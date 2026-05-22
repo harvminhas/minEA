@@ -1,0 +1,301 @@
+import uuid
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.ai.chat import stream_chat
+from app.ai.ingestion import extract_from_text
+from app.ai.insights import generate_insights
+from app.auth import AuthContext, get_auth_context
+from app.database import get_db
+from app.models.insights import AiInsight
+from app.models.objects import MinEAObject, Workspace
+from app.models.relationships import Relationship
+from app.routers.workspaces import get_workspace_context
+from app.schemas.relationships import ALLOWED_TRIPLES
+
+router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    workspace_id: uuid.UUID
+    messages: list[ChatMessage]
+
+
+class IngestRequest(BaseModel):
+    workspace_id: uuid.UUID
+    text: str
+
+
+@router.post("/chat")
+async def chat(
+    body: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
+) -> StreamingResponse:
+    # Verify workspace access
+    ws_result = await db.execute(
+        select(Workspace).where(Workspace.id == body.workspace_id, Workspace.org_id == uuid.UUID(auth.org_id))
+    )
+    if not ws_result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    # Build full context
+    context = await get_workspace_context(body.workspace_id, db, auth)
+
+    return StreamingResponse(
+        stream_chat(context, [m.model_dump() for m in body.messages]),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/ingest")
+async def ingest(
+    body: IngestRequest,
+    db: AsyncSession = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
+) -> dict[str, Any]:
+    """Extract CIS objects from free text — returns proposed objects for review."""
+    ws_result = await db.execute(
+        select(Workspace).where(Workspace.id == body.workspace_id, Workspace.org_id == uuid.UUID(auth.org_id))
+    )
+    if not ws_result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    payload = await extract_from_text(body.text)
+    return payload.model_dump()
+
+
+class IngestCommitItem(BaseModel):
+    local_id: str
+    type: str
+    name: str
+    description: str | None = None
+    properties: dict = {}
+
+
+class IngestCommitRelationship(BaseModel):
+    type: str
+    from_local_id: str
+    to_local_id: str
+    attributes: dict = {}
+
+
+class IngestCommitRequest(BaseModel):
+    workspace_id: uuid.UUID
+    objects: list[IngestCommitItem]
+    relationships: list[IngestCommitRelationship]
+
+
+@router.post("/ingest/commit")
+async def ingest_commit(
+    body: IngestCommitRequest,
+    db: AsyncSession = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
+) -> dict[str, Any]:
+    """Commit reviewed CIS objects into the database."""
+    local_id_to_db_id: dict[str, uuid.UUID] = {}
+    created_objects = []
+
+    for item in body.objects:
+        obj = MinEAObject(
+            workspace_id=body.workspace_id,
+            org_id=uuid.UUID(auth.org_id),
+            type=item.type,
+            name=item.name,
+            description=item.description,
+            properties=item.properties,
+            source="ai_extraction",
+            confidence=0.85,
+        )
+        db.add(obj)
+        await db.flush()
+        local_id_to_db_id[item.local_id] = obj.id
+        created_objects.append(str(obj.id))
+
+    created_rels = []
+    for rel in body.relationships:
+        from_id = local_id_to_db_id.get(rel.from_local_id)
+        to_id = local_id_to_db_id.get(rel.to_local_id)
+        if not from_id or not to_id:
+            continue
+
+        from_obj = next((o for o in body.objects if o.local_id == rel.from_local_id), None)
+        to_obj = next((o for o in body.objects if o.local_id == rel.to_local_id), None)
+        if not from_obj or not to_obj:
+            continue
+
+        triple = (rel.type, from_obj.type, to_obj.type)
+        if triple not in ALLOWED_TRIPLES:
+            continue
+
+        r = Relationship(
+            workspace_id=body.workspace_id,
+            org_id=uuid.UUID(auth.org_id),
+            type=rel.type,
+            from_object_id=from_id,
+            from_type=from_obj.type,
+            to_object_id=to_id,
+            to_type=to_obj.type,
+            attributes=rel.attributes,
+        )
+        db.add(r)
+        created_rels.append(str(r.id))
+
+    await db.commit()
+    return {"created_objects": created_objects, "created_relationships": created_rels}
+
+
+@router.post("/insights/generate")
+async def trigger_insights(
+    workspace_id: uuid.UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
+) -> dict[str, Any]:
+    ws_result = await db.execute(
+        select(Workspace).where(Workspace.id == workspace_id, Workspace.org_id == uuid.UUID(auth.org_id))
+    )
+    if not ws_result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+
+    context = await get_workspace_context(workspace_id, db, auth)
+    insights = await generate_insights(context, workspace_id, uuid.UUID(auth.org_id), db)
+    return {"generated": len(insights)}
+
+
+@router.get("/insights")
+async def list_insights(
+    workspace_id: uuid.UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
+) -> list[dict]:
+    result = await db.execute(
+        select(AiInsight).where(
+            AiInsight.workspace_id == workspace_id,
+            AiInsight.org_id == uuid.UUID(auth.org_id),
+        ).order_by(AiInsight.created_at.desc())
+    )
+    insights = result.scalars().all()
+    return [
+        {
+            "id": str(i.id),
+            "type": i.type,
+            "title": i.title,
+            "description": i.description,
+            "severity": i.severity,
+            "affected_object_ids": i.affected_object_ids,
+            "created_at": i.created_at.isoformat(),
+        }
+        for i in insights
+    ]
+
+
+@router.get("/governance/pii-agents")
+async def pii_agents(
+    workspace_id: uuid.UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
+) -> list[dict]:
+    """Return agents that can_call tools that accesses PII data_objects."""
+    # Get all tools that access PII data objects
+    pii_data_objects_result = await db.execute(
+        select(MinEAObject).where(
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.type == "data_object",
+            MinEAObject.properties["classification"].astext == "pii",
+        )
+    )
+    pii_obj_ids = {str(o.id) for o in pii_data_objects_result.scalars().all()}
+
+    if not pii_obj_ids:
+        return []
+
+    # Tools that access those objects
+    tool_rels_result = await db.execute(
+        select(Relationship).where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.type == "accesses",
+            Relationship.to_object_id.in_([uuid.UUID(oid) for oid in pii_obj_ids]),
+        )
+    )
+    tool_ids = {str(r.from_object_id) for r in tool_rels_result.scalars().all()}
+
+    if not tool_ids:
+        return []
+
+    # Agents that can_call those tools
+    agent_rels_result = await db.execute(
+        select(Relationship).where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.type == "can_call",
+            Relationship.to_object_id.in_([uuid.UUID(tid) for tid in tool_ids]),
+        )
+    )
+    agent_ids = {str(r.from_object_id) for r in agent_rels_result.scalars().all()}
+
+    if not agent_ids:
+        return []
+
+    agents_result = await db.execute(
+        select(MinEAObject).where(MinEAObject.id.in_([uuid.UUID(aid) for aid in agent_ids]))
+    )
+    agents = agents_result.scalars().all()
+
+    return [{"id": str(a.id), "name": a.name, "properties": a.properties} for a in agents]
+
+
+@router.get("/governance/autonomous-risks")
+async def autonomous_risks(
+    workspace_id: uuid.UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
+) -> list[dict]:
+    """Return autonomous agents that can_call irreversible tools."""
+    autonomous_agents_result = await db.execute(
+        select(MinEAObject).where(
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.type == "agent",
+            MinEAObject.properties["autonomy_level"].astext == "act_autonomously",
+        )
+    )
+    autonomous_agents = autonomous_agents_result.scalars().all()
+    agent_ids = [a.id for a in autonomous_agents]
+
+    if not agent_ids:
+        return []
+
+    # Tools those agents can_call
+    tool_rels_result = await db.execute(
+        select(Relationship).where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.type == "can_call",
+            Relationship.from_object_id.in_(agent_ids),
+        )
+    )
+    tool_ids = {str(r.to_object_id) for r in tool_rels_result.scalars().all()}
+
+    if not tool_ids:
+        return []
+
+    irreversible_tools_result = await db.execute(
+        select(MinEAObject).where(
+            MinEAObject.id.in_([uuid.UUID(tid) for tid in tool_ids]),
+            MinEAObject.properties["reversibility"].astext == "irreversible",
+        )
+    )
+    irreversible_tools = irreversible_tools_result.scalars().all()
+
+    return [{"id": str(t.id), "name": t.name, "properties": t.properties} for t in irreversible_tools]
