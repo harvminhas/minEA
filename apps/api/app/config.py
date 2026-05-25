@@ -1,6 +1,8 @@
 from pathlib import Path
+import os
 
 from dotenv import load_dotenv
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_ROOT = Path(__file__).resolve().parents[1]
@@ -19,7 +21,7 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:password@localhost:5432/minea"
-    database_ssl: bool = False  # set true for Cloud SQL public IP
+    database_ssl: bool = False  # set true for Cloud SQL public IP / managed Postgres
 
     # Redis
     redis_url: str = "redis://localhost:6379"
@@ -48,13 +50,44 @@ class Settings(BaseSettings):
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
 
-    # CORS
-    cors_origins: list[str] = [
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "https://minea-a1d4c.web.app",
-        "https://minea-a1d4c.firebaseapp.com",
-    ]
+    # CORS — override in production via env, e.g.
+    # CORS_ORIGINS=["https://your-web.vercel.app","http://localhost:3000"]
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "https://minea-a1d4c.web.app",
+            "https://minea-a1d4c.firebaseapp.com",
+        ]
+    )
 
 
 settings = Settings()
+
+
+def is_vercel() -> bool:
+    return os.getenv("VERCEL") == "1"
+
+
+def effective_cors_origins() -> list[str]:
+    """Allowed browser origins — includes WEB_APP_URL and this deployment's Vercel URL."""
+    origins: list[str] = []
+    seen: set[str] = set()
+
+    def add(origin: str | None) -> None:
+        if not origin:
+            return
+        normalized = origin.rstrip("/")
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            origins.append(normalized)
+
+    for origin in settings.cors_origins:
+        add(origin)
+    add(settings.web_app_url)
+
+    vercel_url = os.getenv("VERCEL_URL")
+    if vercel_url:
+        add(f"https://{vercel_url}")
+
+    return origins

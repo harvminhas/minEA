@@ -1,13 +1,14 @@
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 import logging
+import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.config import settings, API_ROOT
+from app.config import settings, effective_cors_origins, API_ROOT
 from app.database import AsyncSessionLocal, check_db_connection, engine
 from app.models import *  # noqa: F401, F403 — registers all models with Base
 from app.auth import init_firebase, firebase_credentials_status
@@ -26,7 +27,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("Permission cache not loaded (run db:migrate?): %s", exc)
     yield
-    await engine.dispose()
+    try:
+        await engine.dispose()
+    except Exception as exc:
+        logger.warning("Engine dispose failed: %s", exc)
 
 
 app = FastAPI(
@@ -47,7 +51,7 @@ async def database_exception_handler(_request: Request, exc: SQLAlchemyError) ->
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=effective_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -72,12 +76,19 @@ app.include_router(webhooks.router, prefix="/api/v1")
 async def health() -> dict:
     cred_ok, cred_path = firebase_credentials_status()
     db_ok, db_detail = await check_db_connection()
+    firebase_error: str | None = None
+    if not cred_ok:
+        firebase_error = (
+            "Set FIREBASE_SERVICE_ACCOUNT_JSON on Vercel (paste full service account JSON)."
+        )
     return {
         "status": "ok" if db_ok else "degraded",
         "version": "0.1.0",
         "firebase_configured": cred_ok,
         "firebase_credentials_path": str(cred_path) if cred_path else None,
+        "firebase_error": firebase_error,
         "database_connected": db_ok,
         "database_detail": db_detail if not db_ok else None,
         "debug": settings.debug,
+        "vercel": os.getenv("VERCEL") == "1",
     }

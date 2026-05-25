@@ -79,12 +79,12 @@ export function edgesFromJourney(journey?: Journey | null, steps: StepDraft[] = 
   if (!steps.length) return [];
 
   if (journey?.graph_edges?.length) {
-    return journey.graph_edges
-      .map((edge) => {
-        const source = steps[edge.source_index];
-        const target = steps[edge.target_index];
-        if (!source || !target) return null;
-        return {
+    return journey.graph_edges.flatMap((edge) => {
+      const source = steps[edge.source_index];
+      const target = steps[edge.target_index];
+      if (!source || !target) return [];
+      return [
+        {
           sourceId: source.id,
           targetId: target.id,
           transition: normalizeEdgeTransition({
@@ -94,9 +94,9 @@ export function edgesFromJourney(journey?: Journey | null, steps: StepDraft[] = 
             dependency: edge.dependency ?? undefined,
             entry_criteria: edge.entry_criteria ?? undefined,
           }),
-        } satisfies EdgeDraft;
-      })
-      .filter((edge): edge is EdgeDraft => edge !== null);
+        },
+      ];
+    });
   }
 
   return buildLinearEdges(steps);

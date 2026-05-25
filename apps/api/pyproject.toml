@@ -1,4 +1,5 @@
-[tool.ruff]
+[tool.vercel]
+entrypoint = "app.main:app"
 line-length = 100
 select = ["E", "F", "I"]
 

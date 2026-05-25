@@ -77,12 +77,12 @@ export function edgesFromProcess(process?: Process | null, stages: StageDraft[] 
   if (!stages.length) return [];
 
   if (process?.graph_edges?.length) {
-    return process.graph_edges
-      .map((edge) => {
-        const source = stages[edge.source_index];
-        const target = stages[edge.target_index];
-        if (!source || !target) return null;
-        return {
+    return process.graph_edges.flatMap((edge) => {
+      const source = stages[edge.source_index];
+      const target = stages[edge.target_index];
+      if (!source || !target) return [];
+      return [
+        {
           sourceId: source.id,
           targetId: target.id,
           transition: normalizeTransition({
@@ -90,9 +90,9 @@ export function edgesFromProcess(process?: Process | null, stages: StageDraft[] 
             trigger: edge.trigger ?? undefined,
             handoff: edge.handoff ?? undefined,
           }),
-        } satisfies EdgeDraft;
-      })
-      .filter((edge): edge is EdgeDraft => edge !== null);
+        },
+      ];
+    });
   }
 
   const edges = buildLinearEdges(stages);
@@ -164,11 +164,11 @@ export function layoutFromIndexed(
   }
 
   if (Array.isArray(layout.edge_labels)) {
-    stages.slice(0, -1).forEach((stage, index) => {
-      const offset = layout.edge_labels[index];
+    layout.edge_labels.forEach((offset, index) => {
       if (offset && typeof offset === "object" && "x" in offset) {
+        const stage = stages[index];
         const target = stages[index + 1];
-        if (target) edgeLabelLayout[flowEdgeId(stage.id, target.id)] = offset;
+        if (stage && target) edgeLabelLayout[flowEdgeId(stage.id, target.id)] = offset;
       }
     });
   }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation } from "@tanstack/react-query";
-import { type ObjectType, type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
+import { type ObjectType, type MinEAObject, type ObjectUpdate, OBJECT_TYPE_LABELS } from "@minea/types";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { FormDrawer, FormField, FormSection, formFieldClass } from "@/components/ui/FormDrawer";
@@ -136,12 +136,11 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
           props[field.key] = field.type === "number" ? Number(val) : val;
         }
       }
-      const body = {
-        type: objectType,
+      const shared = {
         name,
         description: description || undefined,
         owner: owner || undefined,
-        status: (status || undefined) as MinEAObject["status"],
+        status: status ? (status as ObjectUpdate["status"]) : undefined,
         tags: tags
           .split(",")
           .map((t) => t.trim())
@@ -149,9 +148,15 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
         properties: props,
       };
       if (isEdit) {
-        return objectsApi.update(orgSlug, workspaceSlug, initialValues!.id, body, token!);
+        const updateBody: ObjectUpdate = shared;
+        return objectsApi.update(orgSlug, workspaceSlug, initialValues!.id, updateBody, token!);
       }
-      return objectsApi.create(orgSlug, workspaceSlug, body as Parameters<typeof objectsApi.create>[2], token!);
+      return objectsApi.create(
+        orgSlug,
+        workspaceSlug,
+        { ...shared, type: objectType } as Parameters<typeof objectsApi.create>[2],
+        token!
+      );
     },
     onSuccess,
   });

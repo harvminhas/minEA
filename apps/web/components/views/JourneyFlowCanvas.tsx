@@ -346,7 +346,6 @@ function buildFlow(
       source: steps[steps.length - 1]!.id,
       target: "add-step",
       type: "smoothstep",
-      selectable: false,
       markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#cbd5e1" },
       style: { stroke: "#e2e8f0", strokeWidth: 1, strokeDasharray: "4 4" },
     });

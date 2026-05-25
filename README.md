@@ -81,13 +81,24 @@ docker compose -f infra/docker-compose.yml up -d
 - **API**: http://localhost:8000
 - **API docs**: http://localhost:8000/docs
 
+## Deployment
+
+Both apps deploy to **Vercel** as two projects from this repo. See **[docs/deploy-vercel.md](docs/deploy-vercel.md)**.
+
+| Project | Root | URL example |
+|---------|------|-------------|
+| Web | `apps/web` | `https://minea-web.vercel.app` |
+| API | `apps/api` | `https://minea-api.vercel.app` |
+
+Set `API_URL` on the web project to the API URL. Set `FIREBASE_SERVICE_ACCOUNT_JSON` on the API project (paste JSON, not a file).
+
 ## Architecture
 
 ```
 minea/
 ├── apps/
-│   ├── web/          # Next.js 14 (App Router) — Vercel
-│   └── api/          # FastAPI (Python) — Railway
+│   ├── web/          # Next.js — Vercel project (root: apps/web)
+│   └── api/          # FastAPI — Vercel project (root: apps/api)
 ├── packages/
 │   └── types/        # Shared TypeScript types
 ├── infra/

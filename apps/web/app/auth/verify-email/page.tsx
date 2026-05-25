@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const { user, resendVerificationEmail, getDevVerificationLink, reloadUser } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -132,5 +133,13 @@ export default function VerifyEmailPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<p className="p-8 text-sm text-gray-400">Loading…</p>}>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

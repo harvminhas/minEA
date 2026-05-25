@@ -51,31 +51,68 @@ def firebase_credentials_status() -> tuple[bool, Path | None]:
     return (cred_path is not None and cred_path.exists()), cred_path
 
 
+def _parse_service_account_json(raw: str) -> dict:
+    """Parse FIREBASE_SERVICE_ACCOUNT_JSON from Vercel/env (tolerates minor formatting issues)."""
+    text = raw.strip()
+    if not text:
+        raise ValueError("FIREBASE_SERVICE_ACCOUNT_JSON is empty")
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Sometimes env vars wrap the JSON in extra quotes
+        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+            return json.loads(text[1:-1])
+        raise
+
+
+def _load_firebase_cred():
+    if settings.firebase_service_account_json:
+        return credentials.Certificate(_parse_service_account_json(settings.firebase_service_account_json))
+
+    cred_path = _find_credentials_path()
+    if cred_path is None or not cred_path.exists():
+        return None
+
+    return credentials.Certificate(str(cred_path))
+
+
 def init_firebase() -> None:
-    """Initialize Firebase Admin once at app startup."""
-    _ensure_firebase()
+    """Initialize Firebase Admin at startup — never raises (serverless-safe)."""
+    if firebase_admin._apps:
+        return
+    try:
+        cred = _load_firebase_cred()
+        if cred is None:
+            return
+        firebase_admin.initialize_app(cred, {"projectId": settings.firebase_project_id})
+    except Exception as exc:
+        # Do not crash cold starts on Vercel when env is missing or malformed.
+        import logging
+
+        logging.getLogger(__name__).warning("Firebase not initialized at startup: %s", exc)
 
 
 def _ensure_firebase() -> None:
     if firebase_admin._apps:
         return
 
-    cred = None
+    try:
+        cred = _load_firebase_cred()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Firebase credentials invalid: {exc}",
+        ) from exc
 
-    if settings.firebase_service_account_json:
-        cred = credentials.Certificate(json.loads(settings.firebase_service_account_json))
-    else:
-        cred_path = _find_credentials_path()
-
-        if cred_path is None or not cred_path.exists():
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=(
-                    "Firebase auth not configured. Set FIREBASE_CREDENTIALS_PATH in apps/api/.env "
-                    f"or place fb_svc_acct.json in {API_ROOT}"
-                ),
-            )
-        cred = credentials.Certificate(str(cred_path))
+    if cred is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Firebase auth not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON on Vercel "
+                "(full service account JSON) or FIREBASE_CREDENTIALS_PATH locally."
+            ),
+        )
 
     firebase_admin.initialize_app(cred, {"projectId": settings.firebase_project_id})
 
