@@ -1,17 +1,16 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Workspace } from "@minea/types";
+import type { Org, Workspace } from "@minea/types";
 
 interface AppStore {
-  // Active workspace
+  activeOrg: Org | null;
   activeWorkspace: Workspace | null;
+  setActiveOrg: (org: Org | null) => void;
   setActiveWorkspace: (ws: Workspace | null) => void;
 
-  // Sidebar collapsed state per layer
   collapsedLayers: Record<string, boolean>;
   toggleLayer: (layer: string) => void;
 
-  // Chat panel
   chatOpen: boolean;
   setChatOpen: (open: boolean) => void;
 }
@@ -19,7 +18,9 @@ interface AppStore {
 export const useAppStore = create<AppStore>()(
   persist(
     (set) => ({
+      activeOrg: null,
       activeWorkspace: null,
+      setActiveOrg: (org) => set({ activeOrg: org }),
       setActiveWorkspace: (ws) => set({ activeWorkspace: ws }),
 
       collapsedLayers: {},
@@ -37,7 +38,6 @@ export const useAppStore = create<AppStore>()(
     {
       name: "minea-app-store",
       partialize: (state) => ({
-        activeWorkspace: state.activeWorkspace,
         collapsedLayers: state.collapsedLayers,
       }),
     }

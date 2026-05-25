@@ -1,47 +1,99 @@
 """
-Clerk JWT verification for FastAPI.
+Firebase ID token verification for FastAPI.
 
-Clerk issues JWTs signed with RS256. We fetch Clerk's JWKS, verify the token,
-and extract org_id + user_id claims for use in route handlers.
+Firebase handles passwords/sessions. We verify the ID token and map firebase_uid → User.
+Org/workspace context is derived from URL path — never from JWT claims.
 """
-import uuid
+import json
+from pathlib import Path
 from typing import Any
 
-import httpx
+import firebase_admin
+from firebase_admin import auth as firebase_auth
+from firebase_admin import credentials
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
 
-from app.config import settings
+from app.config import settings, API_ROOT
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
-_jwks_cache: dict[str, Any] | None = None
+
+def _resolve_credentials_path(path: str) -> Path:
+    cred_path = Path(path)
+    if not cred_path.is_absolute():
+        cred_path = API_ROOT / cred_path
+    return cred_path
 
 
-async def _get_jwks() -> dict[str, Any]:
-    global _jwks_cache
-    if _jwks_cache:
-        return _jwks_cache
-    # Derive JWKS URL from Clerk secret key prefix (sk_live_xxx / sk_test_xxx)
-    # In production, set CLERK_JWKS_URL env var directly.
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{settings.supabase_url}/.well-known/jwks.json")
-        if resp.status_code != 200:
-            # Fallback: attempt Clerk's standard endpoint
-            instance_id = settings.clerk_secret_key.split("_")[-1][:8] if settings.clerk_secret_key else "local"
-            resp = await client.get(f"https://api.clerk.dev/v1/jwks")
-    _jwks_cache = resp.json()
-    return _jwks_cache
+def _default_credentials_path() -> Path | None:
+    for name in ("fb_svc_acct.json", "fb_svc_account.json", "serviceAccountKey.json"):
+        candidate = API_ROOT / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _find_credentials_path() -> Path | None:
+    if settings.firebase_service_account_json:
+        return None  # inline JSON configured
+    if settings.firebase_credentials_path:
+        cred_path = _resolve_credentials_path(settings.firebase_credentials_path)
+        if cred_path.exists():
+            return cred_path
+    return _default_credentials_path()
+
+
+def firebase_credentials_status() -> tuple[bool, Path | None]:
+    if settings.firebase_service_account_json:
+        return True, None
+    cred_path = _find_credentials_path()
+    return (cred_path is not None and cred_path.exists()), cred_path
+
+
+def init_firebase() -> None:
+    """Initialize Firebase Admin once at app startup."""
+    _ensure_firebase()
+
+
+def _ensure_firebase() -> None:
+    if firebase_admin._apps:
+        return
+
+    cred = None
+
+    if settings.firebase_service_account_json:
+        cred = credentials.Certificate(json.loads(settings.firebase_service_account_json))
+    else:
+        cred_path = _find_credentials_path()
+
+        if cred_path is None or not cred_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Firebase auth not configured. Set FIREBASE_CREDENTIALS_PATH in apps/api/.env "
+                    f"or place fb_svc_acct.json in {API_ROOT}"
+                ),
+            )
+        cred = credentials.Certificate(str(cred_path))
+
+    firebase_admin.initialize_app(cred, {"projectId": settings.firebase_project_id})
 
 
 class AuthContext:
-    """Validated claims extracted from the Clerk JWT."""
+    """Validated identity from Firebase ID token — no tenant scope."""
 
-    def __init__(self, user_id: str, org_id: str, email: str = ""):
-        self.user_id = user_id
-        self.org_id = org_id
+    def __init__(
+        self,
+        firebase_uid: str,
+        email: str = "",
+        email_verified: bool = False,
+        full_name: str | None = None,
+    ):
+        self.firebase_uid = firebase_uid
         self.email = email
+        self.email_verified = email_verified
+        self.full_name = full_name
 
 
 async def get_auth_context(
@@ -52,30 +104,29 @@ async def get_auth_context(
 
     token = credentials.credentials
 
-    # In development with no Clerk configured, accept a mock token
+    # Dev bypass: dev_{firebase_uid}
     if settings.debug and token.startswith("dev_"):
-        parts = token.split("_")
-        return AuthContext(user_id=parts[1] if len(parts) > 1 else "dev-user", org_id=parts[2] if len(parts) > 2 else "dev-org")
+        uid = token.removeprefix("dev_")
+        return AuthContext(firebase_uid=uid, email=f"{uid}@dev.local", email_verified=True)
 
     try:
-        # Decode without verification first to get kid
-        header = jwt.get_unverified_header(token)
-        kid = header.get("kid")
+        _ensure_firebase()
+        decoded: dict[str, Any] = firebase_auth.verify_id_token(token)
+        uid = decoded.get("uid") or decoded.get("sub", "")
+        if not uid:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing uid claim")
 
-        jwks = await _get_jwks()
-        key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
-        if not key:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token key")
-
-        claims = jwt.decode(token, key, algorithms=["RS256"])
-        user_id = claims.get("sub", "")
-        org_id = claims.get("org_id", "") or claims.get("o", {}).get("id", "")
-        email = claims.get("email", "")
-
-        if not user_id or not org_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing user or org claim")
-
-        return AuthContext(user_id=user_id, org_id=org_id, email=email)
-
-    except JWTError as e:
+        return AuthContext(
+            firebase_uid=uid,
+            email=decoded.get("email", "") or "",
+            email_verified=bool(decoded.get("email_verified", False)),
+            full_name=decoded.get("name"),
+        )
+    except firebase_auth.InvalidIdTokenError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {e}")
+    except firebase_auth.ExpiredIdTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {e}")

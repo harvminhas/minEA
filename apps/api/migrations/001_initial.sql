@@ -30,7 +30,7 @@ CREATE INDEX IF NOT EXISTS ix_workspaces_org_id ON workspaces (org_id);
 -- ─── Users ────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    clerk_id    TEXT UNIQUE NOT NULL,
+    firebase_uid TEXT UNIQUE NOT NULL,
     org_id      UUID REFERENCES organisations(id) ON DELETE SET NULL,
     email       TEXT NOT NULL,
     full_name   TEXT,
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS ix_users_clerk_id ON users (clerk_id);
+CREATE INDEX IF NOT EXISTS ix_users_firebase_uid ON users (firebase_uid);
 CREATE INDEX IF NOT EXISTS ix_users_org_id ON users (org_id);
 
 -- ─── Objects (core table — all 15 types) ─────────────────────────────────────
@@ -146,7 +146,7 @@ ALTER TABLE ai_insights ENABLE ROW LEVEL SECURITY;
 ALTER TABLE change_log ENABLE ROW LEVEL SECURITY;
 
 -- RLS policies: scope every query to the authenticated user's org_id.
--- Clerk JWT contains org_id; set via: SET app.org_id = '<org_id>';
+-- Firebase JWT verified server-side; tenant scope via URL + app.org_id session variable;
 
 CREATE POLICY workspaces_org_isolation ON workspaces
     USING (org_id::text = current_setting('app.org_id', true));

@@ -11,7 +11,8 @@
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "db:migrate": "cd apps/api && alembic upgrade head"
+    "db:migrate": "cd apps/api && npm run db:migrate",
+    "db:proxy": "cd apps/api && npm run db:proxy"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

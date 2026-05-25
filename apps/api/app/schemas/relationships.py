@@ -50,7 +50,6 @@ ALLOWED_TRIPLES: set[tuple[str, str, str]] = {
 
 
 class RelationshipCreate(BaseModel):
-    workspace_id: UUID
     type: str
     from_object_id: UUID
     from_type: str

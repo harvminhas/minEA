@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class WorkspaceCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
+    slug: str = Field(..., min_length=2, max_length=63, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     template_id: str | None = None
     biz_layer_term: str = "Capability"
     app_layer_term: str = "Application"
@@ -24,11 +25,13 @@ class WorkspaceUpdate(BaseModel):
 class WorkspaceRead(BaseModel):
     id: UUID
     org_id: UUID
+    slug: str
     name: str
     template_id: str | None
     biz_layer_term: str
     app_layer_term: str
     constraint_mode: str
+    role: str | None = None  # caller's effective workspace role
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

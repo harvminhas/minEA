@@ -64,6 +64,11 @@
   background-color: #0f172a; /* slate-900 */
 }
 
+/* Top nav dark background — same tone */
+header.topnav {
+  background-color: #0f172a;
+}
+
 /* Layer colour dots */
 .layer-dot-business     { background-color: #3b82f6; }
 .layer-dot-application  { background-color: #6366f1; }

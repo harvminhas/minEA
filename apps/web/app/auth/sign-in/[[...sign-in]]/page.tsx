@@ -1,9 +1,12 @@
-import { SignIn } from "@clerk/nextjs";
+import { Suspense } from "react";
+import { AuthForm } from "@/components/auth/AuthForm";
 
 export default function SignInPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900">
-      <SignIn />
+    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
+      <Suspense fallback={<div className="text-white/60 text-sm">Loading...</div>}>
+        <AuthForm mode="sign-in" />
+      </Suspense>
     </div>
   );
 }

@@ -9,9 +9,29 @@ import type {
   WorkspaceCreate,
   AiInsight,
   CisPayload,
+  Org,
+  OrgCreate,
+  OrgMember,
+  InvitePreview,
+  Invite,
+  InviteCreated,
+  Product,
+  ProductCreate,
+  ProductGraphResponse,
+  ProductListResponse,
+  Process,
+  ProcessCreate,
+  ProcessListResponse,
 } from "@minea/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE =
+  typeof window !== "undefined"
+    ? ""
+    : (process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000");
+
+function wsBase(orgSlug: string, workspaceSlug: string) {
+  return `/orgs/${orgSlug}/workspaces/${workspaceSlug}`;
+}
 
 async function apiFetch<T>(path: string, init?: RequestInit & { token?: string }): Promise<T> {
   const { token, ...fetchInit } = init ?? {};
@@ -25,87 +45,252 @@ async function apiFetch<T>(path: string, init?: RequestInit & { token?: string }
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? "API error");
+    const detail =
+      typeof err.detail === "string"
+        ? err.detail
+        : JSON.stringify(err.detail) ?? "API error";
+    throw new Error(`${res.status} ${detail} (${path})`);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
 }
 
-// ─── Objects ─────────────────────────────────────────────────────────────────
+// ─── Auth ────────────────────────────────────────────────────────────────────
 
-export const objectsApi = {
-  list: (params: { workspace_id: string; type?: string; status?: string; search?: string; page?: number }, token: string) => {
-    const qs = new URLSearchParams({ workspace_id: params.workspace_id });
-    if (params.type) qs.set("type", params.type);
-    if (params.status) qs.set("status", params.status);
-    if (params.search) qs.set("search", params.search);
-    if (params.page) qs.set("page", String(params.page));
-    return apiFetch<ObjectListResponse>(`/objects?${qs}`, { token });
-  },
+export interface VerificationEmailResult {
+  message: string;
+  email_sent: boolean;
+  verification_link?: string | null;
+}
 
-  get: (id: string, token: string) => apiFetch<MinEAObject>(`/objects/${id}`, { token }),
-
-  create: (body: ObjectCreate, token: string) =>
-    apiFetch<MinEAObject>("/objects", { method: "POST", body: JSON.stringify(body), token }),
-
-  update: (id: string, body: ObjectUpdate, token: string) =>
-    apiFetch<MinEAObject>(`/objects/${id}`, { method: "PUT", body: JSON.stringify(body), token }),
-
-  delete: (id: string, token: string) =>
-    apiFetch<void>(`/objects/${id}`, { method: "DELETE", token }),
+export const authApi = {
+  getDevVerificationLink: (token: string) =>
+    apiFetch<{ message: string; verification_link: string }>("/auth/dev-verification-link", {
+      method: "POST",
+      token,
+    }).then((result) => ({
+      message: result.message,
+      email_sent: false,
+      verification_link: result.verification_link,
+    })),
 };
 
-// ─── Relationships ────────────────────────────────────────────────────────────
+// ─── Orgs ────────────────────────────────────────────────────────────────────
 
-export const relationshipsApi = {
-  list: (params: { workspace_id: string; from_object_id?: string; to_object_id?: string }, token: string) => {
-    const qs = new URLSearchParams({ workspace_id: params.workspace_id });
-    if (params.from_object_id) qs.set("from_object_id", params.from_object_id);
-    if (params.to_object_id) qs.set("to_object_id", params.to_object_id);
-    return apiFetch<Relationship[]>(`/relationships?${qs}`, { token });
-  },
+export const orgsApi = {
+  list: (token: string) => apiFetch<Org[]>("/orgs", { token }),
+  get: (orgSlug: string, token: string) => apiFetch<Org>(`/orgs/${orgSlug}`, { token }),
+  create: (body: OrgCreate, token: string) =>
+    apiFetch<Org>("/orgs", { method: "POST", body: JSON.stringify(body), token }),
+  listMembers: (orgSlug: string, token: string) =>
+    apiFetch<OrgMember[]>(`/orgs/${orgSlug}/members`, { token }),
+  listInvites: (orgSlug: string, token: string) =>
+    apiFetch<Invite[]>(`/orgs/${orgSlug}/invites`, { token }),
+  createInvite: (orgSlug: string, body: { email: string; role: string; workspace_slug?: string }, token: string) =>
+    apiFetch<InviteCreated>(`/orgs/${orgSlug}/invites`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+  revokeInvite: (orgSlug: string, inviteId: string, token: string) =>
+    apiFetch<void>(`/orgs/${orgSlug}/invites/${inviteId}`, { method: "DELETE", token }),
+};
 
-  create: (body: RelationshipCreate, token: string) =>
-    apiFetch<Relationship>("/relationships", { method: "POST", body: JSON.stringify(body), token }),
-
-  delete: (id: string, token: string) =>
-    apiFetch<void>(`/relationships/${id}`, { method: "DELETE", token }),
+export const invitesApi = {
+  preview: (token: string) => apiFetch<InvitePreview>(`/invites/${token}`),
+  accept: (token: string, authToken: string) =>
+    apiFetch<{ org_slug: string; role: string; workspace_slug?: string }>(`/invites/${token}/accept`, {
+      method: "POST",
+      token: authToken,
+    }),
 };
 
 // ─── Workspaces ───────────────────────────────────────────────────────────────
 
 export const workspacesApi = {
-  list: (token: string) => apiFetch<Workspace[]>("/workspaces", { token }),
-  get: (id: string, token: string) => apiFetch<Workspace>(`/workspaces/${id}`, { token }),
-  create: (body: WorkspaceCreate, token: string) =>
-    apiFetch<Workspace>("/workspaces", { method: "POST", body: JSON.stringify(body), token }),
-  update: (id: string, body: Partial<WorkspaceCreate>, token: string) =>
-    apiFetch<Workspace>(`/workspaces/${id}`, { method: "PUT", body: JSON.stringify(body), token }),
-  context: (id: string, token: string) => apiFetch<object>(`/workspaces/${id}/context`, { token }),
+  list: (orgSlug: string, token: string) =>
+    apiFetch<Workspace[]>(`/orgs/${orgSlug}/workspaces`, { token }),
+  get: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<Workspace>(`/orgs/${orgSlug}/workspaces/${workspaceSlug}`, { token }),
+  create: (orgSlug: string, body: WorkspaceCreate, token: string) =>
+    apiFetch<Workspace>(`/orgs/${orgSlug}/workspaces`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+  context: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<object>(`${wsBase(orgSlug, workspaceSlug)}/context`, { token }),
+};
+
+// ─── Objects ─────────────────────────────────────────────────────────────────
+
+export const objectsApi = {
+  list: (
+    orgSlug: string,
+    workspaceSlug: string,
+    params: { type?: string; status?: string; search?: string; page?: number },
+    token: string
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.type) qs.set("type", params.type);
+    if (params.status) qs.set("status", params.status);
+    if (params.search) qs.set("search", params.search);
+    if (params.page) qs.set("page", String(params.page));
+    const query = qs.toString();
+    return apiFetch<ObjectListResponse>(
+      `${wsBase(orgSlug, workspaceSlug)}/objects${query ? `?${query}` : ""}`,
+      { token }
+    );
+  },
+
+  get: (orgSlug: string, workspaceSlug: string, id: string, token: string) =>
+    apiFetch<MinEAObject>(`${wsBase(orgSlug, workspaceSlug)}/objects/${id}`, { token }),
+
+  create: (orgSlug: string, workspaceSlug: string, body: ObjectCreate, token: string) =>
+    apiFetch<MinEAObject>(`${wsBase(orgSlug, workspaceSlug)}/objects`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  update: (orgSlug: string, workspaceSlug: string, id: string, body: ObjectUpdate, token: string) =>
+    apiFetch<MinEAObject>(`${wsBase(orgSlug, workspaceSlug)}/objects/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  delete: (orgSlug: string, workspaceSlug: string, id: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/objects/${id}`, { method: "DELETE", token }),
+};
+
+// ─── Relationships ────────────────────────────────────────────────────────────
+
+export const relationshipsApi = {
+  list: (
+    orgSlug: string,
+    workspaceSlug: string,
+    params: { from_object_id?: string; to_object_id?: string },
+    token: string
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.from_object_id) qs.set("from_object_id", params.from_object_id);
+    if (params.to_object_id) qs.set("to_object_id", params.to_object_id);
+    const query = qs.toString();
+    return apiFetch<Relationship[]>(
+      `${wsBase(orgSlug, workspaceSlug)}/relationships${query ? `?${query}` : ""}`,
+      { token }
+    );
+  },
+
+  create: (orgSlug: string, workspaceSlug: string, body: RelationshipCreate, token: string) =>
+    apiFetch<Relationship>(`${wsBase(orgSlug, workspaceSlug)}/relationships`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  delete: (orgSlug: string, workspaceSlug: string, id: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/relationships/${id}`, {
+      method: "DELETE",
+      token,
+    }),
+};
+
+// ─── Products (Product Portfolio view) ───────────────────────────────────────
+
+export const productsApi = {
+  list: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<ProductListResponse>(`${wsBase(orgSlug, workspaceSlug)}/products`, { token }),
+
+  get: (orgSlug: string, workspaceSlug: string, productId: string, token: string) =>
+    apiFetch<Product>(`${wsBase(orgSlug, workspaceSlug)}/products/${productId}`, { token }),
+
+  create: (orgSlug: string, workspaceSlug: string, body: ProductCreate, token: string) =>
+    apiFetch<Product>(`${wsBase(orgSlug, workspaceSlug)}/products`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  update: (
+    orgSlug: string,
+    workspaceSlug: string,
+    productId: string,
+    body: Partial<ProductCreate>,
+    token: string
+  ) =>
+    apiFetch<Product>(`${wsBase(orgSlug, workspaceSlug)}/products/${productId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  graph: (orgSlug: string, workspaceSlug: string, productId: string, token: string) =>
+    apiFetch<ProductGraphResponse>(
+      `${wsBase(orgSlug, workspaceSlug)}/products/${productId}/graph`,
+      { token }
+    ),
+};
+
+// ─── Processes ───────────────────────────────────────────────────────────────
+
+export const processesApi = {
+  list: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<ProcessListResponse>(`${wsBase(orgSlug, workspaceSlug)}/processes`, { token }),
+
+  get: (orgSlug: string, workspaceSlug: string, processId: string, token: string) =>
+    apiFetch<Process>(`${wsBase(orgSlug, workspaceSlug)}/processes/${processId}`, { token }),
+
+  create: (orgSlug: string, workspaceSlug: string, body: ProcessCreate, token: string) =>
+    apiFetch<Process>(`${wsBase(orgSlug, workspaceSlug)}/processes`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  update: (
+    orgSlug: string,
+    workspaceSlug: string,
+    processId: string,
+    body: Partial<ProcessCreate>,
+    token: string
+  ) =>
+    apiFetch<Process>(`${wsBase(orgSlug, workspaceSlug)}/processes/${processId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      token,
+    }),
 };
 
 // ─── AI ──────────────────────────────────────────────────────────────────────
 
 export const aiApi = {
-  ingest: (workspace_id: string, text: string, token: string) =>
-    apiFetch<CisPayload>("/ai/ingest", { method: "POST", body: JSON.stringify({ workspace_id, text }), token }),
-
-  commitIngest: (payload: object, token: string) =>
-    apiFetch<{ created_objects: string[]; created_relationships: string[] }>("/ai/ingest/commit", {
+  ingest: (orgSlug: string, workspaceSlug: string, text: string, token: string) =>
+    apiFetch<CisPayload>(`${wsBase(orgSlug, workspaceSlug)}/ai/ingest`, {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ text }),
       token,
     }),
 
-  generateInsights: (workspace_id: string, token: string) =>
-    apiFetch<{ generated: number }>(`/ai/insights/generate?workspace_id=${workspace_id}`, { method: "POST", token }),
+  commitIngest: (orgSlug: string, workspaceSlug: string, payload: object, token: string) =>
+    apiFetch<{ created_objects: string[]; created_relationships: string[] }>(
+      `${wsBase(orgSlug, workspaceSlug)}/ai/ingest/commit`,
+      { method: "POST", body: JSON.stringify(payload), token }
+    ),
 
-  listInsights: (workspace_id: string, token: string) =>
-    apiFetch<AiInsight[]>(`/ai/insights?workspace_id=${workspace_id}`, { token }),
+  generateInsights: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<{ generated: number }>(`${wsBase(orgSlug, workspaceSlug)}/ai/insights/generate`, {
+      method: "POST",
+      token,
+    }),
 
-  piiAgents: (workspace_id: string, token: string) =>
-    apiFetch<MinEAObject[]>(`/ai/governance/pii-agents?workspace_id=${workspace_id}`, { token }),
+  listInsights: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<AiInsight[]>(`${wsBase(orgSlug, workspaceSlug)}/ai/insights`, { token }),
 
-  autonomousRisks: (workspace_id: string, token: string) =>
-    apiFetch<MinEAObject[]>(`/ai/governance/autonomous-risks?workspace_id=${workspace_id}`, { token }),
+  piiAgents: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<MinEAObject[]>(`${wsBase(orgSlug, workspaceSlug)}/ai/governance/pii-agents`, { token }),
+
+  autonomousRisks: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<MinEAObject[]>(`${wsBase(orgSlug, workspaceSlug)}/ai/governance/autonomous-risks`, { token }),
 };

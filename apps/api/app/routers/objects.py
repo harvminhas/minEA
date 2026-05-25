@@ -5,29 +5,35 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import AuthContext, get_auth_context
 from app.database import get_db
 from app.models.objects import ChangeLog, MinEAObject
 from app.schemas.objects import ObjectCreate, ObjectListResponse, ObjectRead, ObjectUpdate
+from app.services.authorization import require_limit
+from app.services.tenancy import TenancyContext, get_workspace_context
 
-router = APIRouter(prefix="/objects", tags=["objects"])
+router = APIRouter(
+    prefix="/orgs/{org_slug}/workspaces/{workspace_slug}/objects",
+    tags=["objects"],
+)
 
 
 @router.get("", response_model=ObjectListResponse)
 async def list_objects(
-    workspace_id: UUID = Query(...),
     type: str | None = Query(None),
     status: str | None = Query(None),
     owner: str | None = Query(None),
     search: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(get_auth_context),
 ) -> ObjectListResponse:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
     q = select(MinEAObject).where(
-        MinEAObject.workspace_id == workspace_id,
-        MinEAObject.org_id == UUID(auth.org_id),
+        MinEAObject.workspace_id == ctx.workspace.id,
+        MinEAObject.org_id == ctx.org_id,
     )
     if type:
         q = q.where(MinEAObject.type == type)
@@ -51,12 +57,18 @@ async def list_objects(
 @router.post("", response_model=ObjectRead, status_code=status.HTTP_201_CREATED)
 async def create_object(
     body: ObjectCreate,
+    ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(get_auth_context),
 ) -> MinEAObject:
+    await ctx.require_permission(db, "object.create")
+    await require_limit(
+        db, ctx.org_id, "max_objects_per_workspace", workspace_id=ctx.workspace.id, pending_delta=1
+    )
+    assert ctx.workspace
+
     obj = MinEAObject(
-        workspace_id=body.workspace_id,
-        org_id=UUID(auth.org_id),
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
         type=body.type,
         name=body.name,
         description=body.description,
@@ -66,17 +78,19 @@ async def create_object(
         external_id=body.external_id,
         source=body.source,
         properties=body.properties,
+        created_by=ctx.user_id,
     )
     db.add(obj)
     await db.flush()
 
     db.add(ChangeLog(
-        workspace_id=body.workspace_id,
-        org_id=UUID(auth.org_id),
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
         object_id=obj.id,
         object_type=obj.type,
         action="created",
         diff={"name": obj.name, "type": obj.type},
+        performed_by=ctx.user_id,
     ))
 
     await db.commit()
@@ -87,13 +101,17 @@ async def create_object(
 @router.get("/{object_id}", response_model=ObjectRead)
 async def get_object(
     object_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(get_auth_context),
 ) -> MinEAObject:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
     result = await db.execute(
         select(MinEAObject).where(
             MinEAObject.id == object_id,
-            MinEAObject.org_id == UUID(auth.org_id),
+            MinEAObject.workspace_id == ctx.workspace.id,
+            MinEAObject.org_id == ctx.org_id,
         )
     )
     obj = result.scalar_one_or_none()
@@ -106,13 +124,17 @@ async def get_object(
 async def update_object(
     object_id: UUID,
     body: ObjectUpdate,
+    ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(get_auth_context),
 ) -> MinEAObject:
+    await ctx.require_permission(db, "object.edit")
+    assert ctx.workspace
+
     result = await db.execute(
         select(MinEAObject).where(
             MinEAObject.id == object_id,
-            MinEAObject.org_id == UUID(auth.org_id),
+            MinEAObject.workspace_id == ctx.workspace.id,
+            MinEAObject.org_id == ctx.org_id,
         )
     )
     obj = result.scalar_one_or_none()
@@ -129,12 +151,13 @@ async def update_object(
             setattr(obj, field, value)
 
     db.add(ChangeLog(
-        workspace_id=obj.workspace_id,
-        org_id=UUID(auth.org_id),
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
         object_id=obj.id,
         object_type=obj.type,
         action="updated",
         diff=diff,
+        performed_by=ctx.user_id,
     ))
 
     await db.commit()
@@ -145,13 +168,17 @@ async def update_object(
 @router.delete("/{object_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_object(
     object_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(get_auth_context),
 ) -> None:
+    await ctx.require_permission(db, "object.delete")
+    assert ctx.workspace
+
     result = await db.execute(
         select(MinEAObject).where(
             MinEAObject.id == object_id,
-            MinEAObject.org_id == UUID(auth.org_id),
+            MinEAObject.workspace_id == ctx.workspace.id,
+            MinEAObject.org_id == ctx.org_id,
         )
     )
     obj = result.scalar_one_or_none()
@@ -159,12 +186,13 @@ async def delete_object(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
 
     db.add(ChangeLog(
-        workspace_id=obj.workspace_id,
-        org_id=UUID(auth.org_id),
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
         object_id=obj.id,
         object_type=obj.type,
         action="deleted",
         diff={"name": obj.name},
+        performed_by=ctx.user_id,
     ))
 
     await db.delete(obj)

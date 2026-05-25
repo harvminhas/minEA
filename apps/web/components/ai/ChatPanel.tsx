@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/lib/auth-context";
 import { MessageSquare, X, Send, Sparkles, Bot, User } from "lucide-react";
+import { useTenancy } from "@/lib/tenancy";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -12,10 +13,11 @@ interface Message {
   content: string;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = "";
 
 export function ChatPanel() {
   const { getToken } = useAuth();
+  const { orgSlug, workspaceSlug } = useTenancy();
   const { chatOpen, setChatOpen, activeWorkspace } = useAppStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -27,7 +29,7 @@ export function ChatPanel() {
   }, [messages]);
 
   const sendMessage = async () => {
-    if (!input.trim() || isStreaming || !activeWorkspace) return;
+    if (!input.trim() || isStreaming || !orgSlug || !workspaceSlug) return;
 
     const userMsg: Message = { id: Date.now().toString(), role: "user", content: input };
     const allMessages = [...messages, userMsg];
@@ -40,17 +42,19 @@ export function ChatPanel() {
 
     try {
       const token = await getToken();
-      const response = await fetch(`${API_BASE}/api/v1/ai/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          workspace_id: activeWorkspace.id,
-          messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
-        }),
-      });
+      const response = await fetch(
+        `${API_BASE}/api/v1/orgs/${orgSlug}/workspaces/${workspaceSlug}/ai/chat`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
+          }),
+        }
+      );
 
       if (!response.body) throw new Error("No response body");
 
@@ -182,13 +186,13 @@ export function ChatPanel() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-                placeholder={activeWorkspace ? "Ask about your architecture..." : "No workspace selected"}
-                disabled={!activeWorkspace || isStreaming}
+                placeholder={orgSlug ? "Ask about your architecture..." : "No workspace selected"}
+                disabled={!orgSlug || isStreaming}
                 className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
               />
               <button
                 onClick={sendMessage}
-                disabled={!input.trim() || isStreaming || !activeWorkspace}
+                disabled={!input.trim() || isStreaming || !orgSlug}
                 className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-lg p-2 transition-colors"
               >
                 <Send size={14} />

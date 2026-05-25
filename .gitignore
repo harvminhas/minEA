@@ -36,6 +36,11 @@ apps/api/alembic/versions/*.pyc
 .env.*.local
 .env.production
 
+# Secrets
+apps/api/fb_svc_acct.json
+apps/api/*service*account*.json
+scripts/cloud-sql-proxy.exe
+
 # Logs
 *.log
 npm-debug.log*

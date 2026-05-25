@@ -3,8 +3,8 @@
 import { type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
 import { getStatusColor, getStatusLabel, formatCurrency, getObjectInitial } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@clerk/nextjs";
-import { useAppStore } from "@/lib/store";
+import { useAuth } from "@/lib/auth-context";
+import { useTenancy } from "@/lib/tenancy";
 import { relationshipsApi } from "@/lib/api-client";
 
 interface Props {
@@ -15,15 +15,14 @@ interface Props {
 
 export function ObjectCard({ object, layerColor, onClick }: Props) {
   const { getToken } = useAuth();
-  const { activeWorkspace } = useAppStore();
+  const { orgSlug, workspaceSlug } = useTenancy();
 
-  // Count capabilities this object supports (for applications)
   const { data: relationships } = useQuery({
     queryKey: ["relationships", "to", object.id],
-    enabled: object.type === "application",
+    enabled: object.type === "application" && !!orgSlug,
     queryFn: async () => {
       const token = await getToken();
-      return relationshipsApi.list({ workspace_id: activeWorkspace!.id, to_object_id: object.id }, token!);
+      return relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: object.id }, token!);
     },
   });
 
@@ -46,10 +45,10 @@ export function ObjectCard({ object, layerColor, onClick }: Props) {
           </div>
           <div>
             <p className="font-semibold text-gray-900 text-sm leading-tight">{object.name}</p>
-            {props.vendor && (
+            {props.vendor != null && props.vendor !== "" && (
               <p className="text-xs text-gray-400">{String(props.vendor)}</p>
             )}
-            {!props.vendor && (
+            {(props.vendor == null || props.vendor === "") && (
               <p className="text-xs text-gray-400">{OBJECT_TYPE_LABELS[object.type] ?? object.type}</p>
             )}
           </div>
@@ -63,7 +62,7 @@ export function ObjectCard({ object, layerColor, onClick }: Props) {
 
       {/* Properties */}
       <div className="space-y-1.5 text-xs">
-        {props.category && (
+        {!!props.category && (
           <PropertyRow label="Category" value={String(props.category)} />
         )}
         {props.annual_cost !== undefined && (
@@ -75,22 +74,22 @@ export function ObjectCard({ object, layerColor, onClick }: Props) {
         {object.owner && (
           <PropertyRow label="Owner" value={object.owner} />
         )}
-        {props.maturity && (
+        {!!props.maturity && (
           <PropertyRow label="Maturity" value={`${props.maturity} / 5`} />
         )}
-        {props.classification && (
+        {!!props.classification && (
           <PropertyRow label="Classification" value={String(props.classification)} />
         )}
-        {props.protocol && (
+        {!!props.protocol && (
           <PropertyRow label="Protocol" value={String(props.protocol)} />
         )}
-        {props.provider && (
+        {!!props.provider && (
           <PropertyRow label="Provider" value={String(props.provider)} />
         )}
-        {props.store_type && (
+        {!!props.store_type && (
           <PropertyRow label="Store type" value={String(props.store_type)} />
         )}
-        {object.description && !props.category && !props.annual_cost && (
+        {object.description && !props.category && props.annual_cost === undefined && (
           <p className="text-gray-500 line-clamp-2">{object.description}</p>
         )}
       </div>

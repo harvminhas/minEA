@@ -1,0 +1,181 @@
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.database import get_db
+from app.models.views_graph import Product, ProductCapability
+from app.schemas.products import (
+    ProductCreate,
+    ProductGraphResponse,
+    ProductListResponse,
+    ProductRead,
+    ProductUpdate,
+)
+from app.services.product_graph import build_product_graph, load_product_for_graph
+from app.services.product_stats import enrich_product, validate_capability_ids
+from app.services.tenancy import TenancyContext, get_workspace_context
+
+router = APIRouter(
+    prefix="/orgs/{org_slug}/workspaces/{workspace_slug}/products",
+    tags=["products"],
+)
+
+
+async def _to_read(db: AsyncSession, product: Product) -> ProductRead:
+    stats = await enrich_product(db, product)
+    cap_ids = [pc.capability_id for pc in product.capabilities]
+    return ProductRead(
+        id=product.id,
+        workspace_id=product.workspace_id,
+        org_id=product.org_id,
+        name=product.name,
+        product_line=product.product_line,
+        lifecycle=product.lifecycle,
+        owner=product.owner,
+        description=product.description,
+        capability_ids=cap_ids,
+        created_at=product.created_at,
+        updated_at=product.updated_at,
+        **stats,
+    )
+
+
+@router.get("", response_model=ProductListResponse)
+async def list_products(
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> ProductListResponse:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
+    result = await db.execute(
+        select(Product)
+        .options(selectinload(Product.capabilities))
+        .where(Product.workspace_id == ctx.workspace.id, Product.org_id == ctx.org_id)
+        .order_by(Product.product_line.nulls_last(), Product.name)
+    )
+    products = result.scalars().all()
+    items = [await _to_read(db, p) for p in products]
+    return ProductListResponse(items=items, total=len(items))
+
+
+@router.post("", response_model=ProductRead, status_code=status.HTTP_201_CREATED)
+async def create_product(
+    body: ProductCreate,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> ProductRead:
+    await ctx.require_permission(db, "object.create")
+    assert ctx.workspace
+
+    try:
+        await validate_capability_ids(db, ctx.workspace.id, ctx.org_id, body.capability_ids)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    product = Product(
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        name=body.name,
+        product_line=body.product_line,
+        lifecycle=body.lifecycle,
+        owner=body.owner,
+        description=body.description,
+        created_by=ctx.user_id,
+    )
+    db.add(product)
+    await db.flush()
+
+    for cap_id in body.capability_ids:
+        db.add(ProductCapability(product_id=product.id, capability_id=cap_id))
+
+    await db.flush()
+    await db.refresh(product, ["capabilities"])
+    return await _to_read(db, product)
+
+
+@router.get("/{product_id}", response_model=ProductRead)
+async def get_product(
+    product_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> ProductRead:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
+    result = await db.execute(
+        select(Product)
+        .options(selectinload(Product.capabilities))
+        .where(
+            Product.id == product_id,
+            Product.workspace_id == ctx.workspace.id,
+            Product.org_id == ctx.org_id,
+        )
+    )
+    product = result.scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    return await _to_read(db, product)
+
+
+@router.get("/{product_id}/graph", response_model=ProductGraphResponse)
+async def get_product_graph(
+    product_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> ProductGraphResponse:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
+    product = await load_product_for_graph(db, product_id, ctx.workspace.id, ctx.org_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    graph = await build_product_graph(db, product)
+    return ProductGraphResponse(**graph)
+
+
+@router.patch("/{product_id}", response_model=ProductRead)
+async def update_product(
+    product_id: UUID,
+    body: ProductUpdate,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> ProductRead:
+    await ctx.require_permission(db, "object.edit")
+    assert ctx.workspace
+
+    result = await db.execute(
+        select(Product)
+        .options(selectinload(Product.capabilities))
+        .where(
+            Product.id == product_id,
+            Product.workspace_id == ctx.workspace.id,
+            Product.org_id == ctx.org_id,
+        )
+    )
+    product = result.scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    if body.capability_ids is not None:
+        try:
+            await validate_capability_ids(db, ctx.workspace.id, ctx.org_id, body.capability_ids)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        product.capabilities.clear()
+        await db.flush()
+        for cap_id in body.capability_ids:
+            db.add(ProductCapability(product_id=product.id, capability_id=cap_id))
+
+    for field in ("name", "product_line", "lifecycle", "owner", "description"):
+        value = getattr(body, field)
+        if value is not None:
+            setattr(product, field, value)
+
+    await db.flush()
+    await db.refresh(product, ["capabilities"])
+    return await _to_read(db, product)

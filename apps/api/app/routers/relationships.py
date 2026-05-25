@@ -4,26 +4,31 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import AuthContext, get_auth_context
 from app.database import get_db
 from app.models.relationships import Relationship
 from app.schemas.relationships import RelationshipCreate, RelationshipRead
+from app.services.tenancy import TenancyContext, get_workspace_context
 
-router = APIRouter(prefix="/relationships", tags=["relationships"])
+router = APIRouter(
+    prefix="/orgs/{org_slug}/workspaces/{workspace_slug}/relationships",
+    tags=["relationships"],
+)
 
 
 @router.get("", response_model=list[RelationshipRead])
 async def list_relationships(
-    workspace_id: UUID = Query(...),
     from_object_id: UUID | None = Query(None),
     to_object_id: UUID | None = Query(None),
     type: str | None = Query(None),
+    ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(get_auth_context),
 ) -> list[Relationship]:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
     q = select(Relationship).where(
-        Relationship.workspace_id == workspace_id,
-        Relationship.org_id == UUID(auth.org_id),
+        Relationship.workspace_id == ctx.workspace.id,
+        Relationship.org_id == ctx.org_id,
     )
     if from_object_id:
         q = q.where(Relationship.from_object_id == from_object_id)
@@ -39,18 +44,22 @@ async def list_relationships(
 @router.post("", response_model=RelationshipRead, status_code=status.HTTP_201_CREATED)
 async def create_relationship(
     body: RelationshipCreate,
+    ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(get_auth_context),
 ) -> Relationship:
+    await ctx.require_permission(db, "object.edit")
+    assert ctx.workspace
+
     rel = Relationship(
-        workspace_id=body.workspace_id,
-        org_id=UUID(auth.org_id),
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
         type=body.type,
         from_object_id=body.from_object_id,
         from_type=body.from_type,
         to_object_id=body.to_object_id,
         to_type=body.to_type,
         attributes=body.attributes,
+        created_by=ctx.user_id,
     )
     db.add(rel)
     await db.commit()
@@ -61,13 +70,17 @@ async def create_relationship(
 @router.delete("/{relationship_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_relationship(
     relationship_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(get_auth_context),
 ) -> None:
+    await ctx.require_permission(db, "object.delete")
+    assert ctx.workspace
+
     result = await db.execute(
         select(Relationship).where(
             Relationship.id == relationship_id,
-            Relationship.org_id == UUID(auth.org_id),
+            Relationship.workspace_id == ctx.workspace.id,
+            Relationship.org_id == ctx.org_id,
         )
     )
     rel = result.scalar_one_or_none()

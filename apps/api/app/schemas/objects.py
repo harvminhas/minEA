@@ -18,7 +18,6 @@ VALID_STATUSES = {
 
 
 class ObjectCreate(BaseModel):
-    workspace_id: UUID
     type: str = Field(..., description="One of the 15 valid object types")
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None

@@ -4,6 +4,22 @@
 
 Every element is a real object — capabilities, applications, data stores, APIs, agents — with properties, relationships, and identity. Views are projections of the model, not pictures.
 
+## Auth & Tenancy (v1)
+
+- **Org = tenant.** Users belong to orgs via `org_memberships`. Workspaces belong to orgs.
+- **Roles:** Org (`owner`, `admin`, `member`); Workspace (`admin`, `editor`, `viewer`). Org owners/admins implicitly get workspace admin.
+- **URLs:** Path-based — `/orgs/{org_slug}/workspaces/{workspace_slug}/...`
+- **Auth:** Firebase Authentication. Passwords/sessions handled by Firebase; our DB stores users, memberships, invites.
+- **Tenant isolation:** API derives org + workspace from URL slugs + JWT identity. All queries scoped via `TenancyContext`. Postgres RLS via `app.org_id` session variable.
+- **Invites:** Org admins create single-use tokens (7-day expiry). Recipient signs in/up and accepts at `/invites/{token}`.
+- **Audit log:** Append-only `audit_log` table — member invited/joined/removed, role changed, workspace created/deleted.
+
+Run migrations in order:
+```bash
+psql $DATABASE_URL < apps/api/migrations/001_initial.sql
+psql $DATABASE_URL < apps/api/migrations/003_firebase_auth.sql
+```
+
 ## Quick Start
 
 ### Prerequisites
@@ -20,8 +36,9 @@ npm install
 ### 2. Set up environment variables
 
 ```bash
-cp .env.example .env
-# Fill in: CLERK_*, DATABASE_URL, ANTHROPIC_API_KEY, SUPABASE_*
+cp apps/web/.env.example apps/web/.env.local
+cp apps/api/.env.example apps/api/.env
+# Fill in Firebase keys (web) and service account JSON (api)
 ```
 
 ### 3. Start local services
@@ -44,6 +61,20 @@ cd apps/api && alembic upgrade head
 
 ```bash
 npm run dev
+```
+
+This starts **both** the Next.js frontend and the FastAPI backend (port 8000).
+
+If you only see the web app, start the API separately:
+
+```bash
+cd apps/api && npm run dev
+```
+
+Start Postgres first:
+
+```bash
+docker compose -f infra/docker-compose.yml up -d
 ```
 
 - **Frontend**: http://localhost:3000
@@ -70,7 +101,7 @@ minea/
 |-------|--------|
 | Frontend | Next.js 14, shadcn/ui, Tailwind CSS |
 | State | Zustand + TanStack Query v5 |
-| Auth | Clerk (Google SSO, org management) |
+| Auth | Firebase Authentication |
 | Backend | FastAPI (Python 3.12) |
 | Database | PostgreSQL 16 via Supabase |
 | Cache | Upstash Redis |
@@ -87,7 +118,7 @@ Three core tables:
 ## Build Sequence
 
 1. Monorepo scaffold + Docker Compose ✅
-2. Clerk auth + org/user model ✅
+2. Firebase auth + org/user model ✅
 3. Supabase schema + RLS ✅
 4. FastAPI: objects CRUD + relationships CRUD ✅
 5. Next.js shell: sidebar, dashboard, object list views ✅

@@ -1,34 +1,33 @@
 "use client";
 
 import { useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { X, Search } from "lucide-react";
-import { type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
+import { type MinEAObject, OBJECT_TYPE_LABELS, type ObjectListResponse } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { ALLOWED_TRIPLES_FRONTEND } from "@/lib/allowed-triples";
+import { useTenancy } from "@/lib/tenancy";
 
 interface Props {
   fromObject: MinEAObject;
-  workspaceId: string;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export function RelationshipForm({ fromObject, workspaceId, onClose, onSuccess }: Props) {
+export function RelationshipForm({ fromObject, onClose, onSuccess }: Props) {
   const { getToken } = useAuth();
+  const { orgSlug, workspaceSlug } = useTenancy();
   const [relType, setRelType] = useState("");
   const [targetSearch, setTargetSearch] = useState("");
   const [selectedTarget, setSelectedTarget] = useState<MinEAObject | null>(null);
 
-  // Get allowed relationship types for this from_type
   const allowedTypes = [...new Set(
     ALLOWED_TRIPLES_FRONTEND
       .filter(([, from]) => from === fromObject.type)
       .map(([type]) => type)
   )];
 
-  // Get allowed to_types for the selected rel type
   const allowedToTypes = relType
     ? ALLOWED_TRIPLES_FRONTEND
         .filter(([type, from]) => type === relType && from === fromObject.type)
@@ -36,17 +35,16 @@ export function RelationshipForm({ fromObject, workspaceId, onClose, onSuccess }
     : [];
 
   const { data: candidates } = useQuery({
-    queryKey: ["objects-candidates", workspaceId, allowedToTypes, targetSearch],
+    queryKey: ["objects-candidates", orgSlug, workspaceSlug, allowedToTypes, targetSearch],
     enabled: allowedToTypes.length > 0,
     queryFn: async () => {
       const token = await getToken();
-      // Fetch all candidates across allowed to_types
       const results = await Promise.all(
         allowedToTypes.map((type) =>
-          objectsApi.list({ workspace_id: workspaceId, type, search: targetSearch || undefined }, token!)
+          objectsApi.list(orgSlug, workspaceSlug, { type, search: targetSearch || undefined }, token!)
         )
       );
-      return results.flatMap((r) => r.items);
+      return results.flatMap((r: ObjectListResponse) => r.items);
     },
   });
 
@@ -54,8 +52,7 @@ export function RelationshipForm({ fromObject, workspaceId, onClose, onSuccess }
     mutationFn: async () => {
       if (!selectedTarget || !relType) return;
       const token = await getToken();
-      return relationshipsApi.create({
-        workspace_id: workspaceId,
+      return relationshipsApi.create(orgSlug, workspaceSlug, {
         type: relType as any,
         from_object_id: fromObject.id,
         from_type: fromObject.type,
@@ -84,7 +81,6 @@ export function RelationshipForm({ fromObject, workspaceId, onClose, onSuccess }
         </div>
 
         <div className="p-5 space-y-4">
-          {/* From object (read-only) */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
             <div className="flex items-center gap-2 py-2 px-3 bg-gray-50 rounded-md text-sm text-gray-700">
@@ -93,7 +89,6 @@ export function RelationshipForm({ fromObject, workspaceId, onClose, onSuccess }
             </div>
           </div>
 
-          {/* Relationship type */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Relationship type *</label>
             {allowedTypes.length === 0 ? (
@@ -112,7 +107,6 @@ export function RelationshipForm({ fromObject, workspaceId, onClose, onSuccess }
             )}
           </div>
 
-          {/* Target object search */}
           {relType && (
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -147,11 +141,8 @@ export function RelationshipForm({ fromObject, workspaceId, onClose, onSuccess }
             </div>
           )}
 
-          {/* Validation warning */}
           {selectedTarget && !isValidTriple && (
-            <p className="text-xs text-red-500">
-              This combination is not allowed by the relationship rules.
-            </p>
+            <p className="text-xs text-red-500">This combination is not allowed by the relationship rules.</p>
           )}
         </div>
 

@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Trash2, Edit2, Link2, Plus } from "lucide-react";
 import { type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
-import { useAppStore } from "@/lib/store";
+import { useTenancy } from "@/lib/tenancy";
 import { getStatusColor, getStatusLabel, getObjectInitial, formatCurrency } from "@/lib/utils";
 import { RelationshipForm } from "./RelationshipForm";
 import { ObjectForm } from "./ObjectForm";
@@ -21,7 +21,7 @@ interface Props {
 export function ObjectDetail({ object, onClose, onDelete, onUpdate }: Props) {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
-  const { activeWorkspace } = useAppStore();
+  const { orgSlug, workspaceSlug } = useTenancy();
   const [showRelForm, setShowRelForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
 
@@ -31,7 +31,7 @@ export function ObjectDetail({ object, onClose, onDelete, onUpdate }: Props) {
     queryKey: ["relationships", "from", object.id],
     queryFn: async () => {
       const token = await getToken();
-      return relationshipsApi.list({ workspace_id: activeWorkspace!.id, from_object_id: object.id }, token!);
+      return relationshipsApi.list(orgSlug, workspaceSlug, { from_object_id: object.id }, token!);
     },
   });
 
@@ -39,14 +39,14 @@ export function ObjectDetail({ object, onClose, onDelete, onUpdate }: Props) {
     queryKey: ["relationships", "to", object.id],
     queryFn: async () => {
       const token = await getToken();
-      return relationshipsApi.list({ workspace_id: activeWorkspace!.id, to_object_id: object.id }, token!);
+      return relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: object.id }, token!);
     },
   });
 
   const deleteRelMutation = useMutation({
     mutationFn: async (id: string) => {
       const token = await getToken();
-      return relationshipsApi.delete(id, token!);
+      return relationshipsApi.delete(orgSlug, workspaceSlug, id, token!);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["relationships"] });
@@ -197,10 +197,9 @@ export function ObjectDetail({ object, onClose, onDelete, onUpdate }: Props) {
       </div>
 
       {/* Relationship form */}
-      {showRelForm && activeWorkspace && (
+      {showRelForm && (
         <RelationshipForm
           fromObject={object}
-          workspaceId={activeWorkspace.id}
           onClose={() => setShowRelForm(false)}
           onSuccess={() => {
             setShowRelForm(false);
@@ -209,11 +208,9 @@ export function ObjectDetail({ object, onClose, onDelete, onUpdate }: Props) {
         />
       )}
 
-      {/* Edit form */}
-      {showEditForm && activeWorkspace && (
+      {showEditForm && (
         <ObjectForm
           objectType={object.type}
-          workspaceId={activeWorkspace.id}
           initialValues={object}
           onClose={() => setShowEditForm(false)}
           onSuccess={() => {

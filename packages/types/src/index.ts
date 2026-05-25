@@ -110,7 +110,6 @@ export interface MinEAObject {
 }
 
 export interface ObjectCreate {
-  workspace_id: string;
   type: ObjectType;
   name: string;
   description?: string;
@@ -234,7 +233,6 @@ export interface Relationship {
 }
 
 export interface RelationshipCreate {
-  workspace_id: string;
   type: RelationshipType;
   from_object_id: string;
   from_type: ObjectType;
@@ -243,25 +241,232 @@ export interface RelationshipCreate {
   attributes?: Record<string, unknown>;
 }
 
+// ─── Tenancy ─────────────────────────────────────────────────────────────────
+
+export type OrgRole = "owner" | "admin" | "member";
+export type WorkspaceRole = "admin" | "member" | "viewer";
+export type InviteRole = "admin" | "member" | "viewer";
+export type InviteStatus = "pending" | "accepted" | "revoked" | "expired";
+
+export interface LimitExceededError {
+  code: "limit_exceeded";
+  limit: string;
+  current: number;
+  max: number;
+}
+
+export interface Org {
+  id: string;
+  name: string;
+  slug: string;
+  plan: "free" | "starter" | "growth" | "business";
+  role: OrgRole;
+  created_at: string;
+}
+
+export interface OrgMember {
+  user_id: string;
+  email: string;
+  full_name?: string | null;
+  role: OrgRole;
+  joined_at: string;
+}
+
+export interface OrgCreate {
+  name: string;
+  slug: string;
+  workspace_name?: string;
+  workspace_slug?: string;
+}
+
+export interface InvitePreview {
+  org_name: string;
+  org_slug: string;
+  email: string;
+  role: InviteRole;
+  workspace_slug?: string | null;
+  status: InviteStatus;
+  expired: boolean;
+  consumed: boolean;
+}
+
+export interface Invite {
+  id: string;
+  email: string;
+  role: InviteRole;
+  workspace_id?: string | null;
+  status: InviteStatus;
+  expires_at: string;
+  consumed_at?: string | null;
+  created_at: string;
+}
+
+export interface InviteCreated extends Invite {
+  invite_url: string;
+  token: string;
+}
+
 // ─── Workspace ────────────────────────────────────────────────────────────────
 
 export interface Workspace {
   id: string;
   org_id: string;
+  slug: string;
   name: string;
   template_id?: string | null;
   biz_layer_term: string;
   app_layer_term: string;
   constraint_mode: "guided" | "strict" | "freeflow";
+  role?: WorkspaceRole | null;
   created_at: string;
 }
 
-export interface Organisation {
-  id: string;
+export interface WorkspaceCreate {
   name: string;
   slug: string;
-  plan: "free" | "starter" | "growth" | "business";
+  template_id?: string;
+  biz_layer_term?: string;
+  app_layer_term?: string;
+  constraint_mode?: "guided" | "strict" | "freeflow";
+}
+
+/** @deprecated Use Org */
+export type Organisation = Org;
+
+export type ProductLifecycle = "planned" | "live" | "beta" | "retiring" | "retired";
+export type RealizationMaturity = "manual" | "partial" | "automated" | "outsourced";
+
+export interface Product {
+  id: string;
+  workspace_id: string;
+  org_id: string;
+  name: string;
+  product_line?: string | null;
+  lifecycle: ProductLifecycle | string;
+  owner?: string | null;
+  description?: string | null;
+  capability_count: number;
+  system_count: number;
+  api_count: number;
+  data_store_count: number;
+  maturity_indicator?: RealizationMaturity | null;
+  capability_ids: string[];
   created_at: string;
+  updated_at: string;
+}
+
+export interface ProductCreate {
+  name: string;
+  product_line?: string;
+  lifecycle?: string;
+  owner?: string;
+  description?: string;
+  capability_ids?: string[];
+}
+
+export interface ProductListResponse {
+  items: Product[];
+  total: number;
+}
+
+export interface ProductGraphNode {
+  id: string;
+  label: string;
+  type: string;
+  layer: number;
+}
+
+export interface ProductGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  label: string;
+}
+
+export interface ProductGraphResponse {
+  nodes: ProductGraphNode[];
+  edges: ProductGraphEdge[];
+}
+
+export type ProcessStatus = "draft" | "live" | "planned" | "retiring" | "retired";
+
+export interface CanvasPoint {
+  x: number;
+  y: number;
+}
+
+export interface ProcessCanvasLayout {
+  nodes: (CanvasPoint | null)[];
+  edge_labels: (CanvasPoint | null)[] | Record<string, CanvasPoint>;
+}
+
+export interface ProcessGraphEdge {
+  source_index: number;
+  target_index: number;
+  condition?: string | null;
+  trigger?: string | null;
+  handoff?: string | null;
+}
+
+export interface ProcessStage {
+  id: string;
+  name: string;
+  position: number;
+  owner?: string | null;
+  cycle_time_target?: number | null;
+  typical_duration?: string | null;
+  transition_condition?: string | null;
+  transition_trigger?: string | null;
+  transition_handoff?: string | null;
+  capability_ids: string[];
+}
+
+export interface Process {
+  id: string;
+  workspace_id: string;
+  org_id: string;
+  name: string;
+  owner?: string | null;
+  status: ProcessStatus | string;
+  description?: string | null;
+  trigger_event?: string | null;
+  value_delivered?: string | null;
+  stage_count: number;
+  capability_count: number;
+  stages: ProcessStage[];
+  canvas_layout?: ProcessCanvasLayout | null;
+  graph_edges?: ProcessGraphEdge[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProcessStageCreate {
+  name: string;
+  position?: number;
+  owner?: string;
+  cycle_time_target?: number;
+  typical_duration?: string;
+  transition_condition?: string;
+  transition_trigger?: string;
+  transition_handoff?: string;
+  capability_ids?: string[];
+}
+
+export interface ProcessCreate {
+  name: string;
+  owner?: string;
+  status?: string;
+  description?: string;
+  trigger_event?: string;
+  value_delivered?: string;
+  canvas_layout?: ProcessCanvasLayout | null;
+  graph_edges?: ProcessGraphEdge[] | null;
+  stages?: ProcessStageCreate[];
+}
+
+export interface ProcessListResponse {
+  items: Process[];
+  total: number;
 }
 
 // ─── AI ──────────────────────────────────────────────────────────────────────
@@ -307,3 +512,5 @@ export interface PaginatedResponse<T> {
   page: number;
   page_size: number;
 }
+
+export type ObjectListResponse = PaginatedResponse<MinEAObject>;
