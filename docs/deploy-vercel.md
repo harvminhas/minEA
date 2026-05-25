@@ -24,8 +24,8 @@ Browser  →  your-web.vercel.app/api/v1/...  →  (Next rewrite)  →  your-api
 
 1. [vercel.com/new](https://vercel.com/new) → import your repo.
 2. **Project name:** e.g. `minea-api`
-3. **Root Directory:** `apps/api`
-4. Framework: Vercel should detect **FastAPI** (zero extra config needed).
+3. **Root Directory:** `apps/api` — **required**. If set to repo root, Python deps won't install.
+4. Framework: Vercel should detect **FastAPI** (needs `requirements.txt` + `app/main.py` in that root).
 
 ### API environment variables
 
@@ -121,6 +121,7 @@ vercel --prod
 | Symptom | Fix |
 |---------|-----|
 | `FUNCTION_INVOCATION_FAILED` / 500 on all routes | Set `FIREBASE_SERVICE_ACCOUNT_JSON`; redeploy. Check `/health` for `firebase_error`. |
+| `No module named 'fastapi'` | API project **Root Directory** must be `apps/api` (not repo root). Redeploy after fix. |
 | Web API calls 502 | Wrong `API_URL`, or API project not deployed |
 | `/health` shows DB disconnected | `DATABASE_URL` / `DATABASE_SSL`; Cloud SQL may block Vercel IPs |
 | Firebase auth fails on Vercel | Add web domain to Firebase authorized domains |
