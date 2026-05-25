@@ -170,8 +170,71 @@ class CustomerJourney(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     customer_segment: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(Text, default="draft")
+    canvas_layout: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    graph_edges: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+
+    steps: Mapped[list["JourneyMoment"]] = relationship(
+        back_populates="journey", cascade="all, delete-orphan"
+    )
+
+
+class JourneyMoment(Base):
+    __tablename__ = "journey_moments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    journey_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("customer_journeys.id", ondelete="CASCADE"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    channel: Mapped[str | None] = mapped_column(Text, nullable=True)
+    goal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pain_points: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_opportunities: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sentiment_friction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    emotion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    touchpoint_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    friction_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    journey: Mapped["CustomerJourney"] = relationship(back_populates="steps")
+    processes: Mapped[list["MomentProcess"]] = relationship(
+        back_populates="moment", cascade="all, delete-orphan"
+    )
+    systems: Mapped[list["MomentSystem"]] = relationship(
+        back_populates="moment", cascade="all, delete-orphan"
+    )
+
+
+class MomentProcess(Base):
+    __tablename__ = "moment_processes"
+
+    moment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journey_moments.id", ondelete="CASCADE"), primary_key=True
+    )
+    process_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("processes.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    moment: Mapped["JourneyMoment"] = relationship(back_populates="processes")
+
+
+class MomentSystem(Base):
+    __tablename__ = "moment_systems"
+
+    moment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("journey_moments.id", ondelete="CASCADE"), primary_key=True
+    )
+    system_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("objects.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    moment: Mapped["JourneyMoment"] = relationship(back_populates="systems")
 
 
 class Investment(Base):

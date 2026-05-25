@@ -26,6 +26,8 @@ MIGRATION_FILES = [
     "008_stage_transitions.sql",
     "009_process_canvas_layout.sql",
     "010_process_graph_edges.sql",
+    "011_journey_builder.sql",
+    "012_capability_domains.sql",
 ]
 
 

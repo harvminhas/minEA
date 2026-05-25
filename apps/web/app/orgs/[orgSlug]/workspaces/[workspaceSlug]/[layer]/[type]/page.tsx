@@ -9,6 +9,7 @@ import { objectsApi } from "@/lib/api-client";
 import { ObjectCard } from "@/components/objects/ObjectCard";
 import { ObjectDetail } from "@/components/objects/ObjectDetail";
 import { ObjectForm } from "@/components/objects/ObjectForm";
+import { CapabilityMapPage } from "@/components/capability-map/CapabilityMapPage";
 import { OBJECT_TYPE_LABELS, type ObjectType, type MinEAObject } from "@minea/types";
 import { getLayerColor } from "@/lib/utils";
 
@@ -39,6 +40,19 @@ const LAYER_LABELS: Record<string, string> = {
 
 export default function ObjectListPage({ params }: { params: Promise<{ layer: string; type: string }> }) {
   const { layer, type: typePath } = use(params);
+
+  if (layer === "business" && typePath === "capabilities") {
+    return (
+      <div className="flex flex-col h-full">
+        <CapabilityMapPage />
+      </div>
+    );
+  }
+
+  return <RepositoryObjectList layer={layer} typePath={typePath} />;
+}
+
+function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: string }) {
   const objectType = PATH_TO_TYPE[typePath] ?? (typePath as ObjectType);
   const layerColor = getLayerColor(layer);
   const layerLabel = LAYER_LABELS[layer] ?? layer;

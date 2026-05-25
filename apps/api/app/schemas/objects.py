@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 VALID_TYPES = {
-    "capability", "value_stream",
+    "business_domain", "capability", "value_stream",
     "application", "solution", "technical_capability", "agent",
     "data_object", "data_store",
     "api", "event", "integration_flow", "message_broker", "tool",
@@ -18,7 +18,7 @@ VALID_STATUSES = {
 
 
 class ObjectCreate(BaseModel):
-    type: str = Field(..., description="One of the 15 valid object types")
+    type: str = Field(..., description="One of the valid object types")
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
     owner: str | None = None

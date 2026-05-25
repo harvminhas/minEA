@@ -22,6 +22,21 @@ import type {
   Process,
   ProcessCreate,
   ProcessListResponse,
+  Journey,
+  JourneyCreate,
+  JourneyListResponse,
+  DerivedSystemsResponse,
+  CapabilityMap,
+  CapabilityMapStatus,
+  CapabilityTemplateDetail,
+  CapabilityTemplateSummary,
+  AdoptTemplateResponse,
+  LibraryDomainGroup,
+  CapabilityPickerSuggestions,
+  AddDomainMappingSystemRequest,
+  CreateDomainMappingSystemRequest,
+  DomainDetail,
+  UpsertDomainMappingRequest,
 } from "@minea/types";
 
 const API_BASE =
@@ -258,6 +273,137 @@ export const processesApi = {
   ) =>
     apiFetch<Process>(`${wsBase(orgSlug, workspaceSlug)}/processes/${processId}`, {
       method: "PATCH",
+      body: JSON.stringify(body),
+      token,
+    }),
+};
+
+// ─── Journeys ────────────────────────────────────────────────────────────────
+
+export const journeysApi = {
+  list: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<JourneyListResponse>(`${wsBase(orgSlug, workspaceSlug)}/journeys`, { token }),
+
+  get: (orgSlug: string, workspaceSlug: string, journeyId: string, token: string) =>
+    apiFetch<Journey>(`${wsBase(orgSlug, workspaceSlug)}/journeys/${journeyId}`, { token }),
+
+  create: (orgSlug: string, workspaceSlug: string, body: JourneyCreate, token: string) =>
+    apiFetch<Journey>(`${wsBase(orgSlug, workspaceSlug)}/journeys`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  update: (
+    orgSlug: string,
+    workspaceSlug: string,
+    journeyId: string,
+    body: Partial<JourneyCreate>,
+    token: string
+  ) =>
+    apiFetch<Journey>(`${wsBase(orgSlug, workspaceSlug)}/journeys/${journeyId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  deriveSystems: (
+    orgSlug: string,
+    workspaceSlug: string,
+    processIds: string[],
+    token: string
+  ) => {
+    const params = new URLSearchParams();
+    for (const id of processIds) params.append("process_ids", id);
+    const qs = params.toString();
+    return apiFetch<DerivedSystemsResponse>(
+      `${wsBase(orgSlug, workspaceSlug)}/journeys/derive-systems${qs ? `?${qs}` : ""}`,
+      { token }
+    );
+  },
+};
+
+// ─── Capability Map ────────────────────────────────────────────────────────────
+
+export const capabilityMapApi = {
+  getStatus: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<CapabilityMapStatus>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/status`, { token }),
+
+  get: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<CapabilityMap>(`${wsBase(orgSlug, workspaceSlug)}/capability-map`, { token }),
+
+  listTemplates: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<CapabilityTemplateSummary[]>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/templates`, {
+      token,
+    }),
+
+  getTemplate: (orgSlug: string, workspaceSlug: string, templateId: string, token: string) =>
+    apiFetch<CapabilityTemplateDetail>(
+      `${wsBase(orgSlug, workspaceSlug)}/capability-map/templates/${templateId}`,
+      { token }
+    ),
+
+  libraryDomains: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<LibraryDomainGroup[]>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/library/domains`, {
+      token,
+    }),
+
+  libraryCapabilities: (orgSlug: string, workspaceSlug: string, domainId: string, token: string) =>
+    apiFetch<CapabilityPickerSuggestions>(
+      `${wsBase(orgSlug, workspaceSlug)}/capability-map/library/capabilities?domain_id=${domainId}`,
+      { token }
+    ),
+
+  adoptTemplate: (orgSlug: string, workspaceSlug: string, templateId: string, token: string) =>
+    apiFetch<AdoptTemplateResponse>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/adopt`, {
+      method: "POST",
+      body: JSON.stringify({ template_id: templateId }),
+      token,
+    }),
+
+  getDomain: (orgSlug: string, workspaceSlug: string, domainId: string, token: string) =>
+    apiFetch<DomainDetail>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/domains/${domainId}`, {
+      token,
+    }),
+
+  addMappingSystem: (
+    orgSlug: string,
+    workspaceSlug: string,
+    domainId: string,
+    body: AddDomainMappingSystemRequest,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/domains/${domainId}/mapping-systems`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  createMappingSystem: (
+    orgSlug: string,
+    workspaceSlug: string,
+    domainId: string,
+    body: CreateDomainMappingSystemRequest,
+    token: string
+  ) =>
+    apiFetch<DomainDetail>(
+      `${wsBase(orgSlug, workspaceSlug)}/capability-map/domains/${domainId}/mapping-systems/create`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+        token,
+      }
+    ),
+
+  upsertMapping: (
+    orgSlug: string,
+    workspaceSlug: string,
+    domainId: string,
+    body: UpsertDomainMappingRequest,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/domains/${domainId}/mappings`, {
+      method: "PUT",
       body: JSON.stringify(body),
       token,
     }),

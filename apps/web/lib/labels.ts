@@ -3,6 +3,7 @@
  * Org-level overrides can replace these later (spec §5.3).
  */
 export const labels = {
+  domain: "Domain",
   capability: "Capability",
   businessCapability: "Business capability",
   technicalCapability: "Platform capability",
@@ -13,8 +14,8 @@ export const labels = {
   process: "Process",
   valueStream: "Value stream",
   stage: "Stage",
-  journey: "Customer journey",
-  moment: "Journey moment",
+  journey: "Journey",
+  moment: "Journey step",
   investment: "Investment",
   view: "View",
   repository: "Repository",
@@ -22,8 +23,13 @@ export const labels = {
 
 export const glossary = [
   {
+    term: labels.domain,
+    definition:
+      "A level-1 grouping in the capability map (e.g. Customer, Finance). Capabilities always belong to exactly one domain.",
+  },
+  {
     term: labels.capability,
-    definition: "Something the business does. Stable. (e.g. Verify identity.)",
+    definition: "A level-2 thing the business does, scoped to a domain. Duplicate names across domains when needed.",
   },
   {
     term: labels.realization,

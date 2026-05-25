@@ -3,7 +3,7 @@ from app.models.objects import ChangeLog, MinEAObject, Workspace
 from app.models.relationships import Relationship
 from app.models.insights import AiInsight
 from app.models.tenancy import AuditLog, Invite, Org, OrgMembership, User, WorkspaceMembership
-from app.models.views_graph import Investment, Process, Product, Realization
+from app.models.views_graph import CustomerJourney, Investment, JourneyMoment, Process, Product, Realization
 
 __all__ = [
     "Org",
@@ -24,5 +24,7 @@ __all__ = [
     "Product",
     "Realization",
     "Process",
+    "CustomerJourney",
+    "JourneyMoment",
     "Investment",
 ]

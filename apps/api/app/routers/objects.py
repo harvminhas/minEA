@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.objects import ChangeLog, MinEAObject
 from app.schemas.objects import ObjectCreate, ObjectListResponse, ObjectRead, ObjectUpdate
 from app.services.authorization import require_limit
+from app.services.capability_validation import validate_object_write
 from app.services.tenancy import TenancyContext, get_workspace_context
 
 router = APIRouter(
@@ -65,6 +66,8 @@ async def create_object(
         db, ctx.org_id, "max_objects_per_workspace", workspace_id=ctx.workspace.id, pending_delta=1
     )
     assert ctx.workspace
+
+    await validate_object_write(db, ctx.workspace.id, ctx.org_id, body, object_type=body.type)
 
     obj = MinEAObject(
         workspace_id=ctx.workspace.id,
@@ -140,6 +143,17 @@ async def update_object(
     obj = result.scalar_one_or_none()
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
+
+    await validate_object_write(
+        db,
+        ctx.workspace.id,
+        ctx.org_id,
+        body,
+        object_type=obj.type,
+        existing_id=obj.id,
+        existing_properties=obj.properties or {},
+        existing_name=obj.name,
+    )
 
     diff: dict[str, Any] = {}
     for field, value in body.model_dump(exclude_none=True).items():

@@ -33,6 +33,20 @@ export interface ViewConfig {
 
 export const PRIMARY_VIEW_ID: ViewId = "products";
 
+/** Processes lives under Repository → Business in the sidebar, not under Views. */
+export const PROCESSES_VIEW: ViewConfig = {
+  id: "processes",
+  label: "Processes",
+  segment: "views/processes",
+  icon: GitBranch,
+  color: "#0ea5e9",
+  anchorQuestion: "Show me our end-to-end processes with cycle time per stage.",
+  emptyTitle: "No processes yet",
+  emptyDescription:
+    "A process is an end-to-end flow with stages — like Merchant onboarding or Dispute resolution. Add stages, link required capabilities, and enter cycle times to spot bottlenecks.",
+  emptyCta: "Add your first process",
+};
+
 export const VIEWS_V1: ViewConfig[] = [
   {
     id: "products",
@@ -47,27 +61,15 @@ export const VIEWS_V1: ViewConfig[] = [
     emptyCta: "Add your first product",
   },
   {
-    id: "processes",
-    label: "Processes",
-    segment: "views/processes",
-    icon: GitBranch,
-    color: "#0ea5e9",
-    anchorQuestion: "Show me our end-to-end processes with cycle time per stage.",
-    emptyTitle: "No processes yet",
-    emptyDescription:
-      "A process is an end-to-end flow with stages — like Merchant onboarding or Dispute resolution. Add stages, link required capabilities, and enter cycle times to spot bottlenecks.",
-    emptyCta: "Add your first process",
-  },
-  {
     id: "journeys",
-    label: "Customer journeys",
+    label: "Journeys",
     segment: "views/journeys",
     icon: Map,
     color: "#ec4899",
     anchorQuestion: "Show me the customer's path and where it breaks down.",
-    emptyTitle: "No customer journeys yet",
+    emptyTitle: "No journeys yet",
     emptyDescription:
-      "A journey is the customer's experience — moments like waiting for KYC approval. Link each moment to the back-end processes that run behind it.",
+      "A journey maps the customer experience step by step — like merchant onboarding or dispute resolution. Link steps to back-end processes and annotate transitions.",
     emptyCta: "Add your first journey",
   },
   {
@@ -118,6 +120,7 @@ export const VIEWS_V1: ViewConfig[] = [
 ];
 
 export function getView(id: ViewId): ViewConfig {
+  if (id === "processes") return PROCESSES_VIEW;
   const view = VIEWS_V1.find((v) => v.id === id);
   if (!view) throw new Error(`Unknown view: ${id}`);
   return view;

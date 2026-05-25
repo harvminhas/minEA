@@ -13,14 +13,26 @@ import { useAppStore } from "@/lib/store";
 import { useTenancy } from "@/lib/tenancy";
 import { PRIMARY_VIEW_ID, VIEWS_V1, viewPath } from "@/lib/views";
 
-const LAYERS = [
+type LayerItem = {
+  label: string;
+  typePath: string;
+  upcoming?: boolean;
+};
+
+const LAYERS: Array<{
+  id: string;
+  label: string;
+  color: string;
+  items: LayerItem[];
+}> = [
   {
     id: "business",
     label: "Business",
     color: "#3b82f6",
     items: [
       { label: "Capability Map", typePath: "business/capabilities" },
-      { label: "Value Streams", typePath: "business/value-streams" },
+      { label: "Processes", typePath: "views/processes" },
+      { label: "Value Streams", typePath: "business/value-streams", upcoming: true },
     ],
   },
   {
@@ -150,9 +162,11 @@ export function Sidebar() {
 
             {LAYERS.map((layer) => {
               const isCollapsed = collapsedLayers[layer.id] ?? true;
-              const isLayerActive = layer.items.some(
-                (item) => pathname === `${basePath}/${item.typePath}`
-              );
+              const isLayerActive = layer.items.some((item) => {
+                if (item.upcoming) return false;
+                const href = `${basePath}/${item.typePath}`;
+                return pathname === href || pathname.startsWith(`${href}/`);
+              });
               return (
                 <div key={layer.id}>
                   <button
@@ -183,7 +197,27 @@ export function Sidebar() {
                     <div className="mb-0.5">
                       {layer.items.map((item) => {
                         const href = `${basePath}/${item.typePath}`;
-                        const isActive = pathname === href;
+
+                        if (item.upcoming) {
+                          return (
+                            <div
+                              key={item.typePath}
+                              title="Coming soon"
+                              className="flex items-center gap-2 pl-10 pr-4 py-1 text-sm text-white/25 cursor-not-allowed"
+                            >
+                              <span
+                                className="h-1 w-1 rounded-full flex-shrink-0 opacity-40"
+                                style={{ backgroundColor: layer.color }}
+                              />
+                              <span className="truncate text-[13px]">{item.label}</span>
+                              <span className="ml-auto text-[9px] font-medium uppercase tracking-wide text-white/20">
+                                Upcoming
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        const isActive = pathname === href || pathname.startsWith(`${href}/`);
                         return (
                           <Link
                             key={href}

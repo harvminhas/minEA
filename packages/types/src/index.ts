@@ -2,6 +2,7 @@
 
 export type ObjectType =
   // Business Layer
+  | "business_domain"
   | "capability"
   | "value_stream"
   // Application Layer
@@ -44,7 +45,7 @@ export const LAYER_CONFIG: Record<Layer, {
   business: {
     label: "Business",
     color: "blue",
-    types: ["capability", "value_stream"],
+    types: ["business_domain", "capability", "value_stream"],
   },
   application: {
     label: "Application",
@@ -69,6 +70,7 @@ export const LAYER_CONFIG: Record<Layer, {
 };
 
 export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
+  business_domain: "Domain",
   capability: "Capability",
   value_stream: "Value Stream",
   application: "Application",
@@ -131,8 +133,16 @@ export interface ObjectUpdate {
 
 // ─── Typed Property Schemas ───────────────────────────────────────────────────
 
+export interface DomainProperties {
+  order_index?: number;
+  icon?: string;
+  source_template_id?: string;
+  /** Systems shown as columns on the domain mapping grid */
+  mapping_system_ids?: string[];
+}
+
 export interface CapabilityProperties {
-  parent_id?: string;
+  domain_id: string;
   maturity?: 1 | 2 | 3 | 4 | 5;
   investment?: "low" | "medium" | "high";
   order_index?: number;
@@ -467,6 +477,232 @@ export interface ProcessCreate {
 export interface ProcessListResponse {
   items: Process[];
   total: number;
+}
+
+// ─── Journeys ────────────────────────────────────────────────────────────────
+
+export interface JourneyGraphEdge {
+  source_index: number;
+  target_index: number;
+  transition_description?: string | null;
+  time_wait?: string | null;
+  channel_switch?: string | null;
+  dependency?: string | null;
+  entry_criteria?: string | null;
+}
+
+export interface JourneyStep {
+  id: string;
+  title: string;
+  position: number;
+  channel?: string | null;
+  goal?: string | null;
+  pain_points?: string | null;
+  owner?: string | null;
+  ai_opportunities?: string | null;
+  sentiment_friction?: string | null;
+  process_ids: string[];
+  system_ids: string[];
+}
+
+export interface Journey {
+  id: string;
+  workspace_id: string;
+  org_id: string;
+  name: string;
+  owner?: string | null;
+  status: string;
+  customer_segment?: string | null;
+  description?: string | null;
+  step_count: number;
+  process_count: number;
+  steps: JourneyStep[];
+  canvas_layout?: ProcessCanvasLayout | null;
+  graph_edges?: JourneyGraphEdge[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JourneyStepCreate {
+  title: string;
+  position?: number;
+  channel?: string;
+  goal?: string;
+  pain_points?: string;
+  owner?: string;
+  ai_opportunities?: string;
+  sentiment_friction?: string;
+  process_ids?: string[];
+  system_ids?: string[];
+}
+
+export interface JourneyCreate {
+  name: string;
+  owner?: string;
+  status?: string;
+  customer_segment?: string;
+  description?: string;
+  canvas_layout?: ProcessCanvasLayout | null;
+  graph_edges?: JourneyGraphEdge[] | null;
+  steps?: JourneyStepCreate[];
+}
+
+export interface JourneyListResponse {
+  items: Journey[];
+  total: number;
+}
+
+export interface DerivedSystemsResponse {
+  items: Array<{ id: string; name: string }>;
+}
+
+// ─── Capability Map ──────────────────────────────────────────────────────────
+
+export interface CapabilityTemplateSummary {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  domain_count: number;
+  capability_count: number;
+}
+
+export interface CapabilityTemplateDomain {
+  name: string;
+  icon: string;
+  capabilities: string[];
+}
+
+export interface CapabilityTemplateDetail extends CapabilityTemplateSummary {
+  domains: CapabilityTemplateDomain[];
+}
+
+export interface CapabilityMapStatus {
+  initialized: boolean;
+  domain_count: number;
+  capability_count: number;
+}
+
+export interface CapabilityMapCapability {
+  id: string;
+  name: string;
+  domain_id: string;
+  order_index?: number | null;
+  maturity?: number | null;
+  investment?: string | null;
+}
+
+export interface CapabilityMapDomain {
+  id: string;
+  name: string;
+  icon?: string | null;
+  order_index?: number | null;
+  source_template_id?: string | null;
+  capabilities: CapabilityMapCapability[];
+}
+
+export interface CapabilityMap {
+  initialized: boolean;
+  domains: CapabilityMapDomain[];
+}
+
+export type MappingFitness = "none" | "weak" | "adequate" | "strong";
+
+export interface DomainMappingSystem {
+  id: string;
+  name: string;
+  category?: string | null;
+  vendor?: string | null;
+  status?: ObjectStatus | null;
+  hosting_model?: string | null;
+}
+
+export interface DomainCapabilityMapping {
+  capability_id: string;
+  system_id: string;
+  relationship_id: string;
+  fitness: MappingFitness;
+}
+
+export interface DomainMappingStats {
+  capability_count: number;
+  mapped_system_count: number;
+  strong_count: number;
+  adequate_count: number;
+  weak_count: number;
+  gap_count: number;
+}
+
+export interface DomainDetail {
+  id: string;
+  name: string;
+  icon?: string | null;
+  owner?: string | null;
+  description?: string | null;
+  source_template_id?: string | null;
+  capabilities: CapabilityMapCapability[];
+  systems: DomainMappingSystem[];
+  mappings: DomainCapabilityMapping[];
+  stats: DomainMappingStats;
+}
+
+export interface UpsertDomainMappingRequest {
+  capability_id: string;
+  system_id: string;
+  fitness: MappingFitness;
+}
+
+export interface AddDomainMappingSystemRequest {
+  system_id: string;
+}
+
+export interface CreateDomainMappingSystemRequest {
+  name: string;
+  category?: string;
+  vendor?: string;
+  hosting_model?: ApplicationProperties["hosting_model"];
+}
+
+export interface AdoptTemplateResponse {
+  template_id: string;
+  domain_count: number;
+  capability_count: number;
+}
+
+export interface LibraryDomainSuggestion {
+  name: string;
+  icon: string;
+  template_id: string;
+  already_on_map?: boolean;
+}
+
+export interface LibraryDomainGroup {
+  template_id: string;
+  template_name: string;
+  template_icon: string;
+  domains: LibraryDomainSuggestion[];
+}
+
+export interface LibraryCapabilityItem {
+  name: string;
+  already_in_domain?: boolean;
+}
+
+export interface LibraryCapabilityTemplateGroup {
+  template_id: string;
+  template_name: string;
+  template_icon: string;
+  capabilities: LibraryCapabilityItem[];
+}
+
+export interface ReusableCapabilitySuggestion {
+  name: string;
+  from_domain: string;
+}
+
+export interface CapabilityPickerSuggestions {
+  reusable: ReusableCapabilitySuggestion[];
+  template_groups: LibraryCapabilityTemplateGroup[];
 }
 
 // ─── AI ──────────────────────────────────────────────────────────────────────
