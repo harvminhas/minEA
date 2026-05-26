@@ -2,7 +2,7 @@ from pathlib import Path
 import os
 
 from dotenv import load_dotenv
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_ROOT = Path(__file__).resolve().parents[1]
@@ -22,8 +22,20 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://postgres:password@localhost:5432/minea"
     database_ssl: bool = False  # set true for Cloud SQL public IP / managed Postgres
+    # Cloud SQL server CA PEM (path or inline). Prefer this on Vercel for verified TLS.
+    database_ssl_ca: str = ""
+    # Encrypted TLS without CA verification — use on Vercel if you skip DATABASE_SSL_CA.
+    database_ssl_verify: bool = True
 
-    # Redis
+    @field_validator("database_ssl_ca", mode="before")
+    @classmethod
+    def normalize_database_ssl_ca(cls, value: object) -> str:
+        if not value or not isinstance(value, str):
+            return ""
+        pem = value.strip().strip('"').strip("'")
+        if "\\n" in pem:
+            pem = pem.replace("\\n", "\n")
+        return pem
     redis_url: str = "redis://localhost:6379"
 
     # Firebase

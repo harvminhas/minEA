@@ -33,6 +33,8 @@ Browser  →  your-web.vercel.app/api/v1/...  →  (Next rewrite)  →  your-api
 |----------|----------|-----------------|
 | `DATABASE_URL` | Yes | `postgresql+asyncpg://user:pass@host:5432/postgres` |
 | `DATABASE_SSL` | Yes (Cloud SQL) | `true` |
+| `DATABASE_SSL_VERIFY` | Cloud SQL on Vercel | `false` if you see `CERTIFICATE_VERIFY_FAILED` (TLS still encrypted) |
+| `DATABASE_SSL_CA` | Optional (preferred) | Paste Cloud SQL **server-ca.pem** from GCP Console → SQL → Connections |
 | `FIREBASE_PROJECT_ID` | Yes | `minea-a1d4c` |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Yes on Vercel | Paste full service account JSON (single line). **Do not** rely on `fb_svc_acct.json` — it is not deployed. |
 | `WEB_APP_URL` | Yes | `https://your-web.vercel.app` (set after step 2) |
@@ -124,6 +126,7 @@ vercel --prod
 | `No module named 'fastapi'` | API project **Root Directory** must be `apps/api` (not repo root). Redeploy after fix. |
 | Web API calls 502 | Wrong `API_URL`, or API project not deployed |
 | `/health` shows DB disconnected | `DATABASE_URL` / `DATABASE_SSL`; Cloud SQL may block Vercel IPs |
+| `CERTIFICATE_VERIFY_FAILED` on `/health` | Deploy latest API code first. Then set `DATABASE_SSL_VERIFY=false`, **or** paste server CA as multiline `DATABASE_SSL_CA`. Check `/health` for `database_ssl_mode` (`system` = old code / CA not loaded). |
 | Firebase auth fails on Vercel | Add web domain to Firebase authorized domains |
 | `firebase_configured: false` on API | Set `FIREBASE_SERVICE_ACCOUNT_JSON` (not a file path) |
 | Build fails (web) | Monorepo install must run from repo root (`apps/web/vercel.json`) |

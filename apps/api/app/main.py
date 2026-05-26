@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings, effective_cors_origins, API_ROOT
-from app.database import AsyncSessionLocal, check_db_connection, engine
+from app.database import AsyncSessionLocal, check_db_connection, database_ssl_mode, engine
 from app.models import *  # noqa: F401, F403 — registers all models with Base
 from app.auth import init_firebase, firebase_credentials_status
 from app.services.authorization import load_permission_cache
@@ -89,6 +89,9 @@ async def health() -> dict:
         "firebase_error": firebase_error,
         "database_connected": db_ok,
         "database_detail": db_detail if not db_ok else None,
+        "database_ssl_mode": database_ssl_mode(),
+        "database_ssl_ca_configured": bool(settings.database_ssl_ca.strip()),
+        "database_ssl_verify": settings.database_ssl_verify,
         "debug": settings.debug,
         "vercel": os.getenv("VERCEL") == "1",
     }

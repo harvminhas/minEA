@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 import os
+import ssl
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -8,9 +9,42 @@ from sqlalchemy.pool import NullPool
 
 from app.config import settings
 
+
+def database_ssl_mode() -> str:
+    """Which TLS mode is active — surfaced on /health for deployment debugging."""
+    if not settings.database_ssl:
+        return "off"
+    ca = settings.database_ssl_ca.strip()
+    if ca and "BEGIN CERTIFICATE" in ca:
+        return "ca"
+    if not settings.database_ssl_verify:
+        return "insecure"
+    return "system"
+
+
+def _build_ssl_context() -> ssl.SSLContext:
+    ca = settings.database_ssl_ca.strip()
+    if ca and "BEGIN CERTIFICATE" in ca:
+        ctx = ssl.create_default_context()
+        ctx.load_verify_locations(cadata=ca)
+        # Cloud SQL public IP connections use the IP, not the cert CN.
+        ctx.check_hostname = False
+        return ctx
+
+    if not settings.database_ssl_verify:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    return ctx
+
+
 _connect_args: dict = {}
 if settings.database_ssl:
-    _connect_args["ssl"] = True
+    _connect_args["ssl"] = _build_ssl_context()
 
 # Vercel Functions are short-lived — avoid a large connection pool per instance.
 _engine_kwargs: dict = {
