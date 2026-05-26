@@ -16,7 +16,10 @@ def _parse_uuid(value: object) -> UUID | None:
     try:
         return UUID(str(value).strip())
     except (ValueError, TypeError, AttributeError):
-        return None(db: AsyncSession, workspace_id: UUID, org_id: UUID) -> bool:
+        return None
+
+
+async def map_is_initialized(db: AsyncSession, workspace_id: UUID, org_id: UUID) -> bool:
     result = await db.execute(
         select(func.count())
         .select_from(MinEAObject)
