@@ -3,6 +3,7 @@
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { capabilityMapApi } from "@/lib/api-client";
+import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { useTenancy } from "@/lib/tenancy";
 import { CapabilityMapView } from "@/components/capability-map/CapabilityMapView";
 
@@ -10,12 +11,15 @@ export function CapabilityMapPage() {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
+  const queryEnabled = useAuthQueryEnabled(orgSlug, workspaceSlug);
 
   const mapQuery = useQuery({
     queryKey: ["capability-map", orgSlug, workspaceSlug],
+    enabled: queryEnabled,
     queryFn: async () => {
       const token = await getToken();
-      return capabilityMapApi.get(orgSlug, workspaceSlug, token!);
+      if (!token) throw new Error("Not signed in");
+      return capabilityMapApi.get(orgSlug, workspaceSlug, token);
     },
   });
 
@@ -24,7 +28,7 @@ export function CapabilityMapPage() {
     queryClient.invalidateQueries({ queryKey: ["capability-map-status", orgSlug, workspaceSlug] });
   };
 
-  if (mapQuery.isLoading) {
+  if (mapQuery.isLoading || !queryEnabled) {
     return <p className="p-8 text-sm text-gray-400">Loading capability map…</p>;
   }
 

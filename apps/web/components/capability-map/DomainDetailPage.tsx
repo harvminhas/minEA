@@ -7,6 +7,7 @@ import { Download, Info } from "lucide-react";
 import type { CapabilityMapDomain } from "@minea/types";
 import { useAuth } from "@/lib/auth-context";
 import { fetchDomainDetail } from "@/lib/domain-detail";
+import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { DomainMappingTab } from "@/components/capability-map/DomainMappingTab";
 import { DomainProcessesTab } from "@/components/capability-map/DomainProcessesTab";
 import { domainIcon } from "@/lib/capability-map-icons";
@@ -25,9 +26,11 @@ export function DomainDetailPage({ domainId }: Props) {
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabId>("mapping");
+  const queryEnabled = useAuthQueryEnabled(orgSlug, workspaceSlug, domainId);
 
   const { data: domain, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["domain-detail", orgSlug, workspaceSlug, domainId],
+    enabled: queryEnabled,
     queryFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
@@ -50,7 +53,7 @@ export function DomainDetailPage({ domainId }: Props) {
   const capabilitiesPath = objectListPath(orgSlug, workspaceSlug, "business", "capabilities");
   const DomainIcon = domainIcon(domain?.icon);
 
-  if (isLoading) {
+  if (isLoading || !queryEnabled) {
     return <p className="p-8 text-sm text-gray-400">Loading domain…</p>;
   }
 
@@ -59,8 +62,9 @@ export function DomainDetailPage({ domainId }: Props) {
       <div className="p-8 max-w-lg">
         <p className="text-sm text-red-600">{(error as Error).message}</p>
         <p className="text-sm text-gray-500 mt-2">
-          If you just added this feature, restart <code className="text-xs">npm run dev</code> so the API
-          picks up the domain detail routes.
+          Check the network tab for the request to{" "}
+          <code className="text-xs">/api/v1/orgs/.../capability-map/domains/…</code>. A 401 usually
+          means auth was not ready yet — try Retry.
         </p>
         <div className="flex gap-3 mt-4">
           <button

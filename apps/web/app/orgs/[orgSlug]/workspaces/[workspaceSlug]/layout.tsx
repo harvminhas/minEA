@@ -7,17 +7,21 @@ import { ChatPanel } from "@/components/ai/ChatPanel";
 import { useTenancy } from "@/lib/tenancy";
 import { useAppStore } from "@/lib/store";
 import { workspacesApi } from "@/lib/api-client";
+import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const { setActiveWorkspace } = useAppStore();
+  const queryEnabled = useAuthQueryEnabled(orgSlug, workspaceSlug);
 
   const { data: workspace } = useQuery({
     queryKey: ["workspace", orgSlug, workspaceSlug],
+    enabled: queryEnabled,
     queryFn: async () => {
       const token = await getToken();
-      return workspacesApi.get(orgSlug, workspaceSlug, token!);
+      if (!token) throw new Error("Not signed in");
+      return workspacesApi.get(orgSlug, workspaceSlug, token);
     },
   });
 

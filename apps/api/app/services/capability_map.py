@@ -10,7 +10,13 @@ from app.models.relationships import Relationship
 VALID_FITNESS = frozenset({"none", "weak", "adequate", "strong"})
 
 
-async def map_is_initialized(db: AsyncSession, workspace_id: UUID, org_id: UUID) -> bool:
+def _parse_uuid(value: object) -> UUID | None:
+    if value is None:
+        return None
+    try:
+        return UUID(str(value).strip())
+    except (ValueError, TypeError, AttributeError):
+        return None(db: AsyncSession, workspace_id: UUID, org_id: UUID) -> bool:
     result = await db.execute(
         select(func.count())
         .select_from(MinEAObject)
@@ -357,15 +363,22 @@ async def load_domain_detail(
 
     systems: list[dict] = []
     if ordered_system_ids:
-        sys_result = await db.execute(
-            select(MinEAObject).where(
-                MinEAObject.workspace_id == workspace_id,
-                MinEAObject.org_id == org_id,
-                MinEAObject.type == "application",
-                MinEAObject.id.in_([UUID(system_id) for system_id in ordered_system_ids]),
+        uuid_ids = [
+            parsed
+            for system_id in ordered_system_ids
+            if (parsed := _parse_uuid(system_id)) is not None
+        ]
+        systems_by_id: dict[str, MinEAObject] = {}
+        if uuid_ids:
+            sys_result = await db.execute(
+                select(MinEAObject).where(
+                    MinEAObject.workspace_id == workspace_id,
+                    MinEAObject.org_id == org_id,
+                    MinEAObject.type == "application",
+                    MinEAObject.id.in_(uuid_ids),
+                )
             )
-        )
-        systems_by_id = {str(system.id): system for system in sys_result.scalars().all()}
+            systems_by_id = {str(system.id): system for system in sys_result.scalars().all()}
         for system_id in ordered_system_ids:
             system = systems_by_id.get(system_id)
             if not system:

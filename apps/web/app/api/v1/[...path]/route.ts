@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
+export const maxDuration = 30;
 
 function resolveApiOrigin(): string {
   const configured = process.env.API_URL?.trim();
@@ -37,8 +38,24 @@ async function proxyToApi(req: NextRequest, pathSegments: string[]): Promise<Nex
 
   const upstream = await fetch(upstreamUrl, init);
 
+  // Node fetch decompresses gzip/br bodies but keeps Content-Encoding — browsers then fail
+  // with ERR_CONTENT_DECODING_FAILED if we forward those headers unchanged.
+  const hopByHop = new Set([
+    "connection",
+    "content-encoding",
+    "content-length",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+  ]);
+
   const responseHeaders = new Headers();
   upstream.headers.forEach((value, key) => {
+    if (hopByHop.has(key.toLowerCase())) return;
     responseHeaders.set(key, value);
   });
 

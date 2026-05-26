@@ -9,19 +9,22 @@ import { TopNav } from "@/components/nav/TopNav";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { useAppStore } from "@/lib/store";
 import { orgsApi } from "@/lib/api-client";
+import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 
 export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const { setActiveOrg } = useAppStore();
+  const queryEnabled = useAuthQueryEnabled(orgSlug);
 
   const { data: org } = useQuery({
     queryKey: ["org", orgSlug],
     queryFn: async () => {
       const token = await getToken();
-      return orgsApi.get(orgSlug, token!);
+      if (!token) throw new Error("Not signed in");
+      return orgsApi.get(orgSlug, token);
     },
-    enabled: !!orgSlug,
+    enabled: queryEnabled,
   });
 
   useEffect(() => {
