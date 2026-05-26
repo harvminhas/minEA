@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { apiV1Url } from "@/lib/api-base";
 import { MessageSquare, X, Send, Sparkles, Bot, User } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { useAppStore } from "@/lib/store";
@@ -12,8 +13,6 @@ interface Message {
   role: "user" | "assistant";
   content: string;
 }
-
-const API_BASE = "";
 
 export function ChatPanel() {
   const { getToken } = useAuth();
@@ -43,7 +42,7 @@ export function ChatPanel() {
     try {
       const token = await getToken();
       const response = await fetch(
-        `${API_BASE}/api/v1/orgs/${orgSlug}/workspaces/${workspaceSlug}/ai/chat`,
+        apiV1Url(`/orgs/${orgSlug}/workspaces/${workspaceSlug}/ai/chat`),
         {
           method: "POST",
           headers: {

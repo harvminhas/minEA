@@ -25,7 +25,7 @@ import {
   verificationActionSettings,
   type VerificationEmailResult,
 } from "@/lib/firebase-verification";
-import { firebaseAuth } from "@/lib/firebase";
+import { getFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
 
 export interface AuthUser {
   uid: string;
@@ -68,37 +68,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    return onAuthStateChanged(firebaseAuth, (firebaseUser) => {
+    if (!isFirebaseConfigured()) {
+      setIsLoaded(true);
+      return;
+    }
+    return onAuthStateChanged(getFirebaseAuth(), (firebaseUser) => {
       setUser(mapUser(firebaseUser));
       setIsLoaded(true);
     });
   }, []);
 
   const getToken = useCallback(async () => {
-    const current = firebaseAuth.currentUser;
+    const current = getFirebaseAuth().currentUser;
     if (!current) return null;
     return current.getIdToken();
   }, []);
 
   const signInWithEmail = useCallback(async (email: string, password: string) => {
-    await signInWithEmailAndPassword(firebaseAuth, email, password);
+    await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
     try {
-      await signInWithPopup(firebaseAuth, googleProvider);
+      await signInWithPopup(getFirebaseAuth(), googleProvider);
     } catch (err) {
       throw new Error(firebaseAuthErrorMessage(err));
     }
   }, []);
 
   const signUpWithEmail = useCallback(async (email: string, password: string) => {
-    const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
+    const cred = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
     await sendEmailVerification(cred.user, verificationActionSettings());
   }, []);
 
   const resendVerificationEmail = useCallback(async (): Promise<VerificationEmailResult> => {
-    const current = firebaseAuth.currentUser;
+    const current = getFirebaseAuth().currentUser;
     if (!current) throw new Error("Not signed in");
     if (current.emailVerified) {
       return { message: "Email already verified.", email_sent: false };
@@ -121,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [getToken]);
 
   const reloadUser = useCallback(async () => {
-    const current = firebaseAuth.currentUser;
+    const current = getFirebaseAuth().currentUser;
     if (!current) return;
     await reload(current);
     await current.getIdToken(true);
@@ -129,7 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await firebaseSignOut(firebaseAuth);
+    await firebaseSignOut(getFirebaseAuth());
   }, []);
 
   const value = useMemo(

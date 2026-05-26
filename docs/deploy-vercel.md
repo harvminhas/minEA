@@ -73,13 +73,14 @@ After deploy, open:
 
 | Variable | Required |
 |----------|----------|
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | Yes |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Yes — **must be set before build** (inlined at compile time) |
 | `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Yes |
 | `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Yes |
 | `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Yes |
 | `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Yes |
 | `NEXT_PUBLIC_FIREBASE_APP_ID` | Yes |
-| `API_URL` | Yes — **`https://your-api.vercel.app`** (no trailing slash) |
+| `API_URL` | Yes — **`https://min-ea-api.vercel.app`** (no trailing slash) — used for SSR + rewrites at **build** time |
+| `NEXT_PUBLIC_API_URL` | Yes — **`https://min-ea-api.vercel.app`** — browser calls API directly (avoids broken localhost proxy) |
 
 Redeploy the web app after setting `API_URL` (rewrites are resolved at build time).
 
@@ -124,12 +125,13 @@ vercel --prod
 |---------|-----|
 | `FUNCTION_INVOCATION_FAILED` / 500 on all routes | Set `FIREBASE_SERVICE_ACCOUNT_JSON`; redeploy. Check `/health` for `firebase_error`. |
 | `No module named 'fastapi'` | API project **Root Directory** must be `apps/api` (not repo root). Redeploy after fix. |
-| Web API calls 502 | Wrong `API_URL`, or API project not deployed |
+| Web API calls 502 / 404 | Set `API_URL` and `NEXT_PUBLIC_API_URL` to your API URL on the **web** project, redeploy web |
 | `/health` shows DB disconnected | `DATABASE_URL` / `DATABASE_SSL`; Cloud SQL may block Vercel IPs |
 | `CERTIFICATE_VERIFY_FAILED` on `/health` | Deploy latest API code first. Then set `DATABASE_SSL_VERIFY=false`, **or** paste server CA as multiline `DATABASE_SSL_CA`. Check `/health` for `database_ssl_mode` (`system` = old code / CA not loaded). |
 | Firebase auth fails on Vercel | Add web domain to Firebase authorized domains |
 | `firebase_configured: false` on API | Set `FIREBASE_SERVICE_ACCOUNT_JSON` (not a file path) |
 | Build fails (web) | Monorepo install must run from repo root (`apps/web/vercel.json`) |
+| `auth/invalid-api-key` / verify-email prerender error | Set all `NEXT_PUBLIC_FIREBASE_*` on the **web** Vercel project, then redeploy |
 
 ---
 

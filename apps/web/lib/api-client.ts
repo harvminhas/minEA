@@ -38,11 +38,7 @@ import type {
   DomainDetail,
   UpsertDomainMappingRequest,
 } from "@minea/types";
-
-const API_BASE =
-  typeof window !== "undefined"
-    ? ""
-    : (process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000");
+import { apiV1Url } from "@/lib/api-base";
 
 function wsBase(orgSlug: string, workspaceSlug: string) {
   return `/orgs/${orgSlug}/workspaces/${workspaceSlug}`;
@@ -50,7 +46,7 @@ function wsBase(orgSlug: string, workspaceSlug: string) {
 
 async function apiFetch<T>(path: string, init?: RequestInit & { token?: string }): Promise<T> {
   const { token, ...fetchInit } = init ?? {};
-  const res = await fetch(`${API_BASE}/api/v1${path}`, {
+  const res = await fetch(apiV1Url(path), {
     ...fetchInit,
     headers: {
       "Content-Type": "application/json",
