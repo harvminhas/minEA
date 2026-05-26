@@ -10,6 +10,7 @@ import { ObjectCard } from "@/components/objects/ObjectCard";
 import { ObjectDetail } from "@/components/objects/ObjectDetail";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { CapabilityMapPage } from "@/components/capability-map/CapabilityMapPage";
+import { DataLayerList } from "@/components/data/DataLayerList";
 import { OBJECT_TYPE_LABELS, type ObjectType, type MinEAObject } from "@minea/types";
 import { getLayerColor } from "@/lib/utils";
 
@@ -48,6 +49,13 @@ export default function ObjectListPage({ params }: { params: Promise<{ layer: st
         <CapabilityMapPage />
       </div>
     );
+  }
+
+  if (
+    layer === "data" &&
+    (typePath === "data-objects" || typePath === "data-stores" || typePath === "data-domains")
+  ) {
+    return <DataLayerList typePath={typePath} />;
   }
 
   return <RepositoryObjectList layer={layer} typePath={typePath} />;

@@ -29,6 +29,7 @@ MIGRATION_FILES = [
     "011_journey_builder.sql",
     "012_capability_domains.sql",
     "013_people_layer.sql",
+    "014_data_layer.sql",
 ]
 
 

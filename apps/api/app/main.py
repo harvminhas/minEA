@@ -13,7 +13,7 @@ from app.database import AsyncSessionLocal, check_db_connection, database_ssl_mo
 from app.models import *  # noqa: F401, F403 — registers all models with Base
 from app.auth import init_firebase, firebase_credentials_status
 from app.services.authorization import load_permission_cache
-from app.routers import ai, auth, capability_map, invites, journeys, objects, orgs, people, processes, products, relationships, webhooks, workspaces
+from app.routers import ai, auth, capability_map, data_layer, invites, journeys, objects, orgs, people, processes, products, relationships, webhooks, workspaces
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +66,7 @@ app.include_router(objects.router, prefix="/api/v1")
 app.include_router(products.router, prefix="/api/v1")
 app.include_router(processes.router, prefix="/api/v1")
 app.include_router(people.router, prefix="/api/v1")
+app.include_router(data_layer.router, prefix="/api/v1")
 app.include_router(capability_map.router, prefix="/api/v1")
 app.include_router(journeys.router, prefix="/api/v1")
 app.include_router(relationships.router, prefix="/api/v1")

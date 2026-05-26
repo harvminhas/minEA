@@ -57,7 +57,7 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
     items: [
       { label: "Data Entities", segment: "data/data-objects" },
       { label: "Data Stores", segment: "data/data-stores" },
-      { label: "Data Domains", segment: "data/data-domains", upcoming: true },
+      { label: "Data Domains", segment: "data/data-domains" },
     ],
   },
   {

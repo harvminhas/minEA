@@ -13,6 +13,7 @@ export type ObjectType =
   // Data Layer
   | "data_object"
   | "data_store"
+  | "data_domain"
   // Integration Layer
   | "api"
   | "event"
@@ -60,7 +61,7 @@ export const LAYER_CONFIG: Record<Layer, {
   data: {
     label: "Data",
     color: "amber",
-    types: ["data_object", "data_store"],
+    types: ["data_object", "data_store", "data_domain"],
   },
   integration: {
     label: "Integration",
@@ -84,6 +85,7 @@ export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
   agent: "AI Agent",
   data_object: "Data Entity",
   data_store: "Data Store",
+  data_domain: "Data Domain",
   api: "API",
   event: "Event",
   integration_flow: "Flow",
@@ -168,11 +170,24 @@ export interface AgentProperties {
 }
 
 export interface DataObjectProperties {
-  classification?: "public" | "internal" | "confidential" | "pii" | "restricted";
+  classification?: "core" | "reference" | "public" | "internal" | "confidential" | "pii" | "restricted";
+  sensitivity?: string;
+  data_domain_id?: string;
 }
 
 export interface DataStoreProperties {
   store_type?: "relational_db" | "document_db" | "data_warehouse" | "data_lake" | "file_store" | "cache";
+  technology?: string;
+  health?: "healthy" | "at_risk" | "degraded";
+  data_domain_id?: string;
+}
+
+export interface DataDomainProperties {
+  classification?: string;
+  owning_team?: string;
+  steward_name?: string;
+  steward_email?: string;
+  capability_domain_id?: string;
 }
 
 export interface ApiProperties {
@@ -890,4 +905,126 @@ export interface AccountabilityCreate {
   entity_kind: AccountabilityEntityKind | string;
   entity_id: string;
   link_kind: AccountabilityLinkKind | string;
+}
+
+// ─── Data Layer ──────────────────────────────────────────────────────────────
+
+export interface DataLink {
+  id: string;
+  entity_kind: string;
+  entity_id: string;
+  entity_name: string;
+  link_kind: string;
+  role_tag?: string | null;
+  subtitle?: string | null;
+}
+
+export interface DataLinkCreate {
+  entity_kind: string;
+  entity_id: string;
+  link_kind: string;
+  role_tag?: string | null;
+}
+
+export interface DataObjectDetail {
+  id: string;
+  workspace_id: string;
+  org_id: string;
+  name: string;
+  description?: string | null;
+  classification?: string | null;
+  sensitivity?: string | null;
+  data_domain_id?: string | null;
+  data_domain_name?: string | null;
+  related_entities: DataLink[];
+  links: DataLink[];
+  inferred_capabilities: DataLink[];
+  inferred_processes: DataLink[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataObjectCreate {
+  name: string;
+  description?: string;
+  classification?: string;
+  sensitivity?: string;
+}
+
+export interface DataObjectUpdate {
+  name?: string;
+  description?: string | null;
+  classification?: string | null;
+  sensitivity?: string | null;
+  data_domain_id?: string | null;
+}
+
+export interface DataStoreDetail {
+  id: string;
+  workspace_id: string;
+  org_id: string;
+  name: string;
+  description?: string | null;
+  store_type?: string | null;
+  technology?: string | null;
+  health?: string | null;
+  data_domain_id?: string | null;
+  data_domain_name?: string | null;
+  links: DataLink[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataStoreCreate {
+  name: string;
+  description?: string;
+  store_type?: string;
+  technology?: string;
+  health?: string;
+}
+
+export interface DataStoreUpdate {
+  name?: string;
+  description?: string | null;
+  store_type?: string | null;
+  technology?: string | null;
+  health?: string | null;
+  data_domain_id?: string | null;
+}
+
+export interface DataDomainDetail {
+  id: string;
+  workspace_id: string;
+  org_id: string;
+  name: string;
+  description?: string | null;
+  classification?: string | null;
+  owning_team?: string | null;
+  steward_name?: string | null;
+  steward_email?: string | null;
+  capability_domain_id?: string | null;
+  capability_domain_name?: string | null;
+  links: DataLink[];
+  inferred_summary: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataDomainCreate {
+  name: string;
+  description?: string;
+  classification?: string;
+  owning_team?: string;
+  steward_name?: string;
+  steward_email?: string;
+}
+
+export interface DataDomainUpdate {
+  name?: string;
+  description?: string | null;
+  classification?: string | null;
+  owning_team?: string | null;
+  steward_name?: string | null;
+  steward_email?: string | null;
+  capability_domain_id?: string | null;
 }

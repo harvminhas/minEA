@@ -51,6 +51,16 @@ import type {
   TeamRoleAssignmentUpdate,
   AddRoleToTeamCreate,
   AccountabilityCreate,
+  DataObjectDetail,
+  DataObjectCreate,
+  DataObjectUpdate,
+  DataStoreDetail,
+  DataStoreCreate,
+  DataStoreUpdate,
+  DataDomainDetail,
+  DataDomainCreate,
+  DataDomainUpdate,
+  DataLinkCreate,
 } from "@minea/types";
 import { apiV1Url } from "@/lib/api-base";
 
@@ -558,6 +568,124 @@ export const peopleApi = {
     token: string
   ) =>
     apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/accountabilities/${accountabilityId}`, {
+      method: "DELETE",
+      token,
+    }),
+};
+
+// ─── Data Layer ──────────────────────────────────────────────────────────────
+
+export const dataApi = {
+  getEntity: (orgSlug: string, workspaceSlug: string, entityId: string, token: string) =>
+    apiFetch<DataObjectDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/entities/${entityId}`, { token }),
+
+  createEntity: (orgSlug: string, workspaceSlug: string, body: DataObjectCreate, token: string) =>
+    apiFetch<DataObjectDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/entities`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  updateEntity: (
+    orgSlug: string,
+    workspaceSlug: string,
+    entityId: string,
+    body: DataObjectUpdate,
+    token: string
+  ) =>
+    apiFetch<DataObjectDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/entities/${entityId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  addEntityLink: (
+    orgSlug: string,
+    workspaceSlug: string,
+    entityId: string,
+    body: DataLinkCreate,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/entities/${entityId}/links`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  getStore: (orgSlug: string, workspaceSlug: string, storeId: string, token: string) =>
+    apiFetch<DataStoreDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/stores/${storeId}`, { token }),
+
+  createStore: (orgSlug: string, workspaceSlug: string, body: DataStoreCreate, token: string) =>
+    apiFetch<DataStoreDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/stores`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  updateStore: (
+    orgSlug: string,
+    workspaceSlug: string,
+    storeId: string,
+    body: DataStoreUpdate,
+    token: string
+  ) =>
+    apiFetch<DataStoreDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/stores/${storeId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  addStoreLink: (
+    orgSlug: string,
+    workspaceSlug: string,
+    storeId: string,
+    body: DataLinkCreate,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/stores/${storeId}/links`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  getDomain: (orgSlug: string, workspaceSlug: string, domainId: string, token: string) =>
+    apiFetch<DataDomainDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/domains/${domainId}`, { token }),
+
+  createDomain: (orgSlug: string, workspaceSlug: string, body: DataDomainCreate, token: string) =>
+    apiFetch<DataDomainDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/domains`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  updateDomain: (
+    orgSlug: string,
+    workspaceSlug: string,
+    domainId: string,
+    body: DataDomainUpdate,
+    token: string
+  ) =>
+    apiFetch<DataDomainDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/domains/${domainId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  addDomainLink: (
+    orgSlug: string,
+    workspaceSlug: string,
+    domainId: string,
+    body: DataLinkCreate,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/domains/${domainId}/links`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  deleteLink: (orgSlug: string, workspaceSlug: string, linkId: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/links/${linkId}`, {
       method: "DELETE",
       token,
     }),
