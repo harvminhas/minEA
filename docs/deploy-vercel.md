@@ -14,9 +14,11 @@ The web app proxies `/api/v1/*` to the API project via `API_URL`.
 ## Overview
 
 ```
-Browser  →  your-web.vercel.app/api/v1/...  →  (Next rewrite)  →  your-api.vercel.app/api/v1/...
+Browser  →  your-web.vercel.app/api/v1/...  →  (Next.js route proxy)  →  your-api.vercel.app/api/v1/...
                 ↑ same origin to browser
 ```
+
+The proxy reads `API_URL` at **request time** (not build time), so set it on the **web** Vercel project.
 
 ---
 
@@ -79,10 +81,9 @@ After deploy, open:
 | `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Yes |
 | `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Yes |
 | `NEXT_PUBLIC_FIREBASE_APP_ID` | Yes |
-| `API_URL` | Yes — **`https://min-ea-api.vercel.app`** (no trailing slash) — used for SSR + rewrites at **build** time |
-| `NEXT_PUBLIC_API_URL` | Yes — **`https://min-ea-api.vercel.app`** — browser calls API directly (avoids broken localhost proxy) |
+| `API_URL` | Yes — **`https://min-ea-api.vercel.app`** on the **web** project (runtime proxy target) |
 
-Redeploy the web app after setting `API_URL` (rewrites are resolved at build time).
+Redeploy the web app after setting `API_URL`.
 
 ### Update API with web URL
 
@@ -125,7 +126,7 @@ vercel --prod
 |---------|-----|
 | `FUNCTION_INVOCATION_FAILED` / 500 on all routes | Set `FIREBASE_SERVICE_ACCOUNT_JSON`; redeploy. Check `/health` for `firebase_error`. |
 | `No module named 'fastapi'` | API project **Root Directory** must be `apps/api` (not repo root). Redeploy after fix. |
-| Web API calls 502 / 404 | Set `API_URL` and `NEXT_PUBLIC_API_URL` to your API URL on the **web** project, redeploy web |
+| Web API calls 502 / 404 | Set `API_URL=https://min-ea-api.vercel.app` on the **web** project (not API), then redeploy web |
 | `/health` shows DB disconnected | `DATABASE_URL` / `DATABASE_SSL`; Cloud SQL may block Vercel IPs |
 | `CERTIFICATE_VERIFY_FAILED` on `/health` | Deploy latest API code first. Then set `DATABASE_SSL_VERIFY=false`, **or** paste server CA as multiline `DATABASE_SSL_CA`. Check `/health` for `database_ssl_mode` (`system` = old code / CA not loaded). |
 | Firebase auth fails on Vercel | Add web domain to Firebase authorized domains |
