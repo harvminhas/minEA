@@ -28,7 +28,7 @@ function GraphNodeCard({ data, compact }: { data: ProductGraphNode; compact?: bo
   const color =
     data.type === "product"
       ? "#6366f1"
-      : getLayerColor(data.type === "capability" ? "business" : getTypeLayer(data.type as never));
+      : getLayerColor(getTypeLayer(data.type as never));
 
   if (compact) {
     return (
@@ -219,7 +219,7 @@ export function ProductArchitectureGraph({ productName, graph, className, compac
                 return d.type === "product"
                   ? "#6366f1"
                   : getLayerColor(
-                      d.type === "capability" ? "business" : getTypeLayer(d.type as never)
+                      getTypeLayer(d.type as never)
                     );
               }}
               maskColor="rgba(255,255,255,0.7)"

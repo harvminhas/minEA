@@ -32,6 +32,7 @@ export function getStatusLabel(status: ObjectStatus | string | null | undefined)
 
 export function getLayerColor(layer: Layer | string): string {
   const colors: Record<string, string> = {
+    strategy: "#8b5cf6",
     business: "#3b82f6",
     application: "#6366f1",
     data: "#f59e0b",
@@ -54,7 +55,7 @@ export function formatCurrency(amount: number | undefined): string {
 }
 
 export function getTypeLayer(type: ObjectType): Layer {
-  if (["capability", "value_stream"].includes(type)) return "business";
+  if (["business_domain", "capability", "value_stream"].includes(type)) return "strategy";
   if (["application", "solution", "technical_capability", "agent"].includes(type)) return "application";
   if (["data_object", "data_store"].includes(type)) return "data";
   if (["api", "event", "integration_flow", "message_broker", "tool"].includes(type)) return "integration";

@@ -2,80 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  ChevronRight,
-  Home,
-  Plus,
-  Settings,
-} from "lucide-react";
+import { ChevronRight, Home, Plus, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/lib/store";
 import { useTenancy } from "@/lib/tenancy";
 import { PRIMARY_VIEW_ID, VIEWS_V1, viewPath } from "@/lib/views";
-
-type LayerItem = {
-  label: string;
-  typePath: string;
-  upcoming?: boolean;
-};
-
-const LAYERS: Array<{
-  id: string;
-  label: string;
-  color: string;
-  items: LayerItem[];
-}> = [
-  {
-    id: "business",
-    label: "Business",
-    color: "#3b82f6",
-    items: [
-      { label: "Capability Map", typePath: "business/capabilities" },
-      { label: "Processes", typePath: "views/processes" },
-      { label: "Value Streams", typePath: "business/value-streams", upcoming: true },
-    ],
-  },
-  {
-    id: "application",
-    label: "Application",
-    color: "#6366f1",
-    items: [
-      { label: "Applications", typePath: "application/applications" },
-      { label: "Solutions", typePath: "application/solutions" },
-      { label: "Technical Capabilities", typePath: "application/tech-capabilities" },
-      { label: "AI Agents", typePath: "application/agents" },
-    ],
-  },
-  {
-    id: "data",
-    label: "Data",
-    color: "#f59e0b",
-    items: [
-      { label: "Data Objects", typePath: "data/data-objects" },
-      { label: "Data Stores", typePath: "data/data-stores" },
-    ],
-  },
-  {
-    id: "integration",
-    label: "Integration",
-    color: "#14b8a6",
-    items: [
-      { label: "APIs", typePath: "integration/apis" },
-      { label: "Events", typePath: "integration/events" },
-      { label: "Integration Flows", typePath: "integration/flows" },
-      { label: "Tools / MCP", typePath: "integration/tools" },
-    ],
-  },
-  {
-    id: "infrastructure",
-    label: "Infrastructure",
-    color: "#64748b",
-    items: [
-      { label: "Cloud Services", typePath: "infrastructure/cloud-services" },
-      { label: "Models", typePath: "infrastructure/models" },
-    ],
-  },
-];
+import { REPOSITORY_LAYERS } from "@/lib/repository-nav";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -160,11 +92,11 @@ export function Sidebar() {
               </p>
             </div>
 
-            {LAYERS.map((layer) => {
+            {REPOSITORY_LAYERS.map((layer) => {
               const isCollapsed = collapsedLayers[layer.id] ?? true;
               const isLayerActive = layer.items.some((item) => {
                 if (item.upcoming) return false;
-                const href = `${basePath}/${item.typePath}`;
+                const href = `${basePath}/${item.segment}`;
                 return pathname === href || pathname.startsWith(`${href}/`);
               });
               return (
@@ -196,12 +128,12 @@ export function Sidebar() {
                   {!isCollapsed && (
                     <div className="mb-0.5">
                       {layer.items.map((item) => {
-                        const href = `${basePath}/${item.typePath}`;
+                        const href = `${basePath}/${item.segment}`;
 
                         if (item.upcoming) {
                           return (
                             <div
-                              key={item.typePath}
+                              key={item.segment}
                               title="Coming soon"
                               className="flex items-center gap-2 pl-10 pr-4 py-1 text-sm text-white/25 cursor-not-allowed"
                             >
@@ -220,7 +152,7 @@ export function Sidebar() {
                         const isActive = pathname === href || pathname.startsWith(`${href}/`);
                         return (
                           <Link
-                            key={href}
+                            key={item.segment}
                             href={href}
                             className={cn(
                               "flex items-center gap-2 pl-10 pr-4 py-1 text-sm transition-colors",

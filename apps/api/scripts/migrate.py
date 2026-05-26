@@ -28,6 +28,7 @@ MIGRATION_FILES = [
     "010_process_graph_edges.sql",
     "011_journey_builder.sql",
     "012_capability_domains.sql",
+    "013_people_layer.sql",
 ]
 
 

@@ -31,6 +31,7 @@ const PATH_TO_TYPE: Record<string, ObjectType> = {
 };
 
 const LAYER_LABELS: Record<string, string> = {
+  strategy: "Strategy Layer",
   business: "Business Layer",
   application: "Application Layer",
   data: "Data Layer",
@@ -54,9 +55,14 @@ export default function ObjectListPage({ params }: { params: Promise<{ layer: st
 
 function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: string }) {
   const objectType = PATH_TO_TYPE[typePath] ?? (typePath as ObjectType);
-  const layerColor = getLayerColor(layer);
-  const layerLabel = LAYER_LABELS[layer] ?? layer;
-  const typeLabel = OBJECT_TYPE_LABELS[objectType] ?? objectType;
+  const layerColor = getLayerColor(layer === "business" && typePath === "capabilities" ? "strategy" : layer);
+  const layerLabel = LAYER_LABELS[layer === "business" && typePath === "capabilities" ? "strategy" : layer] ?? layer;
+  const typeLabel =
+    layer === "application" && typePath === "applications"
+      ? "System"
+      : OBJECT_TYPE_LABELS[objectType] ?? objectType;
+  const typeLabelPlural =
+    layer === "application" && typePath === "applications" ? "Systems" : `${typeLabel}s`;
 
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
@@ -100,7 +106,7 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
           >
             {layerLabel}
           </span>
-          <h1 className="text-lg font-semibold text-gray-900">{typeLabel}s</h1>
+          <h1 className="text-lg font-semibold text-gray-900">{typeLabelPlural}</h1>
           {data && (
             <span className="text-sm text-gray-400">
               {data.total} {data.total === 1 ? "record" : "records"}

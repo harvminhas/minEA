@@ -35,17 +35,22 @@ export type ObjectSource = "user" | "ai_extraction" | "import";
 
 // ─── Layer Config ─────────────────────────────────────────────────────────────
 
-export type Layer = "business" | "application" | "data" | "integration" | "infrastructure";
+export type Layer = "strategy" | "business" | "application" | "data" | "integration" | "infrastructure";
 
 export const LAYER_CONFIG: Record<Layer, {
   label: string;
   color: string;
   types: ObjectType[];
 }> = {
+  strategy: {
+    label: "Strategy",
+    color: "violet",
+    types: ["business_domain", "capability", "value_stream"],
+  },
   business: {
     label: "Business",
     color: "blue",
-    types: ["business_domain", "capability", "value_stream"],
+    types: [],
   },
   application: {
     label: "Application",
@@ -77,11 +82,11 @@ export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
   solution: "Solution",
   technical_capability: "Technical Capability",
   agent: "AI Agent",
-  data_object: "Data Object",
+  data_object: "Data Entity",
   data_store: "Data Store",
   api: "API",
   event: "Event",
-  integration_flow: "Integration Flow",
+  integration_flow: "Flow",
   message_broker: "Message Broker",
   tool: "Tool",
   cloud_service: "Cloud Service",
@@ -750,3 +755,139 @@ export interface PaginatedResponse<T> {
 }
 
 export type ObjectListResponse = PaginatedResponse<MinEAObject>;
+
+// ─── People Layer ────────────────────────────────────────────────────────────
+
+export type PeopleRoleKind = "owner" | "performer" | "steward";
+export type AssignmentKind = "owner" | "performer";
+export type AccountabilityEntityKind =
+  | "product"
+  | "capability"
+  | "business_domain"
+  | "process"
+  | "application";
+export type AccountabilityLinkKind = "owns" | "performs" | "stewards";
+
+export interface PeopleRole {
+  id: string;
+  workspace_id: string;
+  org_id: string;
+  name: string;
+  role_kind: PeopleRoleKind | string;
+  description?: string | null;
+  team_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PeopleRoleCreate {
+  name: string;
+  role_kind?: PeopleRoleKind | string;
+  description?: string;
+}
+
+export interface PeopleRoleUpdate {
+  name?: string;
+  role_kind?: PeopleRoleKind | string;
+  description?: string | null;
+}
+
+export interface TeamUsingRole {
+  team_id: string;
+  team_name: string;
+  assignee_name?: string | null;
+  assignee_email?: string | null;
+  assignment_kind: AssignmentKind | string;
+}
+
+export interface TeamRoleOnTeam {
+  id: string;
+  people_role_id: string;
+  role_name: string;
+  role_kind: PeopleRoleKind | string;
+  assignee_name?: string | null;
+  assignee_email?: string | null;
+  assignment_kind: AssignmentKind | string;
+}
+
+export interface PeopleAccountability {
+  id: string;
+  entity_kind: AccountabilityEntityKind | string;
+  entity_id: string;
+  entity_name: string;
+  link_kind: AccountabilityLinkKind | string;
+  subtitle?: string | null;
+}
+
+export interface PeopleRoleDetail extends PeopleRole {
+  teams: TeamUsingRole[];
+  accountabilities: PeopleAccountability[];
+}
+
+export interface PeopleRoleListResponse {
+  items: PeopleRole[];
+  total: number;
+}
+
+export interface Team {
+  id: string;
+  workspace_id: string;
+  org_id: string;
+  name: string;
+  description?: string | null;
+  lead_name?: string | null;
+  lead_email?: string | null;
+  role_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamCreate {
+  name: string;
+  description?: string;
+  lead_name?: string;
+  lead_email?: string;
+}
+
+export interface TeamUpdate {
+  name?: string;
+  description?: string | null;
+  lead_name?: string | null;
+  lead_email?: string | null;
+}
+
+export interface TeamDetail extends Team {
+  roles: TeamRoleOnTeam[];
+  accountabilities: PeopleAccountability[];
+}
+
+export interface TeamListResponse {
+  items: Team[];
+  total: number;
+}
+
+export interface TeamRoleAssignmentCreate {
+  people_role_id: string;
+  assignee_name?: string;
+  assignee_email?: string;
+  assignment_kind?: AssignmentKind | string;
+}
+
+export interface TeamRoleAssignmentUpdate {
+  assignee_name?: string | null;
+  assignee_email?: string | null;
+  assignment_kind?: AssignmentKind | string;
+}
+
+export interface AddRoleToTeamCreate {
+  team_id: string;
+  assignee_name?: string;
+  assignee_email?: string;
+  assignment_kind?: AssignmentKind | string;
+}
+
+export interface AccountabilityCreate {
+  entity_kind: AccountabilityEntityKind | string;
+  entity_id: string;
+  link_kind: AccountabilityLinkKind | string;
+}

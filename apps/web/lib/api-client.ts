@@ -37,6 +37,20 @@ import type {
   CreateDomainMappingSystemRequest,
   DomainDetail,
   UpsertDomainMappingRequest,
+  PeopleRole,
+  PeopleRoleCreate,
+  PeopleRoleUpdate,
+  PeopleRoleDetail,
+  PeopleRoleListResponse,
+  Team,
+  TeamCreate,
+  TeamUpdate,
+  TeamDetail,
+  TeamListResponse,
+  TeamRoleAssignmentCreate,
+  TeamRoleAssignmentUpdate,
+  AddRoleToTeamCreate,
+  AccountabilityCreate,
 } from "@minea/types";
 import { apiV1Url } from "@/lib/api-base";
 
@@ -401,6 +415,150 @@ export const capabilityMapApi = {
     apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/domains/${domainId}/mappings`, {
       method: "PUT",
       body: JSON.stringify(body),
+      token,
+    }),
+};
+
+// ─── People (Roles & Teams) ──────────────────────────────────────────────────
+
+export const peopleApi = {
+  listRoles: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<PeopleRoleListResponse>(`${wsBase(orgSlug, workspaceSlug)}/people/roles`, { token }),
+
+  getRole: (orgSlug: string, workspaceSlug: string, roleId: string, token: string) =>
+    apiFetch<PeopleRoleDetail>(`${wsBase(orgSlug, workspaceSlug)}/people/roles/${roleId}`, { token }),
+
+  createRole: (orgSlug: string, workspaceSlug: string, body: PeopleRoleCreate, token: string) =>
+    apiFetch<PeopleRole>(`${wsBase(orgSlug, workspaceSlug)}/people/roles`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  updateRole: (
+    orgSlug: string,
+    workspaceSlug: string,
+    roleId: string,
+    body: PeopleRoleUpdate,
+    token: string
+  ) =>
+    apiFetch<PeopleRole>(`${wsBase(orgSlug, workspaceSlug)}/people/roles/${roleId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  deleteRole: (orgSlug: string, workspaceSlug: string, roleId: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/roles/${roleId}`, {
+      method: "DELETE",
+      token,
+    }),
+
+  linkRoleToTeam: (
+    orgSlug: string,
+    workspaceSlug: string,
+    roleId: string,
+    body: AddRoleToTeamCreate,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/roles/${roleId}/teams`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  addRoleAccountability: (
+    orgSlug: string,
+    workspaceSlug: string,
+    roleId: string,
+    body: AccountabilityCreate,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/roles/${roleId}/accountabilities`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  listTeams: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<TeamListResponse>(`${wsBase(orgSlug, workspaceSlug)}/people/teams`, { token }),
+
+  getTeam: (orgSlug: string, workspaceSlug: string, teamId: string, token: string) =>
+    apiFetch<TeamDetail>(`${wsBase(orgSlug, workspaceSlug)}/people/teams/${teamId}`, { token }),
+
+  createTeam: (orgSlug: string, workspaceSlug: string, body: TeamCreate, token: string) =>
+    apiFetch<Team>(`${wsBase(orgSlug, workspaceSlug)}/people/teams`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  updateTeam: (
+    orgSlug: string,
+    workspaceSlug: string,
+    teamId: string,
+    body: TeamUpdate,
+    token: string
+  ) =>
+    apiFetch<Team>(`${wsBase(orgSlug, workspaceSlug)}/people/teams/${teamId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  deleteTeam: (orgSlug: string, workspaceSlug: string, teamId: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/teams/${teamId}`, {
+      method: "DELETE",
+      token,
+    }),
+
+  addTeamRole: (
+    orgSlug: string,
+    workspaceSlug: string,
+    teamId: string,
+    body: TeamRoleAssignmentCreate,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/teams/${teamId}/roles`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  updateTeamRole: (
+    orgSlug: string,
+    workspaceSlug: string,
+    teamId: string,
+    assignmentId: string,
+    body: TeamRoleAssignmentUpdate,
+    token: string
+  ) =>
+    apiFetch<void>(
+      `${wsBase(orgSlug, workspaceSlug)}/people/teams/${teamId}/roles/${assignmentId}`,
+      { method: "PUT", body: JSON.stringify(body), token }
+    ),
+
+  addTeamAccountability: (
+    orgSlug: string,
+    workspaceSlug: string,
+    teamId: string,
+    body: AccountabilityCreate,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/teams/${teamId}/accountabilities`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  deleteAccountability: (
+    orgSlug: string,
+    workspaceSlug: string,
+    accountabilityId: string,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/accountabilities/${accountabilityId}`, {
+      method: "DELETE",
       token,
     }),
 };

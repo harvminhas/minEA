@@ -33,6 +33,19 @@ export interface ViewConfig {
 
 export const PRIMARY_VIEW_ID: ViewId = "products";
 
+export const PRODUCTS_VIEW: ViewConfig = {
+  id: "products",
+  label: "Product portfolio",
+  segment: "views/products",
+  icon: Package,
+  color: "#6366f1",
+  anchorQuestion: "Show me our products and what they depend on.",
+  emptyTitle: "No products yet",
+  emptyDescription:
+    "A product is something your business offers — like Payments or Merchant onboarding. Map each product to the business capabilities it delivers; systems and processes are inferred from there.",
+  emptyCta: "Add your first product",
+};
+
 /** Processes lives under Repository → Business in the sidebar, not under Views. */
 export const PROCESSES_VIEW: ViewConfig = {
   id: "processes",
@@ -48,18 +61,6 @@ export const PROCESSES_VIEW: ViewConfig = {
 };
 
 export const VIEWS_V1: ViewConfig[] = [
-  {
-    id: "products",
-    label: "Product portfolio",
-    segment: "views/products",
-    icon: Package,
-    color: "#6366f1",
-    anchorQuestion: "Show me our products and what they depend on.",
-    emptyTitle: "No products yet",
-    emptyDescription:
-      "A product is something your business offers — like Payments or Merchant onboarding. Map each product to the business capabilities it delivers; systems and processes are inferred from there.",
-    emptyCta: "Add your first product",
-  },
   {
     id: "journeys",
     label: "Journeys",
@@ -120,6 +121,7 @@ export const VIEWS_V1: ViewConfig[] = [
 ];
 
 export function getView(id: ViewId): ViewConfig {
+  if (id === "products") return PRODUCTS_VIEW;
   if (id === "processes") return PROCESSES_VIEW;
   const view = VIEWS_V1.find((v) => v.id === id);
   if (!view) throw new Error(`Unknown view: ${id}`);
