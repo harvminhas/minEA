@@ -8,6 +8,7 @@ from app.database import get_db
 from app.models.people import PeopleAccountability, PeopleRole, Team, TeamRoleAssignment
 from app.schemas.people import (
     AccountabilityCreate,
+    AccountabilityUpdate,
     AddRoleToTeamCreate,
     PeopleRoleCreate,
     PeopleRoleDetail,
@@ -547,3 +548,48 @@ async def delete_accountability(
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Accountability not found")
     await db.delete(row)
+
+
+@router.patch("/accountabilities/{accountability_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def update_accountability(
+    accountability_id: UUID,
+    body: AccountabilityUpdate,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await ctx.require_write(db)
+    assert ctx.workspace
+
+    result = await db.execute(
+        select(PeopleAccountability).where(
+            PeopleAccountability.id == accountability_id,
+            PeopleAccountability.workspace_id == ctx.workspace.id,
+            PeopleAccountability.org_id == ctx.org_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Accountability not found")
+
+    if body.link_kind == row.link_kind:
+        return
+
+    dup = await db.execute(
+        select(PeopleAccountability.id).where(
+            PeopleAccountability.workspace_id == ctx.workspace.id,
+            PeopleAccountability.org_id == ctx.org_id,
+            PeopleAccountability.subject_type == row.subject_type,
+            PeopleAccountability.subject_id == row.subject_id,
+            PeopleAccountability.entity_kind == row.entity_kind,
+            PeopleAccountability.entity_id == row.entity_id,
+            PeopleAccountability.link_kind == body.link_kind,
+            PeopleAccountability.id != accountability_id,
+        )
+    )
+    if dup.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This relationship already exists for the entity",
+        )
+
+    row.link_kind = body.link_kind

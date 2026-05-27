@@ -17,7 +17,7 @@ import { invalidateProductQueries } from "@/lib/product-queries";
 import { ProductForm } from "@/components/views/ProductForm";
 import { ProductDetail } from "@/components/views/ProductDetail";
 import { cn } from "@/lib/utils";
-import { useViewEmbedded } from "@/lib/view-embed-context";
+import { useViewEmbedded, useViewsTheme } from "@/lib/view-embed-context";
 import type { Product, MinEAObject } from "@minea/types";
 
 // ─── Health scoring ────────────────────────────────────────────────────────
@@ -418,6 +418,7 @@ export function PortfolioView() {
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const embedded = useViewEmbedded();
+  const isViewsMode = useViewsTheme();
 
   const shellClass = cn(
     "mx-auto w-full",
@@ -589,11 +590,16 @@ export function PortfolioView() {
       <div className={cn(shellClass, "pb-0 flex-shrink-0")}>
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>
-            <p className="text-xs text-gray-400 mb-1 uppercase tracking-wider">
+            <p
+              className={cn(
+                "text-xs mb-1 uppercase tracking-wider",
+                isViewsMode ? "text-violet-400" : "text-gray-400"
+              )}
+            >
               Views · Portfolio
             </p>
             <h1 className="text-2xl font-bold text-gray-900">Products portfolio</h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className={cn("text-sm mt-1", isViewsMode ? "text-violet-500" : "text-gray-500")}>
               {products.length} product{products.length === 1 ? "" : "s"} ·{" "}
               {teamCount} team{teamCount === 1 ? "" : "s"}
               {lastUpdated && ` · last updated ${lastUpdated}`}
@@ -620,7 +626,12 @@ export function PortfolioView() {
         </div>
 
         {/* Toggle row */}
-        <div className="flex items-center gap-3 flex-wrap pb-5 border-b border-gray-200">
+        <div
+          className={cn(
+            "flex items-center gap-3 flex-wrap pb-5 border-b",
+            isViewsMode ? "border-violet-200/60" : "border-gray-200"
+          )}
+        >
           {/* Grid / Matrix toggle */}
           <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
             {(["grid", "matrix"] as const).map((l) => (

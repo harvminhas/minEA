@@ -30,14 +30,14 @@ export function SplitViewPanel() {
     orgSlug && workspaceSlug ? viewPath(orgSlug, workspaceSlug, splitViewId) : "#";
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 overflow-hidden border-l border-gray-200">
+    <div className="flex flex-col h-full bg-violet-50 overflow-hidden border-l border-violet-200/60">
       {/* Compact header — view picker + fullscreen */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 bg-white flex-shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-violet-200/60 bg-violet-50/95 flex-shrink-0">
         <div className="relative flex-1 min-w-0" ref={dropdownRef}>
           <button
             type="button"
             onClick={() => setDropdownOpen((o) => !o)}
-            className="flex items-center gap-1.5 w-full text-left rounded-md px-2.5 py-1.5 hover:bg-gray-100 transition-colors"
+            className="flex items-center gap-1.5 w-full text-left rounded-md px-2.5 py-1.5 hover:bg-violet-100/80 transition-colors"
           >
             <span
               className="h-5 w-5 rounded flex items-center justify-center flex-shrink-0"
@@ -50,12 +50,12 @@ export function SplitViewPanel() {
             </span>
             <ChevronDown
               size={11}
-              className={cn("text-gray-400 flex-shrink-0 transition-transform", dropdownOpen && "rotate-180")}
+              className={cn("text-violet-400 flex-shrink-0 transition-transform", dropdownOpen && "rotate-180")}
             />
           </button>
 
           {dropdownOpen && (
-            <div className="absolute left-0 top-full mt-1 w-full min-w-[200px] bg-white border border-gray-200 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
+            <div className="absolute left-0 top-full mt-1 w-full min-w-[200px] bg-white border border-violet-200/60 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
               {NAV_VIEWS.map((view) => (
                 <button
                   key={view.id}
@@ -67,8 +67,8 @@ export function SplitViewPanel() {
                   className={cn(
                     "flex items-center gap-2.5 w-full text-left px-3 py-1.5 text-xs transition-colors",
                     view.id === splitViewId
-                      ? "bg-indigo-50 text-indigo-700"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                      ? "bg-violet-50 text-violet-700"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-violet-50/60"
                   )}
                 >
                   <span
@@ -87,7 +87,7 @@ export function SplitViewPanel() {
         <Link
           href={fullscreenHref}
           title="Open fullscreen"
-          className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors flex-shrink-0"
+          className="p-1.5 text-violet-400 hover:text-violet-700 hover:bg-violet-100/80 rounded transition-colors flex-shrink-0"
         >
           <Maximize2 size={13} />
         </Link>

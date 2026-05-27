@@ -21,7 +21,10 @@ async def resolve_accountability_labels(
 
     product_ids = [r.entity_id for r in rows if r.entity_kind == "product"]
     object_ids = [
-        r.entity_id for r in rows if r.entity_kind in ("capability", "business_domain", "application")
+        r.entity_id
+        for r in rows
+        if r.entity_kind
+        in ("capability", "business_domain", "application", "data_domain", "data_store")
     ]
     process_ids = [r.entity_id for r in rows if r.entity_kind == "process"]
 
@@ -71,7 +74,7 @@ async def resolve_accountability_labels(
             process = processes.get(row.entity_id)
             if process:
                 name = process.name
-        elif row.entity_kind in ("capability", "business_domain", "application"):
+        elif row.entity_kind in ("capability", "business_domain", "application", "data_domain", "data_store"):
             obj = objects.get(row.entity_id)
             if obj:
                 name = obj.name
@@ -89,6 +92,31 @@ async def resolve_accountability_labels(
                     subtitle = f"{cap_count or 0} capabilities"
                 elif row.entity_kind == "capability":
                     domain_id = (obj.properties or {}).get("domain_id")
+                    if domain_id:
+                        dom_result = await db.execute(
+                            select(MinEAObject.name).where(
+                                MinEAObject.id == UUID(str(domain_id)),
+                                MinEAObject.workspace_id == workspace_id,
+                                MinEAObject.org_id == org_id,
+                            )
+                        )
+                        domain_name = dom_result.scalar_one_or_none()
+                        if domain_name:
+                            subtitle = domain_name
+                elif row.entity_kind == "data_domain":
+                    entity_count = await db.scalar(
+                        select(func.count())
+                        .select_from(MinEAObject)
+                        .where(
+                            MinEAObject.workspace_id == workspace_id,
+                            MinEAObject.org_id == org_id,
+                            MinEAObject.type == "data_object",
+                            MinEAObject.properties["data_domain_id"].astext == str(obj.id),
+                        )
+                    )
+                    subtitle = f"{entity_count or 0} entities"
+                elif row.entity_kind == "data_store":
+                    domain_id = (obj.properties or {}).get("data_domain_id")
                     if domain_id:
                         dom_result = await db.execute(
                             select(MinEAObject.name).where(
@@ -210,6 +238,8 @@ async def validate_accountability_entity(
         "capability": "capability",
         "business_domain": "business_domain",
         "application": "application",
+        "data_domain": "data_domain",
+        "data_store": "data_store",
     }.get(entity_kind)
     if not expected_type:
         raise ValueError("Invalid entity kind")

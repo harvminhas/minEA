@@ -14,7 +14,7 @@ import { workspacesApi } from "@/lib/api-client";
 export function TopNav() {
   const router = useRouter();
   const { getToken, user, signOut } = useAuth();
-  const { orgSlug, workspaceSlug } = useTenancy();
+  const { orgSlug, workspaceSlug, basePath } = useTenancy();
   const { activeOrg, activeWorkspace, viewMode, setViewMode } = useAppStore();
 
   const [wsOpen, setWsOpen] = useState(false);
@@ -126,7 +126,12 @@ export function TopNav() {
             <button
               key={mode}
               type="button"
-              onClick={() => setViewMode(mode)}
+              onClick={() => {
+                setViewMode(mode);
+                if (mode === "views" && basePath) {
+                  router.push(`${basePath}/views`);
+                }
+              }}
               title={label}
               className={cn(
                 "flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors",

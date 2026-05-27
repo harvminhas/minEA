@@ -7,7 +7,6 @@ import { X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { peopleApi } from "@/lib/api-client";
 import { PEOPLE_LAYER_COLOR } from "@/lib/people-utils";
-import type { PeopleRoleKind } from "@minea/types";
 
 interface Props {
   onClose: () => void;
@@ -19,13 +18,17 @@ export function CreateRolePanel({ onClose, onSuccess }: Props) {
   const { orgSlug, workspaceSlug } = useTenancy();
 
   const [name, setName] = useState("");
-  const [roleKind, setRoleKind] = useState<PeopleRoleKind>("owner");
   const [description, setDescription] = useState("");
 
   const createMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
-      return peopleApi.createRole(orgSlug, workspaceSlug, { name: name.trim(), role_kind: roleKind, description }, token!);
+      return peopleApi.createRole(
+        orgSlug,
+        workspaceSlug,
+        { name: name.trim(), description: description || undefined },
+        token!
+      );
     },
     onSuccess: (role) => onSuccess(role.id),
   });
@@ -35,7 +38,6 @@ export function CreateRolePanel({ onClose, onSuccess }: Props) {
       <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
 
       <div className="fixed inset-y-0 right-0 left-[200px] bg-[#faf8f5] z-50 flex flex-col overflow-hidden">
-        {/* Top bar */}
         <div className="flex items-center justify-between px-8 pt-6 pb-2 bg-[#faf8f5]">
           <div>
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
@@ -54,14 +56,9 @@ export function CreateRolePanel({ onClose, onSuccess }: Props) {
 
         <div className="h-px bg-gray-200/80 mx-8 mt-3" />
 
-        {/* Two-column body */}
         <div className="flex flex-1 min-h-0">
-
-          {/* Left: form */}
           <div className="w-[340px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
-
-              {/* Name */}
               <div>
                 <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
                   Name
@@ -75,26 +72,6 @@ export function CreateRolePanel({ onClose, onSuccess }: Props) {
                 />
               </div>
 
-              {/* Type */}
-              <div>
-                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                  Type
-                </label>
-                <div className="relative">
-                  <select
-                    value={roleKind}
-                    onChange={(e) => setRoleKind(e.target.value as PeopleRoleKind)}
-                    className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300 pr-8"
-                  >
-                    <option value="owner">Owner</option>
-                    <option value="performer">Performer</option>
-                    <option value="steward">Steward</option>
-                  </select>
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">▾</span>
-                </div>
-              </div>
-
-              {/* Description */}
               <div>
                 <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
                   Description
@@ -107,9 +84,12 @@ export function CreateRolePanel({ onClose, onSuccess }: Props) {
                   className="w-full rounded-md border border-gray-200 px-3 py-2.5 text-sm text-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-gray-300"
                 />
               </div>
+
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Relationship type is set per assignment — use the accountabilities panel after creating to link this role to products, processes, and systems.
+              </p>
             </div>
 
-            {/* Save */}
             <div className="px-6 py-5 border-t border-gray-100">
               {createMutation.isError && (
                 <p className="text-xs text-red-500 mb-3">Something went wrong. Please try again.</p>
@@ -125,7 +105,6 @@ export function CreateRolePanel({ onClose, onSuccess }: Props) {
             </div>
           </div>
 
-          {/* Right: placeholder */}
           <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center px-12">
             <div
               className="h-12 w-12 rounded-full flex items-center justify-center text-white font-bold text-lg mb-4"
@@ -133,11 +112,9 @@ export function CreateRolePanel({ onClose, onSuccess }: Props) {
             >
               {name ? name.charAt(0).toUpperCase() : "R"}
             </div>
-            <p className="text-sm font-medium text-gray-600 mb-1">
-              {name || "New Role"}
-            </p>
+            <p className="text-sm font-medium text-gray-600 mb-1">{name || "New Role"}</p>
             <p className="text-xs text-gray-400 max-w-xs">
-              After creating, you can assign this role to teams and link it to products, capabilities, processes, and systems.
+              After creating, assign this role to teams and link it to architecture entities with the relationship that fits each one.
             </p>
           </div>
         </div>

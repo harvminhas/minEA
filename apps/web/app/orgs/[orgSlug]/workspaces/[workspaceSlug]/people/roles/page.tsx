@@ -9,8 +9,7 @@ import { peopleApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { RoleDetailPanel } from "@/components/people/RoleDetailPanel";
 import { CreateRolePanel } from "@/components/people/CreateRolePanel";
-import { ASSIGNMENT_KIND_STYLE, initials, PEOPLE_LAYER_COLOR } from "@/lib/people-utils";
-import { cn } from "@/lib/utils";
+import { initials, PEOPLE_LAYER_COLOR } from "@/lib/people-utils";
 import type { PeopleRole } from "@minea/types";
 
 const CARD_COLORS = ["#e11d48", "#8b5cf6", "#0ea5e9", "#22c55e", "#f59e0b"];
@@ -39,25 +38,14 @@ function RoleCard({
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="font-semibold text-gray-900 truncate">{role.name}</h3>
-          <p className="text-xs text-gray-400 mt-0.5 capitalize">{role.role_kind} type</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {role.team_count} team{role.team_count === 1 ? "" : "s"}
+          </p>
         </div>
       </div>
       {role.description && (
         <p className="text-xs text-gray-500 mb-3 line-clamp-2">{role.description}</p>
       )}
-      <div className="flex flex-wrap gap-1.5">
-        <span
-          className={cn(
-            "rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
-            ASSIGNMENT_KIND_STYLE[role.role_kind] ?? "bg-gray-100 text-gray-600"
-          )}
-        >
-          {role.role_kind}
-        </span>
-        <span className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-600">
-          {role.team_count} team{role.team_count === 1 ? "" : "s"}
-        </span>
-      </div>
     </button>
   );
 }

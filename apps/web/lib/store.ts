@@ -22,6 +22,9 @@ interface AppStore {
 
   chatOpen: boolean;
   setChatOpen: (open: boolean) => void;
+
+  sidebarExpanded: boolean;
+  setSidebarExpanded: (expanded: boolean) => void;
 }
 
 export const useAppStore = create<AppStore>()(
@@ -49,6 +52,9 @@ export const useAppStore = create<AppStore>()(
 
       chatOpen: false,
       setChatOpen: (open) => set({ chatOpen: open }),
+
+      sidebarExpanded: false,
+      setSidebarExpanded: (expanded) => set({ sidebarExpanded: expanded }),
     }),
     {
       name: "minea-app-store",
@@ -56,6 +62,7 @@ export const useAppStore = create<AppStore>()(
         collapsedLayers: state.collapsedLayers,
         viewMode: state.viewMode,
         splitViewId: state.splitViewId,
+        sidebarExpanded: state.sidebarExpanded,
       }),
     }
   )

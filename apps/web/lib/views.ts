@@ -22,6 +22,8 @@ export type ViewId =
 export interface ViewConfig {
   id: ViewId;
   label: string;
+  /** Short tagline shown in the gallery card */
+  description: string;
   segment: string;
   icon: LucideIcon;
   color: string;
@@ -36,6 +38,7 @@ export const PRIMARY_VIEW_ID: ViewId = "products";
 export const PRODUCTS_VIEW: ViewConfig = {
   id: "products",
   label: "Product portfolio",
+  description: "Health and overlap analysis",
   segment: "views/products",
   icon: Package,
   color: "#6366f1",
@@ -50,6 +53,7 @@ export const PRODUCTS_VIEW: ViewConfig = {
 export const PROCESSES_VIEW: ViewConfig = {
   id: "processes",
   label: "Processes",
+  description: "End-to-end process flows",
   segment: "views/processes",
   icon: GitBranch,
   color: "#0ea5e9",
@@ -63,8 +67,21 @@ export const PROCESSES_VIEW: ViewConfig = {
 /** Product portfolio + v1 views — used in Views sidebar and split panel picker. */
 export const VIEWS_V1: ViewConfig[] = [
   {
+    id: "capability-heatmap",
+    label: "Capability heatmap",
+    description: "System health across domains",
+    segment: "views/capability-heatmap",
+    icon: Grid3X3,
+    color: "#22c55e",
+    anchorQuestion: "Show me a one-screen map of our business, colored by automation maturity.",
+    emptyTitle: "Nothing to heatmap yet",
+    emptyDescription:
+      "Populate business capabilities and their realizations in the repository. This view colors each capability by maturity (manual → automated) — read-only over data created elsewhere.",
+  },
+  {
     id: "journeys",
     label: "Journeys",
+    description: "End-to-end process flows",
     segment: "views/journeys",
     icon: Map,
     color: "#ec4899",
@@ -75,19 +92,9 @@ export const VIEWS_V1: ViewConfig[] = [
     emptyCta: "Add your first journey",
   },
   {
-    id: "capability-heatmap",
-    label: "Capability heatmap",
-    segment: "views/capability-heatmap",
-    icon: Grid3X3,
-    color: "#22c55e",
-    anchorQuestion: "Show me a one-screen map of our business, colored by automation maturity.",
-    emptyTitle: "Nothing to heatmap yet",
-    emptyDescription:
-      "Populate business capabilities and their realizations in the repository. This view colors each capability by maturity (manual → automated) — read-only over data created elsewhere.",
-  },
-  {
     id: "investments",
     label: "Investment pipeline",
+    description: "Prioritised initiatives by impact",
     segment: "views/investments",
     icon: TrendingUp,
     color: "#f59e0b",
@@ -100,6 +107,7 @@ export const VIEWS_V1: ViewConfig[] = [
   {
     id: "ai-infrastructure",
     label: "AI infrastructure",
+    description: "AI-related systems and capabilities",
     segment: "views/ai-infrastructure",
     icon: Sparkles,
     color: "#a855f7",
@@ -111,6 +119,7 @@ export const VIEWS_V1: ViewConfig[] = [
   {
     id: "insights",
     label: "AI insights",
+    description: "Gaps, risks, recommendations",
     segment: "views/insights",
     icon: Zap,
     color: "#eab308",

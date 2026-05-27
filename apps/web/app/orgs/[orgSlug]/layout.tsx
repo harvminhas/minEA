@@ -6,7 +6,7 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery } from "@tanstack/react-query";
 import { TopNav } from "@/components/nav/TopNav";
-import { Sidebar } from "@/components/sidebar/Sidebar";
+import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { ResizableSplitLayout } from "@/components/sidebar/ResizableSplitLayout";
 import { useAppStore } from "@/lib/store";
 import { orgsApi } from "@/lib/api-client";
@@ -16,7 +16,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const pathname = usePathname();
-  const { setActiveOrg, viewMode } = useAppStore();
+  const { setActiveOrg, viewMode, sidebarExpanded } = useAppStore();
   const queryEnabled = useAuthQueryEnabled(orgSlug);
   const isEmbed = pathname.includes("/embed/");
 
@@ -42,19 +42,21 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const sidebarW = sidebarExpanded ? "ml-[200px]" : "ml-[52px]";
+  const bgClass = viewMode === "views" ? "bg-violet-50" : "bg-gray-50";
+
   return (
     <RequireAuth>
-      <div className="h-screen overflow-hidden bg-gray-50">
+      <div className={`h-screen overflow-hidden ${bgClass}`}>
         <TopNav />
         <div className="flex h-full pt-12">
-          <Sidebar />
+          <AppSidebar />
           {viewMode === "split" ? (
-            /* Split mode: repo content left, draggable handle, live view panel right */
-            <div className="flex flex-1 ml-[200px] overflow-hidden">
+            <div className={`flex flex-1 ${sidebarW} overflow-hidden`}>
               <ResizableSplitLayout>{children}</ResizableSplitLayout>
             </div>
           ) : (
-            <main className="flex-1 ml-[200px] overflow-y-auto">{children}</main>
+            <main className={`flex-1 ${sidebarW} overflow-y-auto`}>{children}</main>
           )}
         </div>
       </div>

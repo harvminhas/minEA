@@ -7,18 +7,13 @@ import { X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { peopleApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
-import { AccountabilitiesPanel } from "@/components/people/AccountabilitiesPanel";
+import { AccountabilitiesPanel, type AssignTarget } from "@/components/people/AccountabilitiesPanel";
 import { AssignAccountabilityDialog } from "@/components/people/AssignAccountabilityDialog";
+import { EditAccountabilityDialog } from "@/components/people/EditAccountabilityDialog";
+import { ConfirmRemoveAssignmentDialog } from "@/components/people/ConfirmRemoveAssignmentDialog";
 import { ASSIGNMENT_KIND_STYLE, PEOPLE_LAYER_COLOR, initials } from "@/lib/people-utils";
 import { cn } from "@/lib/utils";
-import type { AssignmentKind, PeopleRole } from "@minea/types";
-
-interface AssignTarget {
-  sectionKey: string;
-  entityKind: string;
-  linkKind: string;
-  sectionTitle: string;
-}
+import type { AssignmentKind, PeopleAccountability, PeopleRole } from "@minea/types";
 
 const ROLES_PREVIEW_COUNT = 2;
 
@@ -40,6 +35,10 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
   const [showAllRoles, setShowAllRoles] = useState(false);
   const [showAddRole, setShowAddRole] = useState(false);
   const [assignTarget, setAssignTarget] = useState<AssignTarget | null>(null);
+  const [editTarget, setEditTarget] = useState<PeopleAccountability | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PeopleAccountability | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [assigneeName, setAssigneeName] = useState("");
   const [assigneeEmail, setAssigneeEmail] = useState("");
@@ -87,6 +86,34 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
       onClose();
     },
   });
+
+  const refreshAccountabilities = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: ["people-team", orgSlug, workspaceSlug, teamId],
+    });
+  };
+
+  const handleDeleteAssignment = (item: PeopleAccountability) => {
+    setDeleteError(null);
+    setDeleteTarget(item);
+  };
+
+  const confirmDeleteAssignment = async () => {
+    if (!deleteTarget) return;
+    setDeletingId(deleteTarget.id);
+    setDeleteError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      await peopleApi.deleteAccountability(orgSlug, workspaceSlug, deleteTarget.id, token);
+      setDeleteTarget(null);
+      await refreshAccountabilities();
+    } catch {
+      setDeleteError("Could not remove assignment. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const addRoleMutation = useMutation({
     mutationFn: async () => {
@@ -364,6 +391,9 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
                 subjectLabel="team"
                 includeDomains
                 onAssign={setAssignTarget}
+                onEdit={setEditTarget}
+                onDelete={handleDeleteAssignment}
+                deletingId={deletingId}
               />
             )}
           </div>
@@ -375,19 +405,45 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
           subjectType="team"
           subjectId={teamId}
           entityKind={assignTarget.entityKind}
-          linkKind={assignTarget.linkKind}
           sectionTitle={assignTarget.sectionTitle}
-          existingEntityIds={team.accountabilities
-            .filter(
-              (a) =>
-                a.entity_kind === assignTarget.entityKind &&
-                a.link_kind === assignTarget.linkKind
-            )
-            .map((a) => a.entity_id)}
+          existingPairs={team.accountabilities
+            .filter((a) => a.entity_kind === assignTarget.entityKind)
+            .map((a) => ({ entityId: a.entity_id, linkKind: a.link_kind }))}
           onClose={() => setAssignTarget(null)}
-          onSuccess={() => {
+          onSuccess={async () => {
             setAssignTarget(null);
-            queryClient.invalidateQueries({ queryKey: ["people-team", orgSlug, workspaceSlug, teamId] });
+            await refreshAccountabilities();
+          }}
+        />
+      )}
+
+      {editTarget && team && (
+        <EditAccountabilityDialog
+          item={editTarget}
+          subjectType="team"
+          existingPairs={team.accountabilities
+            .filter((a) => a.entity_kind === editTarget.entity_kind)
+            .map((a) => ({ entityId: a.entity_id, linkKind: a.link_kind }))}
+          onClose={() => setEditTarget(null)}
+          onSuccess={async () => {
+            setEditTarget(null);
+            await refreshAccountabilities();
+          }}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmRemoveAssignmentDialog
+          entityName={deleteTarget.entity_name}
+          linkKind={deleteTarget.link_kind}
+          subjectType="team"
+          loading={deletingId === deleteTarget.id}
+          error={deleteError}
+          onConfirm={confirmDeleteAssignment}
+          onClose={() => {
+            if (deletingId) return;
+            setDeleteTarget(null);
+            setDeleteError(null);
           }}
         />
       )}

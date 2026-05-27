@@ -7,21 +7,16 @@ import { X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { peopleApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
-import { AccountabilitiesPanel } from "@/components/people/AccountabilitiesPanel";
+import {
+  AccountabilitiesPanel,
+  type AssignTarget,
+} from "@/components/people/AccountabilitiesPanel";
 import { AssignAccountabilityDialog } from "@/components/people/AssignAccountabilityDialog";
+import { EditAccountabilityDialog } from "@/components/people/EditAccountabilityDialog";
+import { ConfirmRemoveAssignmentDialog } from "@/components/people/ConfirmRemoveAssignmentDialog";
 import { PEOPLE_LAYER_COLOR, initials } from "@/lib/people-utils";
-import type { PeopleRoleKind } from "@minea/types";
+import type { PeopleAccountability } from "@minea/types";
 
-interface AssignTarget {
-  sectionKey: string;
-  entityKind: string;
-  linkKind: string;
-  sectionTitle: string;
-}
-
-const ROLE_KINDS: PeopleRoleKind[] = ["owner", "performer", "steward"];
-
-// Stable colors for team dots
 const TEAM_DOT_COLORS = ["#e11d48", "#f59e0b", "#6366f1", "#0ea5e9", "#22c55e", "#8b5cf6"];
 
 interface Props {
@@ -37,9 +32,12 @@ export function RoleDetailPanel({ roleId, onClose, onUpdate }: Props) {
   const enabled = useAuthQueryEnabled(roleId);
 
   const [name, setName] = useState("");
-  const [roleKind, setRoleKind] = useState<PeopleRoleKind>("owner");
   const [description, setDescription] = useState("");
   const [assignTarget, setAssignTarget] = useState<AssignTarget | null>(null);
+  const [editTarget, setEditTarget] = useState<PeopleAccountability | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PeopleAccountability | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const { data: role, isLoading } = useQuery({
     queryKey: ["people-role", orgSlug, workspaceSlug, roleId],
@@ -53,7 +51,6 @@ export function RoleDetailPanel({ roleId, onClose, onUpdate }: Props) {
   useEffect(() => {
     if (!role) return;
     setName(role.name);
-    setRoleKind(role.role_kind as PeopleRoleKind);
     setDescription(role.description ?? "");
   }, [role]);
 
@@ -61,8 +58,7 @@ export function RoleDetailPanel({ roleId, onClose, onUpdate }: Props) {
     mutationFn: async () => {
       const token = await getToken();
       return peopleApi.updateRole(orgSlug, workspaceSlug, roleId, {
-        name,
-        role_kind: roleKind,
+        name: name.trim(),
         description: description || null,
       }, token!);
     },
@@ -74,15 +70,39 @@ export function RoleDetailPanel({ roleId, onClose, onUpdate }: Props) {
     },
   });
 
+  const refreshAccountabilities = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: ["people-role", orgSlug, workspaceSlug, roleId],
+    });
+  };
+
+  const handleDeleteAssignment = (item: PeopleAccountability) => {
+    setDeleteError(null);
+    setDeleteTarget(item);
+  };
+
+  const confirmDeleteAssignment = async () => {
+    if (!deleteTarget) return;
+    setDeletingId(deleteTarget.id);
+    setDeleteError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      await peopleApi.deleteAccountability(orgSlug, workspaceSlug, deleteTarget.id, token);
+      setDeleteTarget(null);
+      await refreshAccountabilities();
+    } catch {
+      setDeleteError("Could not remove assignment. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
 
-      {/* Full overlay (sidebar-aware) */}
       <div className="fixed inset-y-0 right-0 left-[200px] bg-[#faf8f5] z-50 flex flex-col overflow-hidden">
-
-        {/* Top bar: breadcrumb + close */}
         <div className="flex items-center justify-between px-8 pt-6 pb-2 bg-[#faf8f5]">
           <div>
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
@@ -102,59 +122,43 @@ export function RoleDetailPanel({ roleId, onClose, onUpdate }: Props) {
           </button>
         </div>
 
-        {/* Divider */}
         <div className="h-px bg-gray-200/80 mx-8 mt-3" />
 
-        {/* Two-column body */}
         <div className="flex flex-1 min-h-0">
-
-          {/* ─── Left panel: edit form ─────────────────────────── */}
           <div className="w-[340px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
-
             {isLoading || !role ? (
               <div className="flex-1 flex items-center justify-center">
                 <p className="text-sm text-gray-400">Loading role…</p>
               </div>
             ) : (
               <>
-                {/* Role header */}
                 <div className="px-6 pt-6 pb-5">
                   <div className="flex items-center gap-3">
                     <div
                       className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
                       style={{ backgroundColor: PEOPLE_LAYER_COLOR }}
                     >
-                      {initials(role.name)}
+                      {initials(name || role.name)}
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-900">{role.name}</p>
-                      <p className="text-xs text-gray-400 capitalize">{roleKind} type</p>
+                      <p className="font-semibold text-gray-900">{name || role.name}</p>
+                      <p className="text-xs text-gray-400">
+                        {role.accountabilities.length} assignment{role.accountabilities.length === 1 ? "" : "s"}
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Form fields */}
                 <div className="flex-1 overflow-y-auto px-6 pb-4 space-y-5">
                   <div>
                     <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                      Type
+                      Name
                     </label>
-                    <div className="relative">
-                      <select
-                        value={roleKind}
-                        onChange={(e) => setRoleKind(e.target.value as PeopleRoleKind)}
-                        className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300 capitalize pr-8"
-                      >
-                        {ROLE_KINDS.map((kind) => (
-                          <option key={kind} value={kind} className="capitalize">
-                            {kind.charAt(0).toUpperCase() + kind.slice(1)}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                        ▾
-                      </span>
-                    </div>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full rounded-md border border-gray-200 px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                    />
                   </div>
 
                   <div>
@@ -170,7 +174,6 @@ export function RoleDetailPanel({ roleId, onClose, onUpdate }: Props) {
                     />
                   </div>
 
-                  {/* Teams using this role */}
                   <div>
                     <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
                       Teams Using This Role
@@ -209,7 +212,6 @@ export function RoleDetailPanel({ roleId, onClose, onUpdate }: Props) {
                   </div>
                 </div>
 
-                {/* Save */}
                 <div className="px-6 py-5 border-t border-gray-100">
                   <button
                     type="button"
@@ -224,13 +226,15 @@ export function RoleDetailPanel({ roleId, onClose, onUpdate }: Props) {
             )}
           </div>
 
-          {/* ─── Right panel: accountabilities ────────────────── */}
           <div className="flex-1 min-w-0 overflow-y-auto">
             {role && (
               <AccountabilitiesPanel
                 accountabilities={role.accountabilities}
                 subjectLabel="role"
                 onAssign={setAssignTarget}
+                onEdit={setEditTarget}
+                onDelete={handleDeleteAssignment}
+                deletingId={deletingId}
               />
             )}
           </div>
@@ -242,19 +246,45 @@ export function RoleDetailPanel({ roleId, onClose, onUpdate }: Props) {
           subjectType="role"
           subjectId={roleId}
           entityKind={assignTarget.entityKind}
-          linkKind={assignTarget.linkKind}
           sectionTitle={assignTarget.sectionTitle}
-          existingEntityIds={role.accountabilities
-            .filter(
-              (a) =>
-                a.entity_kind === assignTarget.entityKind &&
-                a.link_kind === assignTarget.linkKind
-            )
-            .map((a) => a.entity_id)}
+          existingPairs={role.accountabilities
+            .filter((a) => a.entity_kind === assignTarget.entityKind)
+            .map((a) => ({ entityId: a.entity_id, linkKind: a.link_kind }))}
           onClose={() => setAssignTarget(null)}
-          onSuccess={() => {
+          onSuccess={async () => {
             setAssignTarget(null);
-            queryClient.invalidateQueries({ queryKey: ["people-role", orgSlug, workspaceSlug, roleId] });
+            await refreshAccountabilities();
+          }}
+        />
+      )}
+
+      {editTarget && role && (
+        <EditAccountabilityDialog
+          item={editTarget}
+          subjectType="role"
+          existingPairs={role.accountabilities
+            .filter((a) => a.entity_kind === editTarget.entity_kind)
+            .map((a) => ({ entityId: a.entity_id, linkKind: a.link_kind }))}
+          onClose={() => setEditTarget(null)}
+          onSuccess={async () => {
+            setEditTarget(null);
+            await refreshAccountabilities();
+          }}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmRemoveAssignmentDialog
+          entityName={deleteTarget.entity_name}
+          linkKind={deleteTarget.link_kind}
+          subjectType="role"
+          loading={deletingId === deleteTarget.id}
+          error={deleteError}
+          onConfirm={confirmDeleteAssignment}
+          onClose={() => {
+            if (deletingId) return;
+            setDeleteTarget(null);
+            setDeleteError(null);
           }}
         />
       )}

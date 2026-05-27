@@ -140,6 +140,19 @@ class AddRoleToTeamCreate(BaseModel):
 
 
 class AccountabilityCreate(BaseModel):
-    entity_kind: str = Field(..., pattern=r"^(product|capability|business_domain|process|application)$")
+    entity_kind: str = Field(
+        ...,
+        pattern=r"^(product|capability|business_domain|process|application|data_domain|data_store)$",
+    )
     entity_id: UUID
-    link_kind: str = Field(..., pattern=r"^(owns|performs|stewards)$")
+    link_kind: str = Field(
+        ...,
+        pattern=r"^(owns|performs|approves|informed|stewards|manages)$",
+    )
+
+
+class AccountabilityUpdate(BaseModel):
+    link_kind: str = Field(
+        ...,
+        pattern=r"^(owns|performs|approves|informed|stewards|manages)$",
+    )

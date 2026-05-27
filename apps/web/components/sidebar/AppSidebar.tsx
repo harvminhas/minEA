@@ -1,0 +1,635 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  ChevronRight,
+  LayoutGrid,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  Target,
+  Briefcase,
+  AppWindow,
+  Share2,
+  Database,
+  Users,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useAppStore } from "@/lib/store";
+import { useTenancy } from "@/lib/tenancy";
+import { NAV_VIEWS } from "@/lib/views";
+import { REPOSITORY_LAYERS, type RepositoryLayer } from "@/lib/repository-nav";
+// ─── Icons assigned to each repository layer ─────────────────────────────
+
+const LAYER_ICONS: Record<string, LucideIcon> = {
+  strategy: Target,
+  business: Briefcase,
+  application: AppWindow,
+  integration: Share2,
+  data: Database,
+  people: Users,
+};
+
+// ─── Shared tooltip ───────────────────────────────────────────────────────
+
+function Tooltip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="pointer-events-none absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[11px] font-medium text-white shadow-lg opacity-0 group-hover:opacity-100 transition-opacity delay-75 z-50">
+      {children}
+      <span className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900" />
+    </span>
+  );
+}
+
+// ─── Icon button (collapsed state) ───────────────────────────────────────
+
+function IconBtn({
+  href,
+  active,
+  icon: Icon,
+  tooltip,
+  color,
+  onClick,
+  isViews,
+  suppressTooltip,
+  isOpen,
+}: {
+  href?: string;
+  active?: boolean;
+  icon: LucideIcon;
+  tooltip: string;
+  color?: string;
+  onClick?: () => void;
+  isViews?: boolean;
+  suppressTooltip?: boolean;
+  isOpen?: boolean;
+}) {
+  const activeClass = isViews
+    ? "bg-violet-500 text-white"
+    : "bg-white/10 text-white";
+  const inactiveClass = isViews
+    ? "text-violet-300/60 hover:text-violet-100 hover:bg-violet-800/60"
+    : "text-white/50 hover:text-white hover:bg-white/8";
+
+  const inner = (
+    <>
+      {(active || isOpen) && (
+        <span
+          className={cn(
+            "absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r",
+            isViews ? "bg-violet-300" : "bg-white/70"
+          )}
+        />
+      )}
+      {color ? (
+        <span
+          className="h-5 w-5 rounded flex items-center justify-center flex-shrink-0 text-[10px] font-bold"
+          style={{ backgroundColor: `${color}22`, color }}
+        >
+          <Icon size={13} />
+        </span>
+      ) : (
+        <Icon size={16} />
+      )}
+      {!suppressTooltip && <Tooltip>{tooltip}</Tooltip>}
+    </>
+  );
+
+  const cls = cn(
+    "group relative flex items-center justify-center h-9 w-9 rounded-lg transition-colors",
+    active || isOpen ? activeClass : inactiveClass
+  );
+
+  if (href) {
+    return (
+      <Link href={href} title={tooltip} className={cls}>
+        {inner}
+      </Link>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} title={tooltip} className={cls}>
+      {inner}
+    </button>
+  );
+}
+
+// ─── Collapsed: Views icon rail ───────────────────────────────────────────
+
+function CollapsedViewsNav({
+  basePath,
+  pathname,
+}: {
+  basePath: string;
+  pathname: string;
+}) {
+  const galleryHref = `${basePath}/views`;
+  const isOnGallery = pathname === galleryHref;
+
+  return (
+    <>
+      <IconBtn
+        href={galleryHref}
+        active={isOnGallery}
+        icon={LayoutGrid}
+        tooltip="Gallery"
+        isViews
+      />
+      <div className="w-6 h-px bg-violet-700/40 my-0.5" />
+      {NAV_VIEWS.map((view) => {
+        const href = `${basePath}/${view.segment}`;
+        const isActive = pathname === href || pathname.startsWith(`${href}/`);
+        return (
+          <IconBtn
+            key={view.id}
+            href={href}
+            active={isActive}
+            icon={view.icon}
+            tooltip={view.label}
+            color={view.color}
+            isViews
+          />
+        );
+      })}
+    </>
+  );
+}
+
+// ─── Collapsed: Repository icon rail ─────────────────────────────────────
+
+function CollapsedLayerFlyout({
+  layer,
+  basePath,
+  pathname,
+  isOpen,
+  onToggle,
+  onClose,
+}: {
+  layer: RepositoryLayer;
+  basePath: string;
+  pathname: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+}) {
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const LayerIcon = LAYER_ICONS[layer.id] ?? Briefcase;
+  const isLayerActive = layer.items.some((item) => {
+    if (item.upcoming) return false;
+    const href = `${basePath}/${item.segment}`;
+    return pathname === href || pathname.startsWith(`${href}/`);
+  });
+
+  useEffect(() => {
+    if (!isOpen || !anchorRef.current) {
+      setCoords(null);
+      return;
+    }
+
+    function updatePosition() {
+      if (!anchorRef.current) return;
+      const rect = anchorRef.current.getBoundingClientRect();
+      setCoords({
+        top: rect.top + rect.height / 2,
+        left: rect.left + rect.width + 8,
+      });
+    }
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={anchorRef} className="relative">
+      <IconBtn
+        active={isLayerActive}
+        icon={LayerIcon}
+        tooltip={layer.label}
+        color={layer.color}
+        onClick={onToggle}
+        suppressTooltip={isOpen}
+        isOpen={isOpen}
+      />
+
+      {isOpen && coords && (
+        <div
+          className="fixed z-[60] min-w-[200px] -translate-y-1/2 rounded-lg border border-white/10 bg-[#1e293b] py-1.5 shadow-2xl"
+          style={{ top: coords.top, left: coords.left }}
+        >
+          <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/35">
+            {layer.label}
+          </p>
+          {layer.items.map((item) => {
+            const href = `${basePath}/${item.segment}`;
+
+            if (item.upcoming) {
+              return (
+                <div
+                  key={item.segment}
+                  title="Coming soon"
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-white/25 cursor-not-allowed"
+                >
+                  <span
+                    className="h-1 w-1 rounded-full flex-shrink-0 opacity-40"
+                    style={{ backgroundColor: layer.color }}
+                  />
+                  <span className="truncate text-[13px]">{item.label}</span>
+                  <span className="ml-auto text-[9px] font-medium uppercase tracking-wide text-white/20">
+                    Upcoming
+                  </span>
+                </div>
+              );
+            }
+
+            const isActive = pathname === href || pathname.startsWith(`${href}/`);
+            return (
+              <Link
+                key={item.segment}
+                href={href}
+                onClick={onClose}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 text-sm transition-colors",
+                  isActive
+                    ? "bg-white/10 text-white"
+                    : "text-white/70 hover:text-white hover:bg-white/5"
+                )}
+              >
+                <span
+                  className="h-1 w-1 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: layer.color }}
+                />
+                <span className="truncate text-[13px]">{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CollapsedRepoNav({
+  basePath,
+  pathname,
+}: {
+  basePath: string;
+  pathname: string;
+}) {
+  const [openLayerId, setOpenLayerId] = useState<string | null>(null);
+  const navRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setOpenLayerId(null);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!openLayerId) return;
+
+    function handleClickOutside(e: MouseEvent) {
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+        setOpenLayerId(null);
+      }
+    }
+
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpenLayerId(null);
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [openLayerId]);
+
+  return (
+    <div ref={navRef} className="flex flex-col items-center gap-1">
+      {REPOSITORY_LAYERS.map((layer) => {
+        const availableItems = layer.items.filter((item) => !item.upcoming);
+        const hasSubnav = layer.items.length > 1;
+
+        if (!hasSubnav && availableItems.length === 1) {
+          const item = availableItems[0];
+          const href = `${basePath}/${item.segment}`;
+          const isActive = pathname === href || pathname.startsWith(`${href}/`);
+          const LayerIcon = LAYER_ICONS[layer.id] ?? Briefcase;
+
+          return (
+            <IconBtn
+              key={layer.id}
+              href={href}
+              active={isActive}
+              icon={LayerIcon}
+              tooltip={layer.label}
+              color={layer.color}
+            />
+          );
+        }
+
+        return (
+          <CollapsedLayerFlyout
+            key={layer.id}
+            layer={layer}
+            basePath={basePath}
+            pathname={pathname}
+            isOpen={openLayerId === layer.id}
+            onToggle={() => setOpenLayerId((current) => (current === layer.id ? null : layer.id))}
+            onClose={() => setOpenLayerId(null)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Expanded: Views full nav ─────────────────────────────────────────────
+
+function ExpandedViewsNav({
+  basePath,
+  pathname,
+}: {
+  basePath: string;
+  pathname: string;
+}) {
+  const galleryHref = `${basePath}/views`;
+  const isOnGallery = pathname === galleryHref;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between px-4 mb-1">
+        <p className="text-[10px] font-semibold text-violet-300/50 uppercase tracking-wider">
+          Views
+        </p>
+      </div>
+
+      {/* Gallery */}
+      <Link
+        href={galleryHref}
+        className={cn(
+          "flex items-center gap-2.5 px-4 py-1.5 text-sm transition-colors",
+          isOnGallery
+            ? "bg-violet-500/30 text-violet-100"
+            : "text-violet-300/60 hover:text-violet-100 hover:bg-violet-800/40"
+        )}
+      >
+        <span className="h-5 w-5 rounded flex items-center justify-center flex-shrink-0 bg-violet-500/20">
+          <LayoutGrid size={11} className="text-violet-300" />
+        </span>
+        <span className="truncate">Gallery</span>
+      </Link>
+
+      <div className="mx-4 my-1.5 h-px bg-violet-700/40" />
+
+      {NAV_VIEWS.map((view) => {
+        const href = `${basePath}/${view.segment}`;
+        const isActive = pathname === href || pathname.startsWith(`${href}/`);
+        const Icon = view.icon;
+        return (
+          <Link
+            key={view.id}
+            href={href}
+            className={cn(
+              "flex items-center gap-2.5 px-4 py-1.5 text-sm transition-colors",
+              isActive
+                ? "bg-violet-500/30 text-violet-100"
+                : "text-violet-300/60 hover:text-violet-100 hover:bg-violet-800/40"
+            )}
+          >
+            <span
+              className="h-5 w-5 rounded flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: `${view.color}22` }}
+            >
+              <Icon size={11} style={{ color: view.color }} />
+            </span>
+            <span className="truncate">{view.label}</span>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Expanded: Repository full nav ────────────────────────────────────────
+
+function ExpandedRepoNav({
+  basePath,
+  pathname,
+}: {
+  basePath: string;
+  pathname: string;
+}) {
+  const { collapsedLayers, toggleLayer } = useAppStore();
+
+  return (
+    <div>
+      <div className="px-4 mb-1">
+        <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">
+          Repository
+        </p>
+      </div>
+
+      {REPOSITORY_LAYERS.map((layer) => {
+        const isCollapsed = collapsedLayers[layer.id] ?? true;
+        const LayerIcon = LAYER_ICONS[layer.id] ?? Briefcase;
+        const isLayerActive = layer.items.some((item) => {
+          if (item.upcoming) return false;
+          const href = `${basePath}/${item.segment}`;
+          return pathname === href || pathname.startsWith(`${href}/`);
+        });
+
+        return (
+          <div key={layer.id}>
+            <button
+              type="button"
+              onClick={() => toggleLayer(layer.id)}
+              className={cn(
+                "flex w-full items-center gap-2 px-4 py-1.5 text-sm transition-colors",
+                isLayerActive && isCollapsed
+                  ? "text-white"
+                  : "text-white/55 hover:text-white hover:bg-white/5"
+              )}
+            >
+              <ChevronRight
+                size={12}
+                className={cn("flex-shrink-0 transition-transform", !isCollapsed && "rotate-90")}
+              />
+              <span
+                className="h-1.5 w-1.5 rounded-full flex-shrink-0"
+                style={{ backgroundColor: layer.color }}
+              />
+              <span className="truncate flex-1 text-left">{layer.label}</span>
+              <span className="text-[10px] text-white/25 tabular-nums">{layer.items.length}</span>
+            </button>
+
+            {!isCollapsed && (
+              <div className="mb-0.5">
+                {layer.items.map((item) => {
+                  const href = `${basePath}/${item.segment}`;
+                  if (item.upcoming) {
+                    return (
+                      <div
+                        key={item.segment}
+                        title="Coming soon"
+                        className="flex items-center gap-2 pl-10 pr-4 py-1 text-sm text-white/25 cursor-not-allowed"
+                      >
+                        <span
+                          className="h-1 w-1 rounded-full flex-shrink-0 opacity-40"
+                          style={{ backgroundColor: layer.color }}
+                        />
+                        <span className="truncate text-[13px]">{item.label}</span>
+                        <span className="ml-auto text-[9px] font-medium uppercase tracking-wide text-white/20">
+                          Upcoming
+                        </span>
+                      </div>
+                    );
+                  }
+                  const isActive = pathname === href || pathname.startsWith(`${href}/`);
+                  return (
+                    <Link
+                      key={item.segment}
+                      href={href}
+                      className={cn(
+                        "flex items-center gap-2 pl-10 pr-4 py-1 text-sm transition-colors",
+                        isActive
+                          ? "bg-white/10 text-white"
+                          : "text-white/45 hover:text-white hover:bg-white/5"
+                      )}
+                    >
+                      <span
+                        className="h-1 w-1 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: layer.color }}
+                      />
+                      <span className="truncate text-[13px]">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Main AppSidebar ──────────────────────────────────────────────────────
+
+export function AppSidebar() {
+  const pathname = usePathname();
+  const { orgSlug, workspaceSlug, basePath } = useTenancy();
+  const { viewMode, sidebarExpanded, setSidebarExpanded } = useAppStore();
+
+  const isViews = viewMode === "views";
+
+  const settingsHref = orgSlug ? `/orgs/${orgSlug}/settings` : "/home";
+  const isOnSettings = pathname.endsWith("/settings");
+
+  const toggleBtn = (
+    <button
+      type="button"
+      onClick={() => setSidebarExpanded(!sidebarExpanded)}
+      title={sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+      className={cn(
+        "flex items-center gap-2 rounded-md transition-colors text-sm",
+        sidebarExpanded ? "px-1.5 py-1" : "h-9 w-9 justify-center",
+        isViews
+          ? "text-violet-300/50 hover:text-violet-100 hover:bg-violet-800/40"
+          : "text-white/35 hover:text-white hover:bg-white/8"
+      )}
+    >
+      {sidebarExpanded ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+    </button>
+  );
+
+  return (
+    <aside
+      className={cn(
+        "fixed left-0 top-12 bottom-0 flex flex-col z-40 transition-[width] duration-200 overflow-hidden",
+        isViews
+          ? "bg-violet-950/90 border-r border-violet-800/40"
+          : "sidebar border-r border-white/10",
+        sidebarExpanded ? "w-[200px]" : "w-[52px]"
+      )}
+    >
+      {/* ── Header row with toggle ── */}
+      <div
+        className={cn(
+          "flex items-center flex-shrink-0 border-b h-10",
+          isViews ? "border-violet-800/40" : "border-white/8",
+          sidebarExpanded ? "px-3 justify-between" : "justify-center"
+        )}
+      >
+        {sidebarExpanded && (
+          <span
+            className={cn(
+              "text-[10px] font-semibold uppercase tracking-wider select-none",
+              isViews ? "text-violet-300/50" : "text-white/30"
+            )}
+          >
+            {isViews ? "Views" : "Repository"}
+          </span>
+        )}
+        {toggleBtn}
+      </div>
+
+      {/* ── Scrollable nav ── */}
+      <nav
+        className={cn(
+          "flex-1 overflow-y-auto py-2",
+          sidebarExpanded ? "" : "flex flex-col items-center gap-1",
+          // hide scrollbar cross-browser
+          "[&::-webkit-scrollbar]:hidden"
+        )}
+        style={{ scrollbarWidth: "none" }}
+      >
+        {workspaceSlug && orgSlug && (
+          sidebarExpanded ? (
+            isViews ? (
+              <ExpandedViewsNav basePath={basePath} pathname={pathname} />
+            ) : (
+              <ExpandedRepoNav basePath={basePath} pathname={pathname} />
+            )
+          ) : (
+            isViews ? (
+              <CollapsedViewsNav basePath={basePath} pathname={pathname} />
+            ) : (
+              <CollapsedRepoNav basePath={basePath} pathname={pathname} />
+            )
+          )
+        )}
+      </nav>
+
+      {/* ── Footer: settings (expanded only) ── */}
+      {sidebarExpanded && (
+        <div className={cn("border-t py-1", isViews ? "border-violet-800/40" : "border-white/10")}>
+          <Link
+            href={settingsHref}
+            className={cn(
+              "flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors",
+              isViews
+                ? isOnSettings
+                  ? "bg-violet-500/30 text-violet-100"
+                  : "text-violet-300/50 hover:text-violet-100 hover:bg-violet-800/40"
+                : isOnSettings
+                  ? "bg-white/10 text-white"
+                  : "text-white/45 hover:text-white hover:bg-white/5"
+            )}
+          >
+            <Settings size={14} />
+            Org settings
+          </Link>
+        </div>
+      )}
+    </aside>
+  );
+}

@@ -51,6 +51,7 @@ import type {
   TeamRoleAssignmentUpdate,
   AddRoleToTeamCreate,
   AccountabilityCreate,
+  AccountabilityUpdate,
   DataObjectDetail,
   DataObjectCreate,
   DataObjectUpdate,
@@ -569,6 +570,19 @@ export const peopleApi = {
   ) =>
     apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/accountabilities/${accountabilityId}`, {
       method: "DELETE",
+      token,
+    }),
+
+  updateAccountability: (
+    orgSlug: string,
+    workspaceSlug: string,
+    accountabilityId: string,
+    body: AccountabilityUpdate,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/accountabilities/${accountabilityId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
       token,
     }),
 };

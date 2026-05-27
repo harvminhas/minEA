@@ -23,7 +23,7 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
     label: "Strategy",
     color: "#8b5cf6",
     items: [
-      { label: "Products", segment: "views/products" },
+      { label: "Products", segment: "strategy/products" },
       { label: "Value Streams", segment: "strategy/value-streams", upcoming: true },
       { label: "Capability Map", segment: "business/capabilities" },
     ],

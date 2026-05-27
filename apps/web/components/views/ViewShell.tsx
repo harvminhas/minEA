@@ -7,7 +7,7 @@ import { HelpCircle, X } from "lucide-react";
 import type { ViewConfig } from "@/lib/views";
 import { glossary } from "@/lib/labels";
 import { cn } from "@/lib/utils";
-import { useViewEmbedded } from "@/lib/view-embed-context";
+import { useViewEmbedded, useViewsTheme } from "@/lib/view-embed-context";
 
 interface ViewShellProps {
   view: ViewConfig;
@@ -29,6 +29,7 @@ export function ViewShell({
   const [showHelp, setShowHelp] = useState(false);
   const pathname = usePathname();
   const embedded = useViewEmbedded() || pathname.includes("/embed/");
+  const isViewsMode = useViewsTheme();
 
   return (
     <div className={cn("w-full", embedded ? "p-4" : "p-8 max-w-6xl")}>
@@ -39,16 +40,25 @@ export function ViewShell({
       ) : (
         <div className="flex items-start justify-between gap-4 mb-6">
           <div>
-            <p className="text-xs text-gray-400 mb-1">View · {view.label}</p>
+            <p className={cn("text-xs mb-1", isViewsMode ? "text-violet-400" : "text-gray-400")}>
+              View · {view.label}
+            </p>
             <h1 className="text-2xl font-bold text-gray-900">{view.label}</h1>
-            <p className="text-sm text-gray-500 mt-1">{subtitle ?? view.anchorQuestion}</p>
+            <p className={cn("text-sm mt-1", isViewsMode ? "text-violet-500" : "text-gray-500")}>
+              {subtitle ?? view.anchorQuestion}
+            </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {headerAction}
             <button
               type="button"
               onClick={() => setShowHelp(true)}
-              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded-md px-2.5 py-1.5 bg-white"
+              className={cn(
+                "flex items-center gap-1.5 text-xs rounded-md px-2.5 py-1.5 border transition-colors",
+                isViewsMode
+                  ? "text-violet-500 hover:text-violet-700 border-violet-200 bg-violet-50 hover:bg-violet-100"
+                  : "text-gray-500 hover:text-gray-800 border-gray-200 bg-white"
+              )}
             >
               <HelpCircle size={13} />
               How this works
@@ -60,7 +70,10 @@ export function ViewShell({
       {isEmpty ? (
         <div
           className={cn(
-            "bg-white rounded-xl border border-gray-200 p-10 text-center mx-auto",
+            "rounded-xl border p-10 text-center mx-auto",
+            isViewsMode
+              ? "bg-violet-50 border-violet-200"
+              : "bg-white border-gray-200",
             embedded ? "max-w-none mt-2 px-6 py-8" : "max-w-lg mt-12"
           )}
         >

@@ -23,7 +23,7 @@ export function ViewPanelContent({ viewId }: { viewId: ViewId }) {
 
   return (
     <ViewEmbedProvider embedded>
-      <div className="h-full overflow-y-auto bg-gray-50">
+      <div className="h-full min-h-full overflow-y-auto bg-violet-50">
         <ViewPage />
       </div>
     </ViewEmbedProvider>

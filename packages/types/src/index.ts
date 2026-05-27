@@ -780,8 +780,16 @@ export type AccountabilityEntityKind =
   | "capability"
   | "business_domain"
   | "process"
-  | "application";
-export type AccountabilityLinkKind = "owns" | "performs" | "stewards";
+  | "application"
+  | "data_domain"
+  | "data_store";
+export type AccountabilityLinkKind =
+  | "owns"
+  | "performs"
+  | "approves"
+  | "informed"
+  | "stewards"
+  | "manages";
 
 export interface PeopleRole {
   id: string;
@@ -904,6 +912,10 @@ export interface AddRoleToTeamCreate {
 export interface AccountabilityCreate {
   entity_kind: AccountabilityEntityKind | string;
   entity_id: string;
+  link_kind: AccountabilityLinkKind | string;
+}
+
+export interface AccountabilityUpdate {
   link_kind: AccountabilityLinkKind | string;
 }
 
