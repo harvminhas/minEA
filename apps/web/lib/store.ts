@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Org, Workspace } from "@minea/types";
+import type { ViewId } from "@/lib/views";
+
+export type ViewMode = "repository" | "views" | "split";
 
 interface AppStore {
   activeOrg: Org | null;
@@ -10,6 +13,12 @@ interface AppStore {
 
   collapsedLayers: Record<string, boolean>;
   toggleLayer: (layer: string) => void;
+
+  viewMode: ViewMode;
+  setViewMode: (mode: ViewMode) => void;
+
+  splitViewId: ViewId;
+  setSplitViewId: (id: ViewId) => void;
 
   chatOpen: boolean;
   setChatOpen: (open: boolean) => void;
@@ -32,6 +41,12 @@ export const useAppStore = create<AppStore>()(
           },
         })),
 
+      viewMode: "repository",
+      setViewMode: (mode) => set({ viewMode: mode }),
+
+      splitViewId: "capability-heatmap",
+      setSplitViewId: (id) => set({ splitViewId: id }),
+
       chatOpen: false,
       setChatOpen: (open) => set({ chatOpen: open }),
     }),
@@ -39,6 +54,8 @@ export const useAppStore = create<AppStore>()(
       name: "minea-app-store",
       partialize: (state) => ({
         collapsedLayers: state.collapsedLayers,
+        viewMode: state.viewMode,
+        splitViewId: state.splitViewId,
       }),
     }
   )

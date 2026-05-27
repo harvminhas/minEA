@@ -12,7 +12,7 @@ import { REPOSITORY_LAYERS } from "@/lib/repository-nav";
 export function Sidebar() {
   const pathname = usePathname();
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
-  const { collapsedLayers, toggleLayer } = useAppStore();
+  const { collapsedLayers, toggleLayer, viewMode } = useAppStore();
 
   const homeHref =
     orgSlug && workspaceSlug
@@ -40,7 +40,8 @@ export function Sidebar() {
           Home
         </Link>
 
-        {workspaceSlug && orgSlug && (
+        {/* Views section — hidden in repository-only mode */}
+        {workspaceSlug && orgSlug && viewMode !== "repository" && (
           <div className="mt-4">
             <div className="flex items-center justify-between px-4 mb-1">
               <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">
@@ -84,7 +85,8 @@ export function Sidebar() {
           </div>
         )}
 
-        {workspaceSlug && (
+        {/* Repository section — hidden in views-only mode */}
+        {workspaceSlug && viewMode !== "views" && (
           <div className="mt-4">
             <div className="px-4 mb-1">
               <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">

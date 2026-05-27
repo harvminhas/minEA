@@ -3,10 +3,10 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Bell, HelpCircle, Search, LogOut, Settings } from "lucide-react";
+import { ChevronDown, Bell, HelpCircle, Search, LogOut, Settings, BookOpen, LayoutTemplate, Columns2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, type ViewMode } from "@/lib/store";
 import { useTenancy, primaryViewPath } from "@/lib/tenancy";
 import { useQuery } from "@tanstack/react-query";
 import { workspacesApi } from "@/lib/api-client";
@@ -15,7 +15,7 @@ export function TopNav() {
   const router = useRouter();
   const { getToken, user, signOut } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
-  const { activeOrg, activeWorkspace } = useAppStore();
+  const { activeOrg, activeWorkspace, viewMode, setViewMode } = useAppStore();
 
   const [wsOpen, setWsOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
@@ -110,6 +110,35 @@ export function TopNav() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* View Mode Toggle — only when inside a workspace */}
+      {workspaceSlug && (
+        <div className="flex items-center gap-0.5 rounded-md bg-white/8 border border-white/10 p-0.5 flex-shrink-0">
+          {(
+            [
+              { mode: "repository" as ViewMode, label: "Repository", icon: BookOpen },
+              { mode: "split"       as ViewMode, label: "Split",      icon: Columns2 },
+              { mode: "views"       as ViewMode, label: "Views",      icon: LayoutTemplate },
+            ] as const
+          ).map(({ mode, label, icon: Icon }) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewMode(mode)}
+              title={label}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                viewMode === mode
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-white/45 hover:text-white/80 hover:bg-white/8"
+              )}
+            >
+              <Icon size={12} />
+              {label}
+            </button>
+          ))}
         </div>
       )}
 

@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery } from "@tanstack/react-query";
 import { TopNav } from "@/components/nav/TopNav";
 import { Sidebar } from "@/components/sidebar/Sidebar";
+import { SplitViewPanel } from "@/components/sidebar/SplitViewPanel";
 import { useAppStore } from "@/lib/store";
 import { orgsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
@@ -14,7 +15,7 @@ import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
   const { orgSlug } = useParams<{ orgSlug: string }>();
-  const { setActiveOrg } = useAppStore();
+  const { setActiveOrg, viewMode } = useAppStore();
   const queryEnabled = useAuthQueryEnabled(orgSlug);
 
   const { data: org } = useQuery({
@@ -37,7 +38,17 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
         <TopNav />
         <div className="flex h-full pt-12">
           <Sidebar />
-          <main className="flex-1 ml-[200px] overflow-y-auto">{children}</main>
+          {viewMode === "split" ? (
+            /* Split mode: repo content left, live view panel right */
+            <div className="flex flex-1 ml-[200px] overflow-hidden">
+              <main className="flex-1 overflow-y-auto">{children}</main>
+              <div className="w-[280px] flex-shrink-0 overflow-hidden">
+                <SplitViewPanel />
+              </div>
+            </div>
+          ) : (
+            <main className="flex-1 ml-[200px] overflow-y-auto">{children}</main>
+          )}
         </div>
       </div>
     </RequireAuth>
