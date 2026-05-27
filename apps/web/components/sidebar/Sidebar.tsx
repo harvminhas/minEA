@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight, Home, Plus, Settings } from "lucide-react";
+import { ChevronRight, Plus, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/lib/store";
 import { useTenancy } from "@/lib/tenancy";
-import { PRIMARY_VIEW_ID, VIEWS_V1, viewPath } from "@/lib/views";
+import { NAV_VIEWS } from "@/lib/views";
 import { REPOSITORY_LAYERS } from "@/lib/repository-nav";
 
 export function Sidebar() {
@@ -14,35 +14,15 @@ export function Sidebar() {
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
   const { collapsedLayers, toggleLayer, viewMode } = useAppStore();
 
-  const homeHref =
-    orgSlug && workspaceSlug
-      ? viewPath(orgSlug, workspaceSlug, PRIMARY_VIEW_ID)
-      : "/home";
-  const isOnHome =
-    pathname === "/home" ||
-    pathname.endsWith("/views/products") ||
-    pathname.endsWith("/dashboard");
-
   const settingsHref = orgSlug ? `/orgs/${orgSlug}/settings` : "/home";
   const isOnSettings = pathname.endsWith("/settings");
 
   return (
     <aside className="sidebar fixed left-0 top-12 bottom-0 w-[200px] flex flex-col overflow-hidden z-40">
       <nav className="flex-1 overflow-y-auto py-2">
-        <Link
-          href={homeHref}
-          className={cn(
-            "flex items-center gap-2.5 px-4 py-2 text-sm transition-colors",
-            isOnHome ? "text-white bg-white/10" : "text-white/55 hover:text-white hover:bg-white/5"
-          )}
-        >
-          <Home size={14} />
-          Home
-        </Link>
-
-        {/* Views section — hidden in repository-only mode */}
-        {workspaceSlug && orgSlug && viewMode !== "repository" && (
-          <div className="mt-4">
+        {/* Views section — only in Views mode (split uses right panel dropdown) */}
+        {workspaceSlug && orgSlug && viewMode === "views" && (
+          <div>
             <div className="flex items-center justify-between px-4 mb-1">
               <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">
                 Views
@@ -57,7 +37,7 @@ export function Sidebar() {
               </button>
             </div>
 
-            {VIEWS_V1.map((view) => {
+            {NAV_VIEWS.map((view) => {
               const href = `${basePath}/${view.segment}`;
               const isActive = pathname === href || pathname.startsWith(`${href}/`);
               const Icon = view.icon;
@@ -87,7 +67,7 @@ export function Sidebar() {
 
         {/* Repository section — hidden in views-only mode */}
         {workspaceSlug && viewMode !== "views" && (
-          <div className="mt-4">
+          <div className={viewMode === "repository" ? "" : "mt-4"}>
             <div className="px-4 mb-1">
               <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">
                 Repository

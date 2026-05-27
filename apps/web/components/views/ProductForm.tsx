@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi, productsApi } from "@/lib/api-client";
+import { invalidateProductQueries } from "@/lib/product-queries";
 import { formFieldClass } from "@/components/ui/FormDrawer";
 import type { MinEAObject, Product } from "@minea/types";
 
@@ -75,10 +76,7 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
       return productsApi.create(orgSlug, workspaceSlug, body, token!);
     },
     onSuccess: (saved) => {
-      queryClient.invalidateQueries({ queryKey: ["products", orgSlug, workspaceSlug] });
-      queryClient.invalidateQueries({
-        queryKey: ["product", orgSlug, workspaceSlug, saved.id],
-      });
+      invalidateProductQueries(queryClient, orgSlug, workspaceSlug, saved.id);
       onSuccess();
     },
   });

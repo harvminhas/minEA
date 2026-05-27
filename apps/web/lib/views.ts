@@ -60,6 +60,7 @@ export const PROCESSES_VIEW: ViewConfig = {
   emptyCta: "Add your first process",
 };
 
+/** Product portfolio + v1 views — used in Views sidebar and split panel picker. */
 export const VIEWS_V1: ViewConfig[] = [
   {
     id: "journeys",
@@ -120,6 +121,8 @@ export const VIEWS_V1: ViewConfig[] = [
   },
 ];
 
+export const NAV_VIEWS: ViewConfig[] = [PRODUCTS_VIEW, ...VIEWS_V1];
+
 export function getView(id: ViewId): ViewConfig {
   if (id === "products") return PRODUCTS_VIEW;
   if (id === "processes") return PROCESSES_VIEW;
@@ -148,4 +151,9 @@ export function viewPath(
 
 export function primaryViewPath(orgSlug: string, workspaceSlug: string): string {
   return viewPath(orgSlug, workspaceSlug, PRIMARY_VIEW_ID);
+}
+
+export function embedViewPath(orgSlug: string, workspaceSlug: string, viewId: ViewId): string {
+  const view = getView(viewId);
+  return `/orgs/${orgSlug}/workspaces/${workspaceSlug}/embed/${view.segment}`;
 }

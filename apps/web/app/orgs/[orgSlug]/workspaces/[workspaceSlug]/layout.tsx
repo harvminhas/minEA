@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery } from "@tanstack/react-query";
 import { ChatPanel } from "@/components/ai/ChatPanel";
@@ -10,6 +11,8 @@ import { workspacesApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isEmbed = pathname.includes("/embed/");
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const { setActiveWorkspace } = useAppStore();
@@ -32,7 +35,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   return (
     <>
       {children}
-      <ChatPanel />
+      {!isEmbed && <ChatPanel />}
     </>
   );
 }
