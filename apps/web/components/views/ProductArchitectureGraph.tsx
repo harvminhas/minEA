@@ -1,19 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
-  MarkerType,
-  type Edge,
-  type Node,
-  Handle,
-  Position,
-} from "reactflow";
-import "reactflow/dist/style.css";
+import { memo, useMemo } from "react";
+import { Handle, MarkerType, Position, type Edge, type Node, type NodeTypes } from "reactflow";
 import type { ProductGraphNode, ProductGraphResponse } from "@minea/types";
+import { EntityFlowCanvas, type NodeLayout } from "@/components/shared/EntityFlowCanvas";
 import { getLayerColor, getTypeLayer } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -26,9 +16,7 @@ const LAYER_LABELS: Record<number, string> = {
 
 function GraphNodeCard({ data, compact }: { data: ProductGraphNode; compact?: boolean }) {
   const color =
-    data.type === "product"
-      ? "#6366f1"
-      : getLayerColor(getTypeLayer(data.type as never));
+    data.type === "product" ? "#6366f1" : getLayerColor(getTypeLayer(data.type as never));
 
   if (compact) {
     return (
@@ -76,7 +64,26 @@ function GraphNodeCard({ data, compact }: { data: ProductGraphNode; compact?: bo
   );
 }
 
-function layoutGraph(graph: ProductGraphResponse, compact?: boolean): { nodes: Node[]; edges: Edge[] } {
+const GraphNode = memo(({ data }: { data: ProductGraphNode }) => (
+  <GraphNodeCard data={data} compact={false} />
+));
+GraphNode.displayName = "GraphNode";
+
+const GraphNodeCompact = memo(({ data }: { data: ProductGraphNode }) => (
+  <GraphNodeCard data={data} compact />
+));
+GraphNodeCompact.displayName = "GraphNodeCompact";
+
+export const PRODUCT_GRAPH_NODE_TYPES: NodeTypes = {
+  graphNode: GraphNode,
+  graphNodeCompact: GraphNodeCompact,
+};
+
+export function buildProductArchitectureGraph(
+  graph: ProductGraphResponse,
+  compact?: boolean,
+  savedLayout?: NodeLayout
+): { nodes: Node[]; edges: Edge[] } {
   const layerX = compact ? 20 : 60;
   const layerGap = compact ? 110 : 260;
   const nodeHeight = compact ? 36 : 72;
@@ -91,12 +98,12 @@ function layoutGraph(graph: ProductGraphResponse, compact?: boolean): { nodes: N
     const totalHeight = layerNodes.length * nodeHeight;
     const startY = Math.max(compact ? 12 : 40, (compact ? 90 : 220) - totalHeight / 2);
     layerNodes.forEach((node, index) => {
+      const autoPos = { x: layerX + layer * layerGap, y: startY + index * nodeHeight };
       nodes.push({
         id: node.id,
         type: compact ? "graphNodeCompact" : "graphNode",
-        position: { x: layerX + layer * layerGap, y: startY + index * nodeHeight },
+        position: compact ? autoPos : (savedLayout?.[node.id] ?? autoPos),
         data: node,
-        draggable: false,
       });
     });
   }
@@ -126,52 +133,32 @@ interface Props {
   graph: ProductGraphResponse;
   className?: string;
   compact?: boolean;
+  onLayoutSave?: (layout: NodeLayout) => void;
+  onResetLayout?: () => void;
 }
 
-export function ProductArchitectureGraph({ productName, graph, className, compact }: Props) {
-  const { nodes, edges } = useMemo(() => layoutGraph(graph, compact), [graph, compact]);
-  const nodeTypes = useMemo(
-    () => ({
-      graphNode: ({ data }: { data: ProductGraphNode }) => (
-        <GraphNodeCard data={data} compact={false} />
-      ),
-      graphNodeCompact: ({ data }: { data: ProductGraphNode }) => (
-        <GraphNodeCard data={data} compact />
-      ),
-    }),
-    []
+export function ProductArchitectureGraph({
+  productName,
+  graph,
+  className,
+  compact,
+  onLayoutSave,
+  onResetLayout,
+}: Props) {
+  const savedLayout = graph.graph_layout ?? undefined;
+  const hasCustomLayout = !!(savedLayout && Object.keys(savedLayout).length > 0);
+
+  const { nodes, edges } = useMemo(
+    () => buildProductArchitectureGraph(graph, compact, compact ? undefined : savedLayout),
+    [graph, compact, savedLayout]
   );
 
   const layersPresent = [...new Set(graph.nodes.map((n) => n.layer))].sort();
 
-  if (graph.nodes.length <= 1) {
-    return (
-      <div
-        className={cn(
-          "flex items-center justify-center bg-gray-50 rounded-lg border border-gray-200",
-          compact ? "h-[160px]" : "h-full",
-          className
-        )}
-      >
-        <div className="text-center px-4">
-          <p className={cn("font-medium text-gray-700 mb-1", compact ? "text-xs" : "text-sm")}>
-            No architecture to show yet
-          </p>
-          {!compact && (
-            <p className="text-xs text-gray-400 max-w-xs">
-              Map business capabilities to this product and link systems in the repository to see
-              the dependency graph.
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
       className={cn(
-        "relative bg-[#fafafa] rounded-lg border border-gray-200 overflow-hidden",
+        "relative overflow-hidden",
         compact ? "h-[160px]" : "h-full",
         className
       )}
@@ -190,48 +177,24 @@ export function ProductArchitectureGraph({ productName, graph, className, compac
         </div>
       )}
 
-      <ReactFlow
+      <EntityFlowCanvas
         nodes={nodes}
         edges={edges}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: compact ? 0.08 : 0.2 }}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        panOnDrag={!compact}
-        panOnScroll={!compact}
-        zoomOnScroll={!compact}
-        zoomOnPinch={!compact}
-        zoomOnDoubleClick={false}
-        preventScrolling={compact}
-        minZoom={compact ? 0.2 : 0.4}
-        maxZoom={compact ? 1 : 1.5}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background gap={compact ? 12 : 20} size={1} color="#e5e7eb" />
-        {!compact && (
-          <>
-            <Controls showInteractive={false} className="!bg-white !border-gray-200 !shadow-sm" />
-            <MiniMap
-              nodeColor={(n) => {
-                const d = n.data as ProductGraphNode;
-                return d.type === "product"
-                  ? "#6366f1"
-                  : getLayerColor(
-                      getTypeLayer(d.type as never)
-                    );
-              }}
-              maskColor="rgba(255,255,255,0.7)"
-              className="!bg-white !border-gray-200"
-            />
-          </>
-        )}
-      </ReactFlow>
+        nodeTypes={PRODUCT_GRAPH_NODE_TYPES}
+        mode={compact ? "thumbnail" : "full"}
+        accentColor="#6366f1"
+        fitViewPadding={compact ? 0.08 : 0.2}
+        onLayoutSave={compact ? undefined : onLayoutSave}
+        onResetLayout={compact ? undefined : onResetLayout}
+        hasCustomLayout={hasCustomLayout}
+        emptyLabel="No architecture to show yet — map capabilities and link systems to see the graph"
+        className={cn("h-full rounded-lg border border-gray-200", compact && "rounded-none border-0")}
+      />
 
-      {!compact && (
-        <div className="absolute bottom-3 left-3 text-[10px] text-gray-400 bg-white/90 border border-gray-200 rounded px-2 py-1">
+      {!compact && graph.nodes.length > 1 && (
+        <div className="absolute bottom-3 left-3 z-10 pointer-events-none text-[10px] text-gray-400 bg-white/90 border border-gray-200 rounded px-2 py-1">
           {graph.nodes.length} nodes · {graph.edges.length} relationships · {productName}
+          {hasCustomLayout && <span className="text-indigo-500 ml-1">· layout saved</span>}
         </div>
       )}
     </div>

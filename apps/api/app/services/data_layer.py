@@ -271,6 +271,88 @@ async def infer_domain_summary(
     return summary
 
 
+async def flow_endpoint_catalog(
+    db: AsyncSession,
+    workspace_id: UUID,
+    org_id: UUID,
+) -> dict:
+    apps_result = await db.execute(
+        select(MinEAObject)
+        .where(
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.org_id == org_id,
+            MinEAObject.type == "application",
+        )
+        .order_by(MinEAObject.name)
+    )
+    apps = list(apps_result.scalars().all())
+    app_map = {a.id: a for a in apps}
+
+    entities_result = await db.execute(
+        select(MinEAObject)
+        .where(
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.org_id == org_id,
+            MinEAObject.type == "data_object",
+        )
+        .order_by(MinEAObject.name)
+    )
+    entities = list(entities_result.scalars().all())
+
+    links_result = await db.execute(
+        select(DataLink).where(
+            DataLink.workspace_id == workspace_id,
+            DataLink.org_id == org_id,
+            DataLink.subject_type == "data_entity",
+            DataLink.link_kind == "managed_by",
+            DataLink.entity_kind == "application",
+        )
+    )
+    managed_by = list(links_result.scalars().all())
+    entity_to_system = {link.subject_id: link.entity_id for link in managed_by}
+    system_entity_counts: dict[UUID, int] = {}
+    for system_id in entity_to_system.values():
+        system_entity_counts[system_id] = system_entity_counts.get(system_id, 0) + 1
+
+    systems_out = []
+    for app in apps:
+        props = app.properties or {}
+        category = props.get("category") or "System"
+        vendor = props.get("vendor")
+        count = system_entity_counts.get(app.id, 0)
+        systems_out.append(
+            {
+                "id": app.id,
+                "name": app.name,
+                "category": str(category),
+                "vendor": str(vendor) if vendor else None,
+                "entity_count": count,
+                "connection_label": props.get("connection_label") or app.owner,
+            }
+        )
+
+    entities_out = []
+    for ent in entities:
+        props = ent.properties or {}
+        system_id = entity_to_system.get(ent.id)
+        system = app_map.get(system_id) if system_id else None
+        classification = props.get("classification")
+        sensitivity = props.get("sensitivity")
+        entities_out.append(
+            {
+                "id": ent.id,
+                "name": ent.name,
+                "system_id": system_id,
+                "system_name": system.name if system else None,
+                "classification": str(classification) if classification else None,
+                "sensitivity": str(sensitivity) if sensitivity else None,
+                "registered": system_id is not None,
+            }
+        )
+
+    return {"systems": systems_out, "entities": entities_out}
+
+
 async def validate_link_entity(
     db: AsyncSession,
     workspace_id: UUID,

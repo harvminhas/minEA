@@ -18,9 +18,11 @@ from app.schemas.data_layer import (
     DataStoreCreate,
     DataStoreDetail,
     DataStoreUpdate,
+    FlowEndpointCatalog,
 )
 from app.services.data_layer import (
     add_data_link,
+    flow_endpoint_catalog,
     get_domain_name,
     infer_capabilities_for_entity,
     infer_domain_summary,
@@ -59,6 +61,17 @@ async def _get_object(
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{expected_type} not found")
     return obj
+
+
+@router.get("/flow-endpoint-catalog", response_model=FlowEndpointCatalog)
+async def get_flow_endpoint_catalog(
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> FlowEndpointCatalog:
+    await ctx.require_read(db)
+    assert ctx.workspace
+    catalog = await flow_endpoint_catalog(db, ctx.workspace.id, ctx.org_id)
+    return FlowEndpointCatalog(**catalog)
 
 
 # ─── Data Entities ───────────────────────────────────────────────────────────

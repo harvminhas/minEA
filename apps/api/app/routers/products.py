@@ -37,6 +37,7 @@ async def _to_read(db: AsyncSession, product: Product) -> ProductRead:
         owner=product.owner,
         description=product.description,
         capability_ids=cap_ids,
+        graph_layout=product.graph_layout,
         created_at=product.created_at,
         updated_at=product.updated_at,
         **stats,
@@ -135,7 +136,7 @@ async def get_product_graph(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
     graph = await build_product_graph(db, product)
-    return ProductGraphResponse(**graph)
+    return ProductGraphResponse(**graph, graph_layout=product.graph_layout)
 
 
 @router.patch("/{product_id}", response_model=ProductRead)
@@ -171,10 +172,9 @@ async def update_product(
         for cap_id in body.capability_ids:
             db.add(ProductCapability(product_id=product.id, capability_id=cap_id))
 
-    for field in ("name", "product_line", "lifecycle", "owner", "description"):
-        value = getattr(body, field)
-        if value is not None:
-            setattr(product, field, value)
+    for field in ("name", "product_line", "lifecycle", "owner", "description", "graph_layout"):
+        if field in body.model_fields_set:
+            setattr(product, field, getattr(body, field))
 
     await db.flush()
     await db.refresh(product, ["capabilities"])

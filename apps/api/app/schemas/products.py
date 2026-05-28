@@ -20,6 +20,7 @@ class ProductUpdate(BaseModel):
     owner: str | None = None
     description: str | None = None
     capability_ids: list[UUID] | None = None
+    graph_layout: dict | None = None
 
 
 class ProductRead(BaseModel):
@@ -65,3 +66,4 @@ class ProductGraphEdge(BaseModel):
 class ProductGraphResponse(BaseModel):
     nodes: list[ProductGraphNode]
     edges: list[ProductGraphEdge]
+    graph_layout: dict | None = None

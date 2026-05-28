@@ -195,10 +195,59 @@ export interface ApiProperties {
 }
 
 export interface IntegrationFlowProperties {
-  direction?: "inbound" | "outbound" | "bidirectional";
+  direction?: "one_way" | "bidirectional" | "inbound" | "outbound";
   protocol?: string;
+  format?: string;
   frequency?: "realtime" | "batch" | "scheduled" | "event_driven";
+  auth?: string;
   criticality?: "low" | "medium" | "high" | "critical";
+  data_classification?: string;
+  sources?: FlowEndpointSide;
+  destinations?: FlowEndpointSide;
+  /** Persisted node positions for the flow diagram canvas. */
+  node_layout?: Record<string, { x: number; y: number }>;
+}
+
+export interface FlowSystemSelection {
+  system_id: string;
+  system_name: string;
+  wildcard: true;
+}
+
+export interface FlowEntitySelection {
+  entity_id: string;
+  entity_name: string;
+  system_id?: string | null;
+  system_name?: string | null;
+}
+
+export interface FlowEndpointSide {
+  systems: FlowSystemSelection[];
+  entities: FlowEntitySelection[];
+}
+
+export interface FlowEndpointSystem {
+  id: string;
+  name: string;
+  category: string;
+  vendor?: string | null;
+  entity_count: number;
+  connection_label?: string | null;
+}
+
+export interface FlowEndpointEntity {
+  id: string;
+  name: string;
+  system_id?: string | null;
+  system_name?: string | null;
+  classification?: string | null;
+  sensitivity?: string | null;
+  registered: boolean;
+}
+
+export interface FlowEndpointCatalog {
+  systems: FlowEndpointSystem[];
+  entities: FlowEndpointEntity[];
 }
 
 export interface ToolProperties {
@@ -381,6 +430,7 @@ export interface Product {
   data_store_count: number;
   maturity_indicator?: RealizationMaturity | null;
   capability_ids: string[];
+  graph_layout?: Record<string, { x: number; y: number }> | null;
   created_at: string;
   updated_at: string;
 }
@@ -392,6 +442,16 @@ export interface ProductCreate {
   owner?: string;
   description?: string;
   capability_ids?: string[];
+}
+
+export interface ProductUpdate {
+  name?: string;
+  product_line?: string;
+  lifecycle?: string;
+  owner?: string;
+  description?: string;
+  capability_ids?: string[];
+  graph_layout?: Record<string, { x: number; y: number }> | null;
 }
 
 export interface ProductListResponse {
@@ -416,6 +476,7 @@ export interface ProductGraphEdge {
 export interface ProductGraphResponse {
   nodes: ProductGraphNode[];
   edges: ProductGraphEdge[];
+  graph_layout?: Record<string, { x: number; y: number }> | null;
 }
 
 export type ProcessStatus = "draft" | "live" | "planned" | "retiring" | "retired";

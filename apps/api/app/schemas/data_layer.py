@@ -129,3 +129,27 @@ class DataDomainCreate(BaseModel):
     owning_team: str | None = None
     steward_name: str | None = None
     steward_email: str | None = None
+
+
+class FlowEndpointSystemRead(BaseModel):
+    id: UUID
+    name: str
+    category: str
+    vendor: str | None = None
+    entity_count: int = 0
+    connection_label: str | None = None
+
+
+class FlowEndpointEntityRead(BaseModel):
+    id: UUID
+    name: str
+    system_id: UUID | None = None
+    system_name: str | None = None
+    classification: str | None = None
+    sensitivity: str | None = None
+    registered: bool = False
+
+
+class FlowEndpointCatalog(BaseModel):
+    systems: list[FlowEndpointSystemRead] = Field(default_factory=list)
+    entities: list[FlowEndpointEntityRead] = Field(default_factory=list)

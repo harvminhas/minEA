@@ -1,11 +1,13 @@
 "use client";
 
+import { useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { productsApi } from "@/lib/api-client";
 import { ProductArchitectureGraph } from "@/components/views/ProductArchitectureGraph";
+import type { NodeLayout } from "@/components/shared/EntityFlowCanvas";
 
 interface Props {
   productId: string;
@@ -16,14 +18,36 @@ interface Props {
 export function ProductArchitectureView({ productId, productName, onClose }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
+
+  const graphQueryKey = ["product-graph", orgSlug, workspaceSlug, productId] as const;
 
   const { data: graph, isLoading, isError } = useQuery({
-    queryKey: ["product-graph", orgSlug, workspaceSlug, productId],
+    queryKey: graphQueryKey,
     queryFn: async () => {
       const token = await getToken();
       return productsApi.graph(orgSlug, workspaceSlug, productId, token!);
     },
   });
+
+  const handleLayoutSave = useCallback(
+    async (layout: NodeLayout) => {
+      const token = await getToken();
+      if (!token) return;
+
+      await productsApi.update(orgSlug, workspaceSlug, productId, { graph_layout: layout }, token);
+
+      queryClient.setQueryData(graphQueryKey, (old) => {
+        if (!old) return old;
+        return { ...old, graph_layout: layout };
+      });
+    },
+    [getToken, orgSlug, workspaceSlug, productId, queryClient, graphQueryKey]
+  );
+
+  const handleResetLayout = useCallback(() => {
+    handleLayoutSave({});
+  }, [handleLayoutSave]);
 
   return (
     <>
@@ -31,7 +55,7 @@ export function ProductArchitectureView({ productId, productName, onClose }: Pro
       <div className="fixed inset-4 md:inset-8 bg-white rounded-xl shadow-2xl z-[70] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
-            <p className="text-xs text-gray-400 mb-0.5">Architecture view · read only</p>
+            <p className="text-xs text-gray-400 mb-0.5">Architecture view</p>
             <h2 className="font-semibold text-gray-900">{productName}</h2>
           </div>
           <button
@@ -44,20 +68,22 @@ export function ProductArchitectureView({ productId, productName, onClose }: Pro
           </button>
         </div>
 
-        <div className="flex-1 p-4 min-h-0">
+        <div className="flex-1 relative min-h-0 bg-[#fafafa]">
           {isLoading ? (
-            <div className="h-full flex items-center justify-center text-sm text-gray-400">
+            <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-400">
               Loading architecture…
             </div>
           ) : isError || !graph ? (
-            <div className="h-full flex items-center justify-center text-sm text-red-500">
+            <div className="absolute inset-0 flex items-center justify-center text-sm text-red-500">
               Could not load architecture graph.
             </div>
           ) : (
             <ProductArchitectureGraph
               productName={productName}
               graph={graph}
-              className="h-full"
+              className="absolute inset-0"
+              onLayoutSave={handleLayoutSave}
+              onResetLayout={handleResetLayout}
             />
           )}
         </div>

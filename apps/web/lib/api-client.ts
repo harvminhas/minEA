@@ -17,6 +17,7 @@ import type {
   InviteCreated,
   Product,
   ProductCreate,
+  ProductUpdate,
   ProductGraphResponse,
   ProductListResponse,
   Process,
@@ -62,6 +63,7 @@ import type {
   DataDomainCreate,
   DataDomainUpdate,
   DataLinkCreate,
+  FlowEndpointCatalog,
 } from "@minea/types";
 import { apiV1Url } from "@/lib/api-base";
 
@@ -253,7 +255,7 @@ export const productsApi = {
     orgSlug: string,
     workspaceSlug: string,
     productId: string,
-    body: Partial<ProductCreate>,
+    body: ProductUpdate,
     token: string
   ) =>
     apiFetch<Product>(`${wsBase(orgSlug, workspaceSlug)}/products/${productId}`, {
@@ -701,6 +703,11 @@ export const dataApi = {
   deleteLink: (orgSlug: string, workspaceSlug: string, linkId: string, token: string) =>
     apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/links/${linkId}`, {
       method: "DELETE",
+      token,
+    }),
+
+  getFlowEndpointCatalog: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<FlowEndpointCatalog>(`${wsBase(orgSlug, workspaceSlug)}/data/flow-endpoint-catalog`, {
       token,
     }),
 };
