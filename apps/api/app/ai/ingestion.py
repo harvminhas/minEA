@@ -39,7 +39,7 @@ class CisPayload(BaseModel):
 
 
 VALID_TYPES = {
-    "capability", "value_stream", "application", "solution", "technical_capability",
+    "capability", "value_stream", "application", "solution", "technical_capability", "component",
     "agent", "data_object", "data_store", "api", "event", "integration_flow",
     "message_broker", "tool", "cloud_service", "model",
 }

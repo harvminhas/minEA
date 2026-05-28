@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ChevronRight,
+  Cpu,
   LayoutGrid,
   PanelLeftClose,
   PanelLeftOpen,
@@ -21,7 +22,13 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/lib/store";
 import { useTenancy } from "@/lib/tenancy";
 import { NAV_VIEWS } from "@/lib/views";
-import { REPOSITORY_LAYERS, type RepositoryLayer } from "@/lib/repository-nav";
+import {
+  REPOSITORY_LAYERS,
+  isNavItemDisabled,
+  type NavBadge,
+  type RepositoryLayer,
+  type RepositoryNavItem,
+} from "@/lib/repository-nav";
 // ─── Icons assigned to each repository layer ─────────────────────────────
 
 const LAYER_ICONS: Record<string, LucideIcon> = {
@@ -30,8 +37,77 @@ const LAYER_ICONS: Record<string, LucideIcon> = {
   application: AppWindow,
   integration: Share2,
   data: Database,
+  technology: Cpu,
   people: Users,
 };
+
+function NavBadgePill({ badge }: { badge: NavBadge }) {
+  if (badge === "new") {
+    return (
+      <span className="ml-auto flex-shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+        New
+      </span>
+    );
+  }
+  return (
+    <span className="ml-auto flex-shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide bg-white/5 text-white/25 border border-white/10">
+      Upcoming
+    </span>
+  );
+}
+
+function RepoNavItemRow({
+  item,
+  layer,
+  href,
+  pathname,
+  onNavigate,
+  indent = true,
+}: {
+  item: RepositoryNavItem;
+  layer: RepositoryLayer;
+  href: string;
+  pathname: string;
+  onNavigate?: () => void;
+  indent?: boolean;
+}) {
+  const disabled = isNavItemDisabled(item);
+  const isActive = !disabled && (pathname === href || pathname.startsWith(`${href}/`));
+  const rowClass = cn(
+    "flex items-center gap-2 py-1 text-sm transition-colors min-w-0",
+    indent ? "pl-10 pr-4" : "px-4",
+    disabled
+      ? "text-white/25 cursor-not-allowed"
+      : isActive
+        ? "bg-white/10 text-white"
+        : "text-white/45 hover:text-white hover:bg-white/5"
+  );
+
+  const content = (
+    <>
+      <span
+        className={cn("h-1 w-1 rounded-full flex-shrink-0", disabled && "opacity-40")}
+        style={{ backgroundColor: layer.color }}
+      />
+      <span className="truncate text-[13px] flex-1 min-w-0">{item.label}</span>
+      {item.badge && <NavBadgePill badge={item.badge} />}
+    </>
+  );
+
+  if (disabled) {
+    return (
+      <div key={item.segment} title="Coming soon" className={rowClass}>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Link key={item.segment} href={href} onClick={onNavigate} className={rowClass}>
+      {content}
+    </Link>
+  );
+}
 
 // ─── Shared tooltip ───────────────────────────────────────────────────────
 
@@ -179,7 +255,7 @@ function CollapsedLayerFlyout({
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const LayerIcon = LAYER_ICONS[layer.id] ?? Briefcase;
   const isLayerActive = layer.items.some((item) => {
-    if (item.upcoming) return false;
+    if (isNavItemDisabled(item)) return false;
     const href = `${basePath}/${item.segment}`;
     return pathname === href || pathname.startsWith(`${href}/`);
   });
@@ -228,49 +304,17 @@ function CollapsedLayerFlyout({
           <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/35">
             {layer.label}
           </p>
-          {layer.items.map((item) => {
-            const href = `${basePath}/${item.segment}`;
-
-            if (item.upcoming) {
-              return (
-                <div
-                  key={item.segment}
-                  title="Coming soon"
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-white/25 cursor-not-allowed"
-                >
-                  <span
-                    className="h-1 w-1 rounded-full flex-shrink-0 opacity-40"
-                    style={{ backgroundColor: layer.color }}
-                  />
-                  <span className="truncate text-[13px]">{item.label}</span>
-                  <span className="ml-auto text-[9px] font-medium uppercase tracking-wide text-white/20">
-                    Upcoming
-                  </span>
-                </div>
-              );
-            }
-
-            const isActive = pathname === href || pathname.startsWith(`${href}/`);
-            return (
-              <Link
-                key={item.segment}
-                href={href}
-                onClick={onClose}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 text-sm transition-colors",
-                  isActive
-                    ? "bg-white/10 text-white"
-                    : "text-white/70 hover:text-white hover:bg-white/5"
-                )}
-              >
-                <span
-                  className="h-1 w-1 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: layer.color }}
-                />
-                <span className="truncate text-[13px]">{item.label}</span>
-              </Link>
-            );
-          })}
+          {layer.items.map((item) => (
+            <RepoNavItemRow
+              key={item.segment}
+              item={item}
+              layer={layer}
+              href={`${basePath}/${item.segment}`}
+              pathname={pathname}
+              onNavigate={onClose}
+              indent={false}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -315,7 +359,7 @@ function CollapsedRepoNav({
   return (
     <div ref={navRef} className="flex flex-col items-center gap-1">
       {REPOSITORY_LAYERS.map((layer) => {
-        const availableItems = layer.items.filter((item) => !item.upcoming);
+        const availableItems = layer.items.filter((item) => !isNavItemDisabled(item));
         const hasSubnav = layer.items.length > 1;
 
         if (!hasSubnav && availableItems.length === 1) {
@@ -442,7 +486,7 @@ function ExpandedRepoNav({
         const isCollapsed = collapsedLayers[layer.id] ?? true;
         const LayerIcon = LAYER_ICONS[layer.id] ?? Briefcase;
         const isLayerActive = layer.items.some((item) => {
-          if (item.upcoming) return false;
+          if (isNavItemDisabled(item)) return false;
           const href = `${basePath}/${item.segment}`;
           return pathname === href || pathname.startsWith(`${href}/`);
         });
@@ -453,7 +497,7 @@ function ExpandedRepoNav({
               type="button"
               onClick={() => toggleLayer(layer.id)}
               className={cn(
-                "flex w-full items-center gap-2 px-4 py-1.5 text-sm transition-colors",
+                "flex w-full items-center gap-2 px-4 py-1.5 text-sm transition-colors min-w-0",
                 isLayerActive && isCollapsed
                   ? "text-white"
                   : "text-white/55 hover:text-white hover:bg-white/5"
@@ -464,55 +508,35 @@ function ExpandedRepoNav({
                 className={cn("flex-shrink-0 transition-transform", !isCollapsed && "rotate-90")}
               />
               <span
-                className="h-1.5 w-1.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: layer.color }}
-              />
+                className="h-4 w-4 rounded border border-white/15 flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: `${layer.color}18` }}
+              >
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: layer.color }}
+                />
+              </span>
               <span className="truncate flex-1 text-left">{layer.label}</span>
-              <span className="text-[10px] text-white/25 tabular-nums">{layer.items.length}</span>
+              {layer.badge ? (
+                <NavBadgePill badge={layer.badge} />
+              ) : (
+                <span className="text-[10px] text-white/25 tabular-nums flex-shrink-0">
+                  {layer.items.length}
+                </span>
+              )}
             </button>
 
             {!isCollapsed && (
               <div className="mb-0.5">
-                {layer.items.map((item) => {
-                  const href = `${basePath}/${item.segment}`;
-                  if (item.upcoming) {
-                    return (
-                      <div
-                        key={item.segment}
-                        title="Coming soon"
-                        className="flex items-center gap-2 pl-10 pr-4 py-1 text-sm text-white/25 cursor-not-allowed"
-                      >
-                        <span
-                          className="h-1 w-1 rounded-full flex-shrink-0 opacity-40"
-                          style={{ backgroundColor: layer.color }}
-                        />
-                        <span className="truncate text-[13px]">{item.label}</span>
-                        <span className="ml-auto text-[9px] font-medium uppercase tracking-wide text-white/20">
-                          Upcoming
-                        </span>
-                      </div>
-                    );
-                  }
-                  const isActive = pathname === href || pathname.startsWith(`${href}/`);
-                  return (
-                    <Link
-                      key={item.segment}
-                      href={href}
-                      className={cn(
-                        "flex items-center gap-2 pl-10 pr-4 py-1 text-sm transition-colors",
-                        isActive
-                          ? "bg-white/10 text-white"
-                          : "text-white/45 hover:text-white hover:bg-white/5"
-                      )}
-                    >
-                      <span
-                        className="h-1 w-1 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: layer.color }}
-                      />
-                      <span className="truncate text-[13px]">{item.label}</span>
-                    </Link>
-                  );
-                })}
+                {layer.items.map((item) => (
+                  <RepoNavItemRow
+                    key={item.segment}
+                    item={item}
+                    layer={layer}
+                    href={`${basePath}/${item.segment}`}
+                    pathname={pathname}
+                  />
+                ))}
               </div>
             )}
           </div>

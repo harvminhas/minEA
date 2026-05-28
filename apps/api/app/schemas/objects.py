@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 VALID_TYPES = {
     "business_domain", "capability", "value_stream",
-    "application", "solution", "technical_capability", "agent",
+    "application", "solution", "technical_capability", "component", "agent",
     "data_object", "data_store", "data_domain",
     "api", "event", "integration_flow", "message_broker", "tool",
     "cloud_service", "model",

@@ -12,6 +12,9 @@ import { ObjectForm } from "@/components/objects/ObjectForm";
 import { CapabilityMapPage } from "@/components/capability-map/CapabilityMapPage";
 import { DataLayerList } from "@/components/data/DataLayerList";
 import { FlowList } from "@/components/integration/FlowList";
+import { ApiList } from "@/components/integration/ApiList";
+import { EventList } from "@/components/integration/EventList";
+import { ComponentList } from "@/components/application/ComponentList";
 import { OBJECT_TYPE_LABELS, type ObjectType, type MinEAObject } from "@minea/types";
 import { getLayerColor } from "@/lib/utils";
 
@@ -30,6 +33,7 @@ const PATH_TO_TYPE: Record<string, ObjectType> = {
   tools: "tool",
   "cloud-services": "cloud_service",
   models: "model",
+  components: "component",
 };
 
 const LAYER_LABELS: Record<string, string> = {
@@ -39,6 +43,7 @@ const LAYER_LABELS: Record<string, string> = {
   data: "Data Layer",
   integration: "Integration Layer",
   infrastructure: "Infrastructure Layer",
+  technology: "Technology Layer",
 };
 
 export default function ObjectListPage({ params }: { params: Promise<{ layer: string; type: string }> }) {
@@ -63,19 +68,50 @@ export default function ObjectListPage({ params }: { params: Promise<{ layer: st
     return <FlowList />;
   }
 
+  if (layer === "integration" && typePath === "apis") {
+    return <ApiList />;
+  }
+
+  if (layer === "integration" && typePath === "events") {
+    return <EventList />;
+  }
+
+  if (layer === "application" && typePath === "components") {
+    return <ComponentList />;
+  }
+
   return <RepositoryObjectList layer={layer} typePath={typePath} />;
 }
 
 function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: string }) {
   const objectType = PATH_TO_TYPE[typePath] ?? (typePath as ObjectType);
-  const layerColor = getLayerColor(layer === "business" && typePath === "capabilities" ? "strategy" : layer);
-  const layerLabel = LAYER_LABELS[layer === "business" && typePath === "capabilities" ? "strategy" : layer] ?? layer;
+  const layerColor = getLayerColor(
+    layer === "business" && typePath === "capabilities"
+      ? "strategy"
+      : layer === "technology"
+        ? "infrastructure"
+        : layer
+  );
+  const layerLabel =
+    LAYER_LABELS[
+      layer === "business" && typePath === "capabilities"
+        ? "strategy"
+        : layer === "technology"
+          ? "technology"
+          : layer
+    ] ?? layer;
   const typeLabel =
-    layer === "application" && typePath === "applications"
-      ? "System"
-      : OBJECT_TYPE_LABELS[objectType] ?? objectType;
+    typePath === "components"
+      ? "Component"
+      : layer === "application" && typePath === "applications"
+        ? "System"
+        : OBJECT_TYPE_LABELS[objectType] ?? objectType;
   const typeLabelPlural =
-    layer === "application" && typePath === "applications" ? "Systems" : `${typeLabel}s`;
+    typePath === "components"
+      ? "Components"
+      : layer === "application" && typePath === "applications"
+        ? "Systems"
+        : `${typeLabel}s`;
 
   const { getToken } = useAuth();
   const queryClient = useQueryClient();

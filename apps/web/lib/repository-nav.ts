@@ -3,19 +3,27 @@
  * Paths may cross canonical object layers (e.g. capability map lives under business/* routes).
  */
 
+export type NavBadge = "new" | "upcoming";
+
 export type RepositoryNavItem = {
   label: string;
   /** Path segment after workspace basePath (no leading slash). */
   segment: string;
-  upcoming?: boolean;
+  badge?: NavBadge;
 };
 
 export type RepositoryLayer = {
   id: string;
   label: string;
   color: string;
+  /** Section-level badge (e.g. Technology → NEW). */
+  badge?: NavBadge;
   items: RepositoryNavItem[];
 };
+
+export function isNavItemDisabled(item: RepositoryNavItem): boolean {
+  return item.badge === "upcoming";
+}
 
 export const REPOSITORY_LAYERS: RepositoryLayer[] = [
   {
@@ -24,7 +32,7 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
     color: "#8b5cf6",
     items: [
       { label: "Products", segment: "strategy/products" },
-      { label: "Value Streams", segment: "strategy/value-streams", upcoming: true },
+      { label: "Value Streams", segment: "strategy/value-streams", badge: "upcoming" },
       { label: "Capability Map", segment: "business/capabilities" },
     ],
   },
@@ -38,7 +46,10 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
     id: "application",
     label: "Application",
     color: "#6366f1",
-    items: [{ label: "Systems", segment: "application/applications" }],
+    items: [
+      { label: "Systems", segment: "application/applications" },
+      { label: "Components", segment: "application/components", badge: "new" },
+    ],
   },
   {
     id: "integration",
@@ -58,6 +69,17 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
       { label: "Data Entities", segment: "data/data-objects" },
       { label: "Data Stores", segment: "data/data-stores" },
       { label: "Data Domains", segment: "data/data-domains" },
+    ],
+  },
+  {
+    id: "technology",
+    label: "Technology",
+    color: "#64748b",
+    badge: "new",
+    items: [
+      { label: "Platforms", segment: "infrastructure/cloud-services" },
+      { label: "Integration Infra", segment: "integration/tools" },
+      { label: "Runtimes", segment: "infrastructure/models" },
     ],
   },
   {

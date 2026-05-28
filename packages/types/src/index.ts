@@ -9,6 +9,7 @@ export type ObjectType =
   | "application"
   | "solution"
   | "technical_capability"
+  | "component"
   | "agent"
   // Data Layer
   | "data_object"
@@ -56,7 +57,7 @@ export const LAYER_CONFIG: Record<Layer, {
   application: {
     label: "Application",
     color: "indigo",
-    types: ["application", "solution", "technical_capability", "agent"],
+    types: ["application", "solution", "technical_capability", "component", "agent"],
   },
   data: {
     label: "Data",
@@ -82,6 +83,7 @@ export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
   application: "Application",
   solution: "Solution",
   technical_capability: "Technical Capability",
+  component: "Component",
   agent: "AI Agent",
   data_object: "Data Entity",
   data_store: "Data Store",
@@ -191,7 +193,75 @@ export interface DataDomainProperties {
 }
 
 export interface ApiProperties {
+  /** API style / protocol */
   protocol?: "rest" | "graphql" | "grpc" | "soap";
+  version?: string;
+  base_url?: string;
+  auth?: string;
+  provider?: ApiProviderRef | null;
+  consumers?: ApiConsumerRef[];
+  gateway?: ApiGatewayRef | null;
+  audience?: "internal" | "partner" | "public";
+  criticality?: "low" | "medium" | "high" | "critical";
+  /** Persisted node positions for the API architecture canvas. */
+  node_layout?: Record<string, { x: number; y: number }>;
+}
+
+export interface ApiProviderRef {
+  provider_id: string;
+  provider_name: string;
+  provider_kind: "application" | "component";
+  /** Parent system when provider is a component */
+  system_name?: string;
+}
+
+export interface ApiConsumerRef {
+  consumer_id?: string;
+  consumer_name: string;
+  consumer_kind: "application" | "custom";
+}
+
+export interface ApiGatewayRef {
+  /** Set when linked to a registered tool (api gateway instance) */
+  gateway_id?: string;
+  gateway_name: string;
+  platform?: "apigee" | "kong" | "aws_api_gateway";
+}
+
+export interface EventProducerRef {
+  producer_id: string;
+  producer_name: string;
+  producer_kind: "application" | "component" | "data_object";
+  /** Parent system when producer is a component */
+  system_name?: string;
+}
+
+export interface EventSubscriberRef {
+  subscriber_id?: string;
+  subscriber_name: string;
+  subscriber_kind: "application" | "component" | "custom";
+}
+
+export interface EventBrokerRef {
+  /** Set when linked to a registered message_broker object */
+  broker_id?: string;
+  broker_name: string;
+  transport?: "kafka" | "eventbridge" | "pub_sub" | "rabbitmq" | "solace";
+}
+
+export interface EventProperties {
+  /** Technical topic / event name on the broker */
+  topic?: string;
+  version?: string;
+  schema_ref?: string;
+  delivery?: "at_least_once" | "at_most_once" | "exactly_once";
+  producer?: EventProducerRef | null;
+  subscribers?: EventSubscriberRef[];
+  broker?: EventBrokerRef | null;
+  audience?: "internal" | "partner" | "public";
+  criticality?: "low" | "medium" | "high" | "critical";
+  /** Persisted node positions for the event architecture canvas. */
+  node_layout?: Record<string, { x: number; y: number }>;
 }
 
 export interface IntegrationFlowProperties {
@@ -205,6 +275,26 @@ export interface IntegrationFlowProperties {
   sources?: FlowEndpointSide;
   destinations?: FlowEndpointSide;
   /** Persisted node positions for the flow diagram canvas. */
+  node_layout?: Record<string, { x: number; y: number }>;
+}
+
+export interface ComponentSystemRef {
+  system_id: string;
+  system_name: string;
+}
+
+export interface ComponentRuntimeRef {
+  runtime_id: string;
+  runtime_name: string;
+  runtime_kind: "tool" | "model" | "cloud_service";
+}
+
+export interface ComponentProperties {
+  component_type?: string;
+  tech_stack?: string;
+  systems?: ComponentSystemRef[];
+  runtime?: ComponentRuntimeRef | null;
+  /** Persisted node positions for the component architecture canvas. */
   node_layout?: Record<string, { x: number; y: number }>;
 }
 

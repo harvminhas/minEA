@@ -56,7 +56,7 @@ export function formatCurrency(amount: number | undefined): string {
 
 export function getTypeLayer(type: ObjectType): Layer {
   if (["business_domain", "capability", "value_stream"].includes(type)) return "strategy";
-  if (["application", "solution", "technical_capability", "agent"].includes(type)) return "application";
+  if (["application", "solution", "technical_capability", "component", "agent"].includes(type)) return "application";
   if (["data_object", "data_store", "data_domain"].includes(type)) return "data";
   if (["api", "event", "integration_flow", "message_broker", "tool"].includes(type)) return "integration";
   return "infrastructure";
