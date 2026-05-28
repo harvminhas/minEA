@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftRight, Edit2, Trash2 } from "lucide-react";
-import type { IntegrationFlowProperties, MinEAObject } from "@minea/types";
+import type { IntegrationFlowProperties, MinEAObject, ObjectListResponse } from "@minea/types";
 import { objectsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import {
@@ -75,7 +75,7 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
       const token = await getToken();
       if (!token) return;
 
-      const cached = queryClient.getQueryData<{ items: MinEAObject[] }>(flowsQueryKey);
+      const cached = queryClient.getQueryData<ObjectListResponse>(flowsQueryKey);
       const current = cached?.items.find((o) => o.id === flow.id) ?? flow;
       const currentProps = (current.properties ?? {}) as IntegrationFlowProperties;
 
@@ -83,7 +83,7 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
         properties: { ...currentProps, node_layout: layout } as Record<string, unknown>,
       }, token);
 
-      queryClient.setQueryData(flowsQueryKey, (old) => {
+      queryClient.setQueryData<ObjectListResponse>(flowsQueryKey, (old) => {
         if (!old) return old;
         return {
           ...old,
