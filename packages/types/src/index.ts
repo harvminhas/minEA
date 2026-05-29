@@ -345,11 +345,43 @@ export interface ToolProperties {
   reversibility?: "reversible" | "irreversible";
   auth_mechanism?: string;
   cost_per_call?: number;
+  /** API gateway registration (from API panel) */
+  gateway_platform?: "apigee" | "kong" | "aws_api_gateway";
+  /** Integration infrastructure (Technology → Integration Infra) */
+  integration_infra_kind?: "ipaas" | "etl_elt" | "broker" | "gateway" | "transport" | "custom";
+  integration_infra_kind_other?: string;
+  vendor?: string;
+  vendor_product?: string;
+  hosting_model?: "saas" | "self_hosted" | "hybrid";
+  region?: string;
+  environments?: string[];
+  admin_url?: string;
+  license_model?: "per_vcore" | "per_connector" | "per_message_volume" | "flat_enterprise" | "open_source";
+  contract_renewal?: string;
+  annual_cost?: string;
+  sla_target?: "99_9" | "99_95" | "99_99" | "best_effort";
+  lifecycle?: "pilot" | "active" | "deprecated" | "end_of_life";
+  criticality?: "low" | "medium" | "high" | "tier1";
 }
 
 export interface CloudServiceProperties {
   provider?: "aws" | "azure" | "gcp" | "other";
   service_type?: string;
+  /** Enterprise platform (Technology → Platforms) */
+  vendor?: string;
+  vendor_product?: string;
+  platform_type?: "low_code" | "itsm" | "crm" | "erp" | "bpm" | "custom_dev" | "other";
+  platform_type_other?: string;
+  hosting_model?: "saas" | "paas" | "self_hosted" | "hybrid";
+  region?: string;
+  environments?: string[];
+  admin_url?: string;
+  license_model?: "per_user" | "per_capacity" | "per_api_call" | "flat_enterprise" | "open_source";
+  contract_renewal?: string;
+  annual_cost?: string;
+  sla_target?: "99_9" | "99_95" | "99_99" | "best_effort";
+  lifecycle?: "pilot" | "active" | "deprecated" | "end_of_life";
+  criticality?: "low" | "medium" | "high" | "tier1";
 }
 
 export interface ModelProperties {
@@ -359,6 +391,26 @@ export interface ModelProperties {
   cost_per_million_tokens_input?: number;
   cost_per_million_tokens_output?: number;
   data_residency?: string;
+  /** Technology → Runtimes (compute / hosting) */
+  compute_runtime_kind?: "kubernetes" | "serverless" | "container" | "vm" | "paas" | "on_prem";
+  runtime_provider?: string;
+  service_product?: string;
+  hosting_model?: "public_cloud" | "private_cloud" | "on_premise" | "hybrid";
+  region?: string;
+  environments?: string[];
+  console_url?: string;
+  cost_model?:
+    | "per_vcpu_memory"
+    | "per_instance_hour"
+    | "per_invocation"
+    | "reserved_committed"
+    | "flat_enterprise"
+    | "capex";
+  commitment_ends?: string;
+  annual_cost?: string;
+  sla_target?: "99_9" | "99_95" | "99_99" | "best_effort";
+  lifecycle?: "pilot" | "active" | "deprecated" | "end_of_life";
+  criticality?: "low" | "medium" | "high" | "tier1";
 }
 
 // ─── Relationship Types ───────────────────────────────────────────────────────

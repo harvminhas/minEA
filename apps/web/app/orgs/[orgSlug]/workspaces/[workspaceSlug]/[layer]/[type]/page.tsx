@@ -15,6 +15,9 @@ import { FlowList } from "@/components/integration/FlowList";
 import { ApiList } from "@/components/integration/ApiList";
 import { EventList } from "@/components/integration/EventList";
 import { ComponentList } from "@/components/application/ComponentList";
+import { PlatformList } from "@/components/infrastructure/PlatformList";
+import { RuntimeList } from "@/components/infrastructure/RuntimeList";
+import { IntegrationInfraList } from "@/components/integration/IntegrationInfraList";
 import { OBJECT_TYPE_LABELS, type ObjectType, type MinEAObject } from "@minea/types";
 import { getLayerColor } from "@/lib/utils";
 
@@ -76,8 +79,20 @@ export default function ObjectListPage({ params }: { params: Promise<{ layer: st
     return <EventList />;
   }
 
+  if (layer === "integration" && typePath === "tools") {
+    return <IntegrationInfraList />;
+  }
+
   if (layer === "application" && typePath === "components") {
     return <ComponentList />;
+  }
+
+  if (layer === "infrastructure" && typePath === "cloud-services") {
+    return <PlatformList />;
+  }
+
+  if (layer === "infrastructure" && typePath === "models") {
+    return <RuntimeList />;
   }
 
   return <RepositoryObjectList layer={layer} typePath={typePath} />;

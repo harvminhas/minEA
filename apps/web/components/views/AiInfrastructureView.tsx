@@ -8,7 +8,9 @@ import { ViewShell } from "@/components/views/ViewShell";
 import { getView } from "@/lib/views";
 import { AlertTriangle, Bot, Brain, Wrench } from "lucide-react";
 import { getStatusColor, getStatusLabel } from "@/lib/utils";
-import type { MinEAObject } from "@minea/types";
+import type { MinEAObject, ModelProperties, ToolProperties } from "@minea/types";
+import { isIntegrationInfra } from "@/lib/integration-infra-utils";
+import { isAiModel } from "@/lib/runtime-utils";
 
 const view = getView("ai-infrastructure");
 
@@ -95,8 +97,12 @@ export default function AiInfrastructureView() {
   });
 
   const agents = agentsData?.items ?? [];
-  const tools = toolsData?.items ?? [];
-  const models = modelsData?.items ?? [];
+  const tools = (toolsData?.items ?? []).filter(
+    (t) => !isIntegrationInfra(t.properties as ToolProperties)
+  );
+  const models = (modelsData?.items ?? []).filter((m) =>
+    isAiModel(m.properties as ModelProperties)
+  );
   const isEmpty = agents.length === 0 && tools.length === 0 && models.length === 0;
 
   return (
