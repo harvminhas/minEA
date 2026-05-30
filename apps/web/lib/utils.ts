@@ -38,6 +38,7 @@ export function getLayerColor(layer: Layer | string): string {
     data: "#f59e0b",
     integration: "#14b8a6",
     infrastructure: "#64748b",
+    risk: "#dc2626",
     ai: "#a855f7",
   };
   return colors[layer] ?? "#64748b";
@@ -55,9 +56,10 @@ export function formatCurrency(amount: number | undefined): string {
 }
 
 export function getTypeLayer(type: ObjectType): Layer {
-  if (["business_domain", "capability", "value_stream"].includes(type)) return "strategy";
+  if (["business_domain", "capability", "value_stream", "roadmap_item"].includes(type)) return "strategy";
   if (["application", "solution", "technical_capability", "component", "agent"].includes(type)) return "application";
   if (["data_object", "data_store", "data_domain"].includes(type)) return "data";
   if (["api", "event", "integration_flow", "message_broker", "tool"].includes(type)) return "integration";
+  if (type === "tech_debt") return "infrastructure";
   return "infrastructure";
 }

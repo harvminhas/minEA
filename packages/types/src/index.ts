@@ -5,6 +5,8 @@ export type ObjectType =
   | "business_domain"
   | "capability"
   | "value_stream"
+  // Strategy Layer
+  | "roadmap_item"
   // Application Layer
   | "application"
   | "solution"
@@ -23,7 +25,9 @@ export type ObjectType =
   | "tool"
   // Infrastructure Layer
   | "cloud_service"
-  | "model";
+  | "model"
+  // Risk Layer
+  | "tech_debt";
 
 export type ObjectStatus =
   | "planned"
@@ -47,7 +51,7 @@ export const LAYER_CONFIG: Record<Layer, {
   strategy: {
     label: "Strategy",
     color: "violet",
-    types: ["business_domain", "capability", "value_stream"],
+    types: ["business_domain", "capability", "value_stream", "roadmap_item"],
   },
   business: {
     label: "Business",
@@ -80,6 +84,7 @@ export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
   business_domain: "Domain",
   capability: "Capability",
   value_stream: "Value Stream",
+  roadmap_item: "Roadmap Item",
   application: "Application",
   solution: "Solution",
   technical_capability: "Technical Capability",
@@ -95,6 +100,7 @@ export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
   tool: "Tool",
   cloud_service: "Cloud Service",
   model: "Model",
+  tech_debt: "Tech Debt",
 };
 
 export const GROWTH_TYPES: ObjectType[] = ["agent", "tool", "model"];
@@ -413,6 +419,64 @@ export interface ModelProperties {
   criticality?: "low" | "medium" | "high" | "tier1";
 }
 
+export interface TechDebtAffectsRef {
+  object_id: string;
+  object_name: string;
+  object_kind: "product" | "application" | "component";
+}
+
+export interface TechDebtProperties {
+  severity?: "low" | "medium" | "high" | "critical";
+  debt_type?:
+    | "eol_software"
+    | "security_vulnerability"
+    | "performance_scaling"
+    | "missing_tests"
+    | "outdated_dependency"
+    | "compliance_gap"
+    | "documentation"
+    | "architecture_drift"
+    | "vendor_contract"
+    | "other";
+  debt_type_other?: string;
+  debt_status?: "open" | "in_progress" | "deferred" | "resolved" | "wont_fix";
+  affects?: TechDebtAffectsRef | null;
+  identified_by?: string;
+  target_resolution?: string;
+  effort_estimate?: "" | "s" | "m" | "l" | "xl";
+}
+
+export interface RoadmapProductRef {
+  product_id: string;
+  product_name: string;
+}
+
+export interface RoadmapDebtRef {
+  debt_id: string;
+  debt_name: string;
+  severity?: "low" | "medium" | "high" | "critical";
+}
+
+export type RoadmapMilestoneStatus = "not_started" | "in_flight" | "done";
+
+export interface RoadmapMilestone {
+  id: string;
+  title: string;
+  target_resolution: string;
+  status: RoadmapMilestoneStatus;
+  sort_order?: number;
+}
+
+export interface RoadmapItemProperties {
+  roadmap_kind?: "feature" | "epic" | "initiative" | "migration" | "sunset" | "discovery";
+  product?: RoadmapProductRef | null;
+  resolves_debt?: RoadmapDebtRef[];
+  roadmap_status?: "discovery" | "planned" | "in_progress" | "delivered" | "deferred" | "cancelled";
+  target_resolution?: string;
+  effort_estimate?: "" | "s" | "m" | "l" | "xl";
+  milestones?: RoadmapMilestone[];
+}
+
 // ─── Relationship Types ───────────────────────────────────────────────────────
 
 export type RelationshipType =
@@ -431,6 +495,7 @@ export type RelationshipType =
   | "stores_in"
   | "runs_on"
   | "affects"
+  | "resolves"
   | "replaces"
   | "uses_model"
   | "can_call"

@@ -16,6 +16,7 @@ import {
   Share2,
   Database,
   Users,
+  AlertTriangle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,7 @@ const LAYER_ICONS: Record<string, LucideIcon> = {
   data: Database,
   technology: Cpu,
   people: Users,
+  risk: AlertTriangle,
 };
 
 function NavBadgePill({ badge }: { badge: NavBadge }) {

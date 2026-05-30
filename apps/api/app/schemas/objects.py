@@ -5,11 +5,11 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 VALID_TYPES = {
-    "business_domain", "capability", "value_stream",
+    "business_domain", "capability", "value_stream", "roadmap_item",
     "application", "solution", "technical_capability", "component", "agent",
     "data_object", "data_store", "data_domain",
     "api", "event", "integration_flow", "message_broker", "tool",
-    "cloud_service", "model",
+    "cloud_service", "model", "tech_debt",
 }
 
 VALID_STATUSES = {

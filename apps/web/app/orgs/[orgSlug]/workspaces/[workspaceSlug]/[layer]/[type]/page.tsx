@@ -18,6 +18,7 @@ import { ComponentList } from "@/components/application/ComponentList";
 import { PlatformList } from "@/components/infrastructure/PlatformList";
 import { RuntimeList } from "@/components/infrastructure/RuntimeList";
 import { IntegrationInfraList } from "@/components/integration/IntegrationInfraList";
+import { TechDebtList } from "@/components/risk/TechDebtList";
 import { OBJECT_TYPE_LABELS, type ObjectType, type MinEAObject } from "@minea/types";
 import { getLayerColor } from "@/lib/utils";
 
@@ -37,6 +38,7 @@ const PATH_TO_TYPE: Record<string, ObjectType> = {
   "cloud-services": "cloud_service",
   models: "model",
   components: "component",
+  "tech-debt": "tech_debt",
 };
 
 const LAYER_LABELS: Record<string, string> = {
@@ -47,6 +49,7 @@ const LAYER_LABELS: Record<string, string> = {
   integration: "Integration Layer",
   infrastructure: "Infrastructure Layer",
   technology: "Technology Layer",
+  risk: "Risk Layer",
 };
 
 export default function ObjectListPage({ params }: { params: Promise<{ layer: string; type: string }> }) {
@@ -93,6 +96,10 @@ export default function ObjectListPage({ params }: { params: Promise<{ layer: st
 
   if (layer === "infrastructure" && typePath === "models") {
     return <RuntimeList />;
+  }
+
+  if (layer === "risk" && typePath === "tech-debt") {
+    return <TechDebtList />;
   }
 
   return <RepositoryObjectList layer={layer} typePath={typePath} />;

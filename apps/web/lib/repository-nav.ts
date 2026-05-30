@@ -32,6 +32,7 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
     color: "#8b5cf6",
     items: [
       { label: "Products", segment: "strategy/products" },
+      { label: "Roadmaps", segment: "strategy/roadmaps", badge: "new" },
       { label: "Value Streams", segment: "strategy/value-streams", badge: "upcoming" },
       { label: "Capability Map", segment: "business/capabilities" },
     ],
@@ -90,5 +91,12 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
       { label: "Roles", segment: "people/roles" },
       { label: "Teams", segment: "people/teams" },
     ],
+  },
+  {
+    id: "risk",
+    label: "Risk",
+    color: "#dc2626",
+    badge: "new",
+    items: [{ label: "Tech Debt", segment: "risk/tech-debt" }],
   },
 ];

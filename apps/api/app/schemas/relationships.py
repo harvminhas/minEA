@@ -46,6 +46,9 @@ ALLOWED_TRIPLES: set[tuple[str, str, str]] = {
     # Initiatives
     ("affects", "initiative", "capability"),
     ("affects", "initiative", "application"),
+    ("affects", "tech_debt", "application"),
+    ("affects", "tech_debt", "component"),
+    ("resolves", "roadmap_item", "tech_debt"),
     ("replaces", "application", "application"),
     # AI module
     ("uses_model", "agent", "model"),

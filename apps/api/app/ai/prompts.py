@@ -21,11 +21,12 @@ Extract all architecture objects and relationships from the provided text/docume
 them as CIS v1.1 JSON. CIS (Common Information Schema) is minEA's standard import format.
 
 Valid object types:
-  Business Layer: capability, value_stream
+  Strategy Layer: capability, value_stream, roadmap_item
   Application Layer: application, solution, technical_capability, agent
   Data Layer: data_object, data_store
   Integration Layer: api, event, integration_flow, message_broker, tool
   Infrastructure Layer: cloud_service, model
+  Risk Layer: tech_debt
 
 Valid relationship types and allowed triples:
   depends_on: capability → capability
