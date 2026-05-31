@@ -34,12 +34,13 @@ async def count_capabilities(db: AsyncSession, product_id: uuid.UUID) -> int:
     return result.scalar_one()
 
 
-async def count_systems_for_product(db: AsyncSession, product_id: uuid.UUID) -> int:
+async def count_systems_for_product(
+    db: AsyncSession, product_id: uuid.UUID, workspace_id: uuid.UUID, org_id: uuid.UUID
+) -> int:
     cap_ids = await _capability_ids(db, product_id)
     if not cap_ids:
         return 0
 
-    # Via realizations → systems
     via_realization = await db.execute(
         select(distinct(RealizationSystem.system_id))
         .select_from(ProductCapability)
@@ -49,15 +50,17 @@ async def count_systems_for_product(db: AsyncSession, product_id: uuid.UUID) -> 
     )
     system_ids = {row[0] for row in via_realization.all()}
 
-    # Fallback: relationship supports (system → capability)
-    via_rel = await db.execute(
-        select(distinct(Relationship.from_object_id)).where(
-            Relationship.type.in_(("supports", "supported_by")),
-            Relationship.to_object_id.in_(cap_ids),
-            Relationship.from_type == "application",
+    via_supported = await db.execute(
+        select(distinct(Relationship.to_object_id)).where(
+            Relationship.type == "supported_by",
+            Relationship.from_type == "capability",
+            Relationship.from_object_id.in_(cap_ids),
+            Relationship.to_type.in_(("application", "solution", "technical_capability")),
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
         )
     )
-    system_ids |= {row[0] for row in via_rel.all()}
+    system_ids |= {row[0] for row in via_supported.all()}
 
     return len(system_ids)
 
@@ -145,10 +148,11 @@ async def worst_maturity_for_product(db: AsyncSession, product_id: uuid.UUID) ->
 
 async def enrich_product(db: AsyncSession, product: Product) -> dict:
     ws_id = product.workspace_id
+    org_id = product.org_id
     pid = product.id
     return {
         "capability_count": await count_capabilities(db, pid),
-        "system_count": await count_systems_for_product(db, pid),
+        "system_count": await count_systems_for_product(db, pid, ws_id, org_id),
         "api_count": await count_apis_for_product(db, pid, ws_id),
         "data_store_count": await count_data_stores_for_product(db, pid, ws_id),
         "maturity_indicator": await worst_maturity_for_product(db, pid),

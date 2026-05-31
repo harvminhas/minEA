@@ -23,6 +23,51 @@ class ProductUpdate(BaseModel):
     graph_layout: dict | None = None
 
 
+class ProductHealthDimensions(BaseModel):
+    ops: str = "healthy"
+    debt: str = "healthy"
+    lifecycle: str = "healthy"
+    ownership: str = "healthy"
+
+
+class ProductTechDebtRemediation(BaseModel):
+    roadmap_id: str
+    roadmap_title: str
+
+
+class ProductTechDebtItem(BaseModel):
+    id: str
+    name: str
+    severity: str
+    debt_type: str | None = None
+    debt_type_label: str
+    age_days: int
+    affects_name: str
+    affects_kind: str
+    owner: str | None = None
+    remediation: ProductTechDebtRemediation | None = None
+
+
+class ProductRoadmapNextMilestone(BaseModel):
+    title: str
+    target_label: str
+
+
+class ProductRoadmapItem(BaseModel):
+    id: str
+    name: str
+    kind: str | None = None
+    kind_label: str
+    status: str
+    status_label: str
+    target_label: str
+    owner: str | None = None
+    milestone_strip: list[dict] = Field(default_factory=list)
+    milestones_done: int = 0
+    milestones_total: int = 0
+    next_milestone: ProductRoadmapNextMilestone | None = None
+
+
 class ProductRead(BaseModel):
     id: UUID
     workspace_id: UUID
@@ -38,8 +83,23 @@ class ProductRead(BaseModel):
     data_store_count: int = 0
     maturity_indicator: str | None = None
     capability_ids: list[UUID] = Field(default_factory=list)
+    graph_layout: dict | None = None
     created_at: datetime
     updated_at: datetime
+    # Layer-1 portfolio cockpit signals
+    annual_cost_total: float | None = None
+    open_tech_debt_count: int = 0
+    critical_tech_debt_count: int = 0
+    roadmap_status: str | None = None
+    roadmap_count: int = 0
+    health_status: str = "no_data"
+    health_factors: list[dict] = Field(default_factory=list)
+    trend_direction: str = "stable"
+    trend_label: str = "No recent changes"
+    # Populated on GET /products/{id} only
+    health_dimensions: ProductHealthDimensions | None = None
+    tech_debt_items: list[ProductTechDebtItem] = Field(default_factory=list)
+    roadmap_items: list[ProductRoadmapItem] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

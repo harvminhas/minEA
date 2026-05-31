@@ -24,6 +24,10 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   initialValues?: MinEAObject;
+  defaultProduct?: RoadmapProductRef | null;
+  defaultOwner?: string;
+  lockProduct?: boolean;
+  debtCandidates?: RoadmapDebtRef[];
   onClose: () => void;
   onSuccess: (roadmapId: string) => void;
 }
@@ -128,7 +132,15 @@ async function syncRoadmapRelationships(
   }
 }
 
-export function CreateRoadmapPanel({ initialValues, onClose, onSuccess }: Props) {
+export function CreateRoadmapPanel({
+  initialValues,
+  defaultProduct,
+  defaultOwner,
+  lockProduct = false,
+  debtCandidates,
+  onClose,
+  onSuccess,
+}: Props) {
   const isEdit = !!initialValues;
   const init = initFromRoadmap(initialValues);
 
@@ -141,9 +153,9 @@ export function CreateRoadmapPanel({ initialValues, onClose, onSuccess }: Props)
   const [description, setDescription] = useState(init.description);
   const [tags, setTags] = useState(init.tags);
   const [kind, setKind] = useState<string>(init.kind);
-  const [product, setProduct] = useState<RoadmapProductRef | null>(init.product);
+  const [product, setProduct] = useState<RoadmapProductRef | null>(init.product ?? defaultProduct ?? null);
   const [resolvesDebt, setResolvesDebt] = useState<RoadmapDebtRef[]>(init.resolvesDebt);
-  const [owner, setOwner] = useState(init.owner);
+  const [owner, setOwner] = useState(init.owner || defaultOwner || "");
   const [roadmapStatus, setRoadmapStatus] = useState<string>(init.roadmapStatus);
   const [targetResolution, setTargetResolution] = useState(init.targetResolution);
   const [effortEstimate, setEffortEstimate] = useState<string>(init.effortEstimate);
@@ -316,18 +328,24 @@ export function CreateRoadmapPanel({ initialValues, onClose, onSuccess }: Props)
               <div className="space-y-3">
                 <div>
                   <FieldLabel required>For product</FieldLabel>
-                  <button
-                    type="button"
-                    onClick={() => setShowProductDialog(true)}
-                    className={cn(
-                      "w-full text-left rounded-md border px-3 py-2 text-sm transition-colors",
-                      product
-                        ? "border-gray-200 text-gray-800 hover:border-violet-300"
-                        : "border-dashed border-gray-300 text-gray-400 hover:border-violet-300"
-                    )}
-                  >
-                    {product ? product.product_name : "Select product…"}
-                  </button>
+                  {lockProduct && product ? (
+                    <div className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800">
+                      {product.product_name}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowProductDialog(true)}
+                      className={cn(
+                        "w-full text-left rounded-md border px-3 py-2 text-sm transition-colors",
+                        product
+                          ? "border-gray-200 text-gray-800 hover:border-violet-300"
+                          : "border-dashed border-gray-300 text-gray-400 hover:border-violet-300"
+                      )}
+                    >
+                      {product ? product.product_name : "Select product…"}
+                    </button>
+                  )}
                 </div>
 
                 <div>
@@ -457,6 +475,7 @@ export function CreateRoadmapPanel({ initialValues, onClose, onSuccess }: Props)
       {showDebtDialog && (
         <LinkDebtDialog
           selected={resolvesDebt}
+          candidates={debtCandidates}
           onClose={() => setShowDebtDialog(false)}
           onApply={(next) => {
             setResolvesDebt(next);

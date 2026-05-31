@@ -14,11 +14,12 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   selected: RoadmapDebtRef[];
+  candidates?: RoadmapDebtRef[];
   onClose: () => void;
   onApply: (debts: RoadmapDebtRef[]) => void;
 }
 
-export function LinkDebtDialog({ selected, onClose, onApply }: Props) {
+export function LinkDebtDialog({ selected, candidates, onClose, onApply }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const enabled = useAuthQueryEnabled();
@@ -31,21 +32,23 @@ export function LinkDebtDialog({ selected, onClose, onApply }: Props) {
       const token = await getToken();
       return objectsApi.list(orgSlug, workspaceSlug, { type: "tech_debt" }, token!);
     },
-    enabled,
+    enabled: enabled && !candidates,
   });
 
   const debts = useMemo(() => {
-    const items = (data?.items ?? []).map((item) => {
-      const props = item.properties as TechDebtProperties;
-      return {
-        debt_id: item.id,
-        debt_name: item.name,
-        severity: props.severity,
-      } satisfies RoadmapDebtRef;
-    });
+    const items =
+      candidates ??
+      (data?.items ?? []).map((item) => {
+        const props = item.properties as TechDebtProperties;
+        return {
+          debt_id: item.id,
+          debt_name: item.name,
+          severity: props.severity,
+        } satisfies RoadmapDebtRef;
+      });
     const q = search.trim().toLowerCase();
     return q ? items.filter((d) => d.debt_name.toLowerCase().includes(q)) : items;
-  }, [data, search]);
+  }, [candidates, data, search]);
 
   const pickedIds = new Set(picked.map((d) => d.debt_id));
 
@@ -85,7 +88,7 @@ export function LinkDebtDialog({ selected, onClose, onApply }: Props) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 py-2">
-          {isLoading ? (
+          {(!candidates && isLoading) ? (
             <p className="text-sm text-gray-400 text-center py-8">Loading…</p>
           ) : debts.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">No tech debt items found</p>

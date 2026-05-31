@@ -9,62 +9,44 @@ import {
   LayoutGrid,
   Table2,
   AlertTriangle,
-  Users,
+  TrendingUp,
+  TrendingDown,
+  Minus,
 } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { productsApi, objectsApi } from "@/lib/api-client";
 import { invalidateProductQueries } from "@/lib/product-queries";
 import { ProductForm } from "@/components/views/ProductForm";
 import { ProductDetail } from "@/components/views/ProductDetail";
+import { ProductHealthDrilldown } from "@/components/views/ProductHealthDrilldown";
+import {
+  formatDebtSummary,
+  formatProductCost,
+  HEALTH_BORDER,
+  HEALTH_LABEL,
+  isUnowned,
+  primaryAction,
+  productHealthStatus,
+  roadmapStatusLabel,
+  sortForCockpit,
+  trendIcon,
+} from "@/lib/portfolio-utils";
 import { cn } from "@/lib/utils";
 import { useViewEmbedded, useViewsTheme } from "@/lib/view-embed-context";
-import type { Product, MinEAObject } from "@minea/types";
+import type { Product, MinEAObject, ProductHealthStatus } from "@minea/types";
 
-// ─── Health scoring ────────────────────────────────────────────────────────
-
-type HealthStatus = "healthy" | "aging" | "at_risk" | "no_data";
-
-function productHealth(p: Product): HealthStatus {
-  if (p.capability_count === 0) return "no_data";
-  if (p.lifecycle === "retired") return "aging";
-  if (p.maturity_indicator === "manual" && p.system_count >= 3) return "at_risk";
-  if (p.lifecycle === "retiring" || p.maturity_indicator === "manual") return "aging";
-  return "healthy";
-}
-
-const HEALTH_LABEL: Record<HealthStatus, string> = {
-  healthy: "Healthy",
-  aging: "Aging",
-  at_risk: "At risk",
-  no_data: "No data",
-};
-
-const HEALTH_CHIP: Record<HealthStatus, string> = {
-  healthy: "bg-emerald-100 text-emerald-700",
-  aging: "bg-amber-100 text-amber-700",
-  at_risk: "bg-red-100 text-red-700",
-  no_data: "bg-gray-100 text-gray-500",
-};
-
-const HEALTH_BORDER: Record<HealthStatus, string> = {
-  healthy: "border-l-emerald-400",
-  aging: "border-l-amber-400",
-  at_risk: "border-l-red-400",
-  no_data: "border-l-gray-300",
-};
-
-const HEALTH_DOT_CLASS: Record<HealthStatus, string> = {
-  healthy: "bg-emerald-500",
-  aging: "bg-amber-500",
-  at_risk: "bg-red-500",
-  no_data: "bg-gray-300",
-};
-
-const CELL_BG: Record<HealthStatus, string> = {
+const CELL_BG: Record<ProductHealthStatus, string> = {
   healthy: "bg-emerald-500",
   aging: "bg-amber-400",
   at_risk: "bg-red-500",
   no_data: "bg-gray-200",
+};
+
+const HEALTH_DOT_CLASS: Record<ProductHealthStatus, string> = {
+  healthy: "bg-emerald-500",
+  aging: "bg-amber-500",
+  at_risk: "bg-red-500",
+  no_data: "bg-gray-300",
 };
 
 const LIFECYCLE_DOT: Record<string, string> = {
@@ -80,99 +62,106 @@ const TEAM_COLORS = [
   "#0ea5e9", "#8b5cf6", "#14b8a6", "#f97316",
 ];
 
-type Lens = "health" | "ownership" | "lifecycle";
+type Lens = "action" | "ownership" | "lifecycle";
 
-// ─── Stat box ─────────────────────────────────────────────────────────────
+// ─── Cockpit card ──────────────────────────────────────────────────────────
 
-function StatBox({ label, value }: { label: string; value: number }) {
+function SignalPill({
+  label,
+  value,
+  emphasis = false,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
   return (
-    <div className="text-center flex-1">
-      <p className="text-sm font-bold text-gray-900 leading-tight">{value}</p>
-      <p className="text-[10px] text-gray-400 leading-tight">{label}</p>
+    <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
+      <p className={cn("text-sm truncate mt-0.5", emphasis ? "font-semibold text-gray-900" : "font-medium text-gray-700")}>
+        {value}
+      </p>
     </div>
   );
 }
 
-// ─── Portfolio card (Grid view) ────────────────────────────────────────────
+function TrendBadge({ product }: { product: Product }) {
+  const direction = product.trend_direction ?? "stable";
+  const label = product.trend_label ?? "No recent changes";
+  const Icon =
+    direction === "up" ? TrendingUp : direction === "down" ? TrendingDown : Minus;
+
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+      <Icon size={12} className="text-gray-400" />
+      <span>{trendIcon(direction)} {label}</span>
+    </span>
+  );
+}
 
 function PortfolioCard({
   product,
-  health,
   teamColor,
   onClick,
 }: {
   product: Product;
-  health: HealthStatus;
   teamColor: string;
   onClick: () => void;
 }) {
-  const alertText =
-    health === "at_risk"
-      ? `${product.system_count} systems · legacy risk`
-      : product.lifecycle === "retiring"
-      ? "Retiring · action may be needed"
-      : null;
+  const health = productHealthStatus(product);
+  const unowned = isUnowned(product);
+  const debtCritical = product.critical_tech_debt_count ?? 0;
+  const action = primaryAction(product);
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       className={cn(
-        "text-left bg-white rounded-xl border border-gray-200 border-l-4 p-4",
-        "hover:shadow-md hover:border-gray-300 transition-all w-full",
+        "text-left bg-white rounded-xl border border-l-4 border-gray-200 p-5 w-full transition-all cursor-pointer",
+        "hover:shadow-sm hover:border-gray-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300",
         HEALTH_BORDER[health]
       )}
     >
-      {/* Header row */}
-      <div className="flex items-start gap-3 mb-3">
+      <div className="flex items-start gap-3 mb-4">
         <div
-          className="h-9 w-9 rounded-lg flex items-center justify-center text-white font-bold text-xs flex-shrink-0 select-none"
+          className="h-10 w-10 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
           style={{ backgroundColor: teamColor }}
         >
           {product.name.slice(0, 2).toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 text-sm truncate leading-tight">
-            {product.name}
-          </p>
-          <p className="text-[11px] text-gray-400 truncate mt-0.5">
-            {product.owner ?? "No team"} · <span className="capitalize">{product.lifecycle}</span>
+          <p className="font-semibold text-gray-900 text-base truncate">{product.name}</p>
+          <p className="text-xs text-gray-500 mt-0.5 capitalize">
+            {product.owner ?? "Unassigned"} · {product.lifecycle}
           </p>
         </div>
-        <span
-          className={cn(
-            "rounded-full px-2 py-0.5 text-[10px] font-semibold flex-shrink-0 self-start",
-            HEALTH_CHIP[health]
+        <ProductHealthDrilldown product={product} />
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        <SignalPill label="Tech debt" value={formatDebtSummary(product)} emphasis={debtCritical > 0} />
+        <SignalPill label="Cost / yr" value={formatProductCost(product.annual_cost_total)} />
+        <SignalPill label="Roadmap" value={roadmapStatusLabel(product.roadmap_status)} />
+      </div>
+
+      <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100">
+        <div className="flex items-center gap-3 min-w-0">
+          <TrendBadge product={product} />
+          {unowned && (
+            <span className="text-[11px] text-gray-500 truncate">· No owner assigned</span>
           )}
-        >
-          {HEALTH_LABEL[health]}
-        </span>
+        </div>
+        <span className="text-xs font-medium text-gray-600 truncate flex-shrink-0">{action} →</span>
       </div>
-
-      {/* Stats row */}
-      <div className="flex items-center gap-1 bg-gray-50 rounded-lg px-3 py-2 mb-3">
-        <StatBox label="capabilities" value={product.capability_count} />
-        <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
-        <StatBox label="systems" value={product.system_count} />
-        <div className="w-px h-6 bg-gray-200 flex-shrink-0" />
-        <StatBox label="APIs" value={product.api_count} />
-      </div>
-
-      {/* Footer alert / owner */}
-      {alertText ? (
-        <p className="flex items-center gap-1 text-[11px] text-amber-700 font-medium">
-          <AlertTriangle size={10} className="flex-shrink-0" />
-          {alertText}
-        </p>
-      ) : product.owner ? (
-        <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
-          <Users size={10} className="flex-shrink-0" />
-          {product.owner}
-        </p>
-      ) : (
-        <p className="text-[11px] text-gray-300 italic">No owner assigned</p>
-      )}
-    </button>
+    </div>
   );
 }
 
@@ -215,7 +204,7 @@ function PortfolioMatrix({
     for (const cap of columns) {
       const users = products.filter((p) => p.capability_ids.includes(cap.id));
       const riskCount = users.filter((p) =>
-        ["at_risk", "aging"].includes(productHealth(p))
+        ["at_risk", "aging"].includes(productHealthStatus(p))
       ).length;
       if (!worst || riskCount > worst.riskCount) worst = { cap, riskCount };
     }
@@ -257,7 +246,7 @@ function PortfolioMatrix({
             </thead>
             <tbody>
               {products.map((p) => {
-                const health = productHealth(p);
+                const health = productHealthStatus(p);
                 const dotClass = LIFECYCLE_DOT[p.lifecycle] ?? "bg-gray-400";
                 return (
                   <tr key={p.id} className="border-b border-gray-100 hover:bg-indigo-50/30 transition-colors">
@@ -321,7 +310,7 @@ function PortfolioMatrix({
                   const count = capUsage[cap.id] ?? 0;
                   const hasRisk = products
                     .filter((p) => p.capability_ids.includes(cap.id))
-                    .some((p) => productHealth(p) === "at_risk");
+                    .some((p) => productHealthStatus(p) === "at_risk");
                   return (
                     <td key={cap.id} className="text-center py-2 w-[88px]">
                       <span
@@ -426,7 +415,7 @@ export function PortfolioView() {
   );
 
   const [layout, setLayout] = useState<"grid" | "matrix">("grid");
-  const [lens, setLens] = useState<Lens>("health");
+  const [lens, setLens] = useState<Lens>("action");
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState(TEAM_COLORS[0]!);
@@ -454,14 +443,11 @@ export function PortfolioView() {
   // Aggregate stats
   const healthCounts = useMemo(() => {
     const c = { healthy: 0, aging: 0, at_risk: 0, no_data: 0 };
-    for (const p of products) c[productHealth(p)]++;
+    for (const p of products) c[productHealthStatus(p)]++;
     return c;
   }, [products]);
 
-  const teamCount = useMemo(
-    () => new Set(products.map((p) => p.owner).filter(Boolean)).size,
-    [products]
-  );
+  const unownedCount = useMemo(() => products.filter(isUnowned).length, [products]);
 
   const lastUpdated = useMemo(() => {
     if (!products.length) return null;
@@ -484,36 +470,40 @@ export function PortfolioView() {
 
   // Grouping for Grid
   const gridGroups = useMemo(() => {
-    if (lens === "health") {
-      const order: HealthStatus[] = ["at_risk", "aging", "no_data", "healthy"];
-      return order
-        .map((h) => ({
-          key: h,
-          label: HEALTH_LABEL[h],
-          items: products.filter((p) => productHealth(p) === h),
-        }))
-        .filter((g) => g.items.length > 0);
+    if (lens === "action") {
+      const sorted = sortForCockpit(products);
+      const needsAction = sorted.filter((p) => productHealthStatus(p) !== "healthy" || isUnowned(p));
+      const stable = sorted.filter((p) => productHealthStatus(p) === "healthy" && !isUnowned(p));
+      const groups = [];
+      if (needsAction.length) {
+        groups.push({ key: "action", label: "Needs your attention", items: needsAction });
+      }
+      if (stable.length) {
+        groups.push({ key: "stable", label: "Stable", items: stable });
+      }
+      return groups.length ? groups : [{ key: "all", label: "Products", items: sorted }];
     }
     if (lens === "ownership") {
-      const owners = [...new Set(products.map((p) => p.owner ?? "No team"))].sort();
+      const owners = [...new Set(products.map((p) => p.owner ?? "Unassigned"))].sort((a, b) => {
+        if (a === "Unassigned") return -1;
+        if (b === "Unassigned") return 1;
+        return a.localeCompare(b);
+      });
       return owners.map((o) => ({
         key: o,
         label: o,
-        items: products.filter((p) => (p.owner ?? "No team") === o),
+        items: sortForCockpit(products.filter((p) => (p.owner ?? "Unassigned") === o)),
       }));
     }
-    // lifecycle
     const stages = ["live", "beta", "planned", "retiring", "retired"];
     return stages
       .map((s) => ({
         key: s,
         label: s.charAt(0).toUpperCase() + s.slice(1),
-        items: products.filter((p) => p.lifecycle === s),
+        items: sortForCockpit(products.filter((p) => p.lifecycle === s)),
       }))
       .filter((g) => g.items.length > 0);
   }, [products, lens]);
-
-  const mostAtRisk = products.find((p) => productHealth(p) === "at_risk");
 
   const refreshProducts = () => {
     invalidateProductQueries(queryClient, orgSlug, workspaceSlug, selectedProductId ?? undefined);
@@ -526,16 +516,19 @@ export function PortfolioView() {
   };
 
   const exportCSV = () => {
-    const rows = [["Name", "Team", "Lifecycle", "Health", "Capabilities", "Systems", "APIs"]];
+    const rows = [
+      ["Name", "Team", "Lifecycle", "Health", "Tech debt", "Cost/yr", "Roadmap", "Trend"],
+    ];
     for (const p of products) {
       rows.push([
         p.name,
         p.owner ?? "",
         p.lifecycle,
-        HEALTH_LABEL[productHealth(p)],
-        String(p.capability_count),
-        String(p.system_count),
-        String(p.api_count),
+        HEALTH_LABEL[productHealthStatus(p)],
+        formatDebtSummary(p),
+        formatProductCost(p.annual_cost_total),
+        roadmapStatusLabel(p.roadmap_status),
+        p.trend_label ?? "",
       ]);
     }
     const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
@@ -600,9 +593,9 @@ export function PortfolioView() {
             </p>
             <h1 className="text-2xl font-bold text-gray-900">Products portfolio</h1>
             <p className={cn("text-sm mt-1", isViewsMode ? "text-violet-500" : "text-gray-500")}>
-              {products.length} product{products.length === 1 ? "" : "s"} ·{" "}
-              {teamCount} team{teamCount === 1 ? "" : "s"}
-              {lastUpdated && ` · last updated ${lastUpdated}`}
+              {products.length} product{products.length === 1 ? "" : "s"} · cockpit view
+              {unownedCount > 0 && ` · ${unownedCount} unowned`}
+              {lastUpdated && ` · updated ${lastUpdated}`}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -661,7 +654,7 @@ export function PortfolioView() {
                 </span>
                 {(
                   [
-                    ["health", "System health"],
+                    ["action", "Action needed"],
                     ["ownership", "Ownership"],
                     ["lifecycle", "Lifecycle"],
                   ] as [Lens, string][]
@@ -684,7 +677,7 @@ export function PortfolioView() {
 
               {/* Legend */}
               <div className="flex items-center gap-3 ml-auto">
-                {(["healthy", "aging", "at_risk", "no_data"] as HealthStatus[]).map((h) => (
+                {(["healthy", "aging", "at_risk", "no_data"] as ProductHealthStatus[]).map((h) => (
                   <span key={h} className="flex items-center gap-1.5 text-[11px] text-gray-500">
                     <span className={cn("h-2.5 w-2.5 rounded", HEALTH_DOT_CLASS[h])} />
                     {HEALTH_LABEL[h]}
@@ -699,7 +692,7 @@ export function PortfolioView() {
       {/* ── Content ── */}
       <div className={cn(shellClass, "flex-1 py-6")}>
         {layout === "grid" ? (
-          <div className="space-y-7 max-w-5xl">
+          <div className="space-y-8 max-w-3xl">
             {gridGroups.map((group) => (
               <section key={group.key}>
                 {gridGroups.length > 1 && (
@@ -707,12 +700,11 @@ export function PortfolioView() {
                     {group.label}
                   </h2>
                 )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-4">
                   {group.items.map((p) => (
                     <PortfolioCard
                       key={p.id}
                       product={p}
-                      health={productHealth(p)}
                       teamColor={teamColorMap[p.owner ?? ""] ?? TEAM_COLORS[0]!}
                       onClick={() => openProduct(p)}
                     />
@@ -731,38 +723,21 @@ export function PortfolioView() {
       </div>
 
       {/* ── Summary footer bar ── */}
-      <div className={cn(shellClass, "flex-shrink-0 border-t border-gray-200 bg-white py-3 flex items-center gap-5 flex-wrap")}>
-        {(["healthy", "aging", "at_risk", "no_data"] as HealthStatus[]).map((h) => {
+      <div className={cn(shellClass, "flex-shrink-0 border-t border-gray-200 bg-white py-3 flex items-center gap-5 flex-wrap text-sm text-gray-500")}>
+        {(["healthy", "aging", "at_risk", "no_data"] as ProductHealthStatus[]).map((h) => {
           const count = healthCounts[h];
           if (count === 0) return null;
           return (
-            <span
-              key={h}
-              className={cn(
-                "flex items-center gap-1.5 text-sm font-medium",
-                h === "at_risk"
-                  ? "text-red-600"
-                  : h === "aging"
-                  ? "text-amber-600"
-                  : h === "healthy"
-                  ? "text-emerald-600"
-                  : "text-gray-400"
-              )}
-            >
+            <span key={h} className="flex items-center gap-1.5">
               <span className={cn("h-2 w-2 rounded-full", HEALTH_DOT_CLASS[h])} />
               {count} {HEALTH_LABEL[h].toLowerCase()}
             </span>
           );
         })}
-
-        {mostAtRisk && (
-          <button
-            type="button"
-            onClick={() => openProduct(mostAtRisk)}
-            className="ml-auto flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-red-100 transition-colors"
-          >
-            <AlertTriangle size={12} />1 product needs immediate action · {mostAtRisk.name}
-          </button>
+        {unownedCount > 0 && (
+          <span className="ml-auto text-xs text-gray-500">
+            {unownedCount} unowned
+          </span>
         )}
       </div>
 

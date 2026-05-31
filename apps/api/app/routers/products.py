@@ -14,6 +14,8 @@ from app.schemas.products import (
     ProductRead,
     ProductUpdate,
 )
+from app.services.portfolio_signals import enrich_portfolio_signals
+from app.services.product_detail import enrich_product_detail
 from app.services.product_graph import build_product_graph, load_product_for_graph
 from app.services.product_stats import enrich_product, validate_capability_ids
 from app.services.tenancy import TenancyContext, get_workspace_context
@@ -24,9 +26,25 @@ router = APIRouter(
 )
 
 
-async def _to_read(db: AsyncSession, product: Product) -> ProductRead:
+async def _to_read(db: AsyncSession, product: Product, *, include_detail: bool = False) -> ProductRead:
     stats = await enrich_product(db, product)
     cap_ids = [pc.capability_id for pc in product.capabilities]
+    portfolio = await enrich_portfolio_signals(
+        db,
+        product,
+        capability_count=stats["capability_count"],
+        maturity_indicator=stats.get("maturity_indicator"),
+    )
+    detail: dict = {}
+    if include_detail:
+        detail = await enrich_product_detail(
+            db,
+            product,
+            open_debt=portfolio["open_tech_debt_count"],
+            critical_debt=portfolio["critical_tech_debt_count"],
+            maturity_indicator=stats.get("maturity_indicator"),
+            system_count=stats["system_count"],
+        )
     return ProductRead(
         id=product.id,
         workspace_id=product.workspace_id,
@@ -41,6 +59,8 @@ async def _to_read(db: AsyncSession, product: Product) -> ProductRead:
         created_at=product.created_at,
         updated_at=product.updated_at,
         **stats,
+        **portfolio,
+        **detail,
     )
 
 
@@ -119,7 +139,7 @@ async def get_product(
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-    return await _to_read(db, product)
+    return await _to_read(db, product, include_detail=True)
 
 
 @router.get("/{product_id}/graph", response_model=ProductGraphResponse)

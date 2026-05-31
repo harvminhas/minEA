@@ -622,6 +622,61 @@ export type Organisation = Org;
 export type ProductLifecycle = "planned" | "live" | "beta" | "retiring" | "retired";
 export type RealizationMaturity = "manual" | "partial" | "automated" | "outsourced";
 
+export type ProductHealthStatus = "healthy" | "aging" | "at_risk" | "no_data";
+export type ProductTrendDirection = "up" | "down" | "neutral" | "stable";
+
+export interface ProductHealthFactor {
+  id: string;
+  label: string;
+  severity: "critical" | "warning" | "info" | "ok";
+  action: string;
+}
+
+export interface ProductHealthDimensions {
+  ops: "healthy" | "warning" | "critical";
+  debt: "healthy" | "warning" | "critical";
+  lifecycle: "healthy" | "warning" | "critical";
+  ownership: "healthy" | "warning" | "critical";
+}
+
+export interface ProductTechDebtRemediation {
+  roadmap_id: string;
+  roadmap_title: string;
+}
+
+export interface ProductTechDebtItem {
+  id: string;
+  name: string;
+  severity: string;
+  debt_type?: string | null;
+  debt_type_label: string;
+  age_days: number;
+  affects_name: string;
+  affects_kind: string;
+  owner?: string | null;
+  remediation?: ProductTechDebtRemediation | null;
+}
+
+export interface ProductRoadmapNextMilestone {
+  title: string;
+  target_label: string;
+}
+
+export interface ProductRoadmapItem {
+  id: string;
+  name: string;
+  kind?: string | null;
+  kind_label: string;
+  status: string;
+  status_label: string;
+  target_label: string;
+  owner?: string | null;
+  milestone_strip: { status: string }[];
+  milestones_done: number;
+  milestones_total: number;
+  next_milestone?: ProductRoadmapNextMilestone | null;
+}
+
 export interface Product {
   id: string;
   workspace_id: string;
@@ -640,6 +695,20 @@ export interface Product {
   graph_layout?: Record<string, { x: number; y: number }> | null;
   created_at: string;
   updated_at: string;
+  /** Layer-1 portfolio cockpit signals */
+  annual_cost_total?: number | null;
+  open_tech_debt_count?: number;
+  critical_tech_debt_count?: number;
+  roadmap_status?: string | null;
+  roadmap_count?: number;
+  health_status?: ProductHealthStatus;
+  health_factors?: ProductHealthFactor[];
+  trend_direction?: ProductTrendDirection;
+  trend_label?: string;
+  /** Populated on GET /products/{id} */
+  health_dimensions?: ProductHealthDimensions | null;
+  tech_debt_items?: ProductTechDebtItem[];
+  roadmap_items?: ProductRoadmapItem[];
 }
 
 export interface ProductCreate {

@@ -25,6 +25,9 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   initialValues?: MinEAObject;
+  defaultOwner?: string;
+  /** When set, debt is locked to this product (no system/component picker). */
+  scopedProduct?: { product_id: string; product_name: string };
   onClose: () => void;
   onSuccess: (techDebtId: string) => void;
 }
@@ -142,9 +145,23 @@ function affectsLabel(affects: TechDebtAffectsRef | null): string {
   return `${affects.object_name} (${kind})`;
 }
 
-export function CreateTechDebtPanel({ initialValues, onClose, onSuccess }: Props) {
+export function CreateTechDebtPanel({
+  initialValues,
+  defaultOwner,
+  scopedProduct,
+  onClose,
+  onSuccess,
+}: Props) {
   const isEdit = !!initialValues;
   const init = initFromTechDebt(initialValues);
+  const lockedProductAffects: TechDebtAffectsRef | null =
+    scopedProduct && !isEdit
+      ? {
+          object_id: scopedProduct.product_id,
+          object_name: scopedProduct.product_name,
+          object_kind: "product",
+        }
+      : null;
   const targetResolutionOptions = useMemo(() => {
     const options = buildTargetResolutionOptions();
     if (
@@ -171,8 +188,10 @@ export function CreateTechDebtPanel({ initialValues, onClose, onSuccess }: Props
   const [debtType, setDebtType] = useState<string>(init.debtType);
   const [debtTypeOther, setDebtTypeOther] = useState(init.debtTypeOther);
   const [debtStatus, setDebtStatus] = useState<string>(init.debtStatus);
-  const [affects, setAffects] = useState<TechDebtAffectsRef | null>(init.affects);
-  const [owner, setOwner] = useState(init.owner);
+  const [affects, setAffects] = useState<TechDebtAffectsRef | null>(
+    init.affects ?? lockedProductAffects
+  );
+  const [owner, setOwner] = useState(init.owner || defaultOwner || "");
   const [identifiedBy, setIdentifiedBy] = useState(init.identifiedBy);
   const [targetResolution, setTargetResolution] = useState(init.targetResolution);
   const [effortEstimate, setEffortEstimate] = useState<string>(init.effortEstimate);
@@ -381,20 +400,28 @@ export function CreateTechDebtPanel({ initialValues, onClose, onSuccess }: Props
               <div className="space-y-3">
                 <div>
                   <FieldLabel required>Affects</FieldLabel>
-                  <button
-                    type="button"
-                    onClick={() => setShowAffectsDialog(true)}
-                    className={cn(
-                      "w-full text-left rounded-md border px-3 py-2 text-sm transition-colors",
-                      affects
-                        ? "border-gray-200 text-gray-800 hover:border-red-300"
-                        : "border-dashed border-gray-300 text-gray-400 hover:border-red-300"
-                    )}
-                  >
-                    {affects ? affectsLabel(affects) : "Search products, systems, components…"}
-                  </button>
+                  {lockedProductAffects ? (
+                    <div className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800">
+                      {lockedProductAffects.object_name} (Product)
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowAffectsDialog(true)}
+                      className={cn(
+                        "w-full text-left rounded-md border px-3 py-2 text-sm transition-colors",
+                        affects
+                          ? "border-gray-200 text-gray-800 hover:border-red-300"
+                          : "border-dashed border-gray-300 text-gray-400 hover:border-red-300"
+                      )}
+                    >
+                      {affects ? affectsLabel(affects) : "Search products, systems, components…"}
+                    </button>
+                  )}
                   <p className="text-[11px] text-gray-400 mt-1.5">
-                    Attach to the thing it most directly affects — rolls up to Product automatically
+                    {lockedProductAffects
+                      ? "This debt is recorded against the open product."
+                      : "Attach to the thing it most directly affects — rolls up to Product automatically"}
                   </p>
                 </div>
 
@@ -489,7 +516,7 @@ export function CreateTechDebtPanel({ initialValues, onClose, onSuccess }: Props
         </div>
       </div>
 
-      {showAffectsDialog && (
+      {showAffectsDialog && !lockedProductAffects && (
         <PickAffectedDialog
           selected={affects}
           onClose={() => setShowAffectsDialog(false)}
