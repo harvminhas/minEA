@@ -8,6 +8,7 @@ from app.schemas.capability_map import (
     AdoptTemplateRequest,
     AdoptTemplateResponse,
     AddDomainMappingSystemRequest,
+    CapabilityHeatmapRead,
     CapabilityMapCapability,
     CapabilityMapDomain,
     CapabilityMapRead,
@@ -20,6 +21,7 @@ from app.schemas.capability_map import (
     LibraryDomainGroup,
     UpsertDomainMappingRequest,
 )
+from app.services.capability_heatmap import build_capability_heatmap
 from app.services.capability_map import (
     add_domain_mapping_system,
     adopt_template,
@@ -105,6 +107,18 @@ async def get_capability_map(
 
     domains, capabilities = await load_capability_map(db, ctx.workspace.id, ctx.org_id)
     return _map_to_read(domains, capabilities)
+
+
+@router.get("/heatmap", response_model=CapabilityHeatmapRead)
+async def get_capability_heatmap(
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> CapabilityHeatmapRead:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
+    data = await build_capability_heatmap(db, ctx.workspace.id, ctx.org_id)
+    return CapabilityHeatmapRead(**data)
 
 
 @router.get("/templates", response_model=list[CapabilityTemplateSummary])

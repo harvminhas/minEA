@@ -27,6 +27,7 @@ import type {
   JourneyCreate,
   JourneyListResponse,
   DerivedSystemsResponse,
+  CapabilityHeatmap,
   CapabilityMap,
   CapabilityMapStatus,
   CapabilityTemplateDetail,
@@ -355,6 +356,9 @@ export const capabilityMapApi = {
 
   get: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<CapabilityMap>(`${wsBase(orgSlug, workspaceSlug)}/capability-map`, { token }),
+
+  heatmap: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<CapabilityHeatmap>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/heatmap`, { token }),
 
   listTemplates: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<CapabilityTemplateSummary[]>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/templates`, {

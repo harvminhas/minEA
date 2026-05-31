@@ -16,6 +16,8 @@ import {
   roadmapStatusToObjectStatus,
   ROADMAP_KINDS,
   ROADMAP_STATUS,
+  INVESTMENT_CATEGORIES,
+  defaultInvestmentCategory,
   targetResolutionLabel,
   TECH_DEBT_EFFORT,
 } from "@/lib/roadmap-utils";
@@ -93,6 +95,9 @@ function initFromRoadmap(item?: MinEAObject) {
     roadmapStatus: props.roadmap_status ?? "discovery",
     targetResolution: props.target_resolution ?? defaultTarget,
     effortEstimate: props.effort_estimate ?? "",
+    cost: props.cost != null ? String(props.cost) : "",
+    investmentCategory: props.investment_category ?? defaultInvestmentCategory(props.roadmap_kind ?? "epic"),
+    blockedReason: props.blocked_reason ?? "",
   };
 }
 
@@ -159,6 +164,9 @@ export function CreateRoadmapPanel({
   const [roadmapStatus, setRoadmapStatus] = useState<string>(init.roadmapStatus);
   const [targetResolution, setTargetResolution] = useState(init.targetResolution);
   const [effortEstimate, setEffortEstimate] = useState<string>(init.effortEstimate);
+  const [cost, setCost] = useState(init.cost);
+  const [investmentCategory, setInvestmentCategory] = useState(init.investmentCategory);
+  const [blockedReason, setBlockedReason] = useState(init.blockedReason);
   const [error, setError] = useState<string | null>(null);
   const [showProductDialog, setShowProductDialog] = useState(false);
   const [showDebtDialog, setShowDebtDialog] = useState(false);
@@ -185,18 +193,30 @@ export function CreateRoadmapPanel({
     enabled,
   });
 
-  const properties = useMemo(
-    () =>
-      buildRoadmapProperties({
-        kind,
-        product,
-        resolvesDebt,
-        roadmapStatus,
-        targetResolution,
-        effortEstimate,
-      }),
-    [kind, product, resolvesDebt, roadmapStatus, targetResolution, effortEstimate]
-  );
+  const properties = useMemo(() => {
+    const parsedCost = cost.trim() ? Number(cost.replace(/,/g, "")) : null;
+    return buildRoadmapProperties({
+      kind,
+      product,
+      resolvesDebt,
+      roadmapStatus,
+      targetResolution,
+      effortEstimate,
+      cost: parsedCost != null && !Number.isNaN(parsedCost) ? parsedCost : null,
+      investmentCategory,
+      blockedReason: roadmapStatus === "blocked" ? blockedReason : null,
+    });
+  }, [
+    kind,
+    product,
+    resolvesDebt,
+    roadmapStatus,
+    targetResolution,
+    effortEstimate,
+    cost,
+    investmentCategory,
+    blockedReason,
+  ]);
 
   const canSubmit =
     title.trim().length > 0 &&
@@ -273,7 +293,10 @@ export function CreateRoadmapPanel({
                   <button
                     key={k.value}
                     type="button"
-                    onClick={() => setKind(k.value)}
+                    onClick={() => {
+                      setKind(k.value);
+                      if (!isEdit) setInvestmentCategory(defaultInvestmentCategory(k.value));
+                    }}
                     className={cn(
                       "text-left rounded-lg border px-3 py-2.5 transition-colors",
                       kind === k.value
@@ -407,6 +430,34 @@ export function CreateRoadmapPanel({
             </section>
 
             <section>
+              <SectionHeader>Investment</SectionHeader>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <FieldLabel>Category</FieldLabel>
+                  <SelectField
+                    value={investmentCategory}
+                    onChange={setInvestmentCategory}
+                    options={INVESTMENT_CATEGORIES.map((c) => ({ value: c.value, label: c.label }))}
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Cost (USD)</FieldLabel>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={cost}
+                    onChange={(e) => setCost(e.target.value)}
+                    placeholder="Optional — estimates from effort"
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                Leave cost blank to estimate from effort × team rate (S $50K · M $200K · L $500K · XL $1M)
+              </p>
+            </section>
+
+            <section>
               <SectionHeader>Timeline</SectionHeader>
               <div className="grid grid-cols-3 gap-x-3 gap-y-3">
                 <div>
@@ -426,6 +477,17 @@ export function CreateRoadmapPanel({
                   <SelectField value={effortEstimate} onChange={setEffortEstimate} options={TECH_DEBT_EFFORT} />
                 </div>
               </div>
+              {roadmapStatus === "blocked" && (
+                <div className="mt-3">
+                  <FieldLabel>Blocked reason</FieldLabel>
+                  <input
+                    value={blockedReason}
+                    onChange={(e) => setBlockedReason(e.target.value)}
+                    placeholder="e.g. vendor SLA"
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+              )}
             </section>
 
             {error && (

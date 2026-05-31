@@ -148,3 +148,67 @@ class CreateDomainMappingSystemRequest(BaseModel):
     category: str | None = None
     vendor: str | None = None
     hosting_model: str | None = None
+
+
+class HeatmapCell(BaseModel):
+    level: str
+    label: str
+
+
+class HeatmapCapabilityRow(BaseModel):
+    id: str
+    name: str
+    status: str | None = None
+    is_planned: bool = False
+    cells: dict[str, HeatmapCell]
+    overlap: bool = False
+    realising_count: int = 0
+
+
+class HeatmapDomainGroup(BaseModel):
+    id: str
+    name: str
+    icon: str | None = None
+    capabilities: list[HeatmapCapabilityRow]
+
+
+class HeatmapProductColumn(BaseModel):
+    id: str
+    name: str
+    short_code: str
+    abbrev: str
+    lifecycle: str
+    color: str
+    capability_ids: list[str] = Field(default_factory=list)
+
+
+class HeatmapGapItem(BaseModel):
+    capability_name: str
+    domain_name: str
+    detail: str
+
+
+class HeatmapHotSpot(BaseModel):
+    capability_name: str
+    detail: str
+
+
+class HeatmapOverlapSummary(BaseModel):
+    count: int
+    names: list[str] = Field(default_factory=list)
+
+
+class HeatmapSummary(BaseModel):
+    capability_count: int
+    product_count: int
+    gap_count: int
+    overlap_count: int
+    gaps: list[HeatmapGapItem] = Field(default_factory=list)
+    overlaps: HeatmapOverlapSummary
+    hot_spots: list[HeatmapHotSpot] = Field(default_factory=list)
+
+
+class CapabilityHeatmapRead(BaseModel):
+    products: list[HeatmapProductColumn]
+    domains: list[HeatmapDomainGroup]
+    summary: HeatmapSummary

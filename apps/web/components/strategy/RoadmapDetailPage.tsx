@@ -16,8 +16,15 @@ import { RoadmapTimeline } from "@/components/strategy/RoadmapTimeline";
 import {
   roadmapKindLabel,
   roadmapListPath,
+  ROADMAP_STATUS_LABEL,
+  INVESTMENT_CATEGORIES,
+  defaultInvestmentCategory,
   STRATEGY_LAYER_COLOR,
+  TECH_DEBT_EFFORT_LABEL,
+  targetResolutionLabel,
 } from "@/lib/roadmap-utils";
+import { resolveRoadmapSpend } from "@/lib/investment-pipeline";
+import { formatCurrency } from "@/lib/utils";
 
 interface Props {
   roadmapId: string;
@@ -54,6 +61,9 @@ export function RoadmapDetailPage({ roadmapId }: Props) {
   const milestones = props.milestones ?? [];
   const kindLabel = roadmapKindLabel(props);
   const subtitleParts = [kindLabel, props.product?.product_name, roadmap?.owner].filter(Boolean);
+  const spend = roadmap ? resolveRoadmapSpend(props) : null;
+  const categoryValue = props.investment_category ?? defaultInvestmentCategory(props.roadmap_kind ?? "epic");
+  const categoryLabel = INVESTMENT_CATEGORIES.find((c) => c.value === categoryValue)?.label;
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey });
@@ -168,7 +178,53 @@ export function RoadmapDetailPage({ roadmapId }: Props) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-8 space-y-6">
+          <div className="rounded-xl border border-gray-200 bg-white p-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</p>
+              <p className="text-sm font-medium text-gray-900 mt-1">
+                {ROADMAP_STATUS_LABEL[props.roadmap_status ?? "discovery"] ?? props.roadmap_status}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Target</p>
+              <p className="text-sm font-medium text-gray-900 mt-1">
+                {props.target_resolution ? targetResolutionLabel(props.target_resolution) : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Effort</p>
+              <p className="text-sm font-medium text-gray-900 mt-1">
+                {props.effort_estimate
+                  ? TECH_DEBT_EFFORT_LABEL[props.effort_estimate] ?? props.effort_estimate.toUpperCase()
+                  : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Category</p>
+              <p className="text-sm font-medium text-gray-900 mt-1">{categoryLabel ?? "—"}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Spend</p>
+              <p className="text-sm font-medium text-gray-900 mt-1">
+                {spend && spend.amount > 0 ? (
+                  <>
+                    {formatCurrency(spend.amount)}
+                    {spend.estimated && <span className="text-xs text-gray-400 ml-1">est</span>}
+                  </>
+                ) : (
+                  "—"
+                )}
+              </p>
+            </div>
+            {props.roadmap_status === "blocked" && props.blocked_reason?.trim() && (
+              <div className="col-span-2 md:col-span-3 lg:col-span-6">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-red-400">Blocked reason</p>
+                <p className="text-sm text-red-700 mt-1">{props.blocked_reason.trim()}</p>
+              </div>
+            )}
+          </div>
+
           <RoadmapTimeline
             properties={props}
             milestones={milestones}

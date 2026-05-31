@@ -45,6 +45,7 @@ ROADMAP_STATUS_LABEL = {
     "discovery": "Discovery",
     "planned": "Planned",
     "in_progress": "In flight",
+    "blocked": "Blocked",
     "delivered": "Delivered",
     "deferred": "Deferred",
     "cancelled": "Cancelled",

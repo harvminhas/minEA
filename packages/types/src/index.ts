@@ -471,9 +471,20 @@ export interface RoadmapItemProperties {
   roadmap_kind?: "feature" | "epic" | "initiative" | "migration" | "sunset" | "discovery";
   product?: RoadmapProductRef | null;
   resolves_debt?: RoadmapDebtRef[];
-  roadmap_status?: "discovery" | "planned" | "in_progress" | "delivered" | "deferred" | "cancelled";
+  roadmap_status?:
+    | "discovery"
+    | "planned"
+    | "in_progress"
+    | "blocked"
+    | "delivered"
+    | "deferred"
+    | "cancelled";
   target_resolution?: string;
   effort_estimate?: "" | "s" | "m" | "l" | "xl";
+  /** Optional override; when absent, spend is estimated from effort × rate card. */
+  cost?: number | null;
+  investment_category?: "innovation" | "modernization" | "run";
+  blocked_reason?: string | null;
   milestones?: RoadmapMilestone[];
 }
 
@@ -979,6 +990,67 @@ export interface CapabilityMapDomain {
 export interface CapabilityMap {
   initialized: boolean;
   domains: CapabilityMapDomain[];
+}
+
+export type HeatmapCellLevel = "empty" | "gap" | "strong" | "good" | "fair" | "poor" | "eol";
+
+export interface HeatmapCell {
+  level: HeatmapCellLevel | string;
+  label: string;
+}
+
+export interface HeatmapCapabilityRow {
+  id: string;
+  name: string;
+  status?: string | null;
+  is_planned: boolean;
+  cells: Record<string, HeatmapCell>;
+  overlap: boolean;
+  realising_count: number;
+}
+
+export interface HeatmapDomainGroup {
+  id: string;
+  name: string;
+  icon?: string | null;
+  capabilities: HeatmapCapabilityRow[];
+}
+
+export interface HeatmapProductColumn {
+  id: string;
+  name: string;
+  short_code: string;
+  abbrev: string;
+  lifecycle: string;
+  color: string;
+  capability_ids: string[];
+}
+
+export interface HeatmapGapItem {
+  capability_name: string;
+  domain_name: string;
+  detail: string;
+}
+
+export interface HeatmapHotSpot {
+  capability_name: string;
+  detail: string;
+}
+
+export interface HeatmapSummary {
+  capability_count: number;
+  product_count: number;
+  gap_count: number;
+  overlap_count: number;
+  gaps: HeatmapGapItem[];
+  overlaps: { count: number; names: string[] };
+  hot_spots: HeatmapHotSpot[];
+}
+
+export interface CapabilityHeatmap {
+  products: HeatmapProductColumn[];
+  domains: HeatmapDomainGroup[];
+  summary: HeatmapSummary;
 }
 
 export type MappingFitness = "none" | "weak" | "adequate" | "strong";

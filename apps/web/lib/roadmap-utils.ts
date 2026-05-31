@@ -28,10 +28,23 @@ export const ROADMAP_STATUS = [
   { value: "discovery", label: "Discovery" },
   { value: "planned", label: "Planned" },
   { value: "in_progress", label: "In progress" },
+  { value: "blocked", label: "Blocked" },
   { value: "delivered", label: "Delivered" },
   { value: "deferred", label: "Deferred" },
   { value: "cancelled", label: "Cancelled" },
 ];
+
+export const INVESTMENT_CATEGORIES = [
+  { value: "innovation", label: "Innovation" },
+  { value: "modernization", label: "Modernization" },
+  { value: "run", label: "Run" },
+] as const;
+
+export function defaultInvestmentCategory(kind: string): string {
+  if (kind === "migration" || kind === "sunset") return "modernization";
+  if (kind === "discovery") return "innovation";
+  return "innovation";
+}
 
 export const ROADMAP_KIND_LABEL = Object.fromEntries(ROADMAP_KINDS.map((k) => [k.value, k.label]));
 export const ROADMAP_STATUS_LABEL = Object.fromEntries(ROADMAP_STATUS.map((s) => [s.value, s.label]));
@@ -47,6 +60,9 @@ export function buildRoadmapProperties(params: {
   roadmapStatus: string;
   targetResolution: string;
   effortEstimate: string;
+  cost?: number | null;
+  investmentCategory?: string;
+  blockedReason?: string | null;
 }): RoadmapItemProperties {
   return {
     roadmap_kind: params.kind as RoadmapItemProperties["roadmap_kind"],
@@ -55,6 +71,9 @@ export function buildRoadmapProperties(params: {
     roadmap_status: params.roadmapStatus as RoadmapItemProperties["roadmap_status"],
     target_resolution: params.targetResolution || undefined,
     effort_estimate: (params.effortEstimate || undefined) as RoadmapItemProperties["effort_estimate"],
+    cost: params.cost != null && params.cost > 0 ? params.cost : undefined,
+    investment_category: (params.investmentCategory || undefined) as RoadmapItemProperties["investment_category"],
+    blocked_reason: params.blockedReason?.trim() || undefined,
   };
 }
 
@@ -209,6 +228,8 @@ export function roadmapStatusToObjectStatus(
     case "deferred":
       return "under_evaluation";
     case "in_progress":
+      return "active";
+    case "blocked":
       return "active";
     case "planned":
       return "planned";
