@@ -17,7 +17,8 @@ from app.schemas.products import (
 from app.services.portfolio_signals import enrich_portfolio_signals
 from app.services.product_detail import enrich_product_detail
 from app.services.product_graph import build_product_graph, load_product_for_graph
-from app.services.product_stats import enrich_product, validate_capability_ids, _capability_ids
+from app.services.product_stats import enrich_product, validate_capability_ids
+from app.services.product_stats import capability_ids_for_product as _capability_ids
 from app.services.tenancy import TenancyContext, get_workspace_context
 
 router = APIRouter(

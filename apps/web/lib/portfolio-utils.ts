@@ -77,6 +77,30 @@ export function formatDebtSummary(product: Product): string {
   return `${open} open`;
 }
 
+/** Cockpit card — main debt value and optional critical subtext. */
+export function formatDebtCockpit(product: Product): { value: string; subtext?: string; critical: boolean } {
+  const open = product.open_tech_debt_count ?? 0;
+  const critical = product.critical_tech_debt_count ?? 0;
+  if (open === 0) return { value: "None open", critical: false };
+  return {
+    value: `${open} open`,
+    subtext: critical > 0 ? `${critical} critical` : undefined,
+    critical: critical > 0,
+  };
+}
+
+export function formatProvidesSummary(product: Product): string {
+  const apis = product.apis_provided_count ?? 0;
+  const events = product.events_produced_count ?? 0;
+  return `${apis} API${apis === 1 ? "" : "s"} · ${events} event${events === 1 ? "" : "s"}`;
+}
+
+export function formatDependsSummary(product: Product): string {
+  const apis = product.apis_consumed_count ?? 0;
+  const events = product.events_subscribed_count ?? 0;
+  return `${apis} API${apis === 1 ? "" : "s"} · ${events} event${events === 1 ? "" : "s"}`;
+}
+
 export function trendIcon(direction?: string): string {
   switch (direction) {
     case "up":
@@ -101,4 +125,13 @@ export function factorSeverityStyle(severity: ProductHealthFactor["severity"]): 
     default:
       return "text-emerald-700 bg-emerald-50 border-emerald-100";
   }
+}
+
+/** Compressed coverage line for product cards and drawer properties. */
+export function formatProductCoverageLine(product: Product): string {
+  const systems = product.system_count ?? 0;
+  const apisProvided = product.apis_provided_count ?? 0;
+  const apisConsumed = product.apis_consumed_count ?? 0;
+  const stores = product.data_store_count ?? 0;
+  return `${systems} system${systems === 1 ? "" : "s"} · ${apisProvided} API${apisProvided === 1 ? "" : "s"} provided · ${apisConsumed} consumed · ${stores} data store${stores === 1 ? "" : "s"}`;
 }

@@ -677,6 +677,12 @@ export interface ProductRoadmapItem {
   next_milestone?: ProductRoadmapNextMilestone | null;
 }
 
+export interface ProductIntegrationItem {
+  id: string;
+  name: string;
+  kind: string;
+}
+
 export interface Product {
   id: string;
   workspace_id: string;
@@ -688,7 +694,12 @@ export interface Product {
   description?: string | null;
   capability_count: number;
   system_count: number;
-  api_count: number;
+  apis_provided_count: number;
+  apis_consumed_count: number;
+  events_produced_count: number;
+  events_subscribed_count: number;
+  flows_in_count: number;
+  flows_out_count: number;
   data_store_count: number;
   maturity_indicator?: RealizationMaturity | null;
   capability_ids: string[];
@@ -709,6 +720,13 @@ export interface Product {
   health_dimensions?: ProductHealthDimensions | null;
   tech_debt_items?: ProductTechDebtItem[];
   roadmap_items?: ProductRoadmapItem[];
+  apis_provided?: ProductIntegrationItem[];
+  apis_consumed?: ProductIntegrationItem[];
+  events_produced?: ProductIntegrationItem[];
+  events_subscribed?: ProductIntegrationItem[];
+  flows_in?: ProductIntegrationItem[];
+  flows_out?: ProductIntegrationItem[];
+  data_stores?: ProductIntegrationItem[];
 }
 
 export interface ProductCreate {

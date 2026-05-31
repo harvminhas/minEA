@@ -68,6 +68,12 @@ class ProductRoadmapItem(BaseModel):
     next_milestone: ProductRoadmapNextMilestone | None = None
 
 
+class ProductIntegrationItem(BaseModel):
+    id: str
+    name: str
+    kind: str
+
+
 class ProductRead(BaseModel):
     id: UUID
     workspace_id: UUID
@@ -79,7 +85,12 @@ class ProductRead(BaseModel):
     description: str | None
     capability_count: int = 0
     system_count: int = 0
-    api_count: int = 0
+    apis_provided_count: int = 0
+    apis_consumed_count: int = 0
+    events_produced_count: int = 0
+    events_subscribed_count: int = 0
+    flows_in_count: int = 0
+    flows_out_count: int = 0
     data_store_count: int = 0
     maturity_indicator: str | None = None
     capability_ids: list[UUID] = Field(default_factory=list)
@@ -100,6 +111,13 @@ class ProductRead(BaseModel):
     health_dimensions: ProductHealthDimensions | None = None
     tech_debt_items: list[ProductTechDebtItem] = Field(default_factory=list)
     roadmap_items: list[ProductRoadmapItem] = Field(default_factory=list)
+    apis_provided: list[ProductIntegrationItem] = Field(default_factory=list)
+    apis_consumed: list[ProductIntegrationItem] = Field(default_factory=list)
+    events_produced: list[ProductIntegrationItem] = Field(default_factory=list)
+    events_subscribed: list[ProductIntegrationItem] = Field(default_factory=list)
+    flows_in: list[ProductIntegrationItem] = Field(default_factory=list)
+    flows_out: list[ProductIntegrationItem] = Field(default_factory=list)
+    data_stores: list[ProductIntegrationItem] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

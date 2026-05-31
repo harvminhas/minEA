@@ -18,8 +18,10 @@ import { productsApi, objectsApi } from "@/lib/api-client";
 import { invalidateProductQueries } from "@/lib/product-queries";
 import { ProductForm } from "@/components/views/ProductForm";
 import { ProductDetail } from "@/components/views/ProductDetail";
+import { ProductIntegrationsSummary } from "@/components/views/ProductIntegrationsSummary";
 import { ProductHealthDrilldown } from "@/components/views/ProductHealthDrilldown";
 import {
+  formatDebtCockpit,
   formatDebtSummary,
   formatProductCost,
   HEALTH_BORDER,
@@ -69,18 +71,28 @@ type Lens = "action" | "ownership" | "lifecycle";
 function SignalPill({
   label,
   value,
+  subtext,
   emphasis = false,
+  valueClassName,
 }: {
   label: string;
   value: string;
+  subtext?: string;
   emphasis?: boolean;
+  valueClassName?: string;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 min-w-0">
+    <div className="rounded-lg border border-gray-200 bg-stone-50 px-3 py-2 min-w-0">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
-      <p className={cn("text-sm truncate mt-0.5", emphasis ? "font-semibold text-gray-900" : "font-medium text-gray-700")}>
+      <p
+        className={cn(
+          "text-sm truncate mt-0.5",
+          valueClassName ?? (emphasis ? "font-semibold text-gray-900" : "font-medium text-gray-700")
+        )}
+      >
         {value}
       </p>
+      {subtext && <p className="text-[11px] text-gray-400 truncate mt-0.5">{subtext}</p>}
     </div>
   );
 }
@@ -99,19 +111,67 @@ function TrendBadge({ product }: { product: Product }) {
   );
 }
 
+const VISIBLE_CAPABILITIES = 4;
+
+function CapabilityStrip({
+  product,
+  capabilityById,
+}: {
+  product: Product;
+  capabilityById: Map<string, MinEAObject>;
+}) {
+  const linked = product.capability_ids
+    .map((id) => capabilityById.get(id))
+    .filter((cap): cap is MinEAObject => !!cap);
+
+  if (linked.length === 0) return null;
+
+  const visible = linked.slice(0, VISIBLE_CAPABILITIES);
+  const overflow = linked.length - visible.length;
+
+  return (
+    <div className="mb-4">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
+        Capabilities
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {visible.map((cap) => (
+          <span
+            key={cap.id}
+            className={cn(
+              "text-xs px-2 py-0.5 rounded-md bg-stone-50 text-gray-700 font-medium border border-transparent",
+              cap.status === "planned" && "border-dashed border-gray-300 text-gray-500"
+            )}
+          >
+            {cap.name}
+          </span>
+        ))}
+      </div>
+      {overflow > 0 && (
+        <p className="text-[11px] font-medium text-indigo-600 mt-1.5">+ {overflow} more</p>
+      )}
+    </div>
+  );
+}
+
 function PortfolioCard({
   product,
   teamColor,
+  capabilityById,
   onClick,
 }: {
   product: Product;
   teamColor: string;
+  capabilityById: Map<string, MinEAObject>;
   onClick: () => void;
 }) {
   const health = productHealthStatus(product);
   const unowned = isUnowned(product);
-  const debtCritical = product.critical_tech_debt_count ?? 0;
-  const action = primaryAction(product);
+  const debt = formatDebtCockpit(product);
+  const openDebt = product.open_tech_debt_count ?? 0;
+  const activeRoadmaps = product.roadmap_count ?? 0;
+  const footerAction =
+    openDebt > 0 ? "Review tech debt register" : primaryAction(product);
 
   return (
     <div
@@ -146,11 +206,27 @@ function PortfolioCard({
         <ProductHealthDrilldown product={product} />
       </div>
 
+      <CapabilityStrip product={product} capabilityById={capabilityById} />
+
       <div className="grid grid-cols-3 gap-2 mb-4">
-        <SignalPill label="Tech debt" value={formatDebtSummary(product)} emphasis={debtCritical > 0} />
+        <SignalPill
+          label="Tech debt"
+          value={debt.value}
+          subtext={debt.subtext}
+          valueClassName={cn(
+            "font-semibold",
+            debt.critical ? "text-red-700" : debt.value === "None open" ? "text-gray-700" : "text-gray-900"
+          )}
+        />
         <SignalPill label="Cost / yr" value={formatProductCost(product.annual_cost_total)} />
-        <SignalPill label="Roadmap" value={roadmapStatusLabel(product.roadmap_status)} />
+        <SignalPill
+          label="Roadmap"
+          value={roadmapStatusLabel(product.roadmap_status)}
+          subtext={activeRoadmaps > 0 ? `${activeRoadmaps} active` : undefined}
+        />
       </div>
+
+      <ProductIntegrationsSummary product={product} />
 
       <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-100">
         <div className="flex items-center gap-3 min-w-0">
@@ -159,7 +235,9 @@ function PortfolioCard({
             <span className="text-[11px] text-gray-500 truncate">· No owner assigned</span>
           )}
         </div>
-        <span className="text-xs font-medium text-gray-600 truncate flex-shrink-0">{action} →</span>
+        <span className="text-xs font-semibold text-gray-900 truncate flex-shrink-0">
+          {footerAction} →
+        </span>
       </div>
     </div>
   );
@@ -434,11 +512,17 @@ export function PortfolioView() {
       const token = await getToken();
       return objectsApi.list(orgSlug, workspaceSlug, { type: "capability" }, token!);
     },
-    enabled: layout === "matrix" && !!data,
+    enabled: !!data,
   });
 
   const products = useMemo(() => data?.items ?? [], [data]);
   const capabilities = capsData?.items ?? [];
+
+  const capabilityById = useMemo(() => {
+    const map = new Map<string, MinEAObject>();
+    for (const cap of capabilities) map.set(cap.id, cap);
+    return map;
+  }, [capabilities]);
 
   // Aggregate stats
   const healthCounts = useMemo(() => {
@@ -706,6 +790,7 @@ export function PortfolioView() {
                       key={p.id}
                       product={p}
                       teamColor={teamColorMap[p.owner ?? ""] ?? TEAM_COLORS[0]!}
+                      capabilityById={capabilityById}
                       onClick={() => openProduct(p)}
                     />
                   ))}

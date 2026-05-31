@@ -9,6 +9,7 @@ import type {
   MinEAObject,
   Product,
   ProductHealthDimensions,
+  ProductIntegrationItem,
   ProductRoadmapItem,
   ProductTechDebtItem,
 } from "@minea/types";
@@ -20,14 +21,17 @@ import {
   DetailSection,
 } from "@/components/ui/DetailPanel";
 import { ProductForm } from "@/components/views/ProductForm";
+import { ProductIntegrationsSummary } from "@/components/views/ProductIntegrationsSummary";
 import { CreateTechDebtPanel } from "@/components/risk/CreateTechDebtPanel";
 import { TechDebtDetail } from "@/components/risk/TechDebtDetail";
 import {
-  formatDebtSummary,
+  formatDebtCockpit,
   formatProductCost,
+  formatProductCoverageLine,
   HEALTH_LABEL,
   isUnowned,
   productHealthStatus,
+  roadmapStatusLabel,
 } from "@/lib/portfolio-utils";
 import { roadmapDetailPath } from "@/lib/roadmap-utils";
 import { SEVERITY_STYLE, TECH_DEBT_SEVERITY_LABEL } from "@/lib/tech-debt-utils";
@@ -64,11 +68,59 @@ function formatLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function SignalCard({ label, value }: { label: string; value: string }) {
+function IntegrationSubsection({
+  title,
+  items,
+  variant,
+}: {
+  title: string;
+  items?: ProductIntegrationItem[];
+  variant: "owned" | "dependency";
+}) {
+  const list = items ?? [];
+  const headerClass =
+    variant === "owned"
+      ? "text-violet-800 bg-violet-50 border-violet-100"
+      : "text-amber-800 bg-amber-50 border-amber-100";
+
+  return (
+    <div className="rounded-lg border border-gray-100 overflow-hidden">
+      <div className={cn("px-3 py-2 text-xs font-semibold border-b", headerClass)}>
+        {title} ({list.length})
+      </div>
+      {list.length === 0 ? (
+        <p className="text-sm text-gray-400 px-3 py-2.5">None</p>
+      ) : (
+        <ul className="divide-y divide-gray-50">
+          {list.map((item) => (
+            <li key={item.id} className="px-3 py-2 text-sm text-gray-800 truncate">
+              {item.name}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SignalCard({
+  label,
+  value,
+  subtext,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  subtext?: string;
+  valueClassName?: string;
+}) {
   return (
     <div className="rounded-lg border border-gray-200 bg-stone-50 px-3 py-2.5 min-w-0 flex-1">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
-      <p className="text-sm font-semibold text-gray-900 mt-0.5 truncate">{value}</p>
+      <p className={cn("text-sm font-semibold mt-0.5 truncate", valueClassName ?? "text-gray-900")}>
+        {value}
+      </p>
+      {subtext && <p className="text-[11px] text-gray-400 truncate mt-0.5">{subtext}</p>}
     </div>
   );
 }
@@ -257,6 +309,7 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
   const activeRoadmaps = roadmapItems.filter(
     (r) => r.status !== "delivered" && r.status !== "cancelled"
   ).length;
+  const debtCockpit = product ? formatDebtCockpit(product) : null;
 
   const productRef = product
     ? { product_id: product.id, product_name: product.name }
@@ -336,10 +389,28 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
         </DetailSection>
 
         <DetailSection title="Signals">
-          <div className="px-6 pb-4 flex gap-2">
-            <SignalCard label="Tech debt" value={formatDebtSummary(product)} />
-            <SignalCard label="Cost / yr" value={formatProductCost(product.annual_cost_total)} />
-            <SignalCard label="Roadmap" value={activeRoadmaps > 0 ? `${activeRoadmaps} active` : "None"} />
+          <div className="px-6 pb-4 space-y-4">
+            <div className="flex gap-2">
+              <SignalCard
+                label="Tech debt"
+                value={debtCockpit?.value ?? "—"}
+                subtext={debtCockpit?.subtext}
+                valueClassName={
+                  debtCockpit?.critical
+                    ? "text-red-700"
+                    : debtCockpit?.value === "None open"
+                      ? "text-gray-700"
+                      : "text-gray-900"
+                }
+              />
+              <SignalCard label="Cost / yr" value={formatProductCost(product.annual_cost_total)} />
+              <SignalCard
+                label="Roadmap"
+                value={roadmapStatusLabel(product.roadmap_status)}
+                subtext={activeRoadmaps > 0 ? `${activeRoadmaps} active` : undefined}
+              />
+            </div>
+            <ProductIntegrationsSummary product={product} />
           </div>
         </DetailSection>
 
@@ -389,6 +460,40 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
           </DetailSection>
         )}
 
+        <DetailSection title="Integration detail">
+          <div className="px-6 pb-4 space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <IntegrationSubsection
+                title="APIs provided"
+                items={product.apis_provided}
+                variant="owned"
+              />
+              <IntegrationSubsection
+                title="APIs consumed"
+                items={product.apis_consumed}
+                variant="dependency"
+              />
+              <IntegrationSubsection
+                title="Events produced"
+                items={product.events_produced}
+                variant="owned"
+              />
+              <IntegrationSubsection
+                title="Events subscribed"
+                items={product.events_subscribed}
+                variant="dependency"
+              />
+              <IntegrationSubsection title="Flows in" items={product.flows_in} variant="dependency" />
+              <IntegrationSubsection title="Flows out" items={product.flows_out} variant="owned" />
+            </div>
+            <IntegrationSubsection
+              title="Data stores touched"
+              items={product.data_stores}
+              variant="owned"
+            />
+          </div>
+        </DetailSection>
+
         <DetailSection title="Properties">
           <div className="px-6 pb-4 space-y-3 text-sm">
             <div className="flex items-center justify-between gap-3">
@@ -417,11 +522,7 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
             </div>
             <div className="flex items-center justify-between gap-3">
               <span className="text-gray-500">Coverage</span>
-              <span className="text-gray-900 text-right">
-                {product.system_count} system{product.system_count === 1 ? "" : "s"} · {product.api_count} API
-                {product.api_count === 1 ? "" : "s"} · {product.capability_count} capabilit
-                {product.capability_count === 1 ? "y" : "ies"}
-              </span>
+              <span className="text-gray-900 text-right">{formatProductCoverageLine(product)}</span>
             </div>
           </div>
         </DetailSection>

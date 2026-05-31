@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import distinct, func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.objects import MinEAObject
-from app.models.relationships import Relationship
-from app.models.views_graph import Product, ProductCapability, Realization, RealizationSystem
+from app.models.views_graph import Product, ProductCapability, Realization
+from app.services.product_integration import integration_counts_for_product
+from app.services.product_scope import capability_ids_for_product, resolve_product_scope
 
 MATURITY_RANK = {
     "manual": 0,
@@ -18,13 +18,6 @@ MATURITY_RANK = {
 }
 
 MATURITY_LABEL = {v: k for k, v in MATURITY_RANK.items()}
-
-
-async def _capability_ids(db: AsyncSession, product_id: uuid.UUID) -> list[uuid.UUID]:
-    result = await db.execute(
-        select(ProductCapability.capability_id).where(ProductCapability.product_id == product_id)
-    )
-    return [row[0] for row in result.all()]
 
 
 async def count_capabilities(db: AsyncSession, product_id: uuid.UUID) -> int:
@@ -37,99 +30,8 @@ async def count_capabilities(db: AsyncSession, product_id: uuid.UUID) -> int:
 async def count_systems_for_product(
     db: AsyncSession, product_id: uuid.UUID, workspace_id: uuid.UUID, org_id: uuid.UUID
 ) -> int:
-    cap_ids = await _capability_ids(db, product_id)
-    if not cap_ids:
-        return 0
-
-    via_realization = await db.execute(
-        select(distinct(RealizationSystem.system_id))
-        .select_from(ProductCapability)
-        .join(Realization, Realization.capability_id == ProductCapability.capability_id)
-        .join(RealizationSystem, RealizationSystem.realization_id == Realization.id)
-        .where(ProductCapability.product_id == product_id)
-    )
-    system_ids = {row[0] for row in via_realization.all()}
-
-    via_supported = await db.execute(
-        select(distinct(Relationship.to_object_id)).where(
-            Relationship.type == "supported_by",
-            Relationship.from_type == "capability",
-            Relationship.from_object_id.in_(cap_ids),
-            Relationship.to_type.in_(("application", "solution", "technical_capability")),
-            Relationship.workspace_id == workspace_id,
-            Relationship.org_id == org_id,
-        )
-    )
-    system_ids |= {row[0] for row in via_supported.all()}
-
-    return len(system_ids)
-
-
-async def count_apis_for_product(db: AsyncSession, product_id: uuid.UUID, workspace_id: uuid.UUID) -> int:
-    cap_ids = await _capability_ids(db, product_id)
-    if not cap_ids:
-        return 0
-
-    # APIs exposed by systems linked to capabilities
-    q = text(
-        """
-        WITH product_systems AS (
-            SELECT DISTINCT rs.system_id AS system_id
-            FROM product_capabilities pc
-            JOIN realizations r ON r.capability_id = pc.capability_id
-            JOIN realization_systems rs ON rs.realization_id = r.id
-            WHERE pc.product_id = :product_id
-            UNION
-            SELECT DISTINCT rel.from_object_id AS system_id
-            FROM product_capabilities pc
-            JOIN relationships rel ON rel.to_object_id = pc.capability_id
-                AND rel.type IN ('supports', 'supported_by')
-                AND rel.from_type = 'application'
-            WHERE pc.product_id = :product_id
-        )
-        SELECT COUNT(DISTINCT rel.to_object_id)
-        FROM product_systems ps
-        JOIN relationships rel ON rel.from_object_id = ps.system_id
-            AND rel.type = 'exposes'
-            AND rel.to_type = 'api'
-        WHERE rel.workspace_id = :workspace_id
-        """
-    )
-    result = await db.execute(
-        q, {"product_id": str(product_id), "workspace_id": str(workspace_id)}
-    )
-    return result.scalar_one() or 0
-
-
-async def count_data_stores_for_product(
-    db: AsyncSession, product_id: uuid.UUID, workspace_id: uuid.UUID
-) -> int:
-    cap_ids = await _capability_ids(db, product_id)
-    if not cap_ids:
-        return 0
-
-    q = text(
-        """
-        WITH cap_data AS (
-            SELECT DISTINCT rel.to_object_id AS data_object_id
-            FROM product_capabilities pc
-            JOIN relationships rel ON rel.from_object_id = pc.capability_id
-                AND rel.type IN ('owns', 'accesses', 'uses')
-                AND rel.to_type = 'data_object'
-            WHERE pc.product_id = :product_id
-        )
-        SELECT COUNT(DISTINCT rel.to_object_id)
-        FROM cap_data cd
-        JOIN relationships rel ON rel.from_object_id = cd.data_object_id
-            AND rel.type = 'stores_in'
-            AND rel.to_type = 'data_store'
-        WHERE rel.workspace_id = :workspace_id
-        """
-    )
-    result = await db.execute(
-        q, {"product_id": str(product_id), "workspace_id": str(workspace_id)}
-    )
-    return result.scalar_one() or 0
+    scope = await resolve_product_scope(db, product_id, workspace_id, org_id)
+    return len(scope.system_ids)
 
 
 async def worst_maturity_for_product(db: AsyncSession, product_id: uuid.UUID) -> str | None:
@@ -150,12 +52,13 @@ async def enrich_product(db: AsyncSession, product: Product) -> dict:
     ws_id = product.workspace_id
     org_id = product.org_id
     pid = product.id
+    scope = await resolve_product_scope(db, pid, ws_id, org_id)
+    integration = await integration_counts_for_product(db, pid, ws_id, org_id, scope=scope)
     return {
         "capability_count": await count_capabilities(db, pid),
-        "system_count": await count_systems_for_product(db, pid, ws_id, org_id),
-        "api_count": await count_apis_for_product(db, pid, ws_id),
-        "data_store_count": await count_data_stores_for_product(db, pid, ws_id),
+        "system_count": len(scope.system_ids),
         "maturity_indicator": await worst_maturity_for_product(db, pid),
+        **integration,
     }
 
 
@@ -164,6 +67,8 @@ async def validate_capability_ids(
 ) -> None:
     if not capability_ids:
         return
+    from app.models.objects import MinEAObject
+
     result = await db.execute(
         select(MinEAObject.id).where(
             MinEAObject.id.in_(capability_ids),
@@ -176,3 +81,7 @@ async def validate_capability_ids(
     missing = set(capability_ids) - found
     if missing:
         raise ValueError(f"Invalid capability ids: {missing}")
+
+
+# Re-export for routers that import _capability_ids
+_capability_ids = capability_ids_for_product

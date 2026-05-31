@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Clock, Plus, Users } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { productsApi } from "@/lib/api-client";
 import { invalidateProductQueries } from "@/lib/product-queries";
 import { ProductForm } from "@/components/views/ProductForm";
 import { ProductDetail } from "@/components/views/ProductDetail";
 import type { Product } from "@minea/types";
+import { formatProductCoverageLine } from "@/lib/portfolio-utils";
 import { cn } from "@/lib/utils";
 
 const STRATEGY_LAYER_COLOR = "#8b5cf6";
@@ -18,17 +19,22 @@ const CARD_COLORS = ["#6366f1", "#22c55e", "#f59e0b", "#ec4899", "#0ea5e9", "#8b
 const LIFECYCLE_STYLE: Record<string, string> = {
   live: "bg-emerald-50 text-emerald-700",
   beta: "bg-amber-50 text-amber-700",
-  planned: "bg-gray-100 text-gray-600",
+  planned: "bg-stone-100 text-gray-600",
   retiring: "bg-orange-50 text-orange-700",
   retired: "bg-gray-100 text-gray-400",
 };
 
-const MATURITY_STYLE: Record<string, string> = {
-  manual: "bg-red-50 text-red-700",
-  partial: "bg-amber-50 text-amber-700",
-  automated: "bg-emerald-50 text-emerald-700",
-  outsourced: "bg-slate-100 text-slate-600",
-};
+function formatUpdatedAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffH = Math.floor(diffMs / 3_600_000);
+  if (diffH < 1) return "just now";
+  if (diffH < 24) return `${diffH}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 30) return `${diffD}d ago`;
+  const diffM = Math.floor(diffD / 30);
+  if (diffM < 12) return `${diffM}mo ago`;
+  return `${Math.floor(diffM / 12)}y ago`;
+}
 
 function ProductCard({
   product,
@@ -43,9 +49,9 @@ function ProductCard({
     <button
       type="button"
       onClick={onClick}
-      className="text-left bg-[#faf8f5] rounded-xl border border-gray-200/80 p-5 hover:border-indigo-200 transition-colors cursor-pointer w-full"
+      className="text-left bg-white rounded-xl border border-gray-200 p-5 hover:border-violet-200 hover:shadow-sm transition-all cursor-pointer w-full flex flex-col"
     >
-      <div className="flex items-start gap-3 mb-3">
+      <div className="flex items-start gap-3">
         <div
           className="h-10 w-10 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
           style={{ backgroundColor: color }}
@@ -53,41 +59,33 @@ function ProductCard({
           {product.name.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-gray-900 truncate">{product.name}</h3>
-          {product.product_line && (
-            <p className="text-xs text-gray-400 mt-0.5">Product line · {product.product_line}</p>
-          )}
+          <h3 className="font-semibold text-gray-900 text-base leading-tight truncate">{product.name}</h3>
+          <p className="flex items-center gap-1.5 text-xs text-gray-500 mt-1">
+            <Users size={13} className="flex-shrink-0 text-gray-400" />
+            <span className="truncate">{product.owner ?? "Unassigned"}</span>
+          </p>
         </div>
       </div>
-      <p className="text-xs text-gray-500 mb-3">
-        {product.system_count} system{product.system_count === 1 ? "" : "s"} ·{" "}
-        {product.api_count} API{product.api_count === 1 ? "" : "s"} ·{" "}
-        {product.data_store_count} data store{product.data_store_count === 1 ? "" : "s"}
-      </p>
-      <div className="flex flex-wrap gap-1.5">
+
+      <p className="text-sm text-gray-600 mt-4">{formatProductCoverageLine(product)}</p>
+
+      <div className="flex flex-wrap gap-2 mt-3">
         <span
           className={cn(
-            "rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+            "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize",
             LIFECYCLE_STYLE[product.lifecycle] ?? LIFECYCLE_STYLE.planned
           )}
         >
           {product.lifecycle}
         </span>
-        {product.maturity_indicator && (
-          <span
-            className={cn(
-              "rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
-              MATURITY_STYLE[product.maturity_indicator] ?? MATURITY_STYLE.manual
-            )}
-          >
-            {product.maturity_indicator}
-          </span>
-        )}
-        {product.capability_count > 0 && (
-          <span className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-indigo-50 text-indigo-700">
-            {product.capability_count} capabilit{product.capability_count === 1 ? "y" : "ies"}
-          </span>
-        )}
+        <span className="rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-50 text-blue-700">
+          {product.capability_count} capabilit{product.capability_count === 1 ? "y" : "ies"}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">
+        <Clock size={12} className="flex-shrink-0" />
+        <span>Updated {formatUpdatedAgo(product.updated_at)}</span>
       </div>
     </button>
   );

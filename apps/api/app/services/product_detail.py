@@ -17,6 +17,7 @@ from app.services.portfolio_signals import (
     _is_open_debt,
     _normalize_object_id,
 )
+from app.services.product_integration import integration_detail_for_product
 
 DEBT_TYPE_LABEL = {
     "eol_software": "EOL software",
@@ -368,6 +369,7 @@ async def enrich_product_detail(
     owner = product.owner
 
     scope_ids = await _debt_scope_ids(db, pid, ws_id, org_id)
+    integration = await integration_detail_for_product(db, pid, ws_id, org_id)
 
     return {
         "health_dimensions": compute_health_dimensions(
@@ -382,4 +384,5 @@ async def enrich_product_detail(
             db, pid, owner, scope_ids, ws_id, org_id
         ),
         "roadmap_items": await _roadmap_items_for_product(db, pid, ws_id, org_id),
+        **integration,
     }

@@ -26,74 +26,12 @@ def _normalize_object_id(value: object | None) -> str | None:
         return str(value)
 
 
-async def _capability_ids_for_product(db: AsyncSession, product_id: uuid.UUID) -> list[uuid.UUID]:
-    result = await db.execute(
-        select(ProductCapability.capability_id).where(ProductCapability.product_id == product_id)
-    )
-    return [row[0] for row in result.all()]
-
-
-async def _system_ids_for_product(
-    db: AsyncSession,
-    product_id: uuid.UUID,
-    workspace_id: uuid.UUID,
-    org_id: uuid.UUID,
-) -> set[uuid.UUID]:
-    """Systems linked to a product via capabilities (realizations + supported_by)."""
-    cap_ids = await _capability_ids_for_product(db, product_id)
-    system_ids: set[uuid.UUID] = set()
-
-    if cap_ids:
-        via_realization = await db.execute(
-            select(distinct(RealizationSystem.system_id))
-            .select_from(ProductCapability)
-            .join(Realization, Realization.capability_id == ProductCapability.capability_id)
-            .join(RealizationSystem, RealizationSystem.realization_id == Realization.id)
-            .where(ProductCapability.product_id == product_id)
-        )
-        system_ids |= {row[0] for row in via_realization.all()}
-
-        # supported_by: capability → system (canonical triple direction)
-        via_supported = await db.execute(
-            select(distinct(Relationship.to_object_id)).where(
-                Relationship.type == "supported_by",
-                Relationship.from_type == "capability",
-                Relationship.from_object_id.in_(cap_ids),
-                Relationship.to_type.in_(SYSTEM_TYPES),
-                Relationship.workspace_id == workspace_id,
-                Relationship.org_id == org_id,
-            )
-        )
-        system_ids |= {row[0] for row in via_supported.all()}
-
-    override_result = await db.execute(
-        select(ProductSystemOverride.system_id).where(ProductSystemOverride.product_id == product_id)
-    )
-    system_ids |= {row[0] for row in override_result.all()}
-    return system_ids
-
-
-async def _component_ids_for_systems(
-    db: AsyncSession,
-    system_ids: set[uuid.UUID],
-    workspace_id: uuid.UUID,
-    org_id: uuid.UUID,
-) -> set[uuid.UUID]:
-    """Components that belong to any of the product's systems."""
-    if not system_ids:
-        return set()
-
-    result = await db.execute(
-        select(distinct(Relationship.from_object_id)).where(
-            Relationship.type == "part_of",
-            Relationship.from_type == "component",
-            Relationship.to_type == "application",
-            Relationship.to_object_id.in_(system_ids),
-            Relationship.workspace_id == workspace_id,
-            Relationship.org_id == org_id,
-        )
-    )
-    return {row[0] for row in result.all()}
+from app.services.product_scope import (
+    capability_ids_for_product as _capability_ids_for_product,
+    component_ids_for_systems as _component_ids_for_systems,
+    resolve_product_scope,
+    system_ids_for_product as _system_ids_for_product,
+)
 
 
 async def _debt_scope_ids(
@@ -102,10 +40,8 @@ async def _debt_scope_ids(
     workspace_id: uuid.UUID,
     org_id: uuid.UUID,
 ) -> set[uuid.UUID]:
-    """Object ids (systems + components) whose tech debt rolls up to this product."""
-    system_ids = await _system_ids_for_product(db, product_id, workspace_id, org_id)
-    component_ids = await _component_ids_for_systems(db, system_ids, workspace_id, org_id)
-    return system_ids | component_ids
+    scope = await resolve_product_scope(db, product_id, workspace_id, org_id)
+    return set(scope.system_ids) | set(scope.component_ids)
 
 
 def _is_open_debt(props: dict | None) -> bool:
