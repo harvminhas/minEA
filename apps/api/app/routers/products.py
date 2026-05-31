@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,7 +17,7 @@ from app.schemas.products import (
 from app.services.portfolio_signals import enrich_portfolio_signals
 from app.services.product_detail import enrich_product_detail
 from app.services.product_graph import build_product_graph, load_product_for_graph
-from app.services.product_stats import enrich_product, validate_capability_ids
+from app.services.product_stats import enrich_product, validate_capability_ids, _capability_ids
 from app.services.tenancy import TenancyContext, get_workspace_context
 
 router = APIRouter(
@@ -27,8 +27,24 @@ router = APIRouter(
 
 
 async def _to_read(db: AsyncSession, product: Product, *, include_detail: bool = False) -> ProductRead:
+    await db.refresh(product)
+    # Snapshot ORM columns before any further await — expired instances trigger async lazy-load errors.
+    product_fields = {
+        "id": product.id,
+        "workspace_id": product.workspace_id,
+        "org_id": product.org_id,
+        "name": product.name,
+        "product_line": product.product_line,
+        "lifecycle": product.lifecycle,
+        "owner": product.owner,
+        "description": product.description,
+        "graph_layout": product.graph_layout,
+        "created_at": product.created_at,
+        "updated_at": product.updated_at,
+    }
+
     stats = await enrich_product(db, product)
-    cap_ids = [pc.capability_id for pc in product.capabilities]
+    cap_ids = await _capability_ids(db, product_fields["id"])
     portfolio = await enrich_portfolio_signals(
         db,
         product,
@@ -46,18 +62,8 @@ async def _to_read(db: AsyncSession, product: Product, *, include_detail: bool =
             system_count=stats["system_count"],
         )
     return ProductRead(
-        id=product.id,
-        workspace_id=product.workspace_id,
-        org_id=product.org_id,
-        name=product.name,
-        product_line=product.product_line,
-        lifecycle=product.lifecycle,
-        owner=product.owner,
-        description=product.description,
         capability_ids=cap_ids,
-        graph_layout=product.graph_layout,
-        created_at=product.created_at,
-        updated_at=product.updated_at,
+        **product_fields,
         **stats,
         **portfolio,
         **detail,
@@ -187,7 +193,9 @@ async def update_product(
             await validate_capability_ids(db, ctx.workspace.id, ctx.org_id, body.capability_ids)
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        product.capabilities.clear()
+        await db.execute(
+            delete(ProductCapability).where(ProductCapability.product_id == product.id)
+        )
         await db.flush()
         for cap_id in body.capability_ids:
             db.add(ProductCapability(product_id=product.id, capability_id=cap_id))
@@ -197,5 +205,4 @@ async def update_product(
             setattr(product, field, getattr(body, field))
 
     await db.flush()
-    await db.refresh(product, ["capabilities"])
     return await _to_read(db, product)

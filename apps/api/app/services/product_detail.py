@@ -11,7 +11,6 @@ from app.models.objects import MinEAObject
 from app.models.relationships import Relationship
 from app.models.views_graph import Product
 from app.services.portfolio_signals import (
-    OPEN_DEBT_STATUSES,
     _debt_attached_to_product,
     _debt_attached_to_scope,
     _debt_scope_ids,
@@ -52,6 +51,8 @@ ROADMAP_STATUS_LABEL = {
 
 SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
+DebtRow = tuple[uuid.UUID, str, dict, datetime]
+
 
 def _debt_type_label(props: dict) -> str:
     debt_type = props.get("debt_type") or "other"
@@ -67,14 +68,15 @@ def _age_days(created_at: datetime) -> int:
 
 
 def compute_health_dimensions(
-    product: Product,
     *,
+    lifecycle: str,
+    owner: str | None,
     open_debt: int,
     critical_debt: int,
     maturity_indicator: str | None,
     system_count: int,
 ) -> dict[str, str]:
-    ownership = "critical" if not (product.owner or "").strip() else "healthy"
+    ownership = "critical" if not (owner or "").strip() else "healthy"
 
     if critical_debt > 0:
         debt = "critical"
@@ -83,12 +85,12 @@ def compute_health_dimensions(
     else:
         debt = "healthy"
 
-    if product.lifecycle in ("retiring", "retired"):
-        lifecycle = "critical"
-    elif product.lifecycle in ("planned", "beta"):
-        lifecycle = "warning"
+    if lifecycle in ("retiring", "retired"):
+        lifecycle_status = "critical"
+    elif lifecycle in ("planned", "beta"):
+        lifecycle_status = "warning"
     else:
-        lifecycle = "healthy"
+        lifecycle_status = "healthy"
 
     if system_count == 0:
         ops = "warning"
@@ -99,7 +101,28 @@ def compute_health_dimensions(
     else:
         ops = "healthy"
 
-    return {"ops": ops, "debt": debt, "lifecycle": lifecycle, "ownership": ownership}
+    return {"ops": ops, "debt": debt, "lifecycle": lifecycle_status, "ownership": ownership}
+
+
+def _debt_item_from_row(row: DebtRow) -> dict | None:
+    debt_id, name, props, created_at = row
+    if not _is_open_debt(props):
+        return None
+    affects = props.get("affects") or {}
+    severity = props.get("severity") or "medium"
+    return {
+        "id": str(debt_id),
+        "name": name,
+        "severity": severity,
+        "debt_type": props.get("debt_type"),
+        "debt_type_label": _debt_type_label(props),
+        "age_days": _age_days(created_at),
+        "affects_name": affects.get("object_name") or "Unknown",
+        "affects_kind": affects.get("object_kind") or "application",
+        "identified_by": props.get("identified_by"),
+        "_rank": SEVERITY_RANK.get(severity, 9),
+        "_affect_oid": _normalize_object_id(affects.get("object_id")),
+    }
 
 
 async def _object_owner_map(
@@ -146,7 +169,6 @@ async def _debt_remediation_map(
     for debt_id, roadmap_id, roadmap_name in rel_result.all():
         mapping[str(debt_id)] = {"roadmap_id": str(roadmap_id), "roadmap_title": roadmap_name}
 
-    # Fallback: resolves_debt on roadmap properties
     roadmap_result = await db.execute(
         select(MinEAObject.id, MinEAObject.name, MinEAObject.properties).where(
             MinEAObject.type == "roadmap_item",
@@ -165,7 +187,8 @@ async def _debt_remediation_map(
 
 async def _tech_debt_items_for_product(
     db: AsyncSession,
-    product: Product,
+    product_id: uuid.UUID,
+    product_owner: str | None,
     scope_ids: set[uuid.UUID],
     workspace_id: uuid.UUID,
     org_id: uuid.UUID,
@@ -173,96 +196,74 @@ async def _tech_debt_items_for_product(
     scope_strs = {_normalize_object_id(sid) for sid in scope_ids}
     scope_strs.discard(None)
     seen: set[uuid.UUID] = set()
-    items: list[tuple[int, dict]] = []
+    ranked_items: list[tuple[int, dict]] = []
 
-    async def add_debt(debt: MinEAObject) -> None:
-        if debt.id in seen:
+    debt_cols = select(
+        MinEAObject.id,
+        MinEAObject.name,
+        MinEAObject.properties,
+        MinEAObject.created_at,
+    ).where(
+        MinEAObject.type == "tech_debt",
+        MinEAObject.workspace_id == workspace_id,
+        MinEAObject.org_id == org_id,
+    )
+
+    def collect_row(row: DebtRow) -> None:
+        debt_id = row[0]
+        if debt_id in seen:
             return
-        seen.add(debt.id)
-        props = debt.properties or {}
-        if not _is_open_debt(props):
+        item = _debt_item_from_row(row)
+        if not item:
             return
-        affects = props.get("affects") or {}
-        severity = props.get("severity") or "medium"
-        rank = SEVERITY_RANK.get(severity, 9)
-        items.append(
-            (
-                rank,
-                {
-                    "id": str(debt.id),
-                    "name": debt.name,
-                    "severity": severity,
-                    "debt_type": props.get("debt_type"),
-                    "debt_type_label": _debt_type_label(props),
-                    "age_days": _age_days(debt.created_at),
-                    "affects_name": affects.get("object_name") or "Unknown",
-                    "affects_kind": affects.get("object_kind") or "application",
-                    "identified_by": props.get("identified_by"),
-                },
-            )
-        )
+        seen.add(debt_id)
+        ranked_items.append((item.pop("_rank"), item))
 
     if scope_ids:
         rel_result = await db.execute(
-            select(MinEAObject)
-            .join(Relationship, Relationship.from_object_id == MinEAObject.id)
-            .where(
-                MinEAObject.type == "tech_debt",
-                MinEAObject.workspace_id == workspace_id,
-                MinEAObject.org_id == org_id,
+            debt_cols.join(Relationship, Relationship.from_object_id == MinEAObject.id).where(
                 Relationship.type == "affects",
                 Relationship.from_type == "tech_debt",
                 Relationship.to_object_id.in_(scope_ids),
             )
         )
-        for debt in rel_result.scalars():
-            await add_debt(debt)
+        for row in rel_result.all():
+            collect_row(row)
 
-    all_debt = await db.execute(
-        select(MinEAObject).where(
-            MinEAObject.type == "tech_debt",
-            MinEAObject.workspace_id == workspace_id,
-            MinEAObject.org_id == org_id,
-        )
-    )
-    for debt in all_debt.scalars():
-        if debt.id in seen:
+    all_debt = await db.execute(debt_cols)
+    for row in all_debt.all():
+        debt_id, _, props, _ = row
+        if debt_id in seen:
             continue
-        props = debt.properties or {}
-        if not _debt_attached_to_product(props, product.id) and not _debt_attached_to_scope(
+        if not _debt_attached_to_product(props, product_id) and not _debt_attached_to_scope(
             props, scope_strs
         ):
             continue
-        await add_debt(debt)
+        collect_row(row)
 
-    items.sort(key=lambda x: x[0])
-    debt_ids = {uuid.UUID(item[1]["id"]) for item in items}
+    ranked_items.sort(key=lambda x: x[0])
+    items = [item for _, item in ranked_items]
+    debt_ids = {uuid.UUID(item["id"]) for item in items}
     remediation = await _debt_remediation_map(db, debt_ids, workspace_id, org_id)
 
     affect_uuid_set: set[uuid.UUID] = set()
-    debt_by_id: dict[uuid.UUID, MinEAObject] = {}
-    if debt_ids:
-        for debt in (
-            await db.execute(select(MinEAObject).where(MinEAObject.id.in_(debt_ids)))
-        ).scalars():
-            debt_by_id[debt.id] = debt
-            affects = (debt.properties or {}).get("affects") or {}
-            oid = _normalize_object_id(affects.get("object_id"))
-            if oid:
-                try:
-                    affect_uuid_set.add(uuid.UUID(oid))
-                except ValueError:
-                    pass
+    affect_oid_by_debt: dict[str, str | None] = {}
+    for item in items:
+        oid = item.pop("_affect_oid", None)
+        affect_oid_by_debt[item["id"]] = oid
+        if oid:
+            try:
+                affect_uuid_set.add(uuid.UUID(oid))
+            except ValueError:
+                pass
 
     owners = await _object_owner_map(db, affect_uuid_set, workspace_id)
 
     result_items: list[dict] = []
-    for _, item in items:
+    for item in items:
         debt_id = item["id"]
-        debt_obj = debt_by_id.get(uuid.UUID(debt_id))
-        affects = ((debt_obj.properties if debt_obj else None) or {}).get("affects") or {}
-        affect_oid = _normalize_object_id(affects.get("object_id"))
-        owner = owners.get(affect_oid or "", None) or item.get("identified_by") or product.owner
+        affect_oid = affect_oid_by_debt.get(debt_id)
+        owner = owners.get(affect_oid or "", None) or item.get("identified_by") or product_owner
         rem = remediation.get(debt_id)
         result_items.append({**item, "owner": owner, "remediation": rem})
     return result_items
@@ -292,13 +293,18 @@ def _next_milestone(milestones: list[dict]) -> dict | None:
 
 async def _roadmap_items_for_product(
     db: AsyncSession,
-    product: Product,
+    product_id: uuid.UUID,
     workspace_id: uuid.UUID,
     org_id: uuid.UUID,
 ) -> list[dict]:
-    pid = str(product.id)
+    pid = str(product_id)
     result = await db.execute(
-        select(MinEAObject).where(
+        select(
+            MinEAObject.id,
+            MinEAObject.name,
+            MinEAObject.owner,
+            MinEAObject.properties,
+        ).where(
             MinEAObject.type == "roadmap_item",
             MinEAObject.workspace_id == workspace_id,
             MinEAObject.org_id == org_id,
@@ -306,8 +312,8 @@ async def _roadmap_items_for_product(
     )
 
     items: list[dict] = []
-    for obj in result.scalars():
-        props = obj.properties or {}
+    for obj_id, name, owner, props in result.all():
+        props = props or {}
         product_ref = props.get("product") or {}
         if product_ref.get("product_id") != pid:
             continue
@@ -323,8 +329,8 @@ async def _roadmap_items_for_product(
 
         items.append(
             {
-                "id": str(obj.id),
-                "name": obj.name,
+                "id": str(obj_id),
+                "name": name,
                 "kind": props.get("roadmap_kind"),
                 "kind_label": ROADMAP_KIND_LABEL.get(props.get("roadmap_kind") or "", "Item"),
                 "status": props.get("roadmap_status") or "discovery",
@@ -332,7 +338,7 @@ async def _roadmap_items_for_product(
                     props.get("roadmap_status") or "discovery", "Discovery"
                 ),
                 "target_label": target_label,
-                "owner": obj.owner,
+                "owner": owner,
                 "milestone_strip": _milestone_strip(milestones),
                 "milestones_done": done,
                 "milestones_total": len(milestones),
@@ -354,18 +360,26 @@ async def enrich_product_detail(
     maturity_indicator: str | None,
     system_count: int,
 ) -> dict:
+    # Snapshot ORM columns before any await — expired instances trigger async lazy-load errors.
+    pid = product.id
     ws_id = product.workspace_id
     org_id = product.org_id
-    scope_ids = await _debt_scope_ids(db, product.id, ws_id, org_id)
+    lifecycle = product.lifecycle
+    owner = product.owner
+
+    scope_ids = await _debt_scope_ids(db, pid, ws_id, org_id)
 
     return {
         "health_dimensions": compute_health_dimensions(
-            product,
+            lifecycle=lifecycle,
+            owner=owner,
             open_debt=open_debt,
             critical_debt=critical_debt,
             maturity_indicator=maturity_indicator,
             system_count=system_count,
         ),
-        "tech_debt_items": await _tech_debt_items_for_product(db, product, scope_ids, ws_id, org_id),
-        "roadmap_items": await _roadmap_items_for_product(db, product, ws_id, org_id),
+        "tech_debt_items": await _tech_debt_items_for_product(
+            db, pid, owner, scope_ids, ws_id, org_id
+        ),
+        "roadmap_items": await _roadmap_items_for_product(db, pid, ws_id, org_id),
     }

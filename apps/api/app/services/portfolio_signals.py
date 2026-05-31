@@ -427,17 +427,21 @@ async def enrich_portfolio_signals(
     capability_count: int,
     maturity_indicator: str | None,
 ) -> dict:
+    # Snapshot ORM columns before any await — expired instances trigger async lazy-load errors.
     ws_id = product.workspace_id
     org_id = product.org_id
     pid = product.id
+    lifecycle = product.lifecycle
+    owner = product.owner
+    updated_at = product.updated_at
 
     annual_cost = await _annual_cost_for_product(db, pid, ws_id, org_id)
     open_debt, critical_debt, debt_latest = await _tech_debt_for_product(db, pid, ws_id, org_id)
     roadmap_status, roadmap_count, roadmap_latest = await _roadmap_for_product(db, pid, ws_id, org_id)
 
     factors = _health_factors(
-        lifecycle=product.lifecycle,
-        owner=product.owner,
+        lifecycle=lifecycle,
+        owner=owner,
         capability_count=capability_count,
         maturity_indicator=maturity_indicator,
         open_debt=open_debt,
@@ -446,7 +450,7 @@ async def enrich_portfolio_signals(
     )
     health_status = _health_status(factors)
     trend = _trend_summary(
-        product_updated=product.updated_at,
+        product_updated=updated_at,
         debt_latest=debt_latest,
         roadmap_latest=roadmap_latest,
         open_debt=open_debt,
