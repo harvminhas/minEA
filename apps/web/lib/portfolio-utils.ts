@@ -27,6 +27,13 @@ export function productHealthStatus(product: Product): ProductHealthStatus {
   return (product.health_status as ProductHealthStatus) ?? "no_data";
 }
 
+/** Table view — show Critical when any factor is critical. */
+export function tableHealthLabel(product: Product): string {
+  const factors = product.health_factors ?? [];
+  if (factors.some((f) => f.severity === "critical")) return "Critical";
+  return HEALTH_LABEL[productHealthStatus(product)];
+}
+
 export function isUnowned(product: Product): boolean {
   return !product.owner?.trim();
 }
@@ -87,6 +94,22 @@ export function formatDebtCockpit(product: Product): { value: string; subtext?: 
     subtext: critical > 0 ? `${critical} critical` : undefined,
     critical: critical > 0,
   };
+}
+
+/** Collapsed card metrics bar — e.g. "3 · 1 crit". */
+export function formatCompactDebt(product: Product): { value: string; critical: boolean } {
+  const open = product.open_tech_debt_count ?? 0;
+  const critical = product.critical_tech_debt_count ?? 0;
+  if (open === 0) return { value: "None", critical: false };
+  if (critical > 0) return { value: `${open} · ${critical} crit`, critical: true };
+  return { value: String(open), critical: false };
+}
+
+/** Inline subtitle hint — e.g. "↗ 1 API ↙ 0 deps". */
+export function formatCompactIntegrationHint(product: Product): string {
+  const provided = product.apis_provided_count ?? 0;
+  const deps = (product.apis_consumed_count ?? 0) + (product.events_subscribed_count ?? 0);
+  return `↗ ${provided} API ↙ ${deps} dep${deps === 1 ? "" : "s"}`;
 }
 
 export function formatProvidesSummary(product: Product): string {

@@ -39,9 +39,15 @@ function IntegrationRow({
 }
 
 /** Compact provides / depends-on rollup for product cockpit cards. */
-export function ProductIntegrationsSummary({ product }: { product: Product }) {
+export function ProductIntegrationsSummary({
+  product,
+  className,
+}: {
+  product: Product;
+  className?: string;
+}) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-stone-50 px-4 py-3 mb-4">
+    <div className={cn("rounded-lg border border-gray-200 bg-stone-50 px-4 py-3", className)}>
       <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
         Integrations
       </p>

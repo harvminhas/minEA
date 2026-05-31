@@ -208,12 +208,13 @@ export const relationshipsApi = {
   list: (
     orgSlug: string,
     workspaceSlug: string,
-    params: { from_object_id?: string; to_object_id?: string },
+    params: { from_object_id?: string; to_object_id?: string; type?: string },
     token: string
   ) => {
     const qs = new URLSearchParams();
     if (params.from_object_id) qs.set("from_object_id", params.from_object_id);
     if (params.to_object_id) qs.set("to_object_id", params.to_object_id);
+    if (params.type) qs.set("type", params.type);
     const query = qs.toString();
     return apiFetch<Relationship[]>(
       `${wsBase(orgSlug, workspaceSlug)}/relationships${query ? `?${query}` : ""}`,
