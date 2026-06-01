@@ -10,8 +10,6 @@ const VIEW_PAGES: Record<string, React.ComponentType> = {
   "views/processes": dynamic(() => import("../../views/processes/page")),
   "views/capability-heatmap": dynamic(() => import("../../views/capability-heatmap/page")),
   "views/investments": dynamic(() => import("../../views/investments/page")),
-  "views/ai-infrastructure": dynamic(() => import("../../views/ai-infrastructure/page")),
-  "views/insights": dynamic(() => import("../../views/insights/page")),
 };
 
 export default function EmbedViewPage() {

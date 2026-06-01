@@ -10,6 +10,7 @@ import { useAppStore, type ViewMode } from "@/lib/store";
 import { useTenancy, primaryViewPath } from "@/lib/tenancy";
 import { useQuery } from "@tanstack/react-query";
 import { workspacesApi } from "@/lib/api-client";
+import { BuboMapWordmark } from "@/components/brand/BuboMapLogo";
 
 export function TopNav() {
   const router = useRouter();
@@ -52,14 +53,8 @@ export function TopNav() {
   return (
     <header className="fixed top-0 left-0 right-0 h-12 bg-[#0f172a] border-b border-white/10 flex items-center px-4 gap-3 z-50">
       {/* Logo */}
-      <Link href="/home" className="flex items-center gap-2 flex-shrink-0 mr-1">
-        <div className="h-7 w-7 rounded-md bg-indigo-600 flex items-center justify-center text-white font-bold text-sm select-none">
-          m
-        </div>
-        <span className="font-semibold text-sm text-white">minEA</span>
-        <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-medium text-white/50">
-          beta
-        </span>
+      <Link href="/home" className="flex-shrink-0 mr-1">
+        <BuboMapWordmark size="sm" beta theme="dark" />
       </Link>
 
       {/* Org / Workspace breadcrumb */}

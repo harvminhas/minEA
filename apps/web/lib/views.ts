@@ -1,13 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import {
-  GitBranch,
-  Grid3X3,
-  Map,
-  Package,
-  Sparkles,
-  TrendingUp,
-  Zap,
-} from "lucide-react";
+import { GitBranch, Grid3X3, Map, Package, TrendingUp } from "lucide-react";
 
 /** v1 fixed views — not user-defined (spec §2). */
 export type ViewId =
@@ -15,9 +7,7 @@ export type ViewId =
   | "processes"
   | "journeys"
   | "capability-heatmap"
-  | "investments"
-  | "ai-infrastructure"
-  | "insights";
+  | "investments";
 
 export interface ViewConfig {
   id: ViewId;
@@ -104,38 +94,23 @@ export const VIEWS_V1: ViewConfig[] = [
       "An investment targets a realization with a hypothesis and expected impact. Start from a bottleneck in Processes or the Capability heatmap, or create one here.",
     emptyCta: "Propose an investment",
   },
-  {
-    id: "ai-infrastructure",
-    label: "AI infrastructure",
-    description: "AI-related systems and capabilities",
-    segment: "views/ai-infrastructure",
-    icon: Sparkles,
-    color: "#a855f7",
-    anchorQuestion: "Show me agents, models, and tools in this workspace.",
-    emptyTitle: "No AI infrastructure yet",
-    emptyDescription:
-      "Add AI agents, tools, and models in the repository. This view is a lens over those entities.",
-  },
-  {
-    id: "insights",
-    label: "AI insights",
-    description: "Gaps, risks, recommendations",
-    segment: "views/insights",
-    icon: Zap,
-    color: "#eab308",
-    anchorQuestion: "What gaps and risks does AI see in this architecture?",
-    emptyTitle: "No insights yet",
-    emptyDescription: "Generate insights from your repository to surface gaps, risks, and recommendations.",
-    emptyCta: "Generate insights",
-  },
 ];
 
 export const NAV_VIEWS: ViewConfig[] = [PRODUCTS_VIEW, ...VIEWS_V1];
 
+const ALL_VIEWS: ViewConfig[] = [PRODUCTS_VIEW, PROCESSES_VIEW, ...VIEWS_V1];
+
+export function isViewId(id: string): id is ViewId {
+  return ALL_VIEWS.some((v) => v.id === id);
+}
+
+/** Coerce persisted or legacy view ids to a valid v1 view. */
+export function resolveViewId(id: string | undefined, fallback: ViewId = "capability-heatmap"): ViewId {
+  return id && isViewId(id) ? id : fallback;
+}
+
 export function getView(id: ViewId): ViewConfig {
-  if (id === "products") return PRODUCTS_VIEW;
-  if (id === "processes") return PROCESSES_VIEW;
-  const view = VIEWS_V1.find((v) => v.id === id);
+  const view = ALL_VIEWS.find((v) => v.id === id);
   if (!view) throw new Error(`Unknown view: ${id}`);
   return view;
 }

@@ -12,10 +12,6 @@ const VIEW_PAGES: Record<ViewId, React.ComponentType> = {
     () => import("@/app/orgs/[orgSlug]/workspaces/[workspaceSlug]/views/capability-heatmap/page")
   ),
   investments: dynamic(() => import("@/app/orgs/[orgSlug]/workspaces/[workspaceSlug]/views/investments/page")),
-  "ai-infrastructure": dynamic(
-    () => import("@/app/orgs/[orgSlug]/workspaces/[workspaceSlug]/views/ai-infrastructure/page")
-  ),
-  insights: dynamic(() => import("@/app/orgs/[orgSlug]/workspaces/[workspaceSlug]/views/insights/page")),
 };
 
 export function ViewPanelContent({ viewId }: { viewId: ViewId }) {

@@ -47,7 +47,7 @@ export default function OnboardingPage() {
       <div className="w-full max-w-md bg-white rounded-xl p-8 shadow-xl">
         <h1 className="text-xl font-bold text-gray-900 mb-1">Create your organisation</h1>
         <p className="text-sm text-gray-500 mb-6">
-          minEA is multi-tenant. Your org is the boundary for data, members, and billing.
+          BuboMap is multi-tenant. Your org is the boundary for data, members, and billing.
         </p>
 
         <div className="space-y-4">

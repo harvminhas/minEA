@@ -21,7 +21,9 @@ import {
   targetResolutionLabel,
   TECH_DEBT_EFFORT,
 } from "@/lib/roadmap-utils";
-import type { MinEAObject, RoadmapDebtRef, RoadmapItemProperties, RoadmapProductRef } from "@minea/types";
+import { aiRoleFromProperties } from "@/lib/ai-role-utils";
+import { AiRoleField } from "@/components/ui/AiRoleField";
+import type { AiRole, MinEAObject, RoadmapDebtRef, RoadmapItemProperties, RoadmapProductRef } from "@minea/types";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -98,6 +100,7 @@ function initFromRoadmap(item?: MinEAObject) {
     cost: props.cost != null ? String(props.cost) : "",
     investmentCategory: props.investment_category ?? defaultInvestmentCategory(props.roadmap_kind ?? "epic"),
     blockedReason: props.blocked_reason ?? "",
+    aiRole: aiRoleFromProperties(props.ai_role),
   };
 }
 
@@ -166,6 +169,7 @@ export function CreateRoadmapPanel({
   const [effortEstimate, setEffortEstimate] = useState<string>(init.effortEstimate);
   const [cost, setCost] = useState(init.cost);
   const [investmentCategory, setInvestmentCategory] = useState(init.investmentCategory);
+  const [aiRole, setAiRole] = useState<AiRole>(init.aiRole);
   const [blockedReason, setBlockedReason] = useState(init.blockedReason);
   const [error, setError] = useState<string | null>(null);
   const [showProductDialog, setShowProductDialog] = useState(false);
@@ -205,6 +209,7 @@ export function CreateRoadmapPanel({
       cost: parsedCost != null && !Number.isNaN(parsedCost) ? parsedCost : null,
       investmentCategory,
       blockedReason: roadmapStatus === "blocked" ? blockedReason : null,
+      aiRole,
     });
   }, [
     kind,
@@ -216,6 +221,7 @@ export function CreateRoadmapPanel({
     cost,
     investmentCategory,
     blockedReason,
+    aiRole,
   ]);
 
   const canSubmit =
@@ -455,6 +461,9 @@ export function CreateRoadmapPanel({
               <p className="text-[11px] text-gray-400 mt-1.5">
                 Leave cost blank to estimate from effort × team rate (S $50K · M $200K · L $500K · XL $1M)
               </p>
+              <div className="mt-3">
+                <AiRoleField value={aiRole} onChange={setAiRole} />
+              </div>
             </section>
 
             <section>

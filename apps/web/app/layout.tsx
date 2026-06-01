@@ -6,8 +6,9 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "minEA — Enterprise Architecture",
-  description: "Model-driven Enterprise Architecture for SMBs",
+  title: "BuboMap — See your IT landscape clearly",
+  description:
+    "BuboMap (BOO-bo MAP) maps your organisation's capabilities, systems, data, and investments into one living model.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

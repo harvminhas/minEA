@@ -16,7 +16,10 @@ import {
   COMPONENT_STATUSES,
   COMPONENT_TYPES,
 } from "@/lib/component-utils";
+import { aiRoleForProperties, aiRoleFromProperties } from "@/lib/ai-role-utils";
+import { AiRoleField } from "@/components/ui/AiRoleField";
 import type {
+  AiRole,
   ComponentProperties,
   ComponentRuntimeRef,
   ComponentSystemRef,
@@ -38,6 +41,7 @@ function initFromComponent(component?: MinEAObject) {
     name: component?.name ?? "",
     componentType: props.component_type ?? "microservice",
     techStack: props.tech_stack ?? "",
+    aiRole: aiRoleFromProperties(props.ai_role),
     tags: (component?.tags ?? []).join(", "),
     systems: props.systems ?? [],
     runtimeKey: runtime ? `${runtime.runtime_kind}:${runtime.runtime_id}` : "",
@@ -169,6 +173,7 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
 
   const [name, setName] = useState(init.name);
   const [componentType, setComponentType] = useState(init.componentType);
+  const [aiRole, setAiRole] = useState<AiRole>(init.aiRole);
   const [techStack, setTechStack] = useState(init.techStack);
   const [tags, setTags] = useState(init.tags);
   const [systems, setSystems] = useState<ComponentSystemRef[]>(init.systems);
@@ -259,6 +264,7 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
       const properties: ComponentProperties = {
         component_type: componentType,
         tech_stack: techStack.trim() || undefined,
+        ai_role: aiRoleForProperties(aiRole),
         systems,
         runtime: selectedRuntime,
         node_layout:
@@ -392,6 +398,8 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
                   <FieldLabel required>Type</FieldLabel>
                   <SelectField value={componentType} onChange={setComponentType} options={COMPONENT_TYPES} />
                 </div>
+
+                <AiRoleField value={aiRole} onChange={setAiRole} />
 
                 <div>
                   <FieldLabel>Runs on</FieldLabel>

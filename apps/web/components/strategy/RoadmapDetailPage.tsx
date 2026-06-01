@@ -24,6 +24,7 @@ import {
   targetResolutionLabel,
 } from "@/lib/roadmap-utils";
 import { resolveRoadmapSpend } from "@/lib/investment-pipeline";
+import { aiRoleLabel } from "@/lib/ai-role-utils";
 import { formatCurrency } from "@/lib/utils";
 
 interface Props {
@@ -203,6 +204,10 @@ export function RoadmapDetailPage({ roadmapId }: Props) {
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Category</p>
               <p className="text-sm font-medium text-gray-900 mt-1">{categoryLabel ?? "—"}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">AI role</p>
+              <p className="text-sm font-medium text-gray-900 mt-1">{aiRoleLabel(props.ai_role)}</p>
             </div>
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Spend</p>

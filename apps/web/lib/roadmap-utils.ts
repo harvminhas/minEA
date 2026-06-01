@@ -1,4 +1,5 @@
 import type { RoadmapItemProperties, RoadmapMilestone } from "@minea/types";
+import { aiRoleForProperties } from "@/lib/ai-role-utils";
 import {
   buildTargetResolutionOptions,
   targetResolutionLabel,
@@ -63,6 +64,7 @@ export function buildRoadmapProperties(params: {
   cost?: number | null;
   investmentCategory?: string;
   blockedReason?: string | null;
+  aiRole?: string;
 }): RoadmapItemProperties {
   return {
     roadmap_kind: params.kind as RoadmapItemProperties["roadmap_kind"],
@@ -74,6 +76,7 @@ export function buildRoadmapProperties(params: {
     cost: params.cost != null && params.cost > 0 ? params.cost : undefined,
     investment_category: (params.investmentCategory || undefined) as RoadmapItemProperties["investment_category"],
     blocked_reason: params.blockedReason?.trim() || undefined,
+    ai_role: aiRoleForProperties(params.aiRole),
   };
 }
 

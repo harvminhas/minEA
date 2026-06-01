@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { BuboMapWordmark } from "@/components/brand/BuboMapLogo";
 
 interface Props {
   mode: "sign-in" | "sign-up";
@@ -81,18 +82,15 @@ export function AuthForm({ mode }: Props) {
 
   return (
     <div className="w-full max-w-md bg-white rounded-xl p-8 shadow-xl">
-      <div className="flex items-center gap-2 mb-6">
-        <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">
-          m
-        </div>
-        <span className="font-semibold text-lg text-gray-900">minEA</span>
+      <div className="mb-6">
+        <BuboMapWordmark size="md" theme="light" />
       </div>
 
       <h1 className="text-xl font-bold text-gray-900 mb-1">
         {isSignIn ? "Sign in" : "Create your account"}
       </h1>
       <p className="text-sm text-gray-500 mb-6">
-        {isSignIn ? "Welcome back." : "Start modelling your enterprise architecture."}
+        {isSignIn ? "Welcome back." : "Start mapping your IT landscape."}
       </p>
 
       <button

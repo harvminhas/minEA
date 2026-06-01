@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, Grid3X3, Map, TrendingUp, Sparkles, Zap, Package, BarChart2 } from "lucide-react";
+import { Plus, Map, TrendingUp, Package } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { NAV_VIEWS } from "@/lib/views";
 import type { ViewConfig } from "@/lib/views";
@@ -74,39 +74,11 @@ function InvestmentsIllustration() {
   );
 }
 
-function AiInfraIllustration() {
-  return (
-    <div className="flex flex-col items-center justify-center py-5 gap-2">
-      <Sparkles size={28} className="text-violet-400" />
-      <div className="flex gap-1.5">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-1.5 w-6 rounded-full bg-violet-300 opacity-70" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function InsightsIllustration() {
-  return (
-    <div className="flex flex-col items-center justify-center py-5 gap-2">
-      <Zap size={28} className="text-amber-400" />
-      <div className="flex gap-1.5">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-1 w-8 rounded-full bg-amber-300 opacity-70" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 const ILLUSTRATIONS: Record<string, () => React.ReactElement> = {
   "capability-heatmap": CapabilityHeatmapIllustration,
   journeys: JourneysIllustration,
   products: ProductsIllustration,
   investments: InvestmentsIllustration,
-  "ai-infrastructure": AiInfraIllustration,
-  insights: InsightsIllustration,
 };
 
 // ─── Gallery card ────────────────────────────────────────────────────────

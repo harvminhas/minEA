@@ -7,6 +7,9 @@ import { type ObjectType, type MinEAObject, type ObjectUpdate, OBJECT_TYPE_LABEL
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { FormDrawer, FormField, FormSection, formFieldClass } from "@/components/ui/FormDrawer";
+import { AiRoleField } from "@/components/ui/AiRoleField";
+import { aiRoleForProperties, aiRoleFromProperties, SYSTEM_OBJECT_TYPES } from "@/lib/ai-role-utils";
+import type { AiRole } from "@minea/types";
 
 interface Props {
   objectType: ObjectType;
@@ -122,9 +125,13 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       Object.entries(initialValues?.properties ?? {}).map(([k, v]) => [k, String(v)])
     )
   );
+  const [aiRole, setAiRole] = useState<AiRole>(
+    aiRoleFromProperties((initialValues?.properties as { ai_role?: AiRole } | undefined)?.ai_role)
+  );
 
   const typeFields = TYPE_FIELDS[objectType] ?? [];
   const typeLabel = OBJECT_TYPE_LABELS[objectType] ?? objectType;
+  const isSystemType = SYSTEM_OBJECT_TYPES.has(objectType);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -136,6 +143,8 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
           props[field.key] = field.type === "number" ? Number(val) : val;
         }
       }
+      const storedAiRole = aiRoleForProperties(aiRole);
+      if (storedAiRole) props.ai_role = storedAiRole;
       const shared = {
         name,
         description: description || undefined,
@@ -209,7 +218,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
         />
       </FormField>
 
-      {typeFields.length > 0 && (
+      {(typeFields.length > 0 || isSystemType) && (
         <FormSection title={`${typeLabel} Properties`}>
           {typeFields.map((field) => (
             <FormField key={field.key} label={field.label}>
@@ -236,6 +245,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
               )}
             </FormField>
           ))}
+          {isSystemType && <AiRoleField value={aiRole} onChange={setAiRole} variant="drawer" />}
         </FormSection>
       )}
 

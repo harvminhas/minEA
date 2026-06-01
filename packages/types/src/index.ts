@@ -39,6 +39,14 @@ export type ObjectStatus =
 
 export type ObjectSource = "user" | "ai_extraction" | "import";
 
+/** How an entity relates to AI workloads. "none" is the default and is usually omitted when stored. */
+export type AiRole =
+  | "none"
+  | "model"
+  | "ai_powered"
+  | "ai_infrastructure"
+  | "ai_adjacent";
+
 // ─── Layer Config ─────────────────────────────────────────────────────────────
 
 export type Layer = "strategy" | "business" | "application" | "data" | "integration" | "infrastructure";
@@ -168,6 +176,8 @@ export interface ApplicationProperties {
   category?: string;
   hosting_model?: "cloud" | "on_premise" | "hybrid" | "saas";
   annual_cost?: number;
+  /** How this entity relates to AI workloads. Omitted or "none" = not AI-related. */
+  ai_role?: AiRole;
 }
 
 export interface AgentProperties {
@@ -300,6 +310,8 @@ export interface ComponentProperties {
   tech_stack?: string;
   systems?: ComponentSystemRef[];
   runtime?: ComponentRuntimeRef | null;
+  /** How this entity relates to AI workloads. Omitted or "none" = not AI-related. */
+  ai_role?: AiRole;
   /** Persisted node positions for the component architecture canvas. */
   node_layout?: Record<string, { x: number; y: number }>;
 }
@@ -485,6 +497,8 @@ export interface RoadmapItemProperties {
   cost?: number | null;
   investment_category?: "innovation" | "modernization" | "run";
   blocked_reason?: string | null;
+  /** How this initiative relates to AI. Omitted or "none" = not AI-related. */
+  ai_role?: AiRole;
   milestones?: RoadmapMilestone[];
 }
 

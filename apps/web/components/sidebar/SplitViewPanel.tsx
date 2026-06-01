@@ -6,11 +6,12 @@ import { ChevronDown, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/lib/store";
 import { useTenancy } from "@/lib/tenancy";
-import { NAV_VIEWS, getView, viewPath } from "@/lib/views";
+import { NAV_VIEWS, getView, resolveViewId, viewPath } from "@/lib/views";
 import { ViewPanelContent } from "@/components/views/ViewPanelContent";
 
 export function SplitViewPanel() {
-  const { splitViewId, setSplitViewId } = useAppStore();
+  const { splitViewId: storedSplitViewId, setSplitViewId } = useAppStore();
+  const splitViewId = resolveViewId(storedSplitViewId);
   const { orgSlug, workspaceSlug } = useTenancy();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -24,6 +25,12 @@ export function SplitViewPanel() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  useEffect(() => {
+    if (storedSplitViewId !== splitViewId) {
+      setSplitViewId(splitViewId);
+    }
+  }, [storedSplitViewId, splitViewId, setSplitViewId]);
 
   const selectedView = getView(splitViewId);
   const fullscreenHref =
