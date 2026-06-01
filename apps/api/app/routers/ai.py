@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.chat import stream_chat
 from app.ai.ingestion import extract_from_text
-from app.ai.insights import generate_insights
+from app.ai.insights import generate_insights, insight_to_dict
 from app.database import get_db
 from app.models.insights import AiInsight
 from app.models.objects import MinEAObject
@@ -165,8 +165,8 @@ async def trigger_insights(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     await ctx.require_permission(db, "extraction.run")
-    context = await build_workspace_context_graph(ctx, db)
-    insights = await generate_insights(context, ctx.workspace.id, ctx.org_id, db)
+    assert ctx.workspace
+    insights = await generate_insights(ctx.workspace.id, ctx.org_id, db)
     return {"generated": len(insights)}
 
 
@@ -174,29 +174,25 @@ async def trigger_insights(
 async def list_insights(
     ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
-) -> list[dict]:
+) -> dict[str, Any]:
     await ctx.require_read(db)
     assert ctx.workspace
 
     result = await db.execute(
-        select(AiInsight).where(
+        select(AiInsight)
+        .where(
             AiInsight.workspace_id == ctx.workspace.id,
             AiInsight.org_id == ctx.org_id,
-        ).order_by(AiInsight.created_at.desc())
+        )
+        .order_by(AiInsight.created_at.desc())
     )
     insights = result.scalars().all()
-    return [
-        {
-            "id": str(i.id),
-            "type": i.type,
-            "title": i.title,
-            "description": i.description,
-            "severity": i.severity,
-            "affected_object_ids": i.affected_object_ids,
-            "created_at": i.created_at.isoformat(),
-        }
-        for i in insights
-    ]
+    analysed_at = insights[0].created_at.isoformat() if insights else None
+    return {
+        "insights": [insight_to_dict(i) for i in insights],
+        "analysed_at": analysed_at,
+        "count": len(insights),
+    }
 
 
 @router.get("/governance/pii-agents")

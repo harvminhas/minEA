@@ -8,6 +8,7 @@ import type {
   Workspace,
   WorkspaceCreate,
   AiInsight,
+  AiInsightsResponse,
   CisPayload,
   Org,
   OrgCreate,
@@ -739,8 +740,25 @@ export const aiApi = {
       token,
     }),
 
-  listInsights: (orgSlug: string, workspaceSlug: string, token: string) =>
-    apiFetch<AiInsight[]>(`${wsBase(orgSlug, workspaceSlug)}/ai/insights`, { token }),
+  listInsights: async (orgSlug: string, workspaceSlug: string, token: string) => {
+    const res = await apiFetch<AiInsightsResponse | AiInsight[]>(
+      `${wsBase(orgSlug, workspaceSlug)}/ai/insights`,
+      { token }
+    );
+    if (Array.isArray(res)) {
+      return {
+        insights: res,
+        analysed_at: res[0]?.created_at ?? null,
+        count: res.length,
+      } satisfies AiInsightsResponse;
+    }
+    const insights = res.insights ?? [];
+    return {
+      insights,
+      analysed_at: res.analysed_at ?? insights[0]?.created_at ?? null,
+      count: res.count ?? insights.length,
+    } satisfies AiInsightsResponse;
+  },
 
   piiAgents: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<MinEAObject[]>(`${wsBase(orgSlug, workspaceSlug)}/ai/governance/pii-agents`, { token }),

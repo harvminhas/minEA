@@ -11,6 +11,10 @@ import { useTenancy, primaryViewPath } from "@/lib/tenancy";
 import { useQuery } from "@tanstack/react-query";
 import { workspacesApi } from "@/lib/api-client";
 import { BuboMapWordmark } from "@/components/brand/BuboMapLogo";
+import {
+  ArchitectureInsightsPanel,
+  useInsightsBadgeCount,
+} from "@/components/insights/ArchitectureInsightsPanel";
 
 export function TopNav() {
   const router = useRouter();
@@ -20,8 +24,14 @@ export function TopNav() {
 
   const [wsOpen, setWsOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
+  const [insightsOpen, setInsightsOpen] = useState(false);
   const wsRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
+
+  const { count: insightBadgeCount, criticalOnly: insightsCritical } = useInsightsBadgeCount(
+    orgSlug,
+    workspaceSlug
+  );
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -160,10 +170,21 @@ export function TopNav() {
       <div className="flex items-center gap-0.5 ml-auto flex-shrink-0">
         <button
           type="button"
-          title="Notifications"
-          className="p-2 text-white/40 hover:text-white/80 hover:bg-white/10 rounded-md transition-colors"
+          title="Architecture insights"
+          onClick={() => workspaceSlug && setInsightsOpen(true)}
+          className="relative p-2 text-white/40 hover:text-white/80 hover:bg-white/10 rounded-md transition-colors"
         >
           <Bell size={16} />
+          {insightBadgeCount > 0 && (
+            <span
+              className={cn(
+                "absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold flex items-center justify-center text-white",
+                insightsCritical ? "bg-red-500" : "bg-amber-500"
+              )}
+            >
+              {insightBadgeCount > 9 ? "9+" : insightBadgeCount}
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -215,6 +236,10 @@ export function TopNav() {
           )}
         </div>
       </div>
+
+      {workspaceSlug && (
+        <ArchitectureInsightsPanel open={insightsOpen} onClose={() => setInsightsOpen(false)} />
+      )}
     </header>
   );
 }

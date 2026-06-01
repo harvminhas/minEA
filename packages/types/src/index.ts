@@ -1170,14 +1170,20 @@ export interface CapabilityPickerSuggestions {
 
 export interface AiInsight {
   id: string;
-  workspace_id: string;
-  org_id: string;
   type: "gap" | "risk" | "recommendation";
   title: string;
   description: string;
   severity?: "low" | "medium" | "high" | null;
+  examples?: string[];
+  impact_note?: string;
   affected_object_ids: string[];
   created_at: string;
+}
+
+export interface AiInsightsResponse {
+  insights: AiInsight[];
+  analysed_at: string | null;
+  count: number;
 }
 
 export interface CisObject {
