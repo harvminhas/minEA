@@ -26,7 +26,12 @@ RETIRED_MODELS = {
 
 
 def _refresh_env() -> None:
-    load_dotenv(API_ROOT / ".env", override=True)
+    # Vercel injects env vars at runtime — no apps/api/.env on disk.
+    if os.getenv("VERCEL") == "1":
+        return
+    env_file = API_ROOT / ".env"
+    if env_file.is_file():
+        load_dotenv(env_file, override=True)
 
 
 def _resolve_model(raw: str | None) -> str:
@@ -60,6 +65,8 @@ def model_name() -> str:
 
 
 def not_configured_message() -> str:
+    if os.getenv("VERCEL") == "1":
+        return "AI is not configured. Set GOOGLE_API_KEY in the Vercel project environment variables."
     return "AI is not configured. Set GOOGLE_API_KEY in apps/api/.env and restart the API server."
 
 
