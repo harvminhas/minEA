@@ -5,19 +5,25 @@ export function MetricSummaryCard({
   value,
   subtext,
   variant = "default",
+  onClick,
+  selected = false,
 }: {
   label: string;
   value: number | string;
   subtext: string;
   variant?: "default" | "warn";
+  onClick?: () => void;
+  selected?: boolean;
 }) {
-  return (
-    <div
-      className={cn(
-        "relative rounded-2xl border bg-white px-5 py-4 min-w-0 overflow-hidden",
-        variant === "warn" ? "border-amber-200/70" : "border-gray-200/80"
-      )}
-    >
+  const className = cn(
+    "relative rounded-2xl border bg-white px-5 py-4 min-w-0 overflow-hidden text-left w-full transition-colors",
+    variant === "warn" ? "border-amber-200/70" : "border-gray-200/80",
+    onClick && "cursor-pointer hover:border-indigo-200/80 hover:bg-gray-50/50",
+    selected && "border-indigo-300 ring-1 ring-indigo-200 bg-indigo-50/40"
+  );
+
+  const inner = (
+    <>
       {/* subtle top accent stripe */}
       <div
         className={cn(
@@ -37,6 +43,16 @@ export function MetricSummaryCard({
       <p className={cn("text-xs mt-2", variant === "warn" ? "text-amber-600/80" : "text-gray-400")}>
         {subtext}
       </p>
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {inner}
+      </button>
+    );
+  }
+
+  return <div className={className}>{inner}</div>;
 }

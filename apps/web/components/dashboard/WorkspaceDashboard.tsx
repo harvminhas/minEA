@@ -31,14 +31,15 @@ export function WorkspaceDashboard() {
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
 
-  const { data: metrics, isLoading } = useWorkspaceDashboard(orgSlug, workspaceSlug);
+  const { data: metrics, isPending, isError, error, refetch, isFetching } =
+    useWorkspaceDashboard(orgSlug, workspaceSlug);
   const insightsState = useArchitectureInsights(orgSlug, workspaceSlug);
 
   const greeting = useMemo(() => greetingForHour(new Date().getHours()), []);
   const userName = greetingName(user?.displayName, user?.email);
-  const empty = metrics ? isWorkspaceEmpty(metrics) : true;
 
-  if (isLoading || !metrics) {
+  // Wait for a real fetch — never treat placeholder zeros as "empty workspace"
+  if (isPending || metrics === undefined) {
     return (
       <div className="px-8 py-9 max-w-5xl">
         <div className="h-8 w-64 bg-gray-200/70 rounded-xl animate-pulse mb-2" />
@@ -52,9 +53,31 @@ export function WorkspaceDashboard() {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="px-8 py-9 max-w-5xl">
+        <p className="text-sm text-red-600">
+          {error instanceof Error ? error.message : "Could not load workspace summary."}
+        </p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const empty = isWorkspaceEmpty(metrics);
+
   return (
     <>
       <div className="px-8 py-9 min-h-full bg-gray-50/50">
+        {isFetching && !empty && (
+          <p className="text-xs text-gray-400 mb-4 -mt-2">Updating…</p>
+        )}
         {empty ? (
           <ZeroStateDashboard
             basePath={basePath}
@@ -68,6 +91,8 @@ export function WorkspaceDashboard() {
         ) : (
           <PopulatedStateDashboard
             basePath={basePath}
+            orgSlug={orgSlug}
+            workspaceSlug={workspaceSlug}
             greeting={greeting}
             userName={userName}
             orgName={activeOrg?.name ?? orgSlug}

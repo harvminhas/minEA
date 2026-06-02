@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowRight, ChevronRight, Grid3X3, Layers, Server } from "lucide-react";
 import type { WorkspaceMetrics } from "@/lib/workspace-dashboard";
-import { buildDashboardViewCards, setupBannerDismissKey } from "@/lib/workspace-dashboard";
-import { MetricSummaryCard } from "@/components/dashboard/MetricSummaryCard";
+import { setupBannerDismissKey } from "@/lib/workspace-dashboard";
+import { DashboardMetricsSection } from "@/components/dashboard/DashboardMetricsSection";
+import { DashboardViewsSection } from "@/components/dashboard/DashboardViewsSection";
 
 const FIRST_STEPS = [
   {
@@ -51,8 +52,6 @@ export function ZeroStateDashboard({
   onGetStarted,
 }: Props) {
   const [bannerDismissed, setBannerDismissed] = useState(true);
-  const viewCards = buildDashboardViewCards(basePath, metrics);
-
   useEffect(() => {
     const key = setupBannerDismissKey(orgSlug, workspaceSlug);
     setBannerDismissed(localStorage.getItem(key) === "1");
@@ -74,13 +73,12 @@ export function ZeroStateDashboard({
         <p className="text-sm text-gray-400 mt-1">Your workspace is empty — let&apos;s get it set up.</p>
       </header>
 
-      {/* Metrics (all zero) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MetricSummaryCard label="Domains" value={0} subtext="none yet" />
-        <MetricSummaryCard label="Capabilities" value={0} subtext="none yet" />
-        <MetricSummaryCard label="Systems" value={0} subtext="none yet" />
-        <MetricSummaryCard label="Products" value={0} subtext="none yet" />
-      </div>
+      <DashboardMetricsSection
+        basePath={basePath}
+        orgSlug={orgSlug}
+        workspaceSlug={workspaceSlug}
+        metrics={metrics}
+      />
 
       {/* Setup banner */}
       {!bannerDismissed && (
@@ -150,34 +148,7 @@ export function ZeroStateDashboard({
           </ol>
         </section>
 
-        {/* Views */}
-        <section className="rounded-2xl border border-gray-200/80 bg-white p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-800">Views</h2>
-            <Link href={`${basePath}/views`} className="text-xs font-medium text-indigo-600 hover:text-indigo-700 transition-colors">
-              All views
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            {viewCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <div
-                  key={card.id}
-                  className="flex flex-col gap-2.5 rounded-xl border border-gray-100 bg-gray-50/60 px-3.5 py-3 opacity-60 select-none"
-                >
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gray-200/60">
-                    <Icon size={14} className="text-gray-400" />
-                  </span>
-                  <span>
-                    <p className="text-xs font-semibold text-gray-600 leading-snug">{card.label}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">{card.statusLabel}</p>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        <DashboardViewsSection basePath={basePath} metrics={metrics} />
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import type { QueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -16,16 +17,16 @@ export function workspaceDashboardQueryKey(orgSlug: string, workspaceSlug: strin
   return ["workspace-dashboard", orgSlug, workspaceSlug] as const;
 }
 
-const EMPTY_METRICS: WorkspaceMetrics = {
-  domainCount: 0,
-  capabilityCount: 0,
-  systemCount: 0,
-  productCount: 0,
-  processCount: 0,
-  journeyCount: 0,
-  investmentCount: 0,
-  mapInitialized: false,
-};
+/** Force a fresh fetch after onboarding or repository changes. */
+export function refreshWorkspaceDashboard(
+  queryClient: QueryClient,
+  orgSlug: string,
+  workspaceSlug: string
+) {
+  return queryClient.refetchQueries({
+    queryKey: workspaceDashboardQueryKey(orgSlug, workspaceSlug),
+  });
+}
 
 async function countSystems(orgSlug: string, workspaceSlug: string, token: string): Promise<number> {
   const types = ["application", "solution", "technical_capability"] as const;
@@ -46,13 +47,15 @@ export function useWorkspaceDashboard(orgSlug: string, workspaceSlug: string) {
     enabled,
     queryFn: async (): Promise<WorkspaceMetrics> => {
       const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+
       const [status, products, processes, journeys, systemCount, roadmap] = await Promise.all([
-        capabilityMapApi.getStatus(orgSlug, workspaceSlug, token!),
-        productsApi.list(orgSlug, workspaceSlug, token!),
-        processesApi.list(orgSlug, workspaceSlug, token!),
-        journeysApi.list(orgSlug, workspaceSlug, token!),
-        countSystems(orgSlug, workspaceSlug, token!),
-        objectsApi.list(orgSlug, workspaceSlug, { type: "roadmap_item", page: 1 }, token!),
+        capabilityMapApi.getStatus(orgSlug, workspaceSlug, token),
+        productsApi.list(orgSlug, workspaceSlug, token),
+        processesApi.list(orgSlug, workspaceSlug, token),
+        journeysApi.list(orgSlug, workspaceSlug, token),
+        countSystems(orgSlug, workspaceSlug, token),
+        objectsApi.list(orgSlug, workspaceSlug, { type: "roadmap_item", page: 1 }, token),
       ]);
 
       return {
@@ -66,6 +69,8 @@ export function useWorkspaceDashboard(orgSlug: string, workspaceSlug: string) {
         mapInitialized: status.initialized,
       };
     },
-    placeholderData: EMPTY_METRICS,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 }

@@ -14,6 +14,8 @@ export interface ViewConfig {
   label: string;
   /** Short tagline shown in the gallery card */
   description: string;
+  /** Longer copy for the workspace dashboard view drawer */
+  drawerDescription: string;
   segment: string;
   icon: LucideIcon;
   color: string;
@@ -29,6 +31,8 @@ export const PRODUCTS_VIEW: ViewConfig = {
   id: "products",
   label: "Product portfolio",
   description: "Health and overlap analysis",
+  drawerDescription:
+    "An overview of all products, what capabilities they rely on, and which systems underpin them.",
   segment: "views/products",
   icon: Package,
   color: "#6366f1",
@@ -44,6 +48,8 @@ export const PROCESSES_VIEW: ViewConfig = {
   id: "processes",
   label: "Processes",
   description: "End-to-end process flows",
+  drawerDescription:
+    "End-to-end flows with stages and cycle times — spot bottlenecks and link each stage to the capabilities it needs.",
   segment: "views/processes",
   icon: GitBranch,
   color: "#0ea5e9",
@@ -60,6 +66,8 @@ export const VIEWS_V1: ViewConfig[] = [
     id: "capability-heatmap",
     label: "Capability heatmap",
     description: "System health across domains",
+    drawerDescription:
+      "A heat-mapped grid of all capabilities across domains — showing investment coverage, system support, and ownership gaps at a glance.",
     segment: "views/capability-heatmap",
     icon: Grid3X3,
     color: "#22c55e",
@@ -71,7 +79,9 @@ export const VIEWS_V1: ViewConfig[] = [
   {
     id: "journeys",
     label: "Journeys",
-    description: "End-to-end process flows",
+    description: "Customer experience paths",
+    drawerDescription:
+      "Map the customer journey step by step, link transitions to back-end processes, and see where the experience breaks down.",
     segment: "views/journeys",
     icon: Map,
     color: "#ec4899",
@@ -85,6 +95,8 @@ export const VIEWS_V1: ViewConfig[] = [
     id: "investments",
     label: "Investment pipeline",
     description: "Prioritised initiatives by impact",
+    drawerDescription:
+      "Active and proposed investments ranked by impact — tied to capabilities, products, and the bottlenecks you want to fix.",
     segment: "views/investments",
     icon: TrendingUp,
     color: "#f59e0b",

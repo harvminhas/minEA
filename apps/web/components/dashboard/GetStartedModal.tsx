@@ -6,7 +6,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { BuboMapMark } from "@/components/brand/BuboMapLogo";
 import { objectsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import { workspaceDashboardQueryKey } from "@/lib/use-workspace-dashboard";
+import { refreshRepositoryNavCounts } from "@/lib/use-repository-nav-counts";
+import { refreshWorkspaceDashboard } from "@/lib/use-workspace-dashboard";
 import { AddDomainPickerDialog } from "@/components/capability-map/AddDomainPickerDialog";
 import { cn } from "@/lib/utils";
 
@@ -575,9 +576,10 @@ export function GetStartedModal({ open, onClose, orgSlug, workspaceSlug, workspa
         })
       );
 
-      await queryClient.invalidateQueries({
-        queryKey: workspaceDashboardQueryKey(orgSlug, workspaceSlug),
-      });
+      await Promise.all([
+        refreshWorkspaceDashboard(queryClient, orgSlug, workspaceSlug),
+        refreshRepositoryNavCounts(queryClient, orgSlug, workspaceSlug),
+      ]);
 
       setDone(true);
     } catch (err) {

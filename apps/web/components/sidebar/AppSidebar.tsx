@@ -26,10 +26,12 @@ import { NAV_VIEWS } from "@/lib/views";
 import {
   REPOSITORY_LAYERS,
   isNavItemDisabled,
+  layerNavCountTotal,
   type NavBadge,
   type RepositoryLayer,
   type RepositoryNavItem,
 } from "@/lib/repository-nav";
+import { useRepositoryNavCounts } from "@/lib/use-repository-nav-counts";
 // ─── Icons assigned to each repository layer ─────────────────────────────
 
 const LAYER_ICONS: Record<string, LucideIcon> = {
@@ -43,16 +45,23 @@ const LAYER_ICONS: Record<string, LucideIcon> = {
   risk: AlertTriangle,
 };
 
+function NavCount({ value, show }: { value: number; show: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="text-[10px] text-white/25 tabular-nums flex-shrink-0">{value}</span>
+  );
+}
+
 function NavBadgePill({ badge }: { badge: NavBadge }) {
   if (badge === "new") {
     return (
-      <span className="ml-auto flex-shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+      <span className="flex-shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
         New
       </span>
     );
   }
   return (
-    <span className="ml-auto flex-shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide bg-white/5 text-white/25 border border-white/10">
+    <span className="flex-shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide bg-white/5 text-white/25 border border-white/10">
       Upcoming
     </span>
   );
@@ -65,6 +74,8 @@ function RepoNavItemRow({
   pathname,
   onNavigate,
   indent = true,
+  count,
+  showCounts,
 }: {
   item: RepositoryNavItem;
   layer: RepositoryLayer;
@@ -72,6 +83,8 @@ function RepoNavItemRow({
   pathname: string;
   onNavigate?: () => void;
   indent?: boolean;
+  count?: number;
+  showCounts: boolean;
 }) {
   const disabled = isNavItemDisabled(item);
   const isActive = !disabled && (pathname === href || pathname.startsWith(`${href}/`));
@@ -92,6 +105,7 @@ function RepoNavItemRow({
         style={{ backgroundColor: layer.color }}
       />
       <span className="truncate text-[13px] flex-1 min-w-0">{item.label}</span>
+      {!disabled && <NavCount value={count ?? 0} show={showCounts} />}
       {item.badge && <NavBadgePill badge={item.badge} />}
     </>
   );
@@ -245,6 +259,8 @@ function CollapsedLayerFlyout({
   isOpen,
   onToggle,
   onClose,
+  countsBySegment,
+  showCounts,
 }: {
   layer: RepositoryLayer;
   basePath: string;
@@ -252,6 +268,8 @@ function CollapsedLayerFlyout({
   isOpen: boolean;
   onToggle: () => void;
   onClose: () => void;
+  countsBySegment: Record<string, number>;
+  showCounts: boolean;
 }) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
@@ -303,9 +321,15 @@ function CollapsedLayerFlyout({
           className="fixed z-[60] min-w-[200px] -translate-y-1/2 rounded-lg border border-white/10 bg-[#1e293b] py-1.5 shadow-2xl"
           style={{ top: coords.top, left: coords.left }}
         >
-          <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/35">
-            {layer.label}
-          </p>
+          <div className="flex items-center justify-between gap-2 px-3 pb-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
+              {layer.label}
+            </p>
+            <NavCount
+              value={layerNavCountTotal(layer, countsBySegment)}
+              show={showCounts}
+            />
+          </div>
           {layer.items.map((item) => (
             <RepoNavItemRow
               key={item.segment}
@@ -315,6 +339,8 @@ function CollapsedLayerFlyout({
               pathname={pathname}
               onNavigate={onClose}
               indent={false}
+              count={countsBySegment[item.segment]}
+              showCounts={showCounts}
             />
           ))}
         </div>
@@ -326,9 +352,13 @@ function CollapsedLayerFlyout({
 function CollapsedRepoNav({
   basePath,
   pathname,
+  countsBySegment,
+  showCounts,
 }: {
   basePath: string;
   pathname: string;
+  countsBySegment: Record<string, number>;
+  showCounts: boolean;
 }) {
   const [openLayerId, setOpenLayerId] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
@@ -391,6 +421,8 @@ function CollapsedRepoNav({
             isOpen={openLayerId === layer.id}
             onToggle={() => setOpenLayerId((current) => (current === layer.id ? null : layer.id))}
             onClose={() => setOpenLayerId(null)}
+            countsBySegment={countsBySegment}
+            showCounts={showCounts}
           />
         );
       })}
@@ -470,9 +502,13 @@ function ExpandedViewsNav({
 function ExpandedRepoNav({
   basePath,
   pathname,
+  countsBySegment,
+  showCounts,
 }: {
   basePath: string;
   pathname: string;
+  countsBySegment: Record<string, number>;
+  showCounts: boolean;
 }) {
   const { collapsedLayers, toggleLayer } = useAppStore();
 
@@ -519,13 +555,11 @@ function ExpandedRepoNav({
                 />
               </span>
               <span className="truncate flex-1 text-left">{layer.label}</span>
-              {layer.badge ? (
-                <NavBadgePill badge={layer.badge} />
-              ) : (
-                <span className="text-[10px] text-white/25 tabular-nums flex-shrink-0">
-                  {layer.items.length}
-                </span>
-              )}
+              {layer.badge && <NavBadgePill badge={layer.badge} />}
+              <NavCount
+                value={layerNavCountTotal(layer, countsBySegment)}
+                show={showCounts}
+              />
             </button>
 
             {!isCollapsed && (
@@ -537,6 +571,8 @@ function ExpandedRepoNav({
                     layer={layer}
                     href={`${basePath}/${item.segment}`}
                     pathname={pathname}
+                    count={countsBySegment[item.segment]}
+                    showCounts={showCounts}
                   />
                 ))}
               </div>
@@ -554,6 +590,9 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
   const { viewMode, sidebarExpanded, setSidebarExpanded } = useAppStore();
+  const { data: navCounts } = useRepositoryNavCounts(orgSlug ?? "", workspaceSlug ?? "");
+  const countsBySegment = navCounts ?? {};
+  const showCounts = navCounts !== undefined;
 
   const isViews = viewMode === "views";
 
@@ -623,13 +662,23 @@ export function AppSidebar() {
             isViews ? (
               <ExpandedViewsNav basePath={basePath} pathname={pathname} />
             ) : (
-              <ExpandedRepoNav basePath={basePath} pathname={pathname} />
+              <ExpandedRepoNav
+                basePath={basePath}
+                pathname={pathname}
+                countsBySegment={countsBySegment}
+                showCounts={showCounts}
+              />
             )
           ) : (
             isViews ? (
               <CollapsedViewsNav basePath={basePath} pathname={pathname} />
             ) : (
-              <CollapsedRepoNav basePath={basePath} pathname={pathname} />
+              <CollapsedRepoNav
+                basePath={basePath}
+                pathname={pathname}
+                countsBySegment={countsBySegment}
+                showCounts={showCounts}
+              />
             )
           )
         )}
