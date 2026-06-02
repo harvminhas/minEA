@@ -133,8 +133,13 @@ export function viewPath(
   return base;
 }
 
+/** Workspace home — dashboard with zero / populated states. */
+export function workspaceHomePath(orgSlug: string, workspaceSlug: string): string {
+  return `/orgs/${orgSlug}/workspaces/${workspaceSlug}`;
+}
+
 export function primaryViewPath(orgSlug: string, workspaceSlug: string): string {
-  return viewPath(orgSlug, workspaceSlug, PRIMARY_VIEW_ID);
+  return workspaceHomePath(orgSlug, workspaceSlug);
 }
 
 export function embedViewPath(orgSlug: string, workspaceSlug: string, viewId: ViewId): string {

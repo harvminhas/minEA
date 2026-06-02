@@ -104,4 +104,5 @@ async def health() -> dict:
         "vercel": os.getenv("VERCEL") == "1",
         "gemini_configured": is_configured(),
         "gemini_model": model_name(),
+        "gemini_env_present": bool(os.getenv("GOOGLE_API_KEY")),
     }

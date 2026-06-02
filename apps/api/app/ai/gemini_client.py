@@ -9,7 +9,7 @@ from google import genai
 from google.genai import types
 from google.genai.errors import ClientError
 
-from app.config import API_ROOT
+from app.config import API_ROOT, settings
 
 _client: genai.Client | None = None
 _client_key: str | None = None
@@ -43,7 +43,7 @@ def _resolve_model(raw: str | None) -> str:
 
 def api_key() -> str:
     _refresh_env()
-    return (os.getenv("GOOGLE_API_KEY") or "").strip()
+    return (os.getenv("GOOGLE_API_KEY") or settings.google_api_key or "").strip()
 
 
 def is_configured() -> bool:
@@ -66,7 +66,11 @@ def model_name() -> str:
 
 def not_configured_message() -> str:
     if os.getenv("VERCEL") == "1":
-        return "AI is not configured. Set GOOGLE_API_KEY in the Vercel project environment variables."
+        return (
+            "AI is not configured. Add GOOGLE_API_KEY to the API Vercel project "
+            "(Root Directory: apps/api — e.g. min-ea-api), not the web project. "
+            "Redeploy the API after saving, then check /health for gemini_configured: true."
+        )
     return "AI is not configured. Set GOOGLE_API_KEY in apps/api/.env and restart the API server."
 
 

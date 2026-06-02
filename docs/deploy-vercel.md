@@ -43,6 +43,8 @@ The proxy reads `API_URL` at **request time** (not build time), so set it on the
 | `DEBUG` | No | `false` |
 | `CORS_ORIGINS` | Optional | JSON array, e.g. `["https://your-web.vercel.app"]` |
 | `RESEND_API_KEY` | For invites | |
+| `GOOGLE_API_KEY` | For AI chat, insights, ingestion | From [Google AI Studio](https://aistudio.google.com/apikey) |
+| `GEMINI_MODEL` | No | `gemini-2.5-flash` (do not use retired `gemini-2.0-flash`) |
 
 > **Database note:** Vercel functions use dynamic outbound IPs. Cloud SQL **authorized networks** (IP allowlists) often fail from Vercel. Options:
 > - Use a Postgres host with universal access (Supabase, Neon, Railway Postgres), or
@@ -61,7 +63,7 @@ cd apps/api && npm run db:migrate
 
 After deploy, open:
 
-- `https://your-api.vercel.app/health` — should show `database_connected: true`
+- `https://your-api.vercel.app/health` — should show `database_connected: true` and `gemini_configured: true`
 
 ---
 
@@ -131,6 +133,8 @@ vercel --prod
 | `CERTIFICATE_VERIFY_FAILED` on `/health` | Deploy latest API code first. Then set `DATABASE_SSL_VERIFY=false`, **or** paste server CA as multiline `DATABASE_SSL_CA`. Check `/health` for `database_ssl_mode` (`system` = old code / CA not loaded). |
 | Firebase auth fails on Vercel | Add web domain to Firebase authorized domains |
 | `firebase_configured: false` on API | Set `FIREBASE_SERVICE_ACCOUNT_JSON` (not a file path) |
+| `gemini_configured: false` on API `/health` | Set `GOOGLE_API_KEY` on the **API** project (`apps/api` root), not the web project. **Redeploy API** after adding env vars. |
+| AI works locally but not on Vercel | Web proxies to API — Gemini keys must be on **minea-api**, not **minea-web** |
 | Build fails (web) | Monorepo install must run from repo root (`apps/web/vercel.json`) |
 | `auth/invalid-api-key` / verify-email prerender error | Set all `NEXT_PUBLIC_FIREBASE_*` on the **web** Vercel project, then redeploy |
 

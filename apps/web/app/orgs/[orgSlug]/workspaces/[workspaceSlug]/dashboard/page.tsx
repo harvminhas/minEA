@@ -2,19 +2,16 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useTenancy } from "@/lib/tenancy";
-import { primaryViewPath } from "@/lib/views";
+import { useTenancy, workspaceHomePath } from "@/lib/tenancy";
 
-/** Home = Product Portfolio (spec §6). Legacy /dashboard redirects here. */
+/** Legacy /dashboard → workspace home. */
 export default function DashboardRedirectPage() {
   const router = useRouter();
   const { orgSlug, workspaceSlug } = useTenancy();
 
   useEffect(() => {
-    router.replace(primaryViewPath(orgSlug, workspaceSlug));
+    router.replace(workspaceHomePath(orgSlug, workspaceSlug));
   }, [router, orgSlug, workspaceSlug]);
 
-  return (
-    <div className="p-8 text-sm text-gray-400">Opening product portfolio…</div>
-  );
+  return <div className="p-8 text-sm text-gray-400">Opening workspace…</div>;
 }

@@ -16,7 +16,7 @@ export function workspacePath(orgSlug: string, workspaceSlug: string, segment = 
   return `/orgs/${orgSlug}/workspaces/${workspaceSlug}/${segment}`;
 }
 
-export { primaryViewPath, viewPath } from "@/lib/views";
+export { primaryViewPath, viewPath, workspaceHomePath } from "@/lib/views";
 
 export function objectListPath(orgSlug: string, workspaceSlug: string, layer: string, type: string) {
   return `/orgs/${orgSlug}/workspaces/${workspaceSlug}/${layer}/${type}`;
