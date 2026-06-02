@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 
 /** Invalidate product list, detail, and architecture graph after product edits. */
 export function invalidateProductQueries(
@@ -7,6 +8,7 @@ export function invalidateProductQueries(
   workspaceSlug: string,
   productId?: string
 ) {
+  void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
   queryClient.invalidateQueries({ queryKey: ["products", orgSlug, workspaceSlug] });
   if (productId) {
     queryClient.invalidateQueries({ queryKey: ["product", orgSlug, workspaceSlug, productId] });

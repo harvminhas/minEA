@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { capabilityMapApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { useTenancy } from "@/lib/tenancy";
+import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { CapabilityMapView } from "@/components/capability-map/CapabilityMapView";
 
 export function CapabilityMapPage() {
@@ -26,6 +27,7 @@ export function CapabilityMapPage() {
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
     queryClient.invalidateQueries({ queryKey: ["capability-map-status", orgSlug, workspaceSlug] });
+    void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
   };
 
   if (mapQuery.isLoading || !queryEnabled) {

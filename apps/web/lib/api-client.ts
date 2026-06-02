@@ -7,6 +7,7 @@ import type {
   RelationshipCreate,
   Workspace,
   WorkspaceCreate,
+  WorkspaceSummary,
   AiInsight,
   AiInsightsResponse,
   CisPayload,
@@ -152,6 +153,11 @@ export const workspacesApi = {
     apiFetch<Workspace[]>(`/orgs/${orgSlug}/workspaces`, { token }),
   get: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<Workspace>(`/orgs/${orgSlug}/workspaces/${workspaceSlug}`, { token }),
+  getSummary: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<WorkspaceSummary>(
+      `/orgs/${orgSlug}/workspaces/${workspaceSlug}/summary`,
+      { token }
+    ),
   create: (orgSlug: string, body: WorkspaceCreate, token: string) =>
     apiFetch<Workspace>(`/orgs/${orgSlug}/workspaces`, {
       method: "POST",

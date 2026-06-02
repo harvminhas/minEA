@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { capabilityMapApi, objectsApi, productsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { WORKSPACE_SUMMARY_GC_MS, WORKSPACE_SUMMARY_STALE_MS } from "@/lib/workspace-summary-cache";
 
 export type MetricDrawerId = "domains" | "capabilities" | "systems" | "products";
 
@@ -63,5 +64,7 @@ export function useMetricDrawerData(
       const { items } = await productsApi.list(orgSlug, workspaceSlug, token);
       return { products: items };
     },
+    staleTime: WORKSPACE_SUMMARY_STALE_MS,
+    gcTime: WORKSPACE_SUMMARY_GC_MS,
   });
 }

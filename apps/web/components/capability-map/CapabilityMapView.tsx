@@ -12,6 +12,7 @@ import { AddDomainPickerDialog } from "@/components/capability-map/AddDomainPick
 import { domainIcon } from "@/lib/capability-map-icons";
 import { objectListPath } from "@/lib/tenancy";
 import { useTenancy } from "@/lib/tenancy";
+import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -30,6 +31,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
     queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
     queryClient.invalidateQueries({ queryKey: ["capability-map-status", orgSlug, workspaceSlug] });
     queryClient.invalidateQueries({ queryKey: ["capability-library-domains", orgSlug, workspaceSlug] });
+    void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
     if (capPickerDomain) {
       queryClient.invalidateQueries({
         queryKey: ["capability-library-caps", orgSlug, workspaceSlug, capPickerDomain.id],

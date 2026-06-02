@@ -7,6 +7,7 @@ import type { WorkspaceMetrics } from "@/lib/workspace-dashboard";
 import { setupBannerDismissKey } from "@/lib/workspace-dashboard";
 import { DashboardMetricsSection } from "@/components/dashboard/DashboardMetricsSection";
 import { DashboardViewsSection } from "@/components/dashboard/DashboardViewsSection";
+import { HowItWorksTrigger } from "@/components/dashboard/HowItWorksModal";
 
 const FIRST_STEPS = [
   {
@@ -40,6 +41,7 @@ interface Props {
   userName: string;
   metrics: WorkspaceMetrics;
   onGetStarted: () => void;
+  onOpenHowItWorks: () => void;
 }
 
 export function ZeroStateDashboard({
@@ -50,6 +52,7 @@ export function ZeroStateDashboard({
   userName,
   metrics,
   onGetStarted,
+  onOpenHowItWorks,
 }: Props) {
   const [bannerDismissed, setBannerDismissed] = useState(true);
   useEffect(() => {
@@ -66,11 +69,14 @@ export function ZeroStateDashboard({
   return (
     <div className="max-w-5xl space-y-7">
       {/* Header */}
-      <header>
-        <h1 className="text-[28px] font-semibold text-gray-900 tracking-tight leading-tight">
-          {greeting}, {userName}
-        </h1>
-        <p className="text-sm text-gray-400 mt-1">Your workspace is empty — let&apos;s get it set up.</p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[28px] font-semibold text-gray-900 tracking-tight leading-tight">
+            {greeting}, {userName}
+          </h1>
+          <p className="text-sm text-gray-400 mt-1">Your workspace is empty — let&apos;s get it set up.</p>
+        </div>
+        <HowItWorksTrigger onClick={onOpenHowItWorks} />
       </header>
 
       <DashboardMetricsSection

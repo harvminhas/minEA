@@ -21,6 +21,7 @@ import { IntegrationInfraList } from "@/components/integration/IntegrationInfraL
 import { TechDebtList } from "@/components/risk/TechDebtList";
 import { OBJECT_TYPE_LABELS, type ObjectType, type MinEAObject } from "@minea/types";
 import { getLayerColor } from "@/lib/utils";
+import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 
 const PATH_TO_TYPE: Record<string, ObjectType> = {
   capabilities: "capability",
@@ -158,6 +159,7 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, objectType] });
+      void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
       setSelectedObject(null);
     },
   });
@@ -239,6 +241,7 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
           onDelete={() => deleteMutation.mutate(selectedObject.id)}
           onUpdate={() => {
             queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, objectType] });
+            void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
             setSelectedObject(null);
           }}
         />
@@ -251,6 +254,7 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
           onSuccess={() => {
             setShowForm(false);
             queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, objectType] });
+            void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
           }}
         />
       )}

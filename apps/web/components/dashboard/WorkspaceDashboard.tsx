@@ -15,6 +15,7 @@ import { ZeroStateDashboard } from "@/components/dashboard/ZeroStateDashboard";
 import { PopulatedStateDashboard } from "@/components/dashboard/PopulatedStateDashboard";
 import { ArchitectureInsightsPanel } from "@/components/insights/ArchitectureInsightsPanel";
 import { GetStartedModal } from "@/components/dashboard/GetStartedModal";
+import { HowItWorksModal } from "@/components/dashboard/HowItWorksModal";
 
 function formatUpdatedAgo(iso: string | null): string {
   if (!iso) return "recently";
@@ -30,6 +31,7 @@ export function WorkspaceDashboard() {
   const { activeOrg } = useAppStore();
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [howItWorksOpen, setHowItWorksOpen] = useState(false);
 
   const { data: metrics, isPending, isError, error, refetch, isFetching } =
     useWorkspaceDashboard(orgSlug, workspaceSlug);
@@ -38,8 +40,8 @@ export function WorkspaceDashboard() {
   const greeting = useMemo(() => greetingForHour(new Date().getHours()), []);
   const userName = greetingName(user?.displayName, user?.email);
 
-  // Wait for a real fetch — never treat placeholder zeros as "empty workspace"
-  if (isPending || metrics === undefined) {
+  // Skeleton only on first load (no cached metrics yet)
+  if (isPending) {
     return (
       <div className="px-8 py-9 max-w-5xl">
         <div className="h-8 w-64 bg-gray-200/70 rounded-xl animate-pulse mb-2" />
@@ -87,6 +89,7 @@ export function WorkspaceDashboard() {
             userName={userName}
             metrics={metrics}
             onGetStarted={() => setSetupOpen(true)}
+            onOpenHowItWorks={() => setHowItWorksOpen(true)}
           />
         ) : (
           <PopulatedStateDashboard
@@ -100,6 +103,7 @@ export function WorkspaceDashboard() {
             metrics={metrics}
             insights={insightsState.insights}
             onOpenInsights={() => setInsightsOpen(true)}
+            onOpenHowItWorks={() => setHowItWorksOpen(true)}
           />
         )}
       </div>
@@ -122,6 +126,8 @@ export function WorkspaceDashboard() {
         workspaceSlug={workspaceSlug}
         workspaceName={activeOrg?.name ?? orgSlug}
       />
+
+      <HowItWorksModal open={howItWorksOpen} onClose={() => setHowItWorksOpen(false)} />
     </>
   );
 }

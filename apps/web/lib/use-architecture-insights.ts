@@ -50,6 +50,8 @@ export function useArchitectureInsights(orgSlug: string, workspaceSlug: string) 
       return aiApi.listInsights(orgSlug, workspaceSlug, token!);
     },
     enabled,
+    staleTime: STALE_MS,
+    refetchOnWindowFocus: false,
   });
 
   const generateMutation = useMutation({

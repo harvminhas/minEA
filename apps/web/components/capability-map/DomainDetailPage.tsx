@@ -13,6 +13,7 @@ import { DomainProcessesTab } from "@/components/capability-map/DomainProcessesT
 import { domainIcon } from "@/lib/capability-map-icons";
 import { objectListPath } from "@/lib/tenancy";
 import { useTenancy } from "@/lib/tenancy";
+import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { cn } from "@/lib/utils";
 
 type TabId = "overview" | "mapping" | "processes" | "products";
@@ -215,6 +216,7 @@ export function DomainDetailPage({ domainId }: Props) {
             onRefresh={() => {
               refetch();
               queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
+              void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
             }}
           />
         )}

@@ -18,10 +18,14 @@ import {
   type RepositoryNavItem,
 } from "@/lib/repository-nav";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import {
+  WORKSPACE_SUMMARY_GC_MS,
+  WORKSPACE_SUMMARY_STALE_MS,
+  invalidateWorkspaceSummary,
+  repositoryNavCountsQueryKey,
+} from "@/lib/workspace-summary-cache";
 
-export function repositoryNavCountsQueryKey(orgSlug: string, workspaceSlug: string) {
-  return ["repository-nav-counts", orgSlug, workspaceSlug] as const;
-}
+export { repositoryNavCountsQueryKey };
 
 export function refreshRepositoryNavCounts(
   queryClient: QueryClient,
@@ -182,7 +186,8 @@ export function useRepositoryNavCounts(orgSlug: string, workspaceSlug: string) {
       if (!token) throw new Error("Not authenticated");
       return fetchNavCounts(orgSlug, workspaceSlug, token);
     },
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
+    staleTime: WORKSPACE_SUMMARY_STALE_MS,
+    gcTime: WORKSPACE_SUMMARY_GC_MS,
+    refetchOnWindowFocus: false,
   });
 }

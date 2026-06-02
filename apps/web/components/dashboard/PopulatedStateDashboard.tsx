@@ -11,6 +11,7 @@ import {
 } from "@/lib/workspace-dashboard";
 import { DashboardMetricsSection } from "@/components/dashboard/DashboardMetricsSection";
 import { DashboardViewsSection } from "@/components/dashboard/DashboardViewsSection";
+import { HowItWorksTrigger } from "@/components/dashboard/HowItWorksModal";
 import { cn } from "@/lib/utils";
 
 function severityConfig(severity: AiInsight["severity"]) {
@@ -40,6 +41,7 @@ interface Props {
   metrics: WorkspaceMetrics;
   insights: AiInsight[];
   onOpenInsights: () => void;
+  onOpenHowItWorks: () => void;
 }
 
 export function PopulatedStateDashboard({
@@ -53,6 +55,7 @@ export function PopulatedStateDashboard({
   metrics,
   insights,
   onOpenInsights,
+  onOpenHowItWorks,
 }: Props) {
   const allInsights = buildDashboardInsights(metrics, insights);
   const completeness = workspaceCompletenessPercent(metrics);
@@ -61,13 +64,16 @@ export function PopulatedStateDashboard({
 
   return (
     <div className="max-w-5xl space-y-7">
-      <header>
-        <h1 className="text-[28px] font-semibold text-gray-900 tracking-tight leading-tight">
-          {greeting}, {userName}
-        </h1>
-        <p className="text-sm text-gray-400 mt-1">
-          {orgName} · last updated {lastUpdatedLabel}
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[28px] font-semibold text-gray-900 tracking-tight leading-tight">
+            {greeting}, {userName}
+          </h1>
+          <p className="text-sm text-gray-400 mt-1">
+            {orgName} · last updated {lastUpdatedLabel}
+          </p>
+        </div>
+        <HowItWorksTrigger onClick={onOpenHowItWorks} />
       </header>
 
       <DashboardMetricsSection

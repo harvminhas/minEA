@@ -12,6 +12,7 @@ from app.models.relationships import Relationship
 from app.models.views_graph import Product
 from app.services.architecture_gaps import compute_architecture_gaps
 from app.services.capability_map import load_capability_map
+from app.services.workspace_summary import fetch_workspace_summary
 
 SYSTEM_TYPES = ("application", "solution", "technical_capability")
 
@@ -28,6 +29,8 @@ def _object_summary(obj: MinEAObject) -> dict:
 
 
 async def get_workspace_summary(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID) -> dict:
+    summary = await fetch_workspace_summary(db, workspace_id, org_id)
+
     type_counts: dict[str, int] = {}
     objects_result = await db.execute(
         select(MinEAObject.type, MinEAObject.id).where(
@@ -44,14 +47,18 @@ async def get_workspace_summary(db: AsyncSession, workspace_id: uuid.UUID, org_i
             Relationship.org_id == org_id,
         )
     )
-    products_result = await db.execute(
-        select(Product.id).where(Product.workspace_id == workspace_id, Product.org_id == org_id)
-    )
 
     return {
+        "domain_count": summary.domain_count,
+        "capability_count": summary.capability_count,
+        "system_count": summary.system_count,
+        "product_count": summary.product_count,
+        "process_count": summary.process_count,
+        "journey_count": summary.journey_count,
+        "investment_count": summary.investment_count,
+        "map_initialized": summary.map_initialized,
         "object_counts_by_type": type_counts,
         "relationship_count": len(rel_count.all()),
-        "product_count": len(products_result.all()),
     }
 
 

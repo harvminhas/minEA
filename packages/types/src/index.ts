@@ -983,6 +983,18 @@ export interface CapabilityMapStatus {
   capability_count: number;
 }
 
+/** Aggregated workspace metrics — landing dashboard summary endpoint. */
+export interface WorkspaceSummary {
+  domain_count: number;
+  capability_count: number;
+  system_count: number;
+  product_count: number;
+  process_count: number;
+  journey_count: number;
+  investment_count: number;
+  map_initialized: boolean;
+}
+
 export interface CapabilityMapCapability {
   id: string;
   name: string;
