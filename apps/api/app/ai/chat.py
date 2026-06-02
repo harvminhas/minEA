@@ -1,18 +1,25 @@
 """
-Streaming AI chat with prompt-cached workspace context.
+AI chat with workspace context via Gemini Flash.
 
-Uses Anthropic's cache_control: ephemeral on the system prompt to cut costs ~80%
-for repeated queries against the same workspace model.
+Uses non-streaming generate_content because google-genai async streaming is
+incompatible with aiohttp 3.13; response text is chunked for the SSE UI.
 """
 import json
 from collections.abc import AsyncGenerator
 
-import anthropic
+from google.genai import types
 
+from app.ai.gemini_client import (
+    format_api_error,
+    get_client,
+    is_configured,
+    messages_to_contents,
+    model_name,
+    not_configured_message,
+)
 from app.ai.prompts import SYSTEM_PROMPT_BASE
-from app.config import settings
 
-client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+SSE_CHUNK_SIZE = 48
 
 
 async def stream_chat(
@@ -23,34 +30,37 @@ async def stream_chat(
     Yields SSE-formatted strings: data: <chunk>\n\n
     The final event is data: [DONE]\n\n
     """
+    if not is_configured():
+        yield f'data: {json.dumps({"type": "error", "message": not_configured_message()})}\n\n'
+        yield "data: [DONE]\n\n"
+        return
+
     context_json = json.dumps(workspace_context, indent=2)
+    system_instruction = (
+        f"{SYSTEM_PROMPT_BASE}\n\n"
+        f"## Current Architecture Model\n\n```json\n{context_json}\n```"
+    )
 
-    system = [
-        {
-            "type": "text",
-            "text": SYSTEM_PROMPT_BASE,
-        },
-        {
-            "type": "text",
-            "text": f"## Current Architecture Model\n\n```json\n{context_json}\n```",
-            "cache_control": {"type": "ephemeral"},  # Cache the context — cuts cost ~80%
-        },
-    ]
+    contents = messages_to_contents(messages)
+    if not contents:
+        yield f'data: {json.dumps({"type": "error", "message": "No messages to send."})}\n\n'
+        yield "data: [DONE]\n\n"
+        return
 
-    # Convert frontend message format to Anthropic format
-    anthropic_messages = [
-        {"role": m["role"], "content": m["content"]}
-        for m in messages
-        if m.get("role") in ("user", "assistant")
-    ]
-
-    async with client.messages.stream(
-        model="claude-sonnet-4-6",
-        max_tokens=4096,
-        system=system,
-        messages=anthropic_messages,
-    ) as stream:
-        async for text in stream.text_stream:
-            yield f"data: {json.dumps({'type': 'text', 'text': text})}\n\n"
+    try:
+        response = await get_client().aio.models.generate_content(
+            model=model_name(),
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                max_output_tokens=4096,
+            ),
+        )
+        text = response.text or ""
+        for i in range(0, len(text), SSE_CHUNK_SIZE):
+            chunk = text[i : i + SSE_CHUNK_SIZE]
+            yield f"data: {json.dumps({'type': 'text', 'text': chunk})}\n\n"
+    except Exception as exc:
+        yield f"data: {json.dumps({'type': 'error', 'message': format_api_error(exc)})}\n\n"
 
     yield "data: [DONE]\n\n"

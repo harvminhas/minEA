@@ -1,20 +1,18 @@
 """
 CIS ingestion pipeline:
   Input (text / extracted doc content)
-  → Claude (CIS v1.1 JSON extraction)
+  → Gemini Flash (CIS v1.1 JSON extraction)
   → Pydantic validation
   → Return proposed objects + relationships for review UI
 """
 import json
 
-import anthropic
+from google.genai import types
 from pydantic import BaseModel, ValidationError
 
+from app.ai.gemini_client import format_api_error, get_client, is_configured, model_name, not_configured_message
 from app.ai.prompts import CIS_EXTRACTION_SYSTEM
-from app.config import settings
 from app.schemas.relationships import ALLOWED_TRIPLES
-
-client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
 
 class ProposedObject(BaseModel):
@@ -46,15 +44,23 @@ VALID_TYPES = {
 
 
 async def extract_from_text(text: str) -> CisPayload:
-    """Run Claude CIS extraction and validate the output."""
-    response = await client.messages.create(
-        model="claude-haiku-4-5",  # Faster + cheaper for classification
-        max_tokens=8192,
-        system=CIS_EXTRACTION_SYSTEM,
-        messages=[{"role": "user", "content": f"Extract architecture objects from:\n\n{text}"}],
-    )
+    """Run Gemini CIS extraction and validate the output."""
+    if not is_configured():
+        raise ValueError(not_configured_message())
 
-    raw = response.content[0].text.strip()
+    try:
+        response = await get_client().aio.models.generate_content(
+            model=model_name(),
+            contents=f"Extract architecture objects from:\n\n{text}",
+            config=types.GenerateContentConfig(
+                system_instruction=CIS_EXTRACTION_SYSTEM,
+                max_output_tokens=8192,
+            ),
+        )
+    except Exception as exc:
+        raise ValueError(format_api_error(exc)) from exc
+
+    raw = (response.text or "").strip()
 
     # Strip markdown fences if present
     if raw.startswith("```"):
@@ -64,12 +70,12 @@ async def extract_from_text(text: str) -> CisPayload:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Claude returned invalid JSON: {e}\n\nRaw: {raw[:500]}")
+        raise ValueError(f"Gemini returned invalid JSON: {e}\n\nRaw: {raw[:500]}") from e
 
     try:
         payload = CisPayload.model_validate(data)
     except ValidationError as e:
-        raise ValueError(f"CIS payload validation failed: {e}")
+        raise ValueError(f"CIS payload validation failed: {e}") from e
 
     # Filter out invalid types
     payload.objects = [o for o in payload.objects if o.type in VALID_TYPES]

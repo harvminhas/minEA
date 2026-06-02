@@ -43,8 +43,9 @@ class Settings(BaseSettings):
     firebase_credentials_path: str = "fb_svc_acct.json"
     firebase_service_account_json: str = ""
 
-    # Anthropic
-    anthropic_api_key: str = ""
+    # Google Gemini
+    google_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
 
     # Supabase
     supabase_url: str = ""

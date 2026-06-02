@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings, effective_cors_origins, API_ROOT
+from app.ai.gemini_client import is_configured, model_name
 from app.database import AsyncSessionLocal, check_db_connection, database_ssl_mode, engine
 from app.models import *  # noqa: F401, F403 — registers all models with Base
 from app.auth import init_firebase, firebase_credentials_status
@@ -21,6 +22,11 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     init_firebase()
+    logger.info(
+        "Gemini AI configured=%s model=%s",
+        is_configured(),
+        model_name(),
+    )
     try:
         async with AsyncSessionLocal() as db:
             await load_permission_cache(db)
@@ -96,4 +102,6 @@ async def health() -> dict:
         "database_ssl_verify": settings.database_ssl_verify,
         "debug": settings.debug,
         "vercel": os.getenv("VERCEL") == "1",
+        "gemini_configured": is_configured(),
+        "gemini_model": model_name(),
     }

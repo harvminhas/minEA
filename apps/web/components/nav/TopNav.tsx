@@ -11,10 +11,8 @@ import { useTenancy, primaryViewPath } from "@/lib/tenancy";
 import { useQuery } from "@tanstack/react-query";
 import { workspacesApi } from "@/lib/api-client";
 import { BuboMapWordmark } from "@/components/brand/BuboMapLogo";
-import {
-  ArchitectureInsightsPanel,
-  useInsightsBadgeCount,
-} from "@/components/insights/ArchitectureInsightsPanel";
+import { ArchitectureInsightsPanel } from "@/components/insights/ArchitectureInsightsPanel";
+import { useArchitectureInsights } from "@/lib/use-architecture-insights";
 
 export function TopNav() {
   const router = useRouter();
@@ -28,10 +26,7 @@ export function TopNav() {
   const wsRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
-  const { count: insightBadgeCount, criticalOnly: insightsCritical } = useInsightsBadgeCount(
-    orgSlug,
-    workspaceSlug
-  );
+  const insights = useArchitectureInsights(orgSlug ?? "", workspaceSlug ?? "");
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -175,14 +170,14 @@ export function TopNav() {
           className="relative p-2 text-white/40 hover:text-white/80 hover:bg-white/10 rounded-md transition-colors"
         >
           <Bell size={16} />
-          {insightBadgeCount > 0 && (
+          {insights.badgeCount > 0 && (
             <span
               className={cn(
                 "absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold flex items-center justify-center text-white",
-                insightsCritical ? "bg-red-500" : "bg-amber-500"
+                insights.criticalOnly ? "bg-red-500" : "bg-amber-500"
               )}
             >
-              {insightBadgeCount > 9 ? "9+" : insightBadgeCount}
+              {insights.badgeCount > 9 ? "9+" : insights.badgeCount}
             </span>
           )}
         </button>
@@ -238,7 +233,16 @@ export function TopNav() {
       </div>
 
       {workspaceSlug && (
-        <ArchitectureInsightsPanel open={insightsOpen} onClose={() => setInsightsOpen(false)} />
+        <ArchitectureInsightsPanel
+          open={insightsOpen}
+          onClose={() => setInsightsOpen(false)}
+          insights={insights.insights}
+          count={insights.count}
+          analysedAt={insights.analysedAt}
+          isLoading={insights.isLoading}
+          isGenerating={insights.isGenerating}
+          onRefresh={insights.refresh}
+        />
       )}
     </header>
   );

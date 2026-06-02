@@ -55,10 +55,22 @@ export function ChatPanel() {
         }
       );
 
+      if (!response.ok) {
+        let detail = "AI chat request failed.";
+        try {
+          const errBody = await response.json();
+          if (typeof errBody.detail === "string") detail = errBody.detail;
+        } catch {
+          detail = (await response.text()) || detail;
+        }
+        throw new Error(detail);
+      }
+
       if (!response.body) throw new Error("No response body");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let streamError: string | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -80,14 +92,22 @@ export function ChatPanel() {
                   m.id === assistantId ? { ...m, content: m.content + parsed.text } : m
                 )
               );
+            } else if (parsed.type === "error" && typeof parsed.message === "string") {
+              streamError = parsed.message;
             }
           } catch {}
         }
       }
+
+      if (streamError) throw new Error(streamError);
     } catch (err) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Sorry, something went wrong. Please try again.";
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId ? { ...m, content: "Sorry, something went wrong. Please try again." } : m
+          m.id === assistantId ? { ...m, content: message } : m
         )
       );
     } finally {
