@@ -16,6 +16,7 @@ import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
+import { invalidateSystemCaches } from "@/lib/system-capability-utils";
 import { systemStatusLabel, SYSTEM_STATUS_STYLE } from "@/lib/system-utils";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { cn } from "@/lib/utils";
@@ -98,8 +99,9 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
     },
   });
 
-  const refreshObject = () => {
-    refetch();
+  const refreshObject = async () => {
+    await invalidateSystemCaches(queryClient, orgSlug, workspaceSlug, objectId);
+    await refetch();
     void queryClient.invalidateQueries({
       queryKey: ["object-history", orgSlug, workspaceSlug, objectId],
     });
@@ -380,7 +382,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
           onClose={() => setShowEditForm(false)}
           onSuccess={() => {
             setShowEditForm(false);
-            refreshObject();
+            void refreshObject();
           }}
         />
       )}

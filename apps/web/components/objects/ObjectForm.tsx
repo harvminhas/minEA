@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import {
   type ApplicationProperties,
@@ -13,7 +13,7 @@ import {
   OBJECT_TYPE_LABELS,
 } from "@minea/types";
 import { useTenancy } from "@/lib/tenancy";
-import { objectsApi } from "@/lib/api-client";
+import { capabilityMapApi, objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import {
   filterEnterprisePlatforms,
@@ -22,6 +22,8 @@ import {
   syncSystemPlatformRelation,
 } from "@/lib/platform-relationship-utils";
 import {
+  flattenMapCapabilities,
+  invalidateSystemCaches,
   loadSystemCapabilityIds,
   syncSystemCapabilityRelations,
 } from "@/lib/system-capability-utils";
@@ -132,6 +134,7 @@ const STATUSES = ["planned", "active", "retiring", "retired", "deprecated", "und
 export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
   const isEdit = !!initialValues;
   const isApplication = objectType === "application";
@@ -174,31 +177,37 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
     [platformsData]
   );
 
-  const { data: capabilitiesData } = useQuery({
-    queryKey: ["objects", orgSlug, workspaceSlug, "capability"],
+  const { data: capabilityMapData } = useQuery({
+    queryKey: ["capability-map", orgSlug, workspaceSlug],
     queryFn: async () => {
       const token = await getToken();
-      return objectsApi.list(orgSlug, workspaceSlug, { type: "capability" }, token!);
+      return capabilityMapApi.get(orgSlug, workspaceSlug, token!);
     },
     enabled: enabled && isApplication,
   });
 
-  const allCapabilities = capabilitiesData?.items ?? [];
+  const mapCapabilityRows = useMemo(
+    () => (capabilityMapData ? flattenMapCapabilities(capabilityMapData) : []),
+    [capabilityMapData]
+  );
 
-  const filteredCapabilities = useMemo(() => {
+  const filteredMapCapabilities = useMemo(() => {
     const query = capSearch.trim().toLowerCase();
-    if (!query) return allCapabilities;
-    return allCapabilities.filter((c) => c.name.toLowerCase().includes(query));
-  }, [allCapabilities, capSearch]);
+    if (!query) return mapCapabilityRows;
+    return mapCapabilityRows.filter(
+      (row) =>
+        row.capability.name.toLowerCase().includes(query) ||
+        row.domainName.toLowerCase().includes(query)
+    );
+  }, [mapCapabilityRows, capSearch]);
 
   const groupedCapabilities = useMemo(() => {
-    const groups: Record<string, MinEAObject[]> = {};
-    for (const cap of filteredCapabilities) {
-      const group = cap.owner || cap.tags?.[0] || "Other";
-      (groups[group] ??= []).push(cap);
+    const groups: Record<string, typeof mapCapabilityRows> = {};
+    for (const row of filteredMapCapabilities) {
+      (groups[row.domainName] ??= []).push(row);
     }
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
-  }, [filteredCapabilities]);
+  }, [filteredMapCapabilities]);
 
   const toggleCapability = (id: string, checked: boolean) =>
     setSelectedCapabilityIds((prev) =>
@@ -305,7 +314,12 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       }
       return saved;
     },
-    onSuccess,
+    onSuccess: async (saved) => {
+      if (isApplication) {
+        await invalidateSystemCaches(queryClient, orgSlug, workspaceSlug, saved.id);
+      }
+      onSuccess();
+    },
   });
 
   return (
@@ -367,7 +381,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
               )}
             </div>
             <p className="text-[11px] text-gray-400 mb-2">
-              Business capabilities this system supports on the capability map.
+              Pick L2 capabilities from your capability map (e.g. Products → Success management). These drive the domain mapping matrix.
             </p>
             <div className="relative mb-2">
               <Search
@@ -381,9 +395,9 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
                 className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
-            {allCapabilities.length === 0 ? (
+            {mapCapabilityRows.length === 0 ? (
               <p className="text-xs text-gray-400 py-2">
-                No capabilities in the repository yet. Add some under Business first.
+                No capabilities on the capability map yet. Add domains and L2 capabilities under Strategy → Capability map first.
               </p>
             ) : (
               <div className="border border-gray-200 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
@@ -397,21 +411,25 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
                           {group}
                         </span>
                       </div>
-                      {items.map((cap) => {
-                        const maturity = cap.properties?.maturity as string | undefined;
+                      {items.map(({ capability }) => {
+                        const maturity = capability.maturity;
                         return (
                           <label
-                            key={cap.id}
+                            key={capability.id}
                             className="flex items-center justify-between px-3 py-2.5 hover:bg-indigo-50/50 cursor-pointer border-t border-gray-100"
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
                               <input
                                 type="checkbox"
-                                checked={selectedCapabilityIds.includes(cap.id)}
-                                onChange={(e) => toggleCapability(cap.id, e.target.checked)}
+                                checked={selectedCapabilityIds.includes(capability.id)}
+                                onChange={(e) =>
+                                  toggleCapability(capability.id, e.target.checked)
+                                }
                                 className="accent-indigo-600 flex-shrink-0"
                               />
-                              <span className="text-sm text-gray-800 truncate">{cap.name}</span>
+                              <span className="text-sm text-gray-800 truncate">
+                                {capability.name}
+                              </span>
                             </div>
                             {maturity && (
                               <span className="text-xs text-gray-400 flex-shrink-0 ml-2">

@@ -329,29 +329,75 @@ async def load_domain_detail(
     rel_system_ids: set[str] = set()
     mapped_cap_ids: set[str] = set()
 
-    if cap_ids:
-        rel_result = await db.execute(
-            select(Relationship).where(
-                Relationship.workspace_id == workspace_id,
-                Relationship.org_id == org_id,
-                Relationship.type == "supported_by",
-                Relationship.from_object_id.in_(cap_ids),
-                Relationship.to_type == "application",
+    if capabilities:
+        name_to_domain_cap_id = {
+            cap.name.strip().lower(): str(cap.id) for cap in capabilities
+        }
+        cap_id_set = {str(cap.id) for cap in capabilities}
+        alias_cap_ids: list[UUID] = []
+
+        if name_to_domain_cap_id:
+            alias_result = await db.execute(
+                select(MinEAObject.id).where(
+                    MinEAObject.workspace_id == workspace_id,
+                    MinEAObject.org_id == org_id,
+                    MinEAObject.type == "capability",
+                    func.lower(MinEAObject.name).in_(list(name_to_domain_cap_id.keys())),
+                    MinEAObject.id.notin_(cap_ids),
+                )
             )
-        )
-        for rel in rel_result.scalars().all():
-            fitness = _normalize_fitness(rel.attributes.get("fitness"))
-            system_id = str(rel.to_object_id)
-            rel_system_ids.add(system_id)
-            mapped_cap_ids.add(str(rel.from_object_id))
-            mappings.append(
-                {
-                    "capability_id": str(rel.from_object_id),
-                    "system_id": system_id,
-                    "relationship_id": str(rel.id),
-                    "fitness": fitness,
+            alias_cap_ids = list(alias_result.scalars().all())
+
+        from_ids = list(cap_ids) + alias_cap_ids
+        if from_ids:
+            rel_result = await db.execute(
+                select(Relationship).where(
+                    Relationship.workspace_id == workspace_id,
+                    Relationship.org_id == org_id,
+                    Relationship.type == "supported_by",
+                    Relationship.from_object_id.in_(from_ids),
+                    Relationship.to_type == "application",
+                )
+            )
+            seen_pairs: set[tuple[str, str]] = set()
+            alias_name_by_id: dict[UUID, str] = {}
+            if alias_cap_ids:
+                alias_names_result = await db.execute(
+                    select(MinEAObject.id, MinEAObject.name).where(
+                        MinEAObject.id.in_(alias_cap_ids)
+                    )
+                )
+                alias_name_by_id = {
+                    row[0]: row[1] for row in alias_names_result.all()
                 }
-            )
+
+            for rel in rel_result.scalars().all():
+                from_id = str(rel.from_object_id)
+                if from_id in cap_id_set:
+                    canonical_cap_id = from_id
+                else:
+                    alias_name = alias_name_by_id.get(rel.from_object_id, "")
+                    canonical_cap_id = name_to_domain_cap_id.get(alias_name.strip().lower())
+                    if not canonical_cap_id:
+                        continue
+
+                pair = (canonical_cap_id, str(rel.to_object_id))
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+
+                fitness = _normalize_fitness(rel.attributes.get("fitness"))
+                system_id = str(rel.to_object_id)
+                rel_system_ids.add(system_id)
+                mapped_cap_ids.add(canonical_cap_id)
+                mappings.append(
+                    {
+                        "capability_id": canonical_cap_id,
+                        "system_id": system_id,
+                        "relationship_id": str(rel.id),
+                        "fitness": fitness,
+                    }
+                )
 
     ordered_system_ids: list[str] = []
     seen: set[str] = set()
