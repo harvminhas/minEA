@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Search } from "lucide-react";
 import {
   type ApplicationProperties,
   type ObjectType,
@@ -20,6 +21,10 @@ import {
   platformRefFromObject,
   syncSystemPlatformRelation,
 } from "@/lib/platform-relationship-utils";
+import {
+  loadSystemCapabilityIds,
+  syncSystemCapabilityRelations,
+} from "@/lib/system-capability-utils";
 import { FormDrawer, FormField, FormSection, formFieldClass } from "@/components/ui/FormDrawer";
 import { AiRoleField } from "@/components/ui/AiRoleField";
 import { aiRoleForProperties, aiRoleFromProperties, SYSTEM_OBJECT_TYPES } from "@/lib/ai-role-utils";
@@ -133,6 +138,8 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
 
   const initAppProps = (initialValues?.properties ?? {}) as ApplicationProperties;
   const [platformId, setPlatformId] = useState(initAppProps.platform?.platform_id ?? "");
+  const [selectedCapabilityIds, setSelectedCapabilityIds] = useState<string[]>([]);
+  const [capSearch, setCapSearch] = useState("");
 
   const [name, setName] = useState(initialValues?.name ?? "");
   const [description, setDescription] = useState(initialValues?.description ?? "");
@@ -166,6 +173,56 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
     () => (platformsData ?? []).map((p) => ({ value: p.id, label: p.name })),
     [platformsData]
   );
+
+  const { data: capabilitiesData } = useQuery({
+    queryKey: ["objects", orgSlug, workspaceSlug, "capability"],
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "capability" }, token!);
+    },
+    enabled: enabled && isApplication,
+  });
+
+  const allCapabilities = capabilitiesData?.items ?? [];
+
+  const filteredCapabilities = useMemo(() => {
+    const query = capSearch.trim().toLowerCase();
+    if (!query) return allCapabilities;
+    return allCapabilities.filter((c) => c.name.toLowerCase().includes(query));
+  }, [allCapabilities, capSearch]);
+
+  const groupedCapabilities = useMemo(() => {
+    const groups: Record<string, MinEAObject[]> = {};
+    for (const cap of filteredCapabilities) {
+      const group = cap.owner || cap.tags?.[0] || "Other";
+      (groups[group] ??= []).push(cap);
+    }
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [filteredCapabilities]);
+
+  const toggleCapability = (id: string, checked: boolean) =>
+    setSelectedCapabilityIds((prev) =>
+      checked ? [...prev, id] : prev.filter((x) => x !== id)
+    );
+
+  useEffect(() => {
+    if (!isEdit || !isApplication || !initialValues) return;
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      const ids = await loadSystemCapabilityIds(
+        orgSlug,
+        workspaceSlug,
+        initialValues.id,
+        token
+      );
+      if (!cancelled) setSelectedCapabilityIds(ids);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, isApplication, initialValues, orgSlug, workspaceSlug, getToken]);
 
   useEffect(() => {
     if (!isEdit || !isApplication || !initialValues || platformId) return;
@@ -229,13 +286,22 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
         );
       }
       if (isApplication) {
-        await syncSystemPlatformRelation(
-          orgSlug,
-          workspaceSlug,
-          saved.id,
-          selectedPlatform,
-          token!
-        );
+        await Promise.all([
+          syncSystemPlatformRelation(
+            orgSlug,
+            workspaceSlug,
+            saved.id,
+            selectedPlatform,
+            token!
+          ),
+          syncSystemCapabilityRelations(
+            orgSlug,
+            workspaceSlug,
+            saved.id,
+            selectedCapabilityIds,
+            token!
+          ),
+        ]);
       }
       return saved;
     },
@@ -291,23 +357,95 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       </FormField>
 
       {isApplication && (
-        <FormField label="Built on platform">
-          <select
-            value={platformId}
-            onChange={(e) => setPlatformId(e.target.value)}
-            className={formFieldClass}
-          >
-            <option value="">— None —</option>
-            {platformOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <p className="text-[11px] text-gray-400 mt-1">
-            Link this system to an enterprise platform (e.g. Salesforce, ServiceNow).
-          </p>
-        </FormField>
+        <>
+          <FormField label="Capabilities supported">
+            <div className="flex items-baseline justify-between mb-1">
+              {selectedCapabilityIds.length > 0 && (
+                <span className="text-xs font-medium text-indigo-600">
+                  {selectedCapabilityIds.length} selected
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-gray-400 mb-2">
+              Business capabilities this system supports on the capability map.
+            </p>
+            <div className="relative mb-2">
+              <Search
+                size={13}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
+              <input
+                value={capSearch}
+                onChange={(e) => setCapSearch(e.target.value)}
+                placeholder="Search capabilities…"
+                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            {allCapabilities.length === 0 ? (
+              <p className="text-xs text-gray-400 py-2">
+                No capabilities in the repository yet. Add some under Business first.
+              </p>
+            ) : (
+              <div className="border border-gray-200 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
+                {groupedCapabilities.length === 0 ? (
+                  <p className="text-xs text-gray-400 px-3 py-3">No results for &ldquo;{capSearch}&rdquo;</p>
+                ) : (
+                  groupedCapabilities.map(([group, items]) => (
+                    <div key={group}>
+                      <div className="bg-gray-50 px-3 py-1.5 sticky top-0">
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                          {group}
+                        </span>
+                      </div>
+                      {items.map((cap) => {
+                        const maturity = cap.properties?.maturity as string | undefined;
+                        return (
+                          <label
+                            key={cap.id}
+                            className="flex items-center justify-between px-3 py-2.5 hover:bg-indigo-50/50 cursor-pointer border-t border-gray-100"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={selectedCapabilityIds.includes(cap.id)}
+                                onChange={(e) => toggleCapability(cap.id, e.target.checked)}
+                                className="accent-indigo-600 flex-shrink-0"
+                              />
+                              <span className="text-sm text-gray-800 truncate">{cap.name}</span>
+                            </div>
+                            {maturity && (
+                              <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
+                                maturity {maturity}
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </FormField>
+
+          <FormField label="Built on platform">
+            <select
+              value={platformId}
+              onChange={(e) => setPlatformId(e.target.value)}
+              className={formFieldClass}
+            >
+              <option value="">— None —</option>
+              {platformOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Link this system to an enterprise platform (e.g. Salesforce, ServiceNow).
+            </p>
+          </FormField>
+        </>
       )}
 
       {(typeFields.length > 0 || isSystemType) && (

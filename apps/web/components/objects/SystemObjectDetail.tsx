@@ -108,6 +108,27 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
 
   const allRels = [...(outRels ?? []), ...(inRels ?? [])];
 
+  const supportedCapabilityIds = (inRels ?? [])
+    .filter(
+      (r) =>
+        r.type === "supported_by" &&
+        r.from_type === "capability" &&
+        r.to_type === "application"
+    )
+    .map((r) => r.from_object_id);
+
+  const { data: capabilitiesData } = useQuery({
+    queryKey: ["objects", orgSlug, workspaceSlug, "capability", supportedCapabilityIds.join(",")],
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "capability" }, token!);
+    },
+    enabled: !!object && supportedCapabilityIds.length > 0,
+  });
+
+  const linkedCapabilities =
+    capabilitiesData?.items.filter((c) => supportedCapabilityIds.includes(c.id)) ?? [];
+
   if (isLoading || !object) {
     return (
       <DetailPanel
@@ -245,6 +266,27 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-gray-500">Annual cost</span>
                     <span className="text-gray-900">{formatCurrency(Number(props.annual_cost))}</span>
+                  </div>
+                )}
+              </div>
+            </DetailSection>
+
+            <DetailSection title={`Capabilities (${linkedCapabilities.length})`}>
+              <div className="px-6 pb-4">
+                {linkedCapabilities.length === 0 ? (
+                  <p className="text-sm text-gray-400">
+                    No capabilities linked. Edit this system to select capabilities it supports.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {linkedCapabilities.map((cap) => (
+                      <span
+                        key={cap.id}
+                        className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full"
+                      >
+                        {cap.name}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
