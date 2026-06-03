@@ -552,6 +552,7 @@ export type RelationshipType =
   | "subscribes"
   | "stores_in"
   | "runs_on"
+  | "built_on"
   | "affects"
   | "resolves"
   | "replaces"
