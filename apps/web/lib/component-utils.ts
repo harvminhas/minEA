@@ -4,6 +4,7 @@ import type {
   ComponentSystemRef,
   MinEAObject,
   ObjectStatus,
+  PlatformRef,
 } from "@minea/types";
 
 export const APPLICATION_LAYER_COLOR = "#6366f1";
@@ -34,6 +35,7 @@ export function buildComponentDraft(params: {
   techStack: string;
   systems: ComponentSystemRef[];
   runtime: ComponentRuntimeRef | null;
+  platform?: PlatformRef | null;
   status: ObjectStatus;
   owner?: string;
   tags?: string[];
@@ -44,6 +46,7 @@ export function buildComponentDraft(params: {
     tech_stack: params.techStack.trim() || undefined,
     systems: params.systems,
     runtime: params.runtime,
+    platform: params.platform,
     node_layout: params.nodeLayout,
   };
 

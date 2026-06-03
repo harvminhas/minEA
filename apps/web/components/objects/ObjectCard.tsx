@@ -1,6 +1,6 @@
 "use client";
 
-import { type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
+import { type ApplicationProperties, type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
 import { Clock } from "lucide-react";
 import {
   formatUpdatedAgo,
@@ -38,6 +38,8 @@ function SystemCard({
   const status = object.status ?? "planned";
   const capCount = object.capability_count ?? 0;
   const props = object.properties as Record<string, unknown>;
+  const appProps = object.properties as ApplicationProperties;
+  const platformName = appProps.platform?.platform_name ?? null;
   const vendor = props.vendor ? String(props.vendor) : null;
   const category = props.category ? String(props.category) : null;
   const annualCost = props.annual_cost != null && Number(props.annual_cost) > 0
@@ -79,6 +81,7 @@ function SystemCard({
       {/* Key-value rows */}
       <div className="space-y-1.5 text-xs">
         {category && <PropertyRow label="Category" value={category} />}
+        {platformName && <PropertyRow label="Platform" value={platformName} />}
         {annualCost != null && (
           <PropertyRow label="Annual cost" value={formatCurrency(annualCost)} />
         )}

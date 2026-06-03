@@ -195,11 +195,18 @@ export interface CapabilityProperties {
   order_index?: number;
 }
 
+export interface PlatformRef {
+  platform_id: string;
+  platform_name: string;
+}
+
 export interface ApplicationProperties {
   vendor?: string;
   category?: string;
   hosting_model?: "cloud" | "on_premise" | "hybrid" | "saas";
   annual_cost?: number;
+  /** Enterprise platform this system is built on (synced via runs_on relationship). */
+  platform?: PlatformRef | null;
   /** How this entity relates to AI workloads. Omitted or "none" = not AI-related. */
   ai_role?: AiRole;
 }
@@ -334,6 +341,8 @@ export interface ComponentProperties {
   tech_stack?: string;
   systems?: ComponentSystemRef[];
   runtime?: ComponentRuntimeRef | null;
+  /** Enterprise platform this component is built on (synced via built_on relationship). */
+  platform?: PlatformRef | null;
   /** How this entity relates to AI workloads. Omitted or "none" = not AI-related. */
   ai_role?: AiRole;
   /** Persisted node positions for the component architecture canvas. */

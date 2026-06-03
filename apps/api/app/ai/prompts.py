@@ -43,6 +43,7 @@ Valid relationship types and allowed triples:
   connects: integration_flow → api | event
   routes: message_broker → event
   runs_on: application | data_store | message_broker → cloud_service
+  built_on: component → cloud_service (enterprise platform)
   uses_model: agent → model
   can_call: agent → tool
   supports: agent → capability

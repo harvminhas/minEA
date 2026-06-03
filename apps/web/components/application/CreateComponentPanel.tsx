@@ -16,6 +16,14 @@ import {
   COMPONENT_STATUSES,
   COMPONENT_TYPES,
 } from "@/lib/component-utils";
+import {
+  filterEnterprisePlatforms,
+  loadComponentPlatformRef,
+  platformRefFromObject,
+  syncComponentPlatformRelation,
+} from "@/lib/platform-relationship-utils";
+import { isEnterprisePlatform } from "@/lib/platform-utils";
+import type { CloudServiceProperties } from "@minea/types";
 import { aiRoleForProperties, aiRoleFromProperties } from "@/lib/ai-role-utils";
 import { AiRoleField } from "@/components/ui/AiRoleField";
 import type {
@@ -25,6 +33,7 @@ import type {
   ComponentSystemRef,
   MinEAObject,
   ObjectStatus,
+  PlatformRef,
 } from "@minea/types";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +54,7 @@ function initFromComponent(component?: MinEAObject) {
     tags: (component?.tags ?? []).join(", "),
     systems: props.systems ?? [],
     runtimeKey: runtime ? `${runtime.runtime_kind}:${runtime.runtime_id}` : "",
+    platformId: props.platform?.platform_id ?? "",
     owner: component?.owner ?? "",
     status: (component?.status ?? "planned") as ObjectStatus,
     draftLayout: props.node_layout ?? {},
@@ -178,6 +188,7 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
   const [tags, setTags] = useState(init.tags);
   const [systems, setSystems] = useState<ComponentSystemRef[]>(init.systems);
   const [runtimeKey, setRuntimeKey] = useState(init.runtimeKey);
+  const [platformId, setPlatformId] = useState(init.platformId);
   const [owner, setOwner] = useState(init.owner);
   const [status, setStatus] = useState<ObjectStatus>(init.status);
   const [error, setError] = useState<string | null>(null);
@@ -207,18 +218,57 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
     })),
   });
 
+  const { data: platformOptions = [] } = useQuery({
+    queryKey: ["objects", orgSlug, workspaceSlug, "cloud_service", "platforms"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await objectsApi.list(orgSlug, workspaceSlug, { type: "cloud_service" }, token!);
+      return filterEnterprisePlatforms(res.items);
+    },
+    enabled,
+  });
+
+  useEffect(() => {
+    if (!isEdit || !initialValues || platformId) return;
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      const ref = await loadComponentPlatformRef(orgSlug, workspaceSlug, initialValues.id, token);
+      if (!cancelled && ref) setPlatformId(ref.platform_id);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, initialValues, orgSlug, workspaceSlug, getToken, platformId]);
+
   const runtimeOptions = useMemo(() => {
     const kinds = ["tool", "model", "cloud_service"] as const;
     return kinds.flatMap((kind, i) =>
-      (runtimeQueries[i]?.data?.items ?? []).map((item) => ({
-        value: `${kind}:${item.id}`,
-        label: item.name,
-        kind,
-        id: item.id,
-        name: item.name,
-      }))
+      (runtimeQueries[i]?.data?.items ?? [])
+        .filter(
+          (item) =>
+            kind !== "cloud_service" ||
+            !isEnterprisePlatform((item.properties ?? {}) as CloudServiceProperties)
+        )
+        .map((item) => ({
+          value: `${kind}:${item.id}`,
+          label: item.name,
+          kind,
+          id: item.id,
+          name: item.name,
+        }))
     );
   }, [runtimeQueries]);
+
+  const selectedPlatform: PlatformRef | null = useMemo(() => {
+    if (!platformId) return null;
+    const match = platformOptions.find((p) => p.id === platformId);
+    if (match) return platformRefFromObject(match);
+    const stored = ((initialValues?.properties ?? {}) as ComponentProperties).platform;
+    if (stored?.platform_id === platformId) return stored;
+    return { platform_id: platformId, platform_name: "" };
+  }, [platformId, platformOptions, initialValues]);
 
   const selectedRuntime: ComponentRuntimeRef | null = useMemo(() => {
     if (!runtimeKey) return null;
@@ -245,12 +295,13 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
         techStack,
         systems,
         runtime: selectedRuntime,
+        platform: selectedPlatform,
         status,
         owner: owner.trim() || undefined,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         nodeLayout: Object.keys(draftLayout).length > 0 ? draftLayout : undefined,
       }),
-    [name, componentType, techStack, systems, selectedRuntime, status, owner, tags, draftLayout]
+    [name, componentType, techStack, systems, selectedRuntime, selectedPlatform, status, owner, tags, draftLayout]
   );
 
   const canSubmit = name.trim().length > 0 && systems.length > 0 && !!componentType;
@@ -267,6 +318,7 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
         ai_role: aiRoleForProperties(aiRole),
         systems,
         runtime: selectedRuntime,
+        platform: selectedPlatform,
         node_layout:
           Object.keys(draftLayout).length > 0 ? draftLayout : existingLayout,
       };
@@ -294,6 +346,13 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
           selectedRuntime,
           token
         );
+        await syncComponentPlatformRelation(
+          orgSlug,
+          workspaceSlug,
+          initialValues.id,
+          selectedPlatform,
+          token
+        );
 
         return component;
       }
@@ -318,6 +377,13 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
         component.id,
         systems,
         selectedRuntime,
+        token
+      );
+      await syncComponentPlatformRelation(
+        orgSlug,
+        workspaceSlug,
+        component.id,
+        selectedPlatform,
         token
       );
 
@@ -410,6 +476,23 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
                     placeholder="+ Register runtime"
                     allowEmpty
                   />
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Compute runtime (tool, model, or cloud service).
+                  </p>
+                </div>
+
+                <div>
+                  <FieldLabel>Built on platform</FieldLabel>
+                  <SelectField
+                    value={platformId}
+                    onChange={setPlatformId}
+                    options={platformOptions.map((p) => ({ value: p.id, label: p.name }))}
+                    placeholder="— None —"
+                    allowEmpty
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Enterprise platform this component is built on (e.g. Salesforce, ServiceNow).
+                  </p>
                 </div>
               </div>
             </section>

@@ -216,6 +216,9 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
                 {props.runtime && (
                   <DetailRow label="Runs on" value={props.runtime.runtime_name} />
                 )}
+                {props.platform && (
+                  <DetailRow label="Built on platform" value={props.platform.platform_name} />
+                )}
                 {component.tags.length > 0 && (
                   <DetailRow label="Tags" value={component.tags.join(", ")} />
                 )}
@@ -226,6 +229,7 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
               <ComponentDiagramPreview component={component} onExpand={() => setShowChart(true)} />
               <p className="text-xs text-gray-400 mt-2">
                 {systems.length} system{systems.length !== 1 ? "s" : ""}
+                {props.platform ? ` · ${props.platform.platform_name}` : ""}
                 {props.runtime ? ` · ${props.runtime.runtime_name}` : ""}
                 {typeLabel ? ` · ${typeLabel}` : ""}
               </p>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit2, Layers, Trash2 } from "lucide-react";
+import { Edit2, Layers, Plus, Trash2 } from "lucide-react";
 import type { CloudServiceProperties, MinEAObject } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
@@ -18,6 +18,8 @@ import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
 import type { HistoryEntry } from "@/components/shared/EntityHistory";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
+import { PlatformLinkDialog } from "@/components/infrastructure/PlatformLinkDialog";
+import { COMPONENT_PLATFORM_REL, SYSTEM_PLATFORM_REL } from "@/lib/platform-relationship-utils";
 import {
   formatPlatformSubtitle,
   PLATFORM_CRITICALITY_LABEL,
@@ -48,6 +50,7 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
   const [activeTab, setActiveTab] = useState<"details" | "history">("details");
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
 
   const props = (platform.properties ?? {}) as CloudServiceProperties;
   const typeLabel = platformTypeLabel(props);
@@ -77,20 +80,29 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
     onUpdate();
   };
 
-  const { data: systemsData } = useQuery({
-    queryKey: ["platform-systems", orgSlug, workspaceSlug, platform.id],
+  const { data: linkedData, refetch: refetchLinked } = useQuery({
+    queryKey: ["platform-linked", orgSlug, workspaceSlug, platform.id],
     queryFn: async () => {
       const token = await getToken();
-      const [rels, apps] = await Promise.all([
+      const [rels, apps, components] = await Promise.all([
         relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: platform.id }, token!),
         objectsApi.list(orgSlug, workspaceSlug, { type: "application" }, token!),
+        objectsApi.list(orgSlug, workspaceSlug, { type: "component" }, token!),
       ]);
-      const relIds = new Set(
+      const systemIds = new Set(
         rels
-          .filter((r) => r.type === "runs_on" && r.from_type === "application")
+          .filter((r) => r.type === SYSTEM_PLATFORM_REL && r.from_type === "application")
           .map((r) => r.from_object_id)
       );
-      return apps.items.filter((item) => relIds.has(item.id));
+      const componentIds = new Set(
+        rels
+          .filter((r) => r.type === COMPONENT_PLATFORM_REL && r.from_type === "component")
+          .map((r) => r.from_object_id)
+      );
+      return {
+        systems: apps.items.filter((item) => systemIds.has(item.id)),
+        components: components.items.filter((item) => componentIds.has(item.id)),
+      };
     },
     enabled: enabled && activeTab === "details",
   });
@@ -106,7 +118,8 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
     },
   });
 
-  const systems = systemsData ?? [];
+  const systems = linkedData?.systems ?? [];
+  const components = linkedData?.components ?? [];
 
   return (
     <>
@@ -238,17 +251,54 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
               )}
             </DetailSection>
 
-            <DetailSection title="Systems on platform">
-              {systems.length === 0 ? (
-                <p className="text-sm text-gray-400 px-6 pb-4">No systems reference this platform yet.</p>
+            <DetailSection
+              title={`Built on this platform (${systems.length + components.length})`}
+              action={
+                <button
+                  type="button"
+                  onClick={() => setShowLinkDialog(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 hover:text-slate-800"
+                >
+                  <Plus size={12} />
+                  Link
+                </button>
+              }
+            >
+              {systems.length === 0 && components.length === 0 ? (
+                <p className="text-sm text-gray-400 px-6 pb-4">
+                  No systems or components linked yet. Link from here or pick a platform when editing a system or component.
+                </p>
               ) : (
-                <ul className="px-6 pb-4 space-y-1.5">
-                  {systems.map((system) => (
-                    <li key={system.id} className="text-sm text-gray-700">
-                      {system.name}
-                    </li>
-                  ))}
-                </ul>
+                <div className="px-6 pb-4 space-y-3">
+                  {systems.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">
+                        Systems
+                      </p>
+                      <ul className="space-y-1.5">
+                        {systems.map((system) => (
+                          <li key={system.id} className="text-sm text-gray-700">
+                            {system.name}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {components.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">
+                        Components
+                      </p>
+                      <ul className="space-y-1.5">
+                        {components.map((component) => (
+                          <li key={component.id} className="text-sm text-gray-700">
+                            {component.name}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               )}
             </DetailSection>
           </>
@@ -272,6 +322,17 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
           onSuccess={() => {
             setShowEditForm(false);
             refreshPlatform();
+          }}
+        />
+      )}
+
+      {showLinkDialog && (
+        <PlatformLinkDialog
+          platform={platform}
+          onClose={() => setShowLinkDialog(false)}
+          onLinked={() => {
+            void refetchLinked();
+            onUpdate();
           }}
         />
       )}

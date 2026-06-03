@@ -26,6 +26,7 @@ export const ALLOWED_TRIPLES_FRONTEND: [string, string, string][] = [
   ["runs_on", "component", "tool"],
   ["runs_on", "component", "model"],
   ["runs_on", "component", "cloud_service"],
+  ["built_on", "component", "cloud_service"],
   ["runs_on", "application", "cloud_service"],
   ["runs_on", "data_store", "cloud_service"],
   ["runs_on", "message_broker", "cloud_service"],

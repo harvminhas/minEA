@@ -19,7 +19,7 @@ import { RelationshipForm } from "@/components/objects/RelationshipForm";
 import { systemStatusLabel, SYSTEM_STATUS_STYLE } from "@/lib/system-utils";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { cn } from "@/lib/utils";
-import { OBJECT_TYPE_LABELS } from "@minea/types";
+import { type ApplicationProperties, OBJECT_TYPE_LABELS } from "@minea/types";
 
 interface Props {
   objectId: string;
@@ -125,8 +125,14 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   }
 
   const props = object.properties as Record<string, unknown>;
+  const appProps = object.properties as ApplicationProperties;
+  const platformName = appProps.platform?.platform_name;
   const status = object.status ?? "planned";
   const layerLabel = OBJECT_TYPE_LABELS[object.type] ?? object.type;
+
+  const platformFromRel = (outRels ?? []).find(
+    (r) => r.type === "runs_on" && r.from_type === "application" && r.to_type === "cloud_service"
+  );
 
   return (
     <>
@@ -221,6 +227,14 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
                     {systemStatusLabel(status)}
                   </span>
                 </div>
+                {(platformName || platformFromRel) && (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-500">Built on platform</span>
+                    <span className="text-gray-900 font-medium">
+                      {platformName || "Linked platform"}
+                    </span>
+                  </div>
+                )}
                 {props.vendor != null && props.vendor !== "" && (
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-gray-500">Vendor</span>

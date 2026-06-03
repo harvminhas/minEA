@@ -1,11 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { useMutation } from "@tanstack/react-query";
-import { type ObjectType, type MinEAObject, type ObjectUpdate, OBJECT_TYPE_LABELS } from "@minea/types";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  type ApplicationProperties,
+  type ObjectType,
+  type MinEAObject,
+  type ObjectUpdate,
+  type PlatformRef,
+  OBJECT_TYPE_LABELS,
+} from "@minea/types";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
+import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import {
+  filterEnterprisePlatforms,
+  loadSystemPlatformRef,
+  platformRefFromObject,
+  syncSystemPlatformRelation,
+} from "@/lib/platform-relationship-utils";
 import { FormDrawer, FormField, FormSection, formFieldClass } from "@/components/ui/FormDrawer";
 import { AiRoleField } from "@/components/ui/AiRoleField";
 import { aiRoleForProperties, aiRoleFromProperties, SYSTEM_OBJECT_TYPES } from "@/lib/ai-role-utils";
@@ -113,7 +127,12 @@ const STATUSES = ["planned", "active", "retiring", "retired", "deprecated", "und
 export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const enabled = useAuthQueryEnabled();
   const isEdit = !!initialValues;
+  const isApplication = objectType === "application";
+
+  const initAppProps = (initialValues?.properties ?? {}) as ApplicationProperties;
+  const [platformId, setPlatformId] = useState(initAppProps.platform?.platform_id ?? "");
 
   const [name, setName] = useState(initialValues?.name ?? "");
   const [description, setDescription] = useState(initialValues?.description ?? "");
@@ -133,6 +152,44 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
   const typeLabel = OBJECT_TYPE_LABELS[objectType] ?? objectType;
   const isSystemType = SYSTEM_OBJECT_TYPES.has(objectType);
 
+  const { data: platformsData } = useQuery({
+    queryKey: ["objects", orgSlug, workspaceSlug, "cloud_service", "platforms"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await objectsApi.list(orgSlug, workspaceSlug, { type: "cloud_service" }, token!);
+      return filterEnterprisePlatforms(res.items);
+    },
+    enabled: enabled && isApplication,
+  });
+
+  const platformOptions = useMemo(
+    () => (platformsData ?? []).map((p) => ({ value: p.id, label: p.name })),
+    [platformsData]
+  );
+
+  useEffect(() => {
+    if (!isEdit || !isApplication || !initialValues || platformId) return;
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      const ref = await loadSystemPlatformRef(orgSlug, workspaceSlug, initialValues.id, token);
+      if (!cancelled && ref) setPlatformId(ref.platform_id);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, isApplication, initialValues, orgSlug, workspaceSlug, getToken, platformId]);
+
+  const selectedPlatform: PlatformRef | null = useMemo(() => {
+    if (!platformId) return null;
+    const match = (platformsData ?? []).find((p) => p.id === platformId);
+    if (match) return platformRefFromObject(match);
+    const stored = initAppProps.platform;
+    if (stored?.platform_id === platformId) return stored;
+    return { platform_id: platformId, platform_name: "" };
+  }, [platformId, platformsData, initAppProps.platform]);
+
   const mutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
@@ -145,6 +202,9 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       }
       const storedAiRole = aiRoleForProperties(aiRole);
       if (storedAiRole) props.ai_role = storedAiRole;
+      if (isApplication) {
+        props.platform = selectedPlatform;
+      }
       const shared = {
         name,
         description: description || undefined,
@@ -156,16 +216,28 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
           .filter(Boolean),
         properties: props,
       };
+      let saved: MinEAObject;
       if (isEdit) {
         const updateBody: ObjectUpdate = shared;
-        return objectsApi.update(orgSlug, workspaceSlug, initialValues!.id, updateBody, token!);
+        saved = await objectsApi.update(orgSlug, workspaceSlug, initialValues!.id, updateBody, token!);
+      } else {
+        saved = await objectsApi.create(
+          orgSlug,
+          workspaceSlug,
+          { ...shared, type: objectType } as Parameters<typeof objectsApi.create>[2],
+          token!
+        );
       }
-      return objectsApi.create(
-        orgSlug,
-        workspaceSlug,
-        { ...shared, type: objectType } as Parameters<typeof objectsApi.create>[2],
-        token!
-      );
+      if (isApplication) {
+        await syncSystemPlatformRelation(
+          orgSlug,
+          workspaceSlug,
+          saved.id,
+          selectedPlatform,
+          token!
+        );
+      }
+      return saved;
     },
     onSuccess,
   });
@@ -217,6 +289,26 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
           placeholder="e.g. Sales Team"
         />
       </FormField>
+
+      {isApplication && (
+        <FormField label="Built on platform">
+          <select
+            value={platformId}
+            onChange={(e) => setPlatformId(e.target.value)}
+            className={formFieldClass}
+          >
+            <option value="">— None —</option>
+            {platformOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-gray-400 mt-1">
+            Link this system to an enterprise platform (e.g. Salesforce, ServiceNow).
+          </p>
+        </FormField>
+      )}
 
       {(typeFields.length > 0 || isSystemType) && (
         <FormSection title={`${typeLabel} Properties`}>

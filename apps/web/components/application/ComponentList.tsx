@@ -86,6 +86,9 @@ function ComponentCard({
       {/* Key-value rows */}
       <div className="space-y-1.5 text-xs">
         {props.tech_stack && <PropertyRow label="Tech stack" value={props.tech_stack} />}
+        {props.platform?.platform_name && (
+          <PropertyRow label="Platform" value={props.platform.platform_name} />
+        )}
         {item.owner && <PropertyRow label="Owner" value={item.owner} />}
         <PropertyRow label="AI role" value={aiRole} />
       </div>
