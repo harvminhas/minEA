@@ -19,6 +19,7 @@ from app.services.product_detail import enrich_product_detail
 from app.services.product_graph import build_product_graph, load_product_for_graph
 from app.services.product_stats import enrich_product, validate_capability_ids
 from app.services.product_stats import capability_ids_for_product as _capability_ids
+from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
 
 router = APIRouter(
@@ -206,4 +207,5 @@ async def update_product(
             setattr(product, field, getattr(body, field))
 
     await db.flush()
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return await _to_read(db, product)

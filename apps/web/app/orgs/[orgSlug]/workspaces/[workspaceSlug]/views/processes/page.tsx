@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { useTenancy } from "@/lib/tenancy";
 import { processesApi } from "@/lib/api-client";
+import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
+import { useViewDataGate } from "@/lib/use-view-summary";
 import { ViewShell } from "@/components/views/ViewShell";
 import { ProcessBuilder } from "@/components/views/ProcessBuilder";
 import { getView } from "@/lib/views";
@@ -35,8 +36,9 @@ function ProcessCard({ process, onClick }: { process: Process; onClick: () => vo
 
 export default function ProcessesViewPage() {
   const { getToken } = useAuth();
-  const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
+  const { orgSlug, workspaceSlug, summaryPending, showEmptyFromSummary, skipHeavyFetch } =
+    useViewDataGate("processes");
   const [showBuilder, setShowBuilder] = useState(false);
   const [editProcess, setEditProcess] = useState<Process | undefined>();
 
@@ -46,9 +48,11 @@ export default function ProcessesViewPage() {
       const token = await getToken();
       return processesApi.list(orgSlug, workspaceSlug, token!);
     },
+    enabled: !skipHeavyFetch,
   });
 
   const processes = data?.items ?? [];
+  const listLoading = !skipHeavyFetch && isLoading;
 
   const subtitle =
     processes.length > 0
@@ -62,6 +66,7 @@ export default function ProcessesViewPage() {
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["processes", orgSlug, workspaceSlug] });
+    void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
   };
 
   return (
@@ -69,7 +74,7 @@ export default function ProcessesViewPage() {
       <ViewShell
         view={view}
         subtitle={subtitle}
-        isEmpty={!isLoading && processes.length === 0}
+        isEmpty={showEmptyFromSummary || (!listLoading && !summaryPending && processes.length === 0)}
         onEmptyAction={openCreate}
         headerAction={
           processes.length > 0 ? (
@@ -84,7 +89,7 @@ export default function ProcessesViewPage() {
           ) : undefined
         }
       >
-        {isLoading ? (
+        {listLoading || summaryPending ? (
           <p className="text-sm text-gray-400">Loading processes…</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

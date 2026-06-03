@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { productsApi, objectsApi } from "@/lib/api-client";
+import { useViewDataGate } from "@/lib/use-view-summary";
 import { invalidateProductQueries } from "@/lib/product-queries";
 import { ProductForm } from "@/components/views/ProductForm";
 import { ProductDetail } from "@/components/views/ProductDetail";
@@ -270,7 +271,8 @@ function PortfolioCard({
 
 export function PortfolioView() {
   const { getToken } = useAuth();
-  const { orgSlug, workspaceSlug } = useTenancy();
+  const { orgSlug, workspaceSlug, summaryPending, showEmptyFromSummary, skipHeavyFetch } =
+    useViewDataGate("products");
   const queryClient = useQueryClient();
   const embedded = useViewEmbedded();
   const isViewsMode = useViewsTheme();
@@ -291,6 +293,7 @@ export function PortfolioView() {
       const token = await getToken();
       return productsApi.list(orgSlug, workspaceSlug, token!);
     },
+    enabled: !skipHeavyFetch,
   });
 
   const { data: capsData } = useQuery({
@@ -299,8 +302,10 @@ export function PortfolioView() {
       const token = await getToken();
       return objectsApi.list(orgSlug, workspaceSlug, { type: "capability" }, token!);
     },
-    enabled: !!data,
+    enabled: !skipHeavyFetch && !!data,
   });
+
+  const listLoading = !skipHeavyFetch && isLoading;
 
   const products = useMemo(() => data?.items ?? [], [data]);
   const capabilities = capsData?.items ?? [];
@@ -392,7 +397,7 @@ export function PortfolioView() {
     a.click();
   };
 
-  if (isLoading) {
+  if (summaryPending || listLoading) {
     return (
       <div className="p-8 space-y-3">
         {[1, 2, 3].map((i) => (
@@ -402,7 +407,7 @@ export function PortfolioView() {
     );
   }
 
-  if (products.length === 0) {
+  if (showEmptyFromSummary || products.length === 0) {
     return (
       <div className="p-8 max-w-6xl">
         <div className="bg-white rounded-xl border border-gray-200 p-10 text-center max-w-lg mx-auto mt-12">

@@ -1,5 +1,6 @@
 from app.models.authz import OrgLimit, Permission, Role, RolePermission
 from app.models.objects import ChangeLog, MinEAObject, Workspace
+from app.models.workspace_snapshot import WorkspaceSnapshot
 from app.models.relationships import Relationship
 from app.models.insights import AiInsight
 from app.models.tenancy import AuditLog, Invite, Org, OrgMembership, User, WorkspaceMembership
@@ -10,6 +11,7 @@ from app.models.people import PeopleAccountability, PeopleRole, Team, TeamRoleAs
 __all__ = [
     "Org",
     "Workspace",
+    "WorkspaceSnapshot",
     "User",
     "OrgMembership",
     "WorkspaceMembership",

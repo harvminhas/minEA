@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, Map, TrendingUp, Package } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { NAV_VIEWS } from "@/lib/views";
+import { buildDashboardViewCards } from "@/lib/workspace-dashboard";
+import { useWorkspaceDashboard } from "@/lib/use-workspace-dashboard";
+import { WorkspaceSnapshotRefreshBar } from "@/components/dashboard/WorkspaceSnapshotRefreshBar";
+import { PROCESSES_VIEW, NAV_VIEWS } from "@/lib/views";
 import type { ViewConfig } from "@/lib/views";
+import { cn } from "@/lib/utils";
 
 // ─── Miniature illustrations per view ────────────────────────────────────
 
@@ -83,7 +87,17 @@ const ILLUSTRATIONS: Record<string, () => React.ReactElement> = {
 
 // ─── Gallery card ────────────────────────────────────────────────────────
 
-function GalleryCard({ view, href }: { view: ViewConfig; href: string }) {
+function GalleryCard({
+  view,
+  href,
+  statusLabel,
+  statusTone,
+}: {
+  view: ViewConfig;
+  href: string;
+  statusLabel?: string;
+  statusTone?: "ready" | "action" | "needs";
+}) {
   const Illustration = ILLUSTRATIONS[view.id];
 
   return (
@@ -105,9 +119,23 @@ function GalleryCard({ view, href }: { view: ViewConfig; href: string }) {
 
       {/* Label */}
       <div className="px-4 py-3">
-        <p className="font-semibold text-gray-900 text-sm group-hover:text-violet-700 transition-colors">
-          {view.label}
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-semibold text-gray-900 text-sm group-hover:text-violet-700 transition-colors">
+            {view.label}
+          </p>
+          {statusLabel && (
+            <span
+              className={cn(
+                "text-[10px] font-medium flex-shrink-0",
+                statusTone === "ready" && "text-emerald-600",
+                statusTone === "action" && "text-indigo-600",
+                statusTone === "needs" && "text-gray-400"
+              )}
+            >
+              {statusLabel}
+            </span>
+          )}
+        </div>
         <p className="text-[11px] text-gray-500 mt-0.5">{view.description}</p>
       </div>
     </Link>
@@ -133,11 +161,26 @@ function NewViewCard() {
 // ─── Main gallery ────────────────────────────────────────────────────────
 
 export function ViewsGallery() {
-  const { basePath } = useTenancy();
+  const { basePath, orgSlug, workspaceSlug } = useTenancy();
+  const { data: dashboardState, isPending } = useWorkspaceDashboard(orgSlug, workspaceSlug);
+  const metrics = dashboardState?.metrics;
+  const viewCards =
+    metrics && !isPending
+      ? buildDashboardViewCards(basePath, metrics)
+      : null;
+  const galleryViews = [...NAV_VIEWS, PROCESSES_VIEW];
 
   return (
     <div className="min-h-full px-10 py-10 max-w-5xl">
       {/* Header */}
+      {dashboardState && (dashboardState.stale || dashboardState.rebuilding) && (
+        <WorkspaceSnapshotRefreshBar
+          stale={dashboardState.stale}
+          rebuilding={dashboardState.rebuilding}
+          className="mb-6"
+        />
+      )}
+
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Views</h1>
         <p className="text-sm text-gray-500">
@@ -147,13 +190,18 @@ export function ViewsGallery() {
 
       {/* Gallery grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        {NAV_VIEWS.map((view) => (
-          <GalleryCard
-            key={view.id}
-            view={view}
-            href={`${basePath}/${view.segment}`}
-          />
-        ))}
+        {galleryViews.map((view) => {
+          const card = viewCards?.find((c) => c.id === view.id);
+          return (
+            <GalleryCard
+              key={view.id}
+              view={view}
+              href={`${basePath}/${view.segment}`}
+              statusLabel={card?.statusLabel}
+              statusTone={card?.statusTone}
+            />
+          );
+        })}
         <NewViewCard />
       </div>
 

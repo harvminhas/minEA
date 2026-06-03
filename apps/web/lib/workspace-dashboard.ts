@@ -12,6 +12,9 @@ export interface WorkspaceMetrics {
   journeyCount: number;
   investmentCount: number;
   mapInitialized: boolean;
+  incompleteDomainCount: number;
+  capabilitiesWithoutSystemCount: number;
+  productsWithoutCapabilitiesCount: number;
 }
 
 export type ViewStatusTone = "ready" | "action" | "needs";
@@ -143,40 +146,41 @@ export function greetingName(displayName: string | null | undefined, email: stri
 
 export function metricSubtexts(
   metrics: WorkspaceMetrics,
-  insights: AiInsight[]
+  insights: AiInsight[] = []
 ): {
   domains: string;
   capabilities: string;
   systems: string;
   products: string;
 } {
-  const emptyDomains = countInsight(insights, "domain", "no capabilities");
-  const capsNoSystem = countInsight(insights, "capabilit", "no system");
-  const productsNoCaps = countInsight(insights, "product", "no capabilit");
   const unlinkedInvestments = countInsight(insights, "investment", "unlinked");
 
   const domains =
     metrics.domainCount === 0
       ? "none yet"
-      : emptyDomains > 0
-        ? `${emptyDomains} incomplete`
+      : metrics.incompleteDomainCount > 0
+        ? `${metrics.incompleteDomainCount} incomplete`
         : "all defined";
 
   const capabilities =
     metrics.capabilityCount === 0
       ? "none yet"
-      : capsNoSystem > 0
-        ? `${capsNoSystem} unmapped`
+      : metrics.capabilitiesWithoutSystemCount > 0
+        ? `${metrics.capabilitiesWithoutSystemCount} unmapped`
         : "all mapped";
 
   const systems =
-    metrics.systemCount === 0 ? "none yet" : capsNoSystem > 0 ? `${capsNoSystem} gaps` : "all mapped";
+    metrics.systemCount === 0
+      ? "none yet"
+      : metrics.capabilitiesWithoutSystemCount > 0
+        ? `${metrics.capabilitiesWithoutSystemCount} gaps`
+        : "all mapped";
 
   const products =
     metrics.productCount === 0
       ? "none yet"
-      : productsNoCaps > 0
-        ? `${productsNoCaps} incomplete`
+      : metrics.productsWithoutCapabilitiesCount > 0
+        ? `${metrics.productsWithoutCapabilitiesCount} incomplete`
         : unlinkedInvestments > 0
           ? `${unlinkedInvestments} with gaps`
           : "all mapped";
@@ -379,7 +383,7 @@ export function buildDashboardViewCards(
   });
 }
 
-function viewReadiness(
+export function viewReadiness(
   viewId: ViewId | "processes",
   metrics: WorkspaceMetrics
 ): { ready: boolean; statusLabel: string; statusTone: ViewStatusTone } {

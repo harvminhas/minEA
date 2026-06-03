@@ -17,6 +17,7 @@ from app.schemas.journeys import (
     JourneyStepRead,
 )
 from app.services.journey_systems import derive_systems_for_processes
+from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
 
 router = APIRouter(
@@ -225,6 +226,7 @@ async def create_journey(
     await db.flush()
     refreshed = await _load_journey(db, journey.id, ctx.workspace.id, ctx.org_id)
     assert refreshed
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return await _to_read(refreshed)
 
 
@@ -276,4 +278,5 @@ async def update_journey(
     await db.flush()
     refreshed = await _load_journey(db, journey.id, ctx.workspace.id, ctx.org_id)
     assert refreshed
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return await _to_read(refreshed)

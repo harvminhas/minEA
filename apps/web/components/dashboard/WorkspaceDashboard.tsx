@@ -16,6 +16,7 @@ import { PopulatedStateDashboard } from "@/components/dashboard/PopulatedStateDa
 import { ArchitectureInsightsPanel } from "@/components/insights/ArchitectureInsightsPanel";
 import { GetStartedModal } from "@/components/dashboard/GetStartedModal";
 import { HowItWorksModal } from "@/components/dashboard/HowItWorksModal";
+import { WorkspaceSnapshotRefreshBar } from "@/components/dashboard/WorkspaceSnapshotRefreshBar";
 
 function formatUpdatedAgo(iso: string | null): string {
   if (!iso) return "recently";
@@ -33,8 +34,9 @@ export function WorkspaceDashboard() {
   const [setupOpen, setSetupOpen] = useState(false);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
 
-  const { data: metrics, isPending, isError, error, refetch, isFetching } =
+  const { data: dashboardState, isPending, isError, error, refetch } =
     useWorkspaceDashboard(orgSlug, workspaceSlug);
+  const metrics = dashboardState?.metrics;
   const insightsState = useArchitectureInsights(orgSlug, workspaceSlug);
 
   const greeting = useMemo(() => greetingForHour(new Date().getHours()), []);
@@ -72,15 +74,19 @@ export function WorkspaceDashboard() {
     );
   }
 
-  const empty = isWorkspaceEmpty(metrics);
+  const empty = metrics ? isWorkspaceEmpty(metrics) : true;
 
   return (
     <>
       <div className="px-8 py-9 min-h-full bg-gray-50/50">
-        {isFetching && !empty && (
-          <p className="text-xs text-gray-400 mb-4 -mt-2">Updating…</p>
+        {dashboardState && (dashboardState.stale || dashboardState.rebuilding) && (
+          <WorkspaceSnapshotRefreshBar
+            stale={dashboardState.stale}
+            rebuilding={dashboardState.rebuilding}
+            className="mb-5"
+          />
         )}
-        {empty ? (
+        {empty && metrics ? (
           <ZeroStateDashboard
             basePath={basePath}
             orgSlug={orgSlug}
@@ -91,7 +97,7 @@ export function WorkspaceDashboard() {
             onGetStarted={() => setSetupOpen(true)}
             onOpenHowItWorks={() => setHowItWorksOpen(true)}
           />
-        ) : (
+        ) : metrics ? (
           <PopulatedStateDashboard
             basePath={basePath}
             orgSlug={orgSlug}
@@ -105,7 +111,7 @@ export function WorkspaceDashboard() {
             onOpenInsights={() => setInsightsOpen(true)}
             onOpenHowItWorks={() => setHowItWorksOpen(true)}
           />
-        )}
+        ) : null}
       </div>
 
       <ArchitectureInsightsPanel

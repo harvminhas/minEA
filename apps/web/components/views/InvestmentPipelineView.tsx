@@ -12,8 +12,8 @@ import {
   type PipelineInitiativeRow,
 } from "@/lib/investment-pipeline";
 import { roadmapDetailPath, targetResolutionLabel } from "@/lib/roadmap-utils";
-import { useTenancy } from "@/lib/tenancy";
-import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { useViewDataGate } from "@/lib/use-view-summary";
+import { getView } from "@/lib/views";
 import { cn, formatCurrency } from "@/lib/utils";
 
 const PRODUCT_COLORS = ["#6366f1", "#f97316", "#ef4444", "#166534", "#0ea5e9", "#6b7280"];
@@ -144,10 +144,12 @@ function InitiativeRow({
   );
 }
 
+const investmentsView = getView("investments");
+
 export function InvestmentPipelineView() {
   const { getToken } = useAuth();
-  const { orgSlug, workspaceSlug } = useTenancy();
-  const enabled = useAuthQueryEnabled(orgSlug, workspaceSlug);
+  const { orgSlug, workspaceSlug, summaryPending, showEmptyFromSummary, skipHeavyFetch } =
+    useViewDataGate("investments");
 
   const { data, isLoading, isPending, isError, error } = useQuery({
     queryKey: ["objects", orgSlug, workspaceSlug, "roadmap_item"],
@@ -156,7 +158,7 @@ export function InvestmentPipelineView() {
       if (!token) throw new Error("Not signed in");
       return objectsApi.list(orgSlug, workspaceSlug, { type: "roadmap_item" }, token);
     },
-    enabled,
+    enabled: !skipHeavyFetch,
   });
 
   const items = data?.items ?? [];
@@ -171,7 +173,23 @@ export function InvestmentPipelineView() {
     [items]
   );
 
-  if (!enabled || isLoading || isPending) {
+  if (summaryPending) {
+    return <p className="text-sm text-gray-400">Loading investment pipeline…</p>;
+  }
+
+  if (showEmptyFromSummary) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white p-10 text-center max-w-lg">
+        <h2 className="font-semibold text-gray-900 mb-2">{investmentsView.emptyTitle}</h2>
+        <p className="text-sm text-gray-500 mb-2">{investmentsView.emptyDescription}</p>
+        <p className="text-xs text-gray-400">
+          Add initiatives in Strategy → Roadmap to populate the investment pipeline.
+        </p>
+      </div>
+    );
+  }
+
+  if (isLoading || isPending) {
     return <p className="text-sm text-gray-400">Loading investment pipeline…</p>;
   }
 

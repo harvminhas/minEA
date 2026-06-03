@@ -12,7 +12,7 @@ from app.models.relationships import Relationship
 from app.models.views_graph import Product
 from app.services.architecture_gaps import compute_architecture_gaps
 from app.services.capability_map import load_capability_map
-from app.services.workspace_summary import fetch_workspace_summary
+from app.services.workspace_snapshot_store import get_workspace_snapshot_response
 
 SYSTEM_TYPES = ("application", "solution", "technical_capability")
 
@@ -29,7 +29,8 @@ def _object_summary(obj: MinEAObject) -> dict:
 
 
 async def get_workspace_summary(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID) -> dict:
-    summary = await fetch_workspace_summary(db, workspace_id, org_id)
+    snap = await get_workspace_snapshot_response(db, workspace_id, org_id)
+    summary = snap.metrics
 
     type_counts: dict[str, int] = {}
     objects_result = await db.execute(

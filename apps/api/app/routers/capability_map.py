@@ -35,6 +35,7 @@ from app.services.capability_map import (
     templates_for_api,
     upsert_domain_mapping,
 )
+from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
 
 router = APIRouter(
@@ -225,6 +226,7 @@ async def add_domain_mapping_system_endpoint(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     await db.commit()
 
 
@@ -253,6 +255,7 @@ async def create_domain_mapping_system_endpoint(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     await db.commit()
     detail = await load_domain_detail(db, ctx.workspace.id, ctx.org_id, domain_id)
     if not detail:
@@ -307,6 +310,7 @@ async def adopt_capability_template(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     await db.commit()
     return AdoptTemplateResponse(
         template_id=body.template_id,

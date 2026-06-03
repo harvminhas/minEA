@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.objects import MinEAObject
 from app.models.views_graph import Process, Stage, StageCapability
 from app.schemas.processes import ProcessCreate, ProcessListResponse, ProcessRead, ProcessUpdate, StageRead
+from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
 
 router = APIRouter(
@@ -174,6 +175,7 @@ async def create_process(
     await db.flush()
     refreshed = await _load_process(db, process.id, ctx.workspace.id, ctx.org_id)
     assert refreshed
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return await _to_read(refreshed)
 
 
@@ -226,4 +228,5 @@ async def update_process(
     await db.flush()
     refreshed = await _load_process(db, process.id, ctx.workspace.id, ctx.org_id)
     assert refreshed
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return await _to_read(refreshed)

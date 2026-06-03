@@ -7,7 +7,8 @@ import { ChevronDown } from "lucide-react";
 import type { HeatmapCell, HeatmapCellLevel, HeatmapProductColumn } from "@minea/types";
 import { capabilityMapApi } from "@/lib/api-client";
 import { domainIcon } from "@/lib/capability-map-icons";
-import { useTenancy } from "@/lib/tenancy";
+import { useViewDataGate } from "@/lib/use-view-summary";
+import { getView } from "@/lib/views";
 import { cn } from "@/lib/utils";
 
 type ColorMode = "fitness";
@@ -105,9 +106,12 @@ function SummaryFooterCard({
   );
 }
 
+const heatmapView = getView("capability-heatmap");
+
 export function CapabilityHeatmapView() {
   const { getToken } = useAuth();
-  const { orgSlug, workspaceSlug } = useTenancy();
+  const { orgSlug, workspaceSlug, summaryPending, showEmptyFromSummary, skipHeavyFetch, metrics } =
+    useViewDataGate("capability-heatmap");
   const [colorMode, setColorMode] = useState<ColorMode>("fitness");
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
 
@@ -117,7 +121,27 @@ export function CapabilityHeatmapView() {
       const token = await getToken();
       return capabilityMapApi.heatmap(orgSlug, workspaceSlug, token!);
     },
+    enabled: !skipHeavyFetch,
   });
+
+  if (summaryPending) {
+    return <p className="text-sm text-gray-400">Loading capability heatmap…</p>;
+  }
+
+  if (showEmptyFromSummary) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white p-10 text-center max-w-lg">
+        <h2 className="font-semibold text-gray-900 mb-2">{heatmapView.emptyTitle}</h2>
+        <p className="text-sm text-gray-500 mb-2">{heatmapView.emptyDescription}</p>
+        {metrics && metrics.capabilityCount === 0 && metrics.productCount > 0 && (
+          <p className="text-xs text-gray-400">Add capabilities on the capability map first.</p>
+        )}
+        {metrics && metrics.productCount === 0 && metrics.capabilityCount > 0 && (
+          <p className="text-xs text-gray-400">Add products and link them to capabilities.</p>
+        )}
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <p className="text-sm text-gray-400">Loading capability heatmap…</p>;

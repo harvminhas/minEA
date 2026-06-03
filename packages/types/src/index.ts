@@ -983,7 +983,7 @@ export interface CapabilityMapStatus {
   capability_count: number;
 }
 
-/** Aggregated workspace metrics — landing dashboard summary endpoint. */
+/** Aggregated workspace metrics inside a snapshot payload. */
 export interface WorkspaceSummary {
   domain_count: number;
   capability_count: number;
@@ -993,6 +993,18 @@ export interface WorkspaceSummary {
   journey_count: number;
   investment_count: number;
   map_initialized: boolean;
+  incomplete_domain_count: number;
+  capabilities_without_system_count: number;
+  products_without_capabilities_count: number;
+}
+
+/** Postgres-derived workspace snapshot envelope. */
+export interface WorkspaceSnapshot {
+  version: number;
+  built_at: string | null;
+  stale: boolean;
+  rebuilding: boolean;
+  metrics: WorkspaceSummary;
 }
 
 export interface CapabilityMapCapability {

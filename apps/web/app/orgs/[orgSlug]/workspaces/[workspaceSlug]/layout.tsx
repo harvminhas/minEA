@@ -4,11 +4,8 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchWorkspaceMetrics } from "@/lib/use-workspace-dashboard";
-import {
-  WORKSPACE_SUMMARY_STALE_MS,
-  workspaceDashboardQueryKey,
-} from "@/lib/workspace-summary-cache";
+import { fetchWorkspaceDashboardState } from "@/lib/use-workspace-dashboard";
+import { workspaceDashboardQueryKey } from "@/lib/workspace-summary-cache";
 import { ChatPanel } from "@/components/ai/ChatPanel";
 import { useTenancy } from "@/lib/tenancy";
 import { useAppStore } from "@/lib/store";
@@ -43,8 +40,9 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     if (!queryEnabled) return;
     void queryClient.prefetchQuery({
       queryKey: workspaceDashboardQueryKey(orgSlug, workspaceSlug),
-      queryFn: () => fetchWorkspaceMetrics(orgSlug, workspaceSlug, getToken),
-      staleTime: WORKSPACE_SUMMARY_STALE_MS,
+      queryFn: () => fetchWorkspaceDashboardState(orgSlug, workspaceSlug, getToken),
+      // Do not treat prefetch as fresh for 5m — background rebuild may complete after prefetch.
+      staleTime: 0,
     });
   }, [queryEnabled, orgSlug, workspaceSlug, queryClient, getToken]);
 

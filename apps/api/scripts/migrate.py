@@ -33,6 +33,7 @@ MIGRATION_FILES = [
     "015_people_accountability_verbs.sql",
     "016_people_data_layer_entities.sql",
     "017_product_graph_layout.sql",
+    "018_workspace_snapshots.sql",
 ]
 
 

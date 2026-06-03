@@ -7,6 +7,7 @@ import type {
   RelationshipCreate,
   Workspace,
   WorkspaceCreate,
+  WorkspaceSnapshot,
   WorkspaceSummary,
   AiInsight,
   AiInsightsResponse,
@@ -154,7 +155,7 @@ export const workspacesApi = {
   get: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<Workspace>(`/orgs/${orgSlug}/workspaces/${workspaceSlug}`, { token }),
   getSummary: (orgSlug: string, workspaceSlug: string, token: string) =>
-    apiFetch<WorkspaceSummary>(
+    apiFetch<WorkspaceSnapshot>(
       `/orgs/${orgSlug}/workspaces/${workspaceSlug}/summary`,
       { token }
     ),

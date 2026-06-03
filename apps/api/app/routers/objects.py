@@ -10,6 +10,7 @@ from app.models.objects import ChangeLog, MinEAObject
 from app.schemas.objects import ObjectCreate, ObjectListResponse, ObjectRead, ObjectUpdate
 from app.services.authorization import require_limit
 from app.services.capability_validation import validate_object_write
+from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
 
 router = APIRouter(
@@ -96,6 +97,7 @@ async def create_object(
         performed_by=ctx.user_id,
     ))
 
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     await db.commit()
     await db.refresh(obj)
     return obj
@@ -174,6 +176,7 @@ async def update_object(
         performed_by=ctx.user_id,
     ))
 
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     await db.commit()
     await db.refresh(obj)
     return obj
@@ -210,4 +213,5 @@ async def delete_object(
     ))
 
     await db.delete(obj)
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     await db.commit()

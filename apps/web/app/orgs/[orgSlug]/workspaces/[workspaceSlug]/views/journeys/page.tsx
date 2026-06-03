@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { useTenancy } from "@/lib/tenancy";
 import { journeysApi } from "@/lib/api-client";
+import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
+import { useViewDataGate } from "@/lib/use-view-summary";
 import { ViewShell } from "@/components/views/ViewShell";
 import { JourneyBuilder } from "@/components/views/JourneyBuilder";
 import { getView } from "@/lib/views";
@@ -38,8 +39,9 @@ function JourneyCard({ journey, onClick }: { journey: Journey; onClick: () => vo
 
 export default function JourneysViewPage() {
   const { getToken } = useAuth();
-  const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
+  const { orgSlug, workspaceSlug, summaryPending, showEmptyFromSummary, skipHeavyFetch } =
+    useViewDataGate("journeys");
   const [showBuilder, setShowBuilder] = useState(false);
   const [editJourney, setEditJourney] = useState<Journey | undefined>();
 
@@ -49,9 +51,11 @@ export default function JourneysViewPage() {
       const token = await getToken();
       return journeysApi.list(orgSlug, workspaceSlug, token!);
     },
+    enabled: !skipHeavyFetch,
   });
 
   const journeys = data?.items ?? [];
+  const listLoading = !skipHeavyFetch && isLoading;
 
   const subtitle =
     journeys.length > 0
@@ -65,6 +69,7 @@ export default function JourneysViewPage() {
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["journeys", orgSlug, workspaceSlug] });
+    void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
   };
 
   return (
@@ -72,7 +77,7 @@ export default function JourneysViewPage() {
       <ViewShell
         view={view}
         subtitle={subtitle}
-        isEmpty={!isLoading && journeys.length === 0}
+        isEmpty={showEmptyFromSummary || (!listLoading && !summaryPending && journeys.length === 0)}
         onEmptyAction={openCreate}
         headerAction={
           journeys.length > 0 ? (
@@ -87,7 +92,7 @@ export default function JourneysViewPage() {
           ) : undefined
         }
       >
-        {isLoading ? (
+        {listLoading || summaryPending ? (
           <p className="text-sm text-gray-400">Loading journeys…</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

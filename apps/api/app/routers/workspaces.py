@@ -10,9 +10,10 @@ from app.database import get_db
 from app.models.objects import Workspace
 from app.models.tenancy import Invite, WorkspaceMembership
 from app.schemas.tenancy import InviteCreate, InviteCreated, InviteRead
-from app.schemas.workspace_summary import WorkspaceSummaryRead
+from app.schemas.workspace_summary import WorkspaceSnapshotResponse
 from app.schemas.workspaces import WorkspaceCreate, WorkspaceRead, WorkspaceUpdate
-from app.services.workspace_summary import fetch_workspace_summary
+from app.services.snapshot_hooks import notify_workspace_data_changed
+from app.services.workspace_snapshot_store import get_workspace_snapshot_response
 from app.services.audit import log_audit
 from app.services.authorization import generate_invite_token, require_limit, require_role_capacity
 from app.services.roles import ORG_ADMIN_ROLES, effective_workspace_role
@@ -107,6 +108,7 @@ async def create_workspace(
         metadata={"slug": ws.slug},
     )
 
+    await notify_workspace_data_changed(db, ws.id, ctx.org_id)
     await db.commit()
     await db.refresh(ws)
 
@@ -124,15 +126,15 @@ async def create_workspace(
     )
 
 
-@router.get("/{workspace_slug}/summary", response_model=WorkspaceSummaryRead)
+@router.get("/{workspace_slug}/summary", response_model=WorkspaceSnapshotResponse)
 async def get_workspace_summary(
     ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
-) -> WorkspaceSummaryRead:
-    """Aggregated counts for the workspace landing dashboard (single round-trip)."""
+) -> WorkspaceSnapshotResponse:
+    """Derived workspace snapshot (JSONB). May be stale while rebuilding in background."""
     await ctx.require_read(db)
     assert ctx.workspace
-    return await fetch_workspace_summary(db, ctx.workspace.id, ctx.org_id)
+    return await get_workspace_snapshot_response(db, ctx.workspace.id, ctx.org_id)
 
 
 @router.get("/{workspace_slug}", response_model=WorkspaceRead)

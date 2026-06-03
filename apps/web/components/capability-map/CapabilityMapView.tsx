@@ -31,6 +31,8 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
     queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
     queryClient.invalidateQueries({ queryKey: ["capability-map-status", orgSlug, workspaceSlug] });
     queryClient.invalidateQueries({ queryKey: ["capability-library-domains", orgSlug, workspaceSlug] });
+    queryClient.invalidateQueries({ queryKey: ["capability-heatmap", orgSlug, workspaceSlug] });
+    queryClient.invalidateQueries({ queryKey: ["metric-drawer"] });
     void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
     if (capPickerDomain) {
       queryClient.invalidateQueries({
