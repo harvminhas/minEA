@@ -1,91 +1,139 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cpu, Plus } from "lucide-react";
+import { Clock, Cpu, Plus } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { RuntimeDetail } from "@/components/infrastructure/RuntimeDetail";
 import {
+  formatRuntimeSubtitle,
   isComputeRuntime,
-  PLATFORM_CRITICALITY_LABEL,
-  PLATFORM_LIFECYCLE_LABEL,
-  runtimeKindLabel,
+  RUNTIME_COST_MODEL_LABEL,
+  RUNTIME_HOSTING_LABEL,
+  RUNTIME_ICON_STYLE,
   runtimeProviderLabel,
   TECHNOLOGY_LAYER_COLOR,
 } from "@/lib/runtime-utils";
+import {
+  criticalityBadgeStyle,
+  criticalityCardLabel,
+  formatAnnualCostDisplay,
+  labelFromMap,
+  lifecycleBadgeStyle,
+  lifecycleCardLabel,
+} from "@/lib/technology-card-utils";
+import { PLATFORM_SLA_LABEL } from "@/lib/platform-utils";
+import { formatUpdatedAgo } from "@/lib/system-utils";
 import type { MinEAObject, ModelProperties } from "@minea/types";
 import { cn } from "@/lib/utils";
 
-const CRIT_COLOR: Record<string, string> = {
-  tier1: "bg-red-50 text-red-700",
-  high: "bg-orange-50 text-orange-700",
-  medium: "bg-amber-50 text-amber-700",
-  low: "bg-gray-100 text-gray-600",
-};
+function PropertyRow({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: ReactNode;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+      <span className="text-gray-400 flex-shrink-0">{label}</span>
+      <span className={cn("text-right truncate max-w-[60%] font-medium text-gray-900", valueClassName)}>
+        {value}
+      </span>
+    </div>
+  );
+}
 
 function RuntimeCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: () => void }) {
   const props = (item.properties ?? {}) as ModelProperties;
-  const kindLabel = runtimeKindLabel(props);
-  const providerLabel = runtimeProviderLabel(props.runtime_provider);
-  const lifecycle = props.lifecycle ? PLATFORM_LIFECYCLE_LABEL[props.lifecycle] : undefined;
+  const lifecycle = props.lifecycle;
+  const lifecycleLabel = lifecycleCardLabel(lifecycle);
+  const criticality = props.criticality ?? "low";
 
   return (
-    <button
-      type="button"
+    <div
       onClick={onOpenDetail}
-      className="text-left bg-white rounded-xl border border-gray-200 hover:border-slate-300 transition-colors w-full p-4"
+      className="bg-white rounded-xl border border-gray-200 p-5 hover:border-slate-300 hover:shadow-sm cursor-pointer transition-all"
     >
-      <div className="flex items-start gap-3">
-        <div
-          className="h-9 w-9 rounded-lg flex items-center justify-center text-white flex-shrink-0"
-          style={{ backgroundColor: TECHNOLOGY_LAYER_COLOR }}
-        >
-          <Cpu size={15} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 text-sm truncate leading-tight">{item.name}</h3>
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            {kindLabel && (
-              <span className="text-[10px] bg-slate-50 text-slate-700 px-1.5 py-0.5 rounded-full font-medium">
-                {kindLabel}
-              </span>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className={cn(
+              "h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0",
+              RUNTIME_ICON_STYLE
             )}
-            {providerLabel && <span className="text-[10px] text-gray-500">{providerLabel}</span>}
-            {props.criticality && (
-              <span
-                className={cn(
-                  "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                  CRIT_COLOR[props.criticality] ?? "bg-gray-100 text-gray-600"
-                )}
-              >
-                {PLATFORM_CRITICALITY_LABEL[props.criticality] ?? props.criticality}
-              </span>
-            )}
-            {lifecycle && (
-              <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">
-                {lifecycle}
-              </span>
-            )}
+          >
+            <Cpu size={16} strokeWidth={2.25} />
           </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{item.name}</p>
+            <p className="text-xs text-gray-400 mt-0.5 truncate">{formatRuntimeSubtitle(props)}</p>
+          </div>
+        </div>
+        {lifecycleLabel && (
+          <span
+            className={cn(
+              "rounded-full px-2.5 py-0.5 text-xs font-medium flex-shrink-0",
+              lifecycleBadgeStyle(lifecycle)
+            )}
+          >
+            {lifecycleLabel}
+          </span>
+        )}
+      </div>
 
-          {props.service_product && (
-            <p className="text-[10px] text-gray-500 truncate mt-2">{props.service_product}</p>
-          )}
-
-          {props.region && (
-            <p className="text-[10px] text-gray-400 truncate mt-1">{props.region}</p>
-          )}
-
-          {item.owner && (
-            <p className="text-[10px] text-gray-400 truncate mt-1">Owner: {item.owner}</p>
-          )}
+      <div className="divide-y divide-gray-100 text-xs">
+        <PropertyRow
+          label="Provider"
+          value={runtimeProviderLabel(props.runtime_provider) || "—"}
+          valueClassName={!props.runtime_provider ? "font-normal text-gray-400" : undefined}
+        />
+        <PropertyRow
+          label="Hosting model"
+          value={labelFromMap(props.hosting_model, RUNTIME_HOSTING_LABEL)}
+          valueClassName={!props.hosting_model ? "font-normal text-gray-400" : undefined}
+        />
+        <PropertyRow
+          label="Cost model"
+          value={labelFromMap(props.cost_model, RUNTIME_COST_MODEL_LABEL)}
+          valueClassName={!props.cost_model ? "font-normal text-gray-400" : undefined}
+        />
+        <PropertyRow
+          label="SLA target"
+          value={labelFromMap(props.sla_target, PLATFORM_SLA_LABEL)}
+          valueClassName={!props.sla_target ? "font-normal text-gray-400" : undefined}
+        />
+        <div className="flex items-center justify-between gap-2 py-2">
+          <span className="text-gray-400 flex-shrink-0">Criticality</span>
+          <span
+            className={cn(
+              "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize flex-shrink-0",
+              criticalityBadgeStyle(criticality)
+            )}
+          >
+            {criticalityCardLabel(criticality)}
+          </span>
         </div>
       </div>
-    </button>
+
+      <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">
+        <Clock size={12} className="flex-shrink-0" />
+        <span>
+          Updated{item.updated_by_name ? ` by ` : " "}
+          {item.updated_by_name && (
+            <span className="font-semibold text-gray-600">{item.updated_by_name}</span>
+          )}
+          {item.updated_by_name ? " " : ""}
+          {formatUpdatedAgo(item.updated_at)}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -148,7 +196,7 @@ export function RuntimeList() {
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-36 bg-gray-100 rounded-lg animate-pulse" />
+              <div key={i} className="h-40 bg-gray-100 rounded-xl animate-pulse" />
             ))}
           </div>
         ) : items.length === 0 ? (

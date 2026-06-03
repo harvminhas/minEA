@@ -1,6 +1,109 @@
-import type { DataLink } from "@minea/types";
+import type { DataLink, DataDomainProperties, DataObjectProperties, DataStoreProperties, MinEAObject } from "@minea/types";
 
 export const DATA_LAYER_COLOR = "#f59e0b";
+
+export const ENTITY_ICON_STYLE = "bg-violet-50 text-violet-700";
+export const STORE_ICON_STYLE = "bg-emerald-50 text-emerald-700";
+export const DOMAIN_ICON_STYLE = "bg-amber-50 text-amber-700";
+
+export const STORE_TYPE_LABEL: Record<string, string> = {
+  relational_db: "Relational DB",
+  document_db: "Document DB",
+  data_warehouse: "Data warehouse",
+  data_lake: "Data lake",
+  file_store: "File store",
+  cache: "Cache",
+};
+
+export const HEALTH_LABEL: Record<string, string> = {
+  healthy: "Healthy",
+  at_risk: "At risk",
+  degraded: "Degraded",
+};
+
+export const HEALTH_STYLE: Record<string, string> = {
+  healthy: "bg-emerald-50 text-emerald-700",
+  at_risk: "bg-amber-50 text-amber-700",
+  degraded: "bg-orange-50 text-orange-700",
+};
+
+export const CLASSIFICATION_LABEL: Record<string, string> = {
+  core: "Core",
+  reference: "Reference",
+  public: "Public",
+  internal: "Internal",
+  confidential: "Confidential",
+  pii: "PII",
+  restricted: "Restricted",
+  financial: "Financial",
+};
+
+export const PII_BADGE_STYLE = "bg-red-50 text-red-700";
+export const DOMAIN_CLASSIFICATION_STYLE = "bg-orange-50 text-orange-700";
+
+export function formatEntitySubtitle(item: MinEAObject): string {
+  const props = (item.properties ?? {}) as DataObjectProperties;
+  const classification = props.classification
+    ? (CLASSIFICATION_LABEL[props.classification] ?? props.classification)
+    : null;
+  return classification ? `Data entity · ${classification}` : "Data entity";
+}
+
+export function formatStoreSubtitle(item: MinEAObject): string {
+  const props = (item.properties ?? {}) as DataStoreProperties;
+  const storeType = props.store_type
+    ? (STORE_TYPE_LABEL[props.store_type] ?? props.store_type.replace(/_/g, " "))
+    : null;
+  return storeType ?? "Data store";
+}
+
+export function formatDomainSubtitle(item: MinEAObject): string {
+  const props = (item.properties ?? {}) as DataDomainProperties;
+  const classification = props.classification
+    ? (CLASSIFICATION_LABEL[props.classification] ?? props.classification)
+    : null;
+  return classification ? `Data domain · ${classification}` : "Data domain";
+}
+
+export function entityTopBadge(item: MinEAObject): { label: string; className: string } | null {
+  const props = (item.properties ?? {}) as DataObjectProperties;
+  if (props.sensitivity === "pii" || props.classification === "pii") {
+    return { label: "PII", className: PII_BADGE_STYLE };
+  }
+  return null;
+}
+
+export function storeTopBadge(item: MinEAObject): { label: string; className: string } | null {
+  const props = (item.properties ?? {}) as DataStoreProperties;
+  const health = props.health;
+  if (!health) return null;
+  return {
+    label: HEALTH_LABEL[health] ?? health,
+    className: HEALTH_STYLE[health] ?? "bg-gray-100 text-gray-600",
+  };
+}
+
+export function domainTopBadge(item: MinEAObject): { label: string; className: string } | null {
+  const props = (item.properties ?? {}) as DataDomainProperties;
+  const classification = props.classification;
+  if (!classification) return null;
+  return {
+    label: CLASSIFICATION_LABEL[classification] ?? classification,
+    className: DOMAIN_CLASSIFICATION_STYLE,
+  };
+}
+
+export function formatSensitivityLabel(item: MinEAObject): string {
+  const props = (item.properties ?? {}) as DataObjectProperties;
+  const value = props.sensitivity ?? props.classification;
+  if (!value) return "—";
+  return CLASSIFICATION_LABEL[value] ?? value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+export function formatTechnology(item: MinEAObject): string {
+  const props = (item.properties ?? {}) as DataStoreProperties;
+  return props.technology?.trim() || "—";
+}
 
 export const ROLE_TAG_STYLE: Record<string, string> = {
   primary: "bg-emerald-50 text-emerald-700",

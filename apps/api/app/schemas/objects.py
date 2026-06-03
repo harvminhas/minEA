@@ -48,6 +48,18 @@ class ObjectUpdate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
+class ObjectHistoryEntry(BaseModel):
+    id: str
+    actor_name: str
+    action: str
+    detail: str | None = None
+    created_at: datetime
+
+
+class ObjectHistoryResponse(BaseModel):
+    entries: list[ObjectHistoryEntry]
+
+
 class ObjectRead(BaseModel):
     id: UUID
     workspace_id: UUID
@@ -65,6 +77,18 @@ class ObjectRead(BaseModel):
     created_by: UUID | None
     created_at: datetime
     updated_at: datetime
+    # Populated for application / solution / technical_capability
+    updated_by_name: str | None = None
+    capability_count: int = 0
+    apis_provided_count: int = 0
+    apis_consumed_count: int = 0
+    data_store_count: int = 0
+    # Populated for data_object / data_store / data_domain cards
+    data_domain_name: str | None = None
+    system_of_record_name: str | None = None
+    hosting_system_name: str | None = None
+    governed_entity_count: int = 0
+    governed_store_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

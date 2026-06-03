@@ -7,9 +7,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.objects import ChangeLog, MinEAObject
-from app.schemas.objects import ObjectCreate, ObjectListResponse, ObjectRead, ObjectUpdate
+from app.models.tenancy import User
+from app.schemas.objects import (
+    ObjectCreate,
+    ObjectHistoryEntry,
+    ObjectHistoryResponse,
+    ObjectListResponse,
+    ObjectRead,
+    ObjectUpdate,
+)
 from app.services.authorization import require_limit
 from app.services.capability_validation import validate_object_write
+from app.services.object_history import describe_object_history
+from app.services.object_stats import (
+    DATA_TYPES,
+    SYSTEM_TYPES,
+    UPDATED_BY_ONLY_TYPES,
+    enrich_data_objects,
+    enrich_single_data,
+    enrich_single_system,
+    enrich_single_updated_by,
+    enrich_system_objects,
+    enrich_updated_by_objects,
+)
 from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
 
@@ -17,6 +37,28 @@ router = APIRouter(
     prefix="/orgs/{org_slug}/workspaces/{workspace_slug}/objects",
     tags=["objects"],
 )
+
+
+def _first_name(user: User | None) -> str | None:
+    if user is None:
+        return None
+    if user.full_name:
+        return user.full_name.split()[0]
+    return user.email.split("@")[0]
+
+
+async def _to_read(db: AsyncSession, obj: MinEAObject) -> ObjectRead:
+    base = ObjectRead.model_validate(obj)
+    if obj.type in SYSTEM_TYPES:
+        extra = await enrich_single_system(db, obj)
+        return base.model_copy(update=extra)
+    if obj.type in DATA_TYPES:
+        extra = await enrich_single_data(db, obj)
+        return base.model_copy(update=extra)
+    if obj.type in UPDATED_BY_ONLY_TYPES:
+        extra = await enrich_single_updated_by(db, obj)
+        return base.model_copy(update=extra)
+    return base
 
 
 @router.get("", response_model=ObjectListResponse)
@@ -51,9 +93,19 @@ async def list_objects(
 
     q = q.order_by(MinEAObject.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(q)
-    items = result.scalars().all()
+    items = list(result.scalars().all())
 
-    return ObjectListResponse(items=list(items), total=total, page=page, page_size=page_size)
+    system_stats = await enrich_system_objects(db, items)
+    updated_by_stats = await enrich_updated_by_objects(db, items)
+    data_stats = await enrich_data_objects(db, items)
+    stats_map = {**system_stats, **updated_by_stats, **data_stats}
+    reads: list[ObjectRead] = []
+    for obj in items:
+        base = ObjectRead.model_validate(obj)
+        extra = stats_map.get(obj.id)
+        reads.append(base.model_copy(update=extra) if extra else base)
+
+    return ObjectListResponse(items=reads, total=total, page=page, page_size=page_size)
 
 
 @router.post("", response_model=ObjectRead, status_code=status.HTTP_201_CREATED)
@@ -83,6 +135,7 @@ async def create_object(
         source=body.source,
         properties=body.properties,
         created_by=ctx.user_id,
+        updated_by=ctx.user_id,
     )
     db.add(obj)
     await db.flush()
@@ -93,14 +146,14 @@ async def create_object(
         object_id=obj.id,
         object_type=obj.type,
         action="created",
-        diff={"name": obj.name, "type": obj.type},
+        diff={"action_type": "created_object", "name": obj.name, "type": obj.type},
         performed_by=ctx.user_id,
     ))
 
     await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     await db.commit()
     await db.refresh(obj)
-    return obj
+    return await _to_read(db, obj)
 
 
 @router.get("/{object_id}", response_model=ObjectRead)
@@ -122,7 +175,7 @@ async def get_object(
     obj = result.scalar_one_or_none()
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
-    return obj
+    return await _to_read(db, obj)
 
 
 @router.put("/{object_id}", response_model=ObjectRead)
@@ -157,29 +210,78 @@ async def update_object(
         existing_name=obj.name,
     )
 
-    diff: dict[str, Any] = {}
+    field_changes: dict[str, Any] = {}
     for field, value in body.model_dump(exclude_none=True).items():
         if field == "properties":
-            diff["properties"] = value
-            obj.properties = {**obj.properties, **value}
+            merged = {**(obj.properties or {}), **value}
+            if merged != (obj.properties or {}):
+                field_changes["properties"] = {"old": obj.properties, "new": merged}
+            obj.properties = merged
         else:
-            diff[field] = value
+            old_val = getattr(obj, field)
+            if old_val != value:
+                field_changes[field] = {"old": old_val, "new": value}
             setattr(obj, field, value)
 
-    db.add(ChangeLog(
-        workspace_id=ctx.workspace.id,
-        org_id=ctx.org_id,
-        object_id=obj.id,
-        object_type=obj.type,
-        action="updated",
-        diff=diff,
-        performed_by=ctx.user_id,
-    ))
+    if field_changes:
+        db.add(ChangeLog(
+            workspace_id=ctx.workspace.id,
+            org_id=ctx.org_id,
+            object_id=obj.id,
+            object_type=obj.type,
+            action="updated",
+            diff={"action_type": "updated_fields", "changes": field_changes},
+            performed_by=ctx.user_id,
+        ))
+
+    obj.updated_by = ctx.user_id
 
     await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     await db.commit()
     await db.refresh(obj)
-    return obj
+    return await _to_read(db, obj)
+
+
+@router.get("/{object_id}/history", response_model=ObjectHistoryResponse)
+async def get_object_history(
+    object_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> ObjectHistoryResponse:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
+    entries_result = await db.execute(
+        select(ChangeLog)
+        .where(
+            ChangeLog.workspace_id == ctx.workspace.id,
+            ChangeLog.object_id == object_id,
+        )
+        .order_by(ChangeLog.created_at.desc())
+        .limit(50)
+    )
+    entries = entries_result.scalars().all()
+
+    actor_ids = list({e.performed_by for e in entries if e.performed_by})
+    user_map: dict[str, User] = {}
+    if actor_ids:
+        users_result = await db.execute(select(User).where(User.id.in_(actor_ids)))
+        user_map = {str(u.id): u for u in users_result.scalars().all()}
+
+    history: list[ObjectHistoryEntry] = []
+    for entry in entries:
+        actor_user = user_map.get(str(entry.performed_by)) if entry.performed_by else None
+        actor_name = _first_name(actor_user) or "Someone"
+        action, detail = describe_object_history(entry)
+        history.append(ObjectHistoryEntry(
+            id=str(entry.id),
+            actor_name=actor_name,
+            action=action,
+            detail=detail,
+            created_at=entry.created_at,
+        ))
+
+    return ObjectHistoryResponse(entries=history)
 
 
 @router.delete("/{object_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -208,7 +310,7 @@ async def delete_object(
         object_id=obj.id,
         object_type=obj.type,
         action="deleted",
-        diff={"name": obj.name},
+        diff={"action_type": "deleted_object", "name": obj.name},
         performed_by=ctx.user_id,
     ))
 

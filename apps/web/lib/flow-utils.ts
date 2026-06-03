@@ -4,6 +4,7 @@ import type {
   FlowEndpointSide,
   FlowEntitySelection,
   FlowSystemSelection,
+  IntegrationFlowProperties,
 } from "@minea/types";
 
 export const INTEGRATION_LAYER_COLOR = "#14b8a6";
@@ -56,6 +57,40 @@ export const FLOW_CRITICALITY = [
   { value: "high", label: "High" },
   { value: "critical", label: "Critical" },
 ];
+
+export const FLOW_PROTOCOL_LABEL = Object.fromEntries(FLOW_PROTOCOLS.map((p) => [p.value, p.label]));
+export const FLOW_AUTH_LABEL = Object.fromEntries(FLOW_AUTH.map((a) => [a.value, a.label]));
+export const FLOW_CRITICALITY_LABEL = Object.fromEntries(FLOW_CRITICALITY.map((c) => [c.value, c.label]));
+
+export function formatFlowSubtitle(protocol?: string): string {
+  const label = protocol ? (FLOW_PROTOCOL_LABEL[protocol] ?? protocol) : null;
+  return label ? `Flow · ${label}` : "Flow";
+}
+
+export function formatEndpointSideLine(
+  systems: FlowSystemSelection[],
+  entities: FlowEntitySelection[]
+): string {
+  const count = systems.length + entities.length;
+  if (count === 0) return "—";
+  const first = systems[0]?.system_name ?? entities[0]?.entity_name;
+  if (!first) return String(count);
+  return `${count} · ${first}`;
+}
+
+export function flowSourceLine(props: IntegrationFlowProperties): string {
+  return formatEndpointSideLine(
+    props.sources?.systems ?? [],
+    props.sources?.entities ?? []
+  );
+}
+
+export function flowDestinationLine(props: IntegrationFlowProperties): string {
+  return formatEndpointSideLine(
+    props.destinations?.systems ?? [],
+    props.destinations?.entities ?? []
+  );
+}
 
 export const CLASSIFICATION_LEVELS = [
   "public",

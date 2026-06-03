@@ -49,6 +49,7 @@ class MinEAObject(Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     properties: Mapped[dict] = mapped_column(JSONB, server_default="{}")
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 

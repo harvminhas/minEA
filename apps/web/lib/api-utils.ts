@@ -94,6 +94,35 @@ export function gatewayRefFromKey(
 export const API_STYLE_LABEL = Object.fromEntries(API_STYLES.map((s) => [s.value, s.label]));
 export const API_AUTH_LABEL = Object.fromEntries(API_AUTH.map((a) => [a.value, a.label]));
 
+export const API_STATUS_STYLE: Record<string, string> = {
+  planned: "bg-sky-50 text-sky-700",
+  active: "bg-emerald-50 text-emerald-700",
+  retiring: "bg-amber-50 text-amber-700",
+  retired: "bg-red-50 text-red-500",
+};
+
+export const API_CRITICALITY_STYLE: Record<string, string> = {
+  critical: "bg-red-50 text-red-700",
+  high: "bg-orange-50 text-orange-700",
+  medium: "bg-amber-50 text-amber-700",
+  low: "bg-emerald-50 text-emerald-700",
+};
+
+export const API_CRITICALITY_LABEL = Object.fromEntries(
+  API_CRITICALITY.map((c) => [c.value, c.label])
+);
+
+export function formatApiSubtitle(protocol?: string): string {
+  const style = protocol ? (API_STYLE_LABEL[protocol] ?? protocol) : null;
+  return style ? `API · ${style}` : "API";
+}
+
+export function formatConsumersLine(consumers: ApiConsumerRef[]): string {
+  const count = consumers.length;
+  if (count === 0) return "0";
+  return `${count} · ${consumers[0]!.consumer_name}`;
+}
+
 export function formatProviderLabel(provider: ApiProviderRef): string {
   if (provider.provider_kind === "component" && provider.system_name) {
     return `${provider.provider_name} (${provider.system_name})`;

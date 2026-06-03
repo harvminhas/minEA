@@ -2,6 +2,7 @@ import type {
   MinEAObject,
   ObjectCreate,
   ObjectUpdate,
+  ObjectHistoryResponse,
   ObjectListResponse,
   Relationship,
   RelationshipCreate,
@@ -22,6 +23,7 @@ import type {
   ProductCreate,
   ProductUpdate,
   ProductGraphResponse,
+  ProductHistoryResponse,
   ProductListResponse,
   Process,
   ProcessCreate,
@@ -209,6 +211,12 @@ export const objectsApi = {
 
   delete: (orgSlug: string, workspaceSlug: string, id: string, token: string) =>
     apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/objects/${id}`, { method: "DELETE", token }),
+
+  history: (orgSlug: string, workspaceSlug: string, objectId: string, token: string) =>
+    apiFetch<ObjectHistoryResponse>(
+      `${wsBase(orgSlug, workspaceSlug)}/objects/${objectId}/history`,
+      { token }
+    ),
 };
 
 // ─── Relationships ────────────────────────────────────────────────────────────
@@ -279,6 +287,18 @@ export const productsApi = {
       `${wsBase(orgSlug, workspaceSlug)}/products/${productId}/graph`,
       { token }
     ),
+
+  history: (orgSlug: string, workspaceSlug: string, productId: string, token: string) =>
+    apiFetch<ProductHistoryResponse>(
+      `${wsBase(orgSlug, workspaceSlug)}/products/${productId}/history`,
+      { token }
+    ),
+
+  delete: (orgSlug: string, workspaceSlug: string, productId: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/products/${productId}`, {
+      method: "DELETE",
+      token,
+    }),
 };
 
 // ─── Processes ───────────────────────────────────────────────────────────────

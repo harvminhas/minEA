@@ -67,6 +67,17 @@ export const PLATFORM_SLA_LABEL = Object.fromEntries(PLATFORM_SLA.map((s) => [s.
 export const PLATFORM_LIFECYCLE_LABEL = Object.fromEntries(PLATFORM_LIFECYCLE.map((l) => [l.value, l.label]));
 export const PLATFORM_CRITICALITY_LABEL = Object.fromEntries(PLATFORM_CRITICALITY.map((c) => [c.value, c.label]));
 
+export function isEnterprisePlatform(props: CloudServiceProperties): boolean {
+  return props.platform_type != null;
+}
+
+export const PLATFORM_ICON_STYLE = "bg-indigo-50 text-indigo-700";
+
+export function formatPlatformSubtitle(props: CloudServiceProperties): string {
+  const typeLabel = platformTypeLabel(props);
+  return typeLabel ? `Platform · ${typeLabel}` : "Platform";
+}
+
 export function platformTypeLabel(props: CloudServiceProperties): string {
   if (props.platform_type === "other" && props.platform_type_other?.trim()) {
     return props.platform_type_other.trim();

@@ -34,6 +34,9 @@ MIGRATION_FILES = [
     "016_people_data_layer_entities.sql",
     "017_product_graph_layout.sql",
     "018_workspace_snapshots.sql",
+    "019_product_history.sql",
+    "020_objects_updated_by.sql",
+    "021_backfill_updated_by.sql",
 ]
 
 

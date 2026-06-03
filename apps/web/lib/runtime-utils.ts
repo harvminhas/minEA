@@ -77,6 +77,13 @@ export function runtimeProviderLabel(provider: string | undefined): string {
   return RUNTIME_PROVIDER_LABEL[provider] ?? provider;
 }
 
+export const RUNTIME_ICON_STYLE = "bg-slate-100 text-slate-700";
+
+export function formatRuntimeSubtitle(props: ModelProperties): string {
+  const kind = runtimeKindLabel(props);
+  return kind ? `Runtime · ${kind}` : "Runtime";
+}
+
 export function collectCustomProviders(items: MinEAObject[]): string[] {
   const presetIds = new Set(RUNTIME_PROVIDERS.map((p) => p.value));
   const names = items

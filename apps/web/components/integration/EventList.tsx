@@ -1,95 +1,126 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Zap } from "lucide-react";
+import { Clock, Plus, Zap } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { CreateEventPanel } from "@/components/integration/CreateEventPanel";
 import { EventDetail } from "@/components/integration/EventDetail";
 import {
+  API_CRITICALITY_LABEL,
+  API_CRITICALITY_STYLE,
+  API_STATUS_STYLE,
+} from "@/lib/api-utils";
+import {
+  EVENT_CRITICALITY_LABEL,
   EVENT_DELIVERY_LABEL,
-  formatProducerLabel,
+  formatEventSubtitle,
+  formatSubscribersLine,
   INTEGRATION_LAYER_COLOR,
 } from "@/lib/event-utils";
+import { formatUpdatedAgo } from "@/lib/system-utils";
 import type { EventProperties, MinEAObject } from "@minea/types";
-import { cn, getStatusColor, getStatusLabel } from "@/lib/utils";
+import { cn, getStatusLabel } from "@/lib/utils";
 
-const CRIT_COLOR: Record<string, string> = {
-  critical: "bg-red-50 text-red-700",
-  high: "bg-orange-50 text-orange-700",
-  medium: "bg-amber-50 text-amber-700",
-  low: "bg-gray-100 text-gray-600",
-};
+function PropertyRow({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: ReactNode;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+      <span className="text-gray-400 flex-shrink-0">{label}</span>
+      <span className={cn("text-right truncate max-w-[60%] font-medium text-gray-900", valueClassName)}>
+        {value}
+      </span>
+    </div>
+  );
+}
 
 function EventCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: () => void }) {
   const props = (item.properties ?? {}) as EventProperties;
-  const subCount = props.subscribers?.length ?? 0;
+  const subscribers = props.subscribers ?? [];
+  const status = item.status ?? "planned";
+  const criticality = props.criticality ?? "low";
+  const deliveryLabel = props.delivery
+    ? (EVENT_DELIVERY_LABEL[props.delivery] ?? props.delivery)
+    : "—";
 
   return (
-    <button
-      type="button"
+    <div
       onClick={onOpenDetail}
-      className="text-left bg-white rounded-xl border border-gray-200 hover:border-teal-200 transition-colors w-full p-4"
+      className="bg-white rounded-xl border border-gray-200 p-5 hover:border-teal-300 hover:shadow-sm cursor-pointer transition-all"
     >
-      <div className="flex items-start gap-3">
-        <div
-          className="h-9 w-9 rounded-lg flex items-center justify-center text-white flex-shrink-0"
-          style={{ backgroundColor: INTEGRATION_LAYER_COLOR }}
-        >
-          <Zap size={15} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 text-sm truncate leading-tight">{item.name}</h3>
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            {props.topic && (
-              <span className="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded-full font-medium font-mono">
-                {props.topic}
-                {props.version ? ` ${props.version}` : ""}
-              </span>
-            )}
-            {props.delivery && (
-              <span className="text-[10px] text-gray-500">
-                {EVENT_DELIVERY_LABEL[props.delivery] ?? props.delivery}
-              </span>
-            )}
-            {props.criticality && (
-              <span
-                className={cn(
-                  "text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize",
-                  CRIT_COLOR[props.criticality] ?? "bg-gray-100 text-gray-600"
-                )}
-              >
-                {props.criticality}
-              </span>
-            )}
-            {item.status && (
-              <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize", getStatusColor(item.status))}>
-                {getStatusLabel(item.status)}
-              </span>
-            )}
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-teal-50 text-teal-700">
+            <Zap size={16} strokeWidth={2.25} />
           </div>
-
-          {props.producer && (
-            <p className="text-[10px] text-gray-500 truncate mt-2">
-              Producer: {formatProducerLabel(props.producer)}
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{item.name}</p>
+            <p className="text-xs text-gray-400 mt-0.5 truncate">
+              {formatEventSubtitle(props.topic, props.delivery)}
             </p>
+          </div>
+        </div>
+        <span
+          className={cn(
+            "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize flex-shrink-0",
+            API_STATUS_STYLE[status] ?? API_STATUS_STYLE.planned
           )}
+        >
+          {getStatusLabel(status)}
+        </span>
+      </div>
 
-          {subCount > 0 && (
-            <p className="text-[10px] text-gray-400 mt-1">
-              {subCount} subscriber{subCount !== 1 ? "s" : ""}
-            </p>
-          )}
-
-          {props.broker && (
-            <p className="text-[10px] text-gray-400 truncate mt-1">Broker: {props.broker.broker_name}</p>
-          )}
+      <div className="divide-y divide-gray-100 text-xs">
+        <PropertyRow
+          label="Producer"
+          value={props.producer?.producer_name ?? "—"}
+          valueClassName={!props.producer ? "font-normal text-gray-400" : undefined}
+        />
+        <PropertyRow
+          label="Subscribers"
+          value={formatSubscribersLine(subscribers)}
+          valueClassName={subscribers.length === 0 ? "font-normal text-gray-400" : undefined}
+        />
+        <PropertyRow
+          label="Delivery"
+          value={deliveryLabel}
+          valueClassName={!props.delivery ? "font-normal text-gray-400" : undefined}
+        />
+        <div className="flex items-center justify-between gap-2 py-2">
+          <span className="text-gray-400 flex-shrink-0">Criticality</span>
+          <span
+            className={cn(
+              "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize flex-shrink-0",
+              API_CRITICALITY_STYLE[criticality] ?? API_CRITICALITY_STYLE.low
+            )}
+          >
+            {EVENT_CRITICALITY_LABEL[criticality] ?? API_CRITICALITY_LABEL[criticality] ?? criticality}
+          </span>
         </div>
       </div>
-    </button>
+
+      <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">
+        <Clock size={12} className="flex-shrink-0" />
+        <span>
+          Updated{item.updated_by_name ? ` by ` : " "}
+          {item.updated_by_name && (
+            <span className="font-semibold text-gray-600">{item.updated_by_name}</span>
+          )}
+          {item.updated_by_name ? " " : ""}
+          {formatUpdatedAgo(item.updated_at)}
+        </span>
+      </div>
+    </div>
   );
 }
 

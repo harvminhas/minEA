@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
@@ -152,19 +152,11 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const token = await getToken();
-      return objectsApi.delete(orgSlug, workspaceSlug, id, token!);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, objectType] });
-      void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
-      setSelectedObject(null);
-    },
-  });
-
   const objects: MinEAObject[] = data?.items ?? [];
+  const isSystemList =
+    objectType === "application" ||
+    objectType === "solution" ||
+    objectType === "technical_capability";
   const filtered = search
     ? objects.filter((o: MinEAObject) => o.name.toLowerCase().includes(search.toLowerCase()))
     : objects;
@@ -208,7 +200,13 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
 
       <div className="flex-1 overflow-y-auto p-8">
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div
+            className={
+              isSystemList
+                ? "grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl"
+                : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+            }
+          >
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-44 bg-gray-100 rounded-lg animate-pulse" />
             ))}
@@ -221,7 +219,13 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div
+            className={
+              isSystemList
+                ? "grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl"
+                : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+            }
+          >
             {filtered.map((obj) => (
               <ObjectCard
                 key={obj.id}
@@ -237,12 +241,11 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
       {selectedObject && (
         <ObjectDetail
           object={selectedObject}
+          layerColor={layerColor}
           onClose={() => setSelectedObject(null)}
-          onDelete={() => deleteMutation.mutate(selectedObject.id)}
           onUpdate={() => {
             queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, objectType] });
             void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
-            setSelectedObject(null);
           }}
         />
       )}

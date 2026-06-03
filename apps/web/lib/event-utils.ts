@@ -86,6 +86,25 @@ export function brokerRefFromKey(
 
 export const EVENT_DELIVERY_LABEL = Object.fromEntries(EVENT_DELIVERY.map((d) => [d.value, d.label]));
 
+export const EVENT_CRITICALITY_LABEL = Object.fromEntries(
+  EVENT_CRITICALITY.map((c) => [c.value, c.label])
+);
+
+export function formatEventSubtitle(topic?: string, delivery?: string): string {
+  if (topic) return `Event · ${topic}`;
+  if (delivery) {
+    const label = EVENT_DELIVERY_LABEL[delivery] ?? delivery;
+    return `Event · ${label}`;
+  }
+  return "Event";
+}
+
+export function formatSubscribersLine(subscribers: EventSubscriberRef[]): string {
+  const count = subscribers.length;
+  if (count === 0) return "0";
+  return `${count} · ${subscribers[0]!.subscriber_name}`;
+}
+
 export function formatProducerLabel(producer: EventProducerRef): string {
   if (producer.producer_kind === "component" && producer.system_name) {
     return `${producer.producer_name} (${producer.system_name})`;

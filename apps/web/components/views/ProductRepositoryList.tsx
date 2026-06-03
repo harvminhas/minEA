@@ -11,6 +11,7 @@ import { ProductForm } from "@/components/views/ProductForm";
 import { ProductDetail } from "@/components/views/ProductDetail";
 import type { Product } from "@minea/types";
 import { formatProductCoverageLine } from "@/lib/portfolio-utils";
+import { formatUpdatedAgo } from "@/lib/system-utils";
 import { cn } from "@/lib/utils";
 
 const STRATEGY_LAYER_COLOR = "#8b5cf6";
@@ -23,18 +24,6 @@ const LIFECYCLE_STYLE: Record<string, string> = {
   retiring: "bg-orange-50 text-orange-700",
   retired: "bg-gray-100 text-gray-400",
 };
-
-function formatUpdatedAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const diffH = Math.floor(diffMs / 3_600_000);
-  if (diffH < 1) return "just now";
-  if (diffH < 24) return `${diffH}h ago`;
-  const diffD = Math.floor(diffH / 24);
-  if (diffD < 30) return `${diffD}d ago`;
-  const diffM = Math.floor(diffD / 30);
-  if (diffM < 12) return `${diffM}mo ago`;
-  return `${Math.floor(diffM / 12)}y ago`;
-}
 
 function ProductCard({
   product,
@@ -85,7 +74,10 @@ function ProductCard({
 
       <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">
         <Clock size={12} className="flex-shrink-0" />
-        <span>Updated {formatUpdatedAgo(product.updated_at)}</span>
+        <span>
+          Updated{product.updated_by_name ? ` by ${product.updated_by_name}` : ""}{" "}
+          {formatUpdatedAgo(product.updated_at)}
+        </span>
       </div>
     </button>
   );

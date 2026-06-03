@@ -115,6 +115,18 @@ export const GROWTH_TYPES: ObjectType[] = ["agent", "tool", "model"];
 
 // ─── Core Object ─────────────────────────────────────────────────────────────
 
+export interface ObjectHistoryEntry {
+  id: string;
+  actor_name: string;
+  action: string;
+  detail?: string | null;
+  created_at: string;
+}
+
+export interface ObjectHistoryResponse {
+  entries: ObjectHistoryEntry[];
+}
+
 export interface MinEAObject {
   id: string;
   workspace_id: string;
@@ -132,6 +144,18 @@ export interface MinEAObject {
   created_by?: string | null;
   created_at: string;
   updated_at: string;
+  /** Populated for application / solution / technical_capability */
+  updated_by_name?: string | null;
+  capability_count?: number;
+  apis_provided_count?: number;
+  apis_consumed_count?: number;
+  data_store_count?: number;
+  /** Populated for data_object / data_store / data_domain cards */
+  data_domain_name?: string | null;
+  system_of_record_name?: string | null;
+  hosting_system_name?: string | null;
+  governed_entity_count?: number;
+  governed_store_count?: number;
 }
 
 export interface ObjectCreate {
@@ -708,6 +732,18 @@ export interface ProductIntegrationItem {
   kind: string;
 }
 
+export interface ProductHistoryEntry {
+  id: string;
+  actor_name: string;
+  action: string;
+  detail?: string | null;
+  created_at: string;
+}
+
+export interface ProductHistoryResponse {
+  entries: ProductHistoryEntry[];
+}
+
 export interface Product {
   id: string;
   workspace_id: string;
@@ -717,6 +753,7 @@ export interface Product {
   lifecycle: ProductLifecycle | string;
   owner?: string | null;
   description?: string | null;
+  updated_by_name?: string | null;
   capability_count: number;
   system_count: number;
   apis_provided_count: number;

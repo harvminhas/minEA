@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Edit2, Layers, Trash2 } from "lucide-react";
 import type { CloudServiceProperties, MinEAObject } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
@@ -14,17 +14,23 @@ import {
   DetailRow,
   DetailSection,
 } from "@/components/ui/DetailPanel";
+import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
+import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
+import type { HistoryEntry } from "@/components/shared/EntityHistory";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import {
+  formatPlatformSubtitle,
   PLATFORM_CRITICALITY_LABEL,
   PLATFORM_HOSTING_LABEL,
+  PLATFORM_ICON_STYLE,
   PLATFORM_LICENSE_LABEL,
   PLATFORM_LIFECYCLE_LABEL,
   PLATFORM_SLA_LABEL,
   PLATFORM_VENDOR_LABEL,
   platformTypeLabel,
-  TECHNOLOGY_LAYER_COLOR,
 } from "@/lib/platform-utils";
+import { formatUpdatedAgo } from "@/lib/system-utils";
+import { cn } from "@/lib/utils";
 
 interface Props {
   platform: MinEAObject;
@@ -36,13 +42,40 @@ interface Props {
 export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
 
+  const [activeTab, setActiveTab] = useState<"details" | "history">("details");
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const props = (platform.properties ?? {}) as CloudServiceProperties;
   const typeLabel = platformTypeLabel(props);
   const vendorLabel = PLATFORM_VENDOR_LABEL[props.vendor ?? ""] ?? props.vendor;
+
+  const historyQueryKey = ["object-history", orgSlug, workspaceSlug, platform.id] as const;
+
+  const historyQuery = useQuery({
+    queryKey: historyQueryKey,
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.history(orgSlug, workspaceSlug, platform.id, token!);
+    },
+    enabled: activeTab === "history",
+  });
+
+  const historyEntries: HistoryEntry[] = (historyQuery.data?.entries ?? []).map((e) => ({
+    id: e.id,
+    actor_name: e.actor_name,
+    action: e.action,
+    detail: e.detail ?? null,
+    created_at: e.created_at,
+  }));
+
+  const refreshPlatform = () => {
+    queryClient.invalidateQueries({ queryKey: historyQueryKey });
+    onUpdate();
+  };
 
   const { data: systemsData } = useQuery({
     queryKey: ["platform-systems", orgSlug, workspaceSlug, platform.id],
@@ -59,7 +92,7 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
       );
       return apps.items.filter((item) => relIds.has(item.id));
     },
-    enabled,
+    enabled: enabled && activeTab === "details",
   });
 
   const deleteMutation = useMutation({
@@ -67,7 +100,10 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
       const token = await getToken();
       return objectsApi.delete(orgSlug, workspaceSlug, platform.id, token!);
     },
-    onSuccess: onDelete,
+    onSuccess: () => {
+      setShowDeleteConfirm(false);
+      onDelete();
+    },
   });
 
   const systems = systemsData ?? [];
@@ -77,114 +113,157 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
       <DetailPanel
         onClose={onClose}
         header={
-          <div className="flex items-start justify-between p-6 border-b border-gray-100">
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                className="h-10 w-10 rounded-lg flex items-center justify-center text-white flex-shrink-0"
-                style={{ backgroundColor: TECHNOLOGY_LAYER_COLOR }}
-              >
-                <Layers size={16} />
+          <div className="flex flex-col border-b border-gray-100">
+            <div className="flex items-start justify-between p-6 pb-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className={cn(
+                    "h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0",
+                    PLATFORM_ICON_STYLE
+                  )}
+                >
+                  <Layers size={16} strokeWidth={2.25} />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-gray-900 truncate">{platform.name}</h2>
+                  <p className="text-sm text-gray-400">{formatPlatformSubtitle(props)}</p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <h2 className="font-semibold text-gray-900 truncate">{platform.name}</h2>
-                <p className="text-sm text-gray-400">Platform</p>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowEditForm(true)}
+                  className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                  aria-label="Edit platform"
+                >
+                  <Edit2 size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                  aria-label="Delete platform"
+                >
+                  <Trash2 size={14} />
+                </button>
+                <DetailPanelCloseButton onClose={onClose} />
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setShowEditForm(true)}
-                className="p-2 rounded-md hover:bg-gray-100 text-gray-500"
-                aria-label="Edit platform"
-              >
-                <Edit2 size={15} />
-              </button>
-              <button
-                type="button"
-                onClick={() => deleteMutation.mutate()}
-                disabled={deleteMutation.isPending}
-                className="p-2 rounded-md hover:bg-red-50 text-gray-500 hover:text-red-600"
-                aria-label="Delete platform"
-              >
-                <Trash2 size={15} />
-              </button>
-              <DetailPanelCloseButton onClose={onClose} />
+
+            <div className="flex gap-6 px-6 mt-4">
+              {(["details", "history"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    "pb-2 text-sm font-medium border-b-2 capitalize transition-colors",
+                    activeTab === tab
+                      ? "border-slate-600 text-slate-600"
+                      : "border-transparent text-gray-400 hover:text-gray-600"
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
           </div>
         }
-      >
-        <DetailSection title="Identity">
-          {typeLabel && <DetailRow label="Type" value={typeLabel} />}
-          {vendorLabel && <DetailRow label="Vendor" value={vendorLabel} />}
-          {props.vendor_product && <DetailRow label="Vendor product" value={props.vendor_product} />}
-          {platform.description && <DetailRow label="Description" value={platform.description} />}
-          {platform.tags.length > 0 && (
-            <DetailRow label="Tags" value={platform.tags.join(", ")} />
-          )}
-        </DetailSection>
-
-        <DetailSection title="Hosting">
-          {props.hosting_model && (
-            <DetailRow
-              label="Hosting model"
-              value={PLATFORM_HOSTING_LABEL[props.hosting_model] ?? props.hosting_model}
-            />
-          )}
-          {props.region && <DetailRow label="Region" value={props.region} />}
-          {props.environments && props.environments.length > 0 && (
-            <DetailRow label="Environments" value={props.environments.join(", ")} />
-          )}
-          {props.admin_url && <DetailRow label="Admin URL" value={props.admin_url} />}
-        </DetailSection>
-
-        <DetailSection title="Contract">
-          {props.license_model && (
-            <DetailRow
-              label="License model"
-              value={PLATFORM_LICENSE_LABEL[props.license_model] ?? props.license_model}
-            />
-          )}
-          {props.contract_renewal && (
-            <DetailRow label="Contract renewal" value={props.contract_renewal} />
-          )}
-          {props.annual_cost && <DetailRow label="Annual cost" value={props.annual_cost} />}
-        </DetailSection>
-
-        <DetailSection title="Governance">
-          {platform.owner && <DetailRow label="Owner" value={platform.owner} />}
-          {props.sla_target && (
-            <DetailRow label="SLA target" value={PLATFORM_SLA_LABEL[props.sla_target] ?? props.sla_target} />
-          )}
-          {props.lifecycle && (
-            <DetailRow
-              label="Lifecycle"
-              value={PLATFORM_LIFECYCLE_LABEL[props.lifecycle] ?? props.lifecycle}
-            />
-          )}
-          {props.criticality && (
-            <DetailRow
-              label="Criticality"
-              value={PLATFORM_CRITICALITY_LABEL[props.criticality] ?? props.criticality}
-            />
-          )}
-        </DetailSection>
-
-        <DetailSection title="Systems on platform">
-          {systems.length === 0 ? (
-            <p className="text-sm text-gray-400 px-6 pb-4">
-              No systems reference this platform yet.
+        footer={
+          <div className="border-t border-gray-100 px-6 py-3">
+            <p className="text-xs text-gray-400">
+              Updated{platform.updated_by_name ? ` by ${platform.updated_by_name}` : ""}{" "}
+              {formatUpdatedAgo(platform.updated_at)}
             </p>
-          ) : (
-            <ul className="px-6 pb-4 space-y-1.5">
-              {systems.map((system) => (
-                <li key={system.id} className="text-sm text-gray-700">
-                  {system.name}
-                </li>
-              ))}
-            </ul>
-          )}
-        </DetailSection>
+          </div>
+        }
+      >
+        {activeTab === "history" ? (
+          <EntityHistoryPanel
+            entries={historyEntries}
+            isLoading={historyQuery.isLoading}
+            emptyMessage="No history recorded yet."
+          />
+        ) : (
+          <>
+            <DetailSection title="Identity">
+              {typeLabel && <DetailRow label="Type" value={typeLabel} />}
+              {vendorLabel && <DetailRow label="Vendor" value={vendorLabel} />}
+              {props.vendor_product && <DetailRow label="Vendor product" value={props.vendor_product} />}
+              {platform.description && <DetailRow label="Description" value={platform.description} />}
+              {platform.tags.length > 0 && <DetailRow label="Tags" value={platform.tags.join(", ")} />}
+            </DetailSection>
+
+            <DetailSection title="Hosting">
+              {props.hosting_model && (
+                <DetailRow
+                  label="Hosting model"
+                  value={PLATFORM_HOSTING_LABEL[props.hosting_model] ?? props.hosting_model}
+                />
+              )}
+              {props.region && <DetailRow label="Region" value={props.region} />}
+              {props.environments && props.environments.length > 0 && (
+                <DetailRow label="Environments" value={props.environments.join(", ")} />
+              )}
+              {props.admin_url && <DetailRow label="Admin URL" value={props.admin_url} />}
+            </DetailSection>
+
+            <DetailSection title="Contract">
+              {props.license_model && (
+                <DetailRow
+                  label="License model"
+                  value={PLATFORM_LICENSE_LABEL[props.license_model] ?? props.license_model}
+                />
+              )}
+              {props.contract_renewal && <DetailRow label="Contract renewal" value={props.contract_renewal} />}
+              {props.annual_cost && <DetailRow label="Annual cost" value={props.annual_cost} />}
+            </DetailSection>
+
+            <DetailSection title="Governance">
+              {platform.owner && <DetailRow label="Owner" value={platform.owner} />}
+              {props.sla_target && (
+                <DetailRow label="SLA target" value={PLATFORM_SLA_LABEL[props.sla_target] ?? props.sla_target} />
+              )}
+              {props.lifecycle && (
+                <DetailRow
+                  label="Lifecycle"
+                  value={PLATFORM_LIFECYCLE_LABEL[props.lifecycle] ?? props.lifecycle}
+                />
+              )}
+              {props.criticality && (
+                <DetailRow
+                  label="Criticality"
+                  value={PLATFORM_CRITICALITY_LABEL[props.criticality] ?? props.criticality}
+                />
+              )}
+            </DetailSection>
+
+            <DetailSection title="Systems on platform">
+              {systems.length === 0 ? (
+                <p className="text-sm text-gray-400 px-6 pb-4">No systems reference this platform yet.</p>
+              ) : (
+                <ul className="px-6 pb-4 space-y-1.5">
+                  {systems.map((system) => (
+                    <li key={system.id} className="text-sm text-gray-700">
+                      {system.name}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </DetailSection>
+          </>
+        )}
       </DetailPanel>
+
+      {showDeleteConfirm && (
+        <ConfirmDeleteDialog
+          title="Delete platform"
+          message={`Are you sure you want to delete "${platform.name}"? This cannot be undone.`}
+          onConfirm={() => deleteMutation.mutate()}
+          onCancel={() => setShowDeleteConfirm(false)}
+          isPending={deleteMutation.isPending}
+        />
+      )}
 
       {showEditForm && (
         <CreatePlatformPanel
@@ -192,7 +271,7 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
           onClose={() => setShowEditForm(false)}
           onSuccess={() => {
             setShowEditForm(false);
-            onUpdate();
+            refreshPlatform();
           }}
         />
       )}

@@ -74,6 +74,18 @@ class ProductIntegrationItem(BaseModel):
     kind: str
 
 
+class ProductHistoryEntry(BaseModel):
+    id: str
+    actor_name: str
+    action: str
+    detail: str | None = None
+    created_at: datetime
+
+
+class ProductHistoryResponse(BaseModel):
+    entries: list[ProductHistoryEntry]
+
+
 class ProductRead(BaseModel):
     id: UUID
     workspace_id: UUID
@@ -83,6 +95,7 @@ class ProductRead(BaseModel):
     lifecycle: str
     owner: str | None
     description: str | None
+    updated_by_name: str | None = None
     capability_count: int = 0
     system_count: int = 0
     apis_provided_count: int = 0

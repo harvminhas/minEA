@@ -8,17 +8,44 @@ import { type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import { getStatusColor, getStatusLabel, getObjectInitial, formatCurrency } from "@/lib/utils";
+import { isSystemObject } from "@/lib/system-utils";
+import { SystemObjectDetail } from "@/components/objects/SystemObjectDetail";
 import { RelationshipForm } from "./RelationshipForm";
 import { ObjectForm } from "./ObjectForm";
 
 interface Props {
   object: MinEAObject;
+  layerColor: string;
   onClose: () => void;
-  onDelete: () => void;
   onUpdate: () => void;
 }
 
-export function ObjectDetail({ object, onClose, onDelete, onUpdate }: Props) {
+export function ObjectDetail({ object, layerColor, onClose, onUpdate }: Props) {
+  if (isSystemObject(object)) {
+    return (
+      <SystemObjectDetail
+        objectId={object.id}
+        accentColor={layerColor}
+        onClose={onClose}
+        onUpdate={onUpdate}
+      />
+    );
+  }
+
+  return (
+    <LegacyObjectDetail object={object} onClose={onClose} onUpdate={onUpdate} />
+  );
+}
+
+function LegacyObjectDetail({
+  object,
+  onClose,
+  onUpdate,
+}: {
+  object: MinEAObject;
+  onClose: () => void;
+  onUpdate: () => void;
+}) {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const { orgSlug, workspaceSlug } = useTenancy();
@@ -84,12 +111,6 @@ export function ObjectDetail({ object, onClose, onDelete, onUpdate }: Props) {
               className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
             >
               <Edit2 size={14} />
-            </button>
-            <button
-              onClick={onDelete}
-              className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-            >
-              <Trash2 size={14} />
             </button>
             <button
               onClick={onClose}

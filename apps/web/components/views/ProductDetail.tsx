@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { useQuery } from "@tanstack/react-query";
-import { Edit2, Link2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Edit2, Link2, Trash2 } from "lucide-react";
 import type {
   MinEAObject,
   Product,
@@ -20,6 +20,9 @@ import {
   DetailPanelCloseButton,
   DetailSection,
 } from "@/components/ui/DetailPanel";
+import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
+import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
+import { invalidateProductQueries } from "@/lib/product-queries";
 import { ProductForm } from "@/components/views/ProductForm";
 import { ProductIntegrationsSummary } from "@/components/views/ProductIntegrationsSummary";
 import { CreateTechDebtPanel } from "@/components/risk/CreateTechDebtPanel";
@@ -265,7 +268,10 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
   const router = useRouter();
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<"details" | "history">("details");
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
   const [showCreateDebt, setShowCreateDebt] = useState(false);
 
@@ -295,6 +301,15 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
     enabled: !!product?.capability_ids.length,
   });
 
+  const { data: historyData, isLoading: historyLoading } = useQuery({
+    queryKey: ["product-history", orgSlug, workspaceSlug, productId],
+    queryFn: async () => {
+      const token = await getToken();
+      return productsApi.history(orgSlug, workspaceSlug, productId, token!);
+    },
+    enabled: activeTab === "history",
+  });
+
   const linkedCapabilities =
     capabilities?.items.filter((cap) => product?.capability_ids.includes(cap.id)) ?? [];
 
@@ -317,8 +332,25 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
 
   const refreshProduct = () => {
     refetch();
+    void queryClient.invalidateQueries({
+      queryKey: ["product-history", orgSlug, workspaceSlug, productId],
+    });
     onUpdate();
   };
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+      return productsApi.delete(orgSlug, workspaceSlug, productId, token);
+    },
+    onSuccess: () => {
+      setShowDeleteConfirm(false);
+      invalidateProductQueries(queryClient, orgSlug, workspaceSlug);
+      onUpdate();
+      onClose();
+    },
+  });
 
   if (isLoading || !product) {
     return (
@@ -341,49 +373,81 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
       <DetailPanel
         onClose={onClose}
         header={
-          <div className="flex items-start justify-between p-6 border-b border-gray-100">
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                className="h-10 w-10 rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0"
-                style={{ backgroundColor: accentColor }}
-              >
-                {product.name.charAt(0).toUpperCase()}
+          <div className="border-b border-gray-100">
+            <div className="flex items-start justify-between px-6 pt-6 pb-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className="h-10 w-10 rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0"
+                  style={{ backgroundColor: accentColor }}
+                >
+                  {product.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <h2 className="font-semibold text-gray-900 truncate">{product.name}</h2>
+                  <p className="text-sm text-gray-400">
+                    Product · {product.owner ?? "Unassigned"}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <h2 className="font-semibold text-gray-900 truncate">{product.name}</h2>
-                <p className="text-sm text-gray-400">Product · Layer 1</p>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowEditForm(true)}
+                  className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                  aria-label="Edit product"
+                >
+                  <Edit2 size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                  aria-label="Delete product"
+                >
+                  <Trash2 size={14} />
+                </button>
+                <DetailPanelCloseButton onClose={onClose} />
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-xs font-medium capitalize",
-                  LIFECYCLE_STYLE[product.lifecycle] ?? LIFECYCLE_STYLE.planned
-                )}
-              >
-                {product.lifecycle}
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowEditForm(true)}
-                className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500"
-                aria-label="Edit product"
-              >
-                <Edit2 size={14} />
-              </button>
-              <DetailPanelCloseButton onClose={onClose} />
+            {/* Tab bar */}
+            <div className="flex px-6 gap-4">
+              {(["details", "history"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    "pb-2.5 text-sm font-medium border-b-2 transition-colors capitalize",
+                    activeTab === tab
+                      ? "border-indigo-600 text-indigo-700"
+                      : "border-transparent text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
           </div>
         }
         footer={
-          <div className="border-t border-gray-100 px-6 py-3">
-            <p className="text-xs text-gray-400">
-              {product.trend_label ?? "No recent changes"} · Updated{" "}
-              {new Date(product.updated_at).toLocaleDateString()}
-            </p>
-          </div>
+          activeTab === "details" ? (
+            <div className="border-t border-gray-100 px-6 py-3">
+              <p className="text-xs text-gray-400">
+                {product.trend_label ?? "No recent changes"} · Updated{" "}
+                {new Date(product.updated_at).toLocaleDateString()}
+              </p>
+            </div>
+          ) : null
         }
       >
+        {activeTab === "history" && (
+          <EntityHistoryPanel
+            entries={historyData?.entries ?? []}
+            isLoading={historyLoading}
+          />
+        )}
+
+        {activeTab === "details" && <>
         <DetailSection title="Health">
           <CompositeHealth product={product} />
         </DetailSection>
@@ -548,7 +612,24 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
             </div>
           )}
         </DetailSection>
+        </>}
       </DetailPanel>
+
+      {showDeleteConfirm && (
+        <ConfirmDeleteDialog
+          title="Delete product?"
+          message={
+            <>
+              <span className="font-medium text-gray-700">{product.name}</span> will be permanently
+              removed from this workspace, including its capability links and history.
+            </>
+          }
+          confirmLabel="Delete product"
+          isPending={deleteMutation.isPending}
+          onCancel={() => setShowDeleteConfirm(false)}
+          onConfirm={() => deleteMutation.mutate()}
+        />
+      )}
 
       {showEditForm && (
         <ProductForm
@@ -556,8 +637,7 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
           onClose={() => setShowEditForm(false)}
           onSuccess={() => {
             setShowEditForm(false);
-            refetch();
-            onUpdate();
+            refreshProduct();
           }}
         />
       )}
@@ -580,12 +660,10 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
           onClose={() => setSelectedDebtId(null)}
           onDelete={() => {
             setSelectedDebtId(null);
-            refetch();
-            onUpdate();
+            refreshProduct();
           }}
           onUpdate={() => {
-            refetch();
-            onUpdate();
+            refreshProduct();
           }}
         />
       )}

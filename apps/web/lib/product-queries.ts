@@ -12,6 +12,7 @@ export function invalidateProductQueries(
   queryClient.invalidateQueries({ queryKey: ["products", orgSlug, workspaceSlug] });
   if (productId) {
     queryClient.invalidateQueries({ queryKey: ["product", orgSlug, workspaceSlug, productId] });
+    queryClient.invalidateQueries({ queryKey: ["product-history", orgSlug, workspaceSlug, productId] });
     queryClient.invalidateQueries({ queryKey: ["product-graph", orgSlug, workspaceSlug, productId] });
   } else {
     queryClient.invalidateQueries({ queryKey: ["product-graph", orgSlug, workspaceSlug] });

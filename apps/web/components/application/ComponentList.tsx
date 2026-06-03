@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Box, Plus } from "lucide-react";
+import { Clock, Plus } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
@@ -13,8 +13,30 @@ import {
   APPLICATION_LAYER_COLOR,
   COMPONENT_TYPE_LABEL,
 } from "@/lib/component-utils";
-import type { ComponentProperties, MinEAObject } from "@minea/types";
-import { cn, getStatusColor, getStatusLabel } from "@/lib/utils";
+import { aiRoleLabel } from "@/lib/ai-role-utils";
+import { formatUpdatedAgo } from "@/lib/system-utils";
+import type { AiRole, ComponentProperties, MinEAObject } from "@minea/types";
+import { cn, getStatusLabel } from "@/lib/utils";
+
+const COMPONENT_STATUS_STYLE: Record<string, string> = {
+  planned: "bg-stone-100 text-gray-600",
+  active: "bg-emerald-50 text-emerald-700",
+  retiring: "bg-amber-50 text-amber-700",
+  retired: "bg-red-50 text-red-500",
+};
+
+function PropertyRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-gray-400 flex-shrink-0">{label}</span>
+      <span className="text-gray-700 text-right truncate max-w-[60%]">{value}</span>
+    </div>
+  );
+}
+
+function getInitial(name: string): string {
+  return name.trim()[0]?.toUpperCase() ?? "?";
+}
 
 function ComponentCard({
   item,
@@ -25,67 +47,92 @@ function ComponentCard({
 }) {
   const props = (item.properties ?? {}) as ComponentProperties;
   const systems = props.systems ?? [];
-  const typeLabel = COMPONENT_TYPE_LABEL[props.component_type ?? ""] ?? props.component_type;
+  const tags = item.tags ?? [];
+  const typeLabel = COMPONENT_TYPE_LABEL[props.component_type ?? ""] ?? props.component_type ?? null;
+  const status = item.status ?? "planned";
+  const aiRole = aiRoleLabel(props.ai_role as AiRole | undefined);
 
   return (
-    <button
-      type="button"
+    <div
       onClick={onOpenDetail}
-      className="text-left bg-white rounded-xl border border-gray-200 hover:border-indigo-200 transition-colors w-full p-4"
+      className="bg-white rounded-xl border border-gray-200 p-5 hover:border-indigo-300 hover:shadow-sm cursor-pointer transition-all"
     >
-      <div className="flex items-start gap-3">
-        <div
-          className="h-9 w-9 rounded-lg flex items-center justify-center text-white flex-shrink-0"
-          style={{ backgroundColor: APPLICATION_LAYER_COLOR }}
-        >
-          <Box size={15} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 text-sm truncate leading-tight">{item.name}</h3>
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="h-9 w-9 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+            style={{ backgroundColor: APPLICATION_LAYER_COLOR }}
+          >
+            {getInitial(item.name)}
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{item.name}</p>
             {typeLabel && (
-              <span className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded-full font-medium">
-                {typeLabel}
-              </span>
-            )}
-            {props.tech_stack && (
-              <span className="text-[10px] text-gray-500 truncate max-w-[140px]">{props.tech_stack}</span>
-            )}
-            {item.status && (
-              <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize", getStatusColor(item.status))}>
-                {getStatusLabel(item.status)}
-              </span>
+              <p className="text-xs text-gray-400 mt-0.5 truncate">{typeLabel}</p>
             )}
           </div>
-
-          {systems.length > 0 && (
-            <div className="mt-2.5 flex flex-wrap gap-1">
-              {systems.slice(0, 3).map((s) => (
-                <span
-                  key={s.system_id}
-                  className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded truncate max-w-[100px]"
-                >
-                  {s.system_name}
-                </span>
-              ))}
-              {systems.length > 3 && (
-                <span className="text-[10px] text-gray-400">+{systems.length - 3}</span>
-              )}
-            </div>
-          )}
-
-          {props.runtime && (
-            <p className="text-[10px] text-gray-400 truncate mt-1.5">
-              Runs on {props.runtime.runtime_name}
-            </p>
-          )}
-
-          {item.owner && (
-            <p className="text-[10px] text-gray-400 truncate mt-1">Owner: {item.owner}</p>
-          )}
         </div>
+        <span
+          className={cn(
+            "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize flex-shrink-0",
+            COMPONENT_STATUS_STYLE[status] ?? COMPONENT_STATUS_STYLE.planned
+          )}
+        >
+          {getStatusLabel(status)}
+        </span>
       </div>
-    </button>
+
+      {/* Key-value rows */}
+      <div className="space-y-1.5 text-xs">
+        {props.tech_stack && <PropertyRow label="Tech stack" value={props.tech_stack} />}
+        {item.owner && <PropertyRow label="Owner" value={item.owner} />}
+        <PropertyRow label="AI role" value={aiRole} />
+      </div>
+
+      {/* Part of (systems) */}
+      {systems.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs text-gray-400 mb-1.5">Part of</p>
+          <div className="flex flex-wrap gap-1.5">
+            {systems.slice(0, 3).map((s) => (
+              <span
+                key={s.system_id}
+                className="rounded border border-gray-200 px-2 py-0.5 text-xs text-gray-500"
+              >
+                {s.system_name}
+              </span>
+            ))}
+            {systems.length > 3 && (
+              <span className="text-xs text-gray-400 self-center">+{systems.length - 3}</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tags */}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-3">
+          {tags.slice(0, 4).map((tag) => (
+            <span
+              key={tag}
+              className="rounded border border-gray-200 px-2 py-0.5 text-xs text-gray-500"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">
+        <Clock size={12} className="flex-shrink-0" />
+        <span>
+          Updated{item.updated_by_name ? ` by ${item.updated_by_name}` : ""}{" "}
+          {formatUpdatedAgo(item.updated_at)}
+        </span>
+      </div>
+    </div>
   );
 }
 

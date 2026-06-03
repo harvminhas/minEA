@@ -73,6 +73,13 @@ export function infraVendorLabel(vendor: string | undefined): string {
   return INFRA_VENDOR_LABEL[vendor] ?? vendor;
 }
 
+export const INFRA_ICON_STYLE = "bg-teal-50 text-teal-700";
+
+export function formatInfraSubtitle(props: ToolProperties): string {
+  const kind = infraKindLabel(props);
+  return kind ? `Integration infra · ${kind}` : "Integration infra";
+}
+
 export function collectCustomVendors(items: MinEAObject[]): string[] {
   const presetIds = new Set(INFRA_VENDORS.map((v) => v.value));
   const names = items
