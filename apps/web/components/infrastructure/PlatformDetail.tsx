@@ -50,7 +50,8 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
 
-  const [activeTab, setActiveTab] = useState<"details" | "history">("details");
+  const [activeTab, setActiveTab] = useState<ObjectDrawerTabId>("details");
+  const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(platform.id);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLinkDialog, setShowLinkDialog] = useState(false);

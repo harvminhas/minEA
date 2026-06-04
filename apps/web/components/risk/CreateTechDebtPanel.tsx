@@ -32,6 +32,8 @@ interface Props {
   scopedProduct?: { product_id: string; product_name: string };
   /** When set, debt is locked to this repository object (drawer tab). */
   scopedObject?: TechDebtAffectsRef;
+  /** When true, debt can be saved without an affected object (Views → Tech debt). */
+  allowUnattached?: boolean;
   onClose: () => void;
   onSuccess: (techDebtId: string) => void;
 }
