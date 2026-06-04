@@ -2,7 +2,17 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { LayoutGrid, List } from "lucide-react";
+import {
+  AlertCircle,
+  ChevronDown,
+  Download,
+  LayoutGrid,
+  List,
+  Loader2,
+  Package,
+  Tag,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTenancy } from "@/lib/tenancy";
@@ -17,6 +27,7 @@ import {
   filterTechDebtRows,
   productFilterOptions,
   summarizeTechDebt,
+  techDebtObjectName,
   techDebtSeverityBadgeLabel,
   type ProductFilter,
   type SeverityFilter,
@@ -41,63 +52,118 @@ function formatAgeDays(days: number): string {
   return `${days} days`;
 }
 
-function KpiCard({
-  label,
-  value,
-  subtext,
-  subtextClassName,
-  active,
-  onClick,
+function MetricsSummaryBar({
+  segments,
 }: {
-  label: string;
-  value: string;
-  subtext: string;
-  subtextClassName?: string;
-  active?: boolean;
-  onClick?: () => void;
+  segments: {
+    key: string;
+    value: string;
+    subtext: string;
+    subtextClassName?: string;
+    active?: boolean;
+    onClick?: () => void;
+  }[];
 }) {
-  const inner = (
-    <div
-      className={cn(
-        "rounded-xl border bg-white px-5 py-4 text-left w-full transition-colors",
-        active ? "border-violet-400 ring-1 ring-violet-200" : "border-gray-200 hover:border-gray-300"
-      )}
-    >
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
-      <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-      <p className={cn("text-[11px] mt-1", subtextClassName ?? "text-gray-500")}>{subtext}</p>
-    </div>
-  );
-  if (!onClick) return inner;
   return (
-    <button type="button" onClick={onClick} className="w-full">
-      {inner}
-    </button>
+    <div className="flex rounded-lg border border-gray-200 bg-white overflow-hidden divide-x divide-gray-200">
+      {segments.map((seg) => {
+        const content = (
+          <div
+            className={cn(
+              "flex flex-1 items-baseline gap-2 px-4 py-2.5 min-w-0 transition-colors",
+              seg.active && "bg-violet-50"
+            )}
+          >
+            <span className="text-xl font-bold text-gray-900 tabular-nums">{seg.value}</span>
+            <span className={cn("text-xs truncate", seg.subtextClassName ?? "text-gray-500")}>
+              {seg.subtext}
+            </span>
+          </div>
+        );
+        if (seg.onClick) {
+          return (
+            <button
+              key={seg.key}
+              type="button"
+              onClick={seg.onClick}
+              className="flex-1 text-left hover:bg-gray-50/80 transition-colors"
+            >
+              {content}
+            </button>
+          );
+        }
+        return (
+          <div key={seg.key} className="flex-1 min-w-0">
+            {content}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-function FilterPill({
-  active,
-  onClick,
-  children,
+function MetricsSummarySkeleton() {
+  return (
+    <div className="flex rounded-lg border border-gray-200 bg-white overflow-hidden divide-x divide-gray-200">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="flex-1 px-4 py-2.5 flex items-center gap-2">
+          <div className="h-6 w-8 rounded bg-gray-100 animate-pulse" />
+          <div className="h-3 flex-1 max-w-[72px] rounded bg-gray-100 animate-pulse" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TechDebtLoadingState({ layout }: { layout: TechDebtLayout }) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center rounded-xl border border-gray-200 bg-white text-center",
+        layout === "table" ? "py-24" : "py-20"
+      )}
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <Loader2 className="h-9 w-9 animate-spin text-violet-600" aria-hidden />
+      <p className="mt-4 text-sm font-medium text-gray-700">Loading tech debt</p>
+      <p className="mt-1 text-xs text-gray-400">Fetching items and product roll-ups…</p>
+    </div>
+  );
+}
+
+function FilterDropdown({
+  icon: Icon,
+  label,
+  value,
+  onChange,
+  options,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-full px-3 py-1 text-xs font-medium border transition-colors",
-        active
-          ? "bg-violet-600 text-white border-violet-600"
-          : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
-      )}
-    >
-      {children}
-    </button>
+    <label className="relative inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white pl-2.5 pr-2 py-1.5 cursor-pointer hover:border-gray-300 hover:bg-gray-50/80 transition-colors">
+      <Icon size={14} className="text-gray-500 shrink-0" />
+      <span className="text-sm font-medium text-gray-700">{label}</span>
+      <ChevronDown size={14} className="text-gray-400 shrink-0" />
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        aria-label={label}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -216,7 +282,7 @@ export function TechDebtView(props: TechDebtViewProps = {}) {
 
   const techDebtQueryKey = ["objects", orgSlug, workspaceSlug, "tech_debt"] as const;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isPending } = useQuery({
     queryKey: techDebtQueryKey,
     queryFn: async () => {
       const token = await getToken();
@@ -224,6 +290,8 @@ export function TechDebtView(props: TechDebtViewProps = {}) {
     },
     enabled,
   });
+
+  const listLoading = isLoading || (isPending && !data);
 
   const { data: productsData } = useQuery({
     queryKey: ["products", orgSlug, workspaceSlug],
@@ -260,129 +328,154 @@ export function TechDebtView(props: TechDebtViewProps = {}) {
     queryClient.invalidateQueries({ queryKey: ["object-tech-debt", orgSlug, workspaceSlug] });
   };
 
+  const exportCsv = () => {
+    const header = ["Name", "Severity", "Type", "Status", "Object", "Products", "Owner", "Age (days)"];
+    const csvRows = filtered.map((row) => [
+      row.item.name,
+      row.props.severity ?? "",
+      row.typeLabel,
+      row.props.debt_status ?? "",
+      techDebtObjectName(row) ?? "",
+      row.rollupProducts.map((p) => p.name).join("; "),
+      row.item.owner ?? "",
+      String(row.ageDays),
+    ]);
+    const csv = [header, ...csvRows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "tech-debt.csv";
+    a.click();
+  };
+
   return (
     <>
-      <div className="flex flex-col gap-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiCard
-            label="All items"
-            value={String(summary.allOpen)}
-            subtext={`${summary.critical} critical`}
-            active={!showResolved && severityFilter === "all"}
-            onClick={() => {
-              setShowResolved(false);
-              setSeverityFilter("all");
-            }}
-          />
-          <KpiCard
-            label="High"
-            value={String(summary.critical)}
-            subtext="needs attention"
-            subtextClassName="text-red-600"
-            active={severityFilter === "high"}
-            onClick={() => {
-              setShowResolved(false);
-              setSeverityFilter("high");
-            }}
-          />
-          <KpiCard
-            label="Unattached"
-            value={String(summary.unattached)}
-            subtext="no object linked"
-            active={false}
-          />
-          <KpiCard
-            label="Resolved"
-            value={String(summary.resolvedThisQuarter)}
-            subtext="this quarter"
-            active={showResolved}
-            onClick={() => setShowResolved((v) => !v)}
-          />
-        </div>
+      <div className="flex flex-col gap-4">
+        {listLoading ? (
+          <MetricsSummarySkeleton />
+        ) : (
+        <MetricsSummaryBar
+          segments={[
+            {
+              key: "all",
+              value: String(summary.allOpen),
+              subtext: `${summary.critical} critical`,
+              active: !showResolved && severityFilter === "all" && typeFilter === "all" && productFilter === "all",
+              onClick: () => {
+                setShowResolved(false);
+                setSeverityFilter("all");
+                setTypeFilter("all");
+                setProductFilter("all");
+              },
+            },
+            {
+              key: "high",
+              value: String(summary.critical),
+              subtext: "needs attention",
+              subtextClassName: "text-red-600",
+              active: severityFilter === "high",
+              onClick: () => {
+                setShowResolved(false);
+                setSeverityFilter("high");
+              },
+            },
+            {
+              key: "unattached",
+              value: String(summary.unattached),
+              subtext: "no object linked",
+              subtextClassName: "text-amber-600",
+            },
+            {
+              key: "resolved",
+              value: String(summary.resolvedThisQuarter),
+              subtext: "this quarter",
+              active: showResolved,
+              onClick: () => setShowResolved((v) => !v),
+            },
+          ]}
+        />
+        )}
 
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium text-gray-500">Severity</span>
-            {(["all", "high", "medium", "low"] as SeverityFilter[]).map((s) => (
-              <FilterPill
-                key={s}
-                active={severityFilter === s}
-                onClick={() => setSeverityFilter(s)}
-              >
-                {s === "all" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
-              </FilterPill>
-            ))}
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-3",
+            listLoading && "opacity-60 pointer-events-none"
+          )}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterDropdown
+              icon={AlertCircle}
+              label="Severity"
+              value={severityFilter}
+              onChange={(v) => {
+                setShowResolved(false);
+                setSeverityFilter(v as SeverityFilter);
+              }}
+              options={[
+                { value: "all", label: "All severities" },
+                { value: "high", label: "High & critical" },
+                { value: "medium", label: "Medium" },
+                { value: "low", label: "Low" },
+              ]}
+            />
+            <FilterDropdown
+              icon={Tag}
+              label="Type"
+              value={typeFilter}
+              onChange={(v) => setTypeFilter(v as TypeFilter)}
+              options={[
+                { value: "all", label: "All types" },
+                { value: "eol_software", label: "EOL software" },
+                { value: "security_vulnerability", label: "Security" },
+                { value: "architecture_drift", label: "Architecture" },
+              ]}
+            />
+            {productOptions.length > 0 && (
+              <FilterDropdown
+                icon={Package}
+                label="Product"
+                value={productFilter}
+                onChange={(v) => setProductFilter(v as ProductFilter)}
+                options={[
+                  { value: "all", label: "All products" },
+                  ...productOptions.map((p) => ({ value: p.id, label: p.name })),
+                ]}
+              />
+            )}
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium text-gray-500">Type</span>
-            <FilterPill active={typeFilter === "all"} onClick={() => setTypeFilter("all")}>
-              All
-            </FilterPill>
-            <FilterPill
-              active={typeFilter === "eol_software"}
-              onClick={() => setTypeFilter("eol_software")}
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={filtered.length === 0}
+              className="flex items-center gap-1.5 border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:pointer-events-none px-3 py-1.5 rounded-lg text-sm font-medium text-gray-700 transition-colors"
             >
-              EOL software
-            </FilterPill>
-            <FilterPill
-              active={typeFilter === "security_vulnerability"}
-              onClick={() => setTypeFilter("security_vulnerability")}
-            >
-              Security
-            </FilterPill>
-            <FilterPill
-              active={typeFilter === "architecture_drift"}
-              onClick={() => setTypeFilter("architecture_drift")}
-            >
-              Architecture
-            </FilterPill>
-          </div>
-          {productOptions.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-medium text-gray-500">Product</span>
-              <FilterPill active={productFilter === "all"} onClick={() => setProductFilter("all")}>
-                All
-              </FilterPill>
-              {productOptions.map((p) => (
-                <FilterPill
-                  key={p.id}
-                  active={productFilter === p.id}
-                  onClick={() => setProductFilter(p.id)}
+              <Download size={14} />
+              Export
+            </button>
+            <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+              {LAYOUT_OPTIONS.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setViewLayout(id)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                    viewLayout === id
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  )}
                 >
-                  {p.name}
-                </FilterPill>
+                  <Icon size={12} />
+                  {label}
+                </button>
               ))}
             </div>
-          )}
-          </div>
-
-          <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5 shrink-0">
-            {LAYOUT_OPTIONS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setViewLayout(id)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                  viewLayout === id
-                    ? "bg-white text-gray-900 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                )}
-              >
-                <Icon size={12} />
-                {label}
-              </button>
-            ))}
           </div>
         </div>
 
-        {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-gray-100 rounded-xl animate-pulse" />
-            ))}
-          </div>
+        {listLoading ? (
+          <TechDebtLoadingState layout={viewLayout} />
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 rounded-xl border border-dashed border-gray-200 bg-white/60">
             <p className="text-gray-500 text-sm mb-3">
