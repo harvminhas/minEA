@@ -150,6 +150,21 @@ async def create_object(
         performed_by=ctx.user_id,
     ))
 
+    if obj.type == "capability":
+        from app.services.domain_history import capability_domain_id, log_capability_added
+
+        domain_id = capability_domain_id(obj)
+        if domain_id:
+            log_capability_added(
+                db,
+                workspace_id=ctx.workspace.id,
+                org_id=ctx.org_id,
+                domain_id=domain_id,
+                user_id=ctx.user_id,
+                capability_name=obj.name,
+                capability_id=obj.id,
+            )
+
     await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     await db.commit()
     await db.refresh(obj)
@@ -233,6 +248,28 @@ async def update_object(
             diff={"action_type": "updated_fields", "changes": field_changes},
             performed_by=ctx.user_id,
         ))
+        if obj.type == "capability":
+            from app.services.domain_history import (
+                capability_domain_id,
+                domain_relevant_capability_changes,
+                log_capability_updated,
+            )
+
+            domain_id = capability_domain_id(obj)
+            domain_changes = domain_relevant_capability_changes(field_changes)
+            if domain_id and domain_changes:
+                cap_label = obj.name
+                if "name" in domain_changes:
+                    cap_label = domain_changes["name"].get("new") or cap_label
+                log_capability_updated(
+                    db,
+                    workspace_id=ctx.workspace.id,
+                    org_id=ctx.org_id,
+                    domain_id=domain_id,
+                    user_id=ctx.user_id,
+                    capability_name=cap_label,
+                    changes=domain_changes,
+                )
 
     obj.updated_by = ctx.user_id
 
@@ -303,6 +340,21 @@ async def delete_object(
     obj = result.scalar_one_or_none()
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
+
+    if obj.type == "capability":
+        from app.services.domain_history import capability_domain_id, log_capability_removed
+
+        domain_id = capability_domain_id(obj)
+        if domain_id:
+            log_capability_removed(
+                db,
+                workspace_id=ctx.workspace.id,
+                org_id=ctx.org_id,
+                domain_id=domain_id,
+                user_id=ctx.user_id,
+                capability_name=obj.name,
+                capability_id=obj.id,
+            )
 
     if obj.type == "business_domain":
         from app.services.capability_map import delete_capabilities_for_domain

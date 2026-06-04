@@ -62,12 +62,6 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
         badge: "new",
         countSource: { kind: "objects", type: "roadmap_item" },
       },
-      { label: "Value Streams", segment: "strategy/value-streams", badge: "upcoming" },
-      {
-        label: "Capability Map",
-        segment: "business/capabilities",
-        countSource: { kind: "capability-map" },
-      },
     ],
   },
   {
@@ -75,6 +69,11 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
     label: "Business",
     color: "#3b82f6",
     items: [
+      {
+        label: "Capabilities",
+        segment: "business/capabilities",
+        countSource: { kind: "capability-map" },
+      },
       { label: "Processes", segment: "views/processes", countSource: { kind: "processes" } },
     ],
   },

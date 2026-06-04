@@ -643,6 +643,7 @@ async def add_domain_mapping_system(
     org_id: UUID,
     domain_id: UUID,
     system_id: UUID,
+    user_id: UUID | None = None,
 ) -> None:
     domain = await get_domain(db, workspace_id, org_id, domain_id)
     if not domain:
@@ -656,8 +657,24 @@ async def add_domain_mapping_system(
             MinEAObject.type == "application",
         )
     )
-    if not system_result.scalar_one_or_none():
+    system = system_result.scalar_one_or_none()
+    if not system:
         raise ValueError("System not found")
+
+    props = domain.properties or {}
+    pinned = [str(item) for item in props.get("mapping_system_ids", []) if str(item).strip()]
+    if str(system_id) not in pinned:
+        from app.services.domain_history import log_system_added_to_mapping
+
+        log_system_added_to_mapping(
+            db,
+            workspace_id=workspace_id,
+            org_id=org_id,
+            domain_id=domain_id,
+            user_id=user_id,
+            system_name=system.name,
+            created=False,
+        )
 
     await _ensure_mapping_system(db, domain, system_id)
 
@@ -698,6 +715,17 @@ async def create_domain_mapping_system(
     db.add(system)
     await db.flush()
     await _ensure_mapping_system(db, domain, system.id)
+    from app.services.domain_history import log_system_added_to_mapping
+
+    log_system_added_to_mapping(
+        db,
+        workspace_id=workspace_id,
+        org_id=org_id,
+        domain_id=domain_id,
+        user_id=user_id,
+        system_name=system.name,
+        created=True,
+    )
     return system
 
 
@@ -727,7 +755,8 @@ async def upsert_domain_mapping(
             MinEAObject.properties["domain_id"].astext == str(domain_id),
         )
     )
-    if not capability_result.scalar_one_or_none():
+    capability = capability_result.scalar_one_or_none()
+    if not capability:
         raise ValueError("Capability not found in this domain")
 
     system_result = await db.execute(
@@ -738,7 +767,8 @@ async def upsert_domain_mapping(
             MinEAObject.type == "application",
         )
     )
-    if not system_result.scalar_one_or_none():
+    system = system_result.scalar_one_or_none()
+    if not system:
         raise ValueError("System not found")
 
     rel_result = await db.execute(
@@ -751,16 +781,43 @@ async def upsert_domain_mapping(
         )
     )
     existing = rel_result.scalar_one_or_none()
+    from app.services.domain_history import log_mapping_fitness
 
     if fitness == "none":
         if existing:
+            old_fitness = (existing.attributes or {}).get("fitness")
             await db.delete(existing)
+            log_mapping_fitness(
+                db,
+                workspace_id=workspace_id,
+                org_id=org_id,
+                domain_id=domain_id,
+                user_id=user_id,
+                capability_name=capability.name,
+                system_name=system.name,
+                fitness="none",
+                old_fitness=old_fitness if isinstance(old_fitness, str) else None,
+                cleared=True,
+            )
         return
 
     await _ensure_mapping_system(db, domain, system_id)
 
     if existing:
-        existing.attributes = {**(existing.attributes or {}), "fitness": fitness}
+        old_fitness = (existing.attributes or {}).get("fitness")
+        if old_fitness != fitness:
+            existing.attributes = {**(existing.attributes or {}), "fitness": fitness}
+            log_mapping_fitness(
+                db,
+                workspace_id=workspace_id,
+                org_id=org_id,
+                domain_id=domain_id,
+                user_id=user_id,
+                capability_name=capability.name,
+                system_name=system.name,
+                fitness=fitness,
+                old_fitness=old_fitness if isinstance(old_fitness, str) else None,
+            )
         return
 
     rel = Relationship(
@@ -775,6 +832,16 @@ async def upsert_domain_mapping(
         created_by=user_id,
     )
     db.add(rel)
+    log_mapping_fitness(
+        db,
+        workspace_id=workspace_id,
+        org_id=org_id,
+        domain_id=domain_id,
+        user_id=user_id,
+        capability_name=capability.name,
+        system_name=system.name,
+        fitness=fitness,
+    )
 
 
 async def load_domain_products(

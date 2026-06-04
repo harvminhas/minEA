@@ -39,7 +39,7 @@ export function RoadmapTimelineFullscreen({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-gray-50">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-gray-50">
       <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-gray-200 bg-white flex-shrink-0">
         <div className="min-w-0">
           <p

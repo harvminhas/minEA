@@ -4,13 +4,16 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Info } from "lucide-react";
-import type { CapabilityMapDomain } from "@minea/types";
+import type { CapabilityMapCapability, CapabilityMapDomain } from "@minea/types";
 import { useAuth } from "@/lib/auth-context";
 import { fetchDomainDetail } from "@/lib/domain-detail";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { DomainMappingTab } from "@/components/capability-map/DomainMappingTab";
 import { DomainProcessesTab } from "@/components/capability-map/DomainProcessesTab";
 import { DomainProductsTab } from "@/components/capability-map/DomainProductsTab";
+import { DomainHistoryTab } from "@/components/capability-map/DomainHistoryTab";
+import { DomainOverviewTab } from "@/components/capability-map/DomainOverviewTab";
+import { EditCapabilityDialog } from "@/components/capability-map/EditCapabilityDialog";
 import { domainIcon } from "@/lib/capability-map-icons";
 import { objectListPath } from "@/lib/tenancy";
 import { useTenancy } from "@/lib/tenancy";
@@ -19,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { RefreshingOverlay } from "@/components/ui/RefreshingOverlay";
 import { useQueryRefreshing } from "@/lib/use-query-refreshing";
 
-type TabId = "overview" | "mapping" | "processes" | "products";
+type TabId = "overview" | "mapping" | "processes" | "products" | "history";
 
 interface Props {
   domainId: string;
@@ -29,7 +32,8 @@ export function DomainDetailPage({ domainId }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<TabId>("mapping");
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [editCapability, setEditCapability] = useState<CapabilityMapCapability | null>(null);
   const queryEnabled = useAuthQueryEnabled(orgSlug, workspaceSlug, domainId);
 
   const domainQuery = useQuery({
@@ -105,6 +109,18 @@ export function DomainDetailPage({ domainId }: Props) {
       ? "No systems mapped"
       : `${domain.stats.mapped_system_count} system${domain.stats.mapped_system_count === 1 ? "" : "s"} mapped`;
 
+  const refreshDomain = () => {
+    refetch();
+    queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
+    queryClient.invalidateQueries({
+      queryKey: ["domain-history", orgSlug, workspaceSlug, domainId],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ["domain-products", orgSlug, workspaceSlug, domainId],
+    });
+    void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
+  };
+
   return (
     <RefreshingOverlay active={isRefreshing} className="flex flex-col h-full min-h-0 bg-white">
       {/* Page header */}
@@ -162,6 +178,7 @@ export function DomainDetailPage({ domainId }: Props) {
               ["mapping", "Mapping"],
               ["processes", "Processes"],
               ["products", "Products"],
+              ["history", "History"],
             ] as const
           ).map(([tab, label]) => (
             <button
@@ -183,54 +200,41 @@ export function DomainDetailPage({ domainId }: Props) {
 
       <div className="flex-1 min-h-0">
         {activeTab === "overview" && (
-          <div className="p-8 max-w-3xl">
-            <div className="rounded-xl border border-gray-200 bg-white p-6 space-y-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Description</p>
-                <p className="text-sm text-gray-700 mt-1">
-                  {domain.description?.trim() || "No description yet."}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Capabilities</p>
-                <ul className="mt-2 space-y-1">
-                  {domain.capabilities.map((capability) => (
-                    <li key={capability.id} className="text-sm text-gray-700">
-                      {capability.name}
-                    </li>
-                  ))}
-                  {domain.capabilities.length === 0 && (
-                    <li className="text-sm text-gray-400 italic">No capabilities yet</li>
-                  )}
-                </ul>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Mapping summary</p>
-                <p className="text-sm text-gray-700 mt-1">
-                  {domain.stats.strong_count} strong · {domain.stats.adequate_count} adequate ·{" "}
-                  {domain.stats.weak_count} weak · {domain.stats.gap_count} gaps
-                </p>
-              </div>
-            </div>
-          </div>
+          <DomainOverviewTab
+            domain={domain}
+            onSwitchTab={setActiveTab}
+            onEditCapability={setEditCapability}
+            onRefresh={refreshDomain}
+          />
         )}
 
         {activeTab === "mapping" && (
           <DomainMappingTab
             domain={domain}
             pickerDomain={pickerDomain}
-            onRefresh={() => {
-              refetch();
-              queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
-              void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
-            }}
+            onEditCapability={setEditCapability}
+            onRefresh={refreshDomain}
           />
         )}
 
         {activeTab === "processes" && <DomainProcessesTab domain={domain} />}
 
         {activeTab === "products" && <DomainProductsTab domain={domain} />}
+
+        {activeTab === "history" && <DomainHistoryTab domainId={domain.id} />}
       </div>
+
+      {editCapability && (
+        <EditCapabilityDialog
+          capability={editCapability}
+          domainName={domain.name}
+          onClose={() => setEditCapability(null)}
+          onSuccess={() => {
+            setEditCapability(null);
+            refreshDomain();
+          }}
+        />
+      )}
     </RefreshingOverlay>
   );
 }

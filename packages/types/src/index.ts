@@ -1210,6 +1210,18 @@ export interface DomainProductsResponse {
   items: DomainLinkedProduct[];
 }
 
+export interface DomainHistoryEntry {
+  id: string;
+  actor_name: string;
+  action: string;
+  detail?: string | null;
+  created_at: string;
+}
+
+export interface DomainHistoryResponse {
+  entries: DomainHistoryEntry[];
+}
+
 export interface UpsertDomainMappingRequest {
   capability_id: string;
   system_id: string;

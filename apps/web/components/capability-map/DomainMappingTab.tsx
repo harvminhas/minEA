@@ -18,7 +18,6 @@ import {
   upsertDomainMapping,
 } from "@/lib/domain-detail";
 import { AddCapabilityPickerDialog } from "@/components/capability-map/AddCapabilityPickerDialog";
-import { EditCapabilityDialog } from "@/components/capability-map/EditCapabilityDialog";
 import { AddMappingSystemDialog } from "@/components/capability-map/AddMappingSystemDialog";
 import { MapCapabilitySystemDialog } from "@/components/capability-map/MapCapabilitySystemDialog";
 import { useTenancy } from "@/lib/tenancy";
@@ -45,6 +44,7 @@ const FITNESS_LABEL: Record<MappingFitness, string> = {
 interface Props {
   domain: DomainDetail;
   pickerDomain: CapabilityMapDomain;
+  onEditCapability: (capability: CapabilityMapCapability) => void;
   onRefresh: () => void;
 }
 
@@ -75,13 +75,12 @@ function capabilityRowMeta(
   };
 }
 
-export function DomainMappingTab({ domain, pickerDomain, onRefresh }: Props) {
+export function DomainMappingTab({ domain, pickerDomain, onEditCapability, onRefresh }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const [filter, setFilter] = useState("");
   const [showAddSystem, setShowAddSystem] = useState(false);
   const [showAddCapability, setShowAddCapability] = useState(false);
-  const [editCapability, setEditCapability] = useState<CapabilityMapCapability | null>(null);
   const [deleteCapability, setDeleteCapability] = useState<CapabilityMapCapability | null>(null);
   const [cellSelection, setCellSelection] = useState<CellSelection | null>(null);
 
@@ -320,7 +319,7 @@ export function DomainMappingTab({ domain, pickerDomain, onRefresh }: Props) {
                             {
                               label: "Edit capability",
                               icon: <Pencil size={14} />,
-                              onClick: () => setEditCapability(capability),
+                              onClick: () => onEditCapability(capability),
                             },
                             {
                               label: "Delete capability",
@@ -411,15 +410,6 @@ export function DomainMappingTab({ domain, pickerDomain, onRefresh }: Props) {
           isSubmitting={createCapabilityMutation.isPending}
           onClose={() => setShowAddCapability(false)}
           onAdd={({ name, owner }) => createCapabilityMutation.mutate({ name, owner })}
-        />
-      )}
-
-      {editCapability && (
-        <EditCapabilityDialog
-          capability={editCapability}
-          domainName={domain.name}
-          onClose={() => setEditCapability(null)}
-          onSuccess={onRefresh}
         />
       )}
 

@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2, Users } from "lucide-react";
 import type { CapabilityMap, CapabilityMapCapability, CapabilityMapDomain } from "@minea/types";
-import { capabilityCoverageDisplay } from "@/lib/capability-map-card-utils";
+import { FitnessHealthBar, FitnessLegend } from "@/components/capability-map/DomainFitnessBar";
+import {
+  capabilityCoverageDisplay,
+  domainCardCoverageCounts,
+} from "@/lib/capability-map-card-utils";
 import { useAuth } from "@/lib/auth-context";
 import { objectsApi } from "@/lib/api-client";
 import { AddCapabilityPickerDialog } from "@/components/capability-map/AddCapabilityPickerDialog";
@@ -36,11 +40,13 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
   const [capPickerDomain, setCapPickerDomain] = useState<CapabilityMapDomain | null>(null);
   const [editCapability, setEditCapability] = useState<{
     capability: CapabilityMapCapability;
+    domainId: string;
     domainName: string;
   } | null>(null);
   const [deleteDomain, setDeleteDomain] = useState<CapabilityMapDomain | null>(null);
   const [deleteCapability, setDeleteCapability] = useState<{
     capability: CapabilityMapCapability;
+    domainId: string;
     domainName: string;
   } | null>(null);
 
@@ -56,6 +62,12 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
         queryKey: ["capability-library-caps", orgSlug, workspaceSlug, capPickerDomain.id],
       });
     }
+  };
+
+  const invalidateDomainHistory = (domainId: string) => {
+    queryClient.invalidateQueries({
+      queryKey: ["domain-history", orgSlug, workspaceSlug, domainId],
+    });
   };
 
   const createDomainMutation = useMutation({
@@ -121,8 +133,10 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
       );
     },
     onSuccess: () => {
+      const domainId = capPickerDomain?.id;
       setCapPickerDomain(null);
       invalidate();
+      if (domainId) invalidateDomainHistory(domainId);
       onRefresh();
     },
   });
@@ -145,8 +159,10 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
       await objectsApi.delete(orgSlug, workspaceSlug, capabilityId, token!);
     },
     onSuccess: () => {
+      const domainId = deleteCapability?.domainId;
       setDeleteCapability(null);
       invalidate();
+      if (domainId) invalidateDomainHistory(domainId);
       onRefresh();
     },
   });
@@ -203,11 +219,19 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
                   domain={domain}
                   onAddCapability={() => setCapPickerDomain(domain)}
                   onEditCapability={(capability) =>
-                    setEditCapability({ capability, domainName: domain.name })
+                    setEditCapability({
+                      capability,
+                      domainId: domain.id,
+                      domainName: domain.name,
+                    })
                   }
                   onDeleteDomain={() => setDeleteDomain(domain)}
                   onDeleteCapability={(capability) =>
-                    setDeleteCapability({ capability, domainName: domain.name })
+                    setDeleteCapability({
+                      capability,
+                      domainId: domain.id,
+                      domainName: domain.name,
+                    })
                   }
                 />
               ))}
@@ -246,6 +270,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
           onClose={() => setEditCapability(null)}
           onSuccess={() => {
             invalidate();
+            invalidateDomainHistory(editCapability.domainId);
             onRefresh();
           }}
         />
@@ -308,6 +333,11 @@ function DomainCard({
   const { orgSlug, workspaceSlug } = useTenancy();
   const Icon = domainIcon(domain.icon);
   const detailPath = `${objectListPath(orgSlug, workspaceSlug, "business", "capabilities")}/domains/${domain.id}`;
+  const coverageCounts = useMemo(
+    () => domainCardCoverageCounts(domain.capabilities),
+    [domain.capabilities]
+  );
+  const capTotal = domain.capabilities.length;
 
   return (
     <div className="group/card rounded-xl border border-gray-200 bg-white p-4 hover:border-indigo-200 transition-colors flex flex-col">
@@ -343,10 +373,17 @@ function DomainCard({
         />
       </div>
 
-      {domain.capabilities.length === 0 ? (
+      {capTotal > 0 && (
+        <div className="mb-3">
+          <FitnessHealthBar counts={coverageCounts} total={capTotal} />
+          <FitnessLegend counts={coverageCounts} hideZero className="mt-2" />
+        </div>
+      )}
+
+      {capTotal === 0 ? (
         <p className="text-sm text-gray-400 italic mb-2">No capabilities yet</p>
       ) : (
-        <ul className="space-y-1 mb-2">
+        <ul className="divide-y divide-gray-100 mb-2">
           {domain.capabilities.map((cap) => (
             <CapabilityL2Row
               key={cap.id}
@@ -385,7 +422,7 @@ function CapabilityL2Row({
   const unowned = !capability.owner?.trim();
 
   return (
-    <li className="group/row flex items-center justify-between gap-2 py-1">
+    <li className="group/row flex items-center justify-between gap-2 py-2.5 first:pt-0">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-gray-900 leading-snug">{capability.name}</p>
         <p

@@ -18,6 +18,8 @@ from app.schemas.capability_map import (
     CapabilityTemplateSummary,
     CreateDomainMappingSystemRequest,
     DomainDetailRead,
+    DomainHistoryEntry,
+    DomainHistoryResponse,
     DomainProductsRead,
     LibraryDomainGroup,
     UpsertDomainMappingRequest,
@@ -39,6 +41,7 @@ from app.services.capability_map import (
     templates_for_api,
     upsert_domain_mapping,
 )
+from app.services.domain_history import domain_history_entries_for_api
 from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
 
@@ -222,6 +225,27 @@ async def get_domain_detail(
     return DomainDetailRead(**detail)
 
 
+@router.get("/domains/{domain_id}/history", response_model=DomainHistoryResponse)
+async def get_domain_history(
+    domain_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> DomainHistoryResponse:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
+    domain = await get_domain(db, ctx.workspace.id, ctx.org_id, domain_id)
+    if not domain:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Domain not found")
+
+    rows = await domain_history_entries_for_api(
+        db, ctx.workspace.id, ctx.org_id, domain_id
+    )
+    return DomainHistoryResponse(
+        entries=[DomainHistoryEntry(**row) for row in rows]
+    )
+
+
 @router.get("/domains/{domain_id}/products", response_model=DomainProductsRead)
 async def get_domain_products(
     domain_id: UUID,
@@ -256,6 +280,7 @@ async def add_domain_mapping_system_endpoint(
             ctx.org_id,
             domain_id,
             UUID(body.system_id),
+            ctx.user_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

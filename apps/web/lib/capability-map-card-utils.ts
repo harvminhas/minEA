@@ -1,5 +1,32 @@
 import type { CapabilityCoverageStatus, CapabilityMapCapability } from "@minea/types";
 
+export interface DomainCardCoverageCounts {
+  strong: number;
+  adequate: number;
+  gap: number;
+}
+
+/** Per-capability coverage buckets for L1 map cards (active → strong, planned → adequate, no system → gap). */
+export function domainCardCoverageCounts(
+  capabilities: CapabilityMapCapability[]
+): DomainCardCoverageCounts {
+  const counts: DomainCardCoverageCounts = { strong: 0, adequate: 0, gap: 0 };
+  for (const cap of capabilities) {
+    switch (resolveCapabilityCoverage(cap)) {
+      case "no_system":
+        counts.gap += 1;
+        break;
+      case "planned":
+        counts.adequate += 1;
+        break;
+      default:
+        counts.strong += 1;
+        break;
+    }
+  }
+  return counts;
+}
+
 export function resolveCapabilityCoverage(
   cap: CapabilityMapCapability
 ): CapabilityCoverageStatus {

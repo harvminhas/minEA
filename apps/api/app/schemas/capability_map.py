@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -142,6 +144,18 @@ class DomainLinkedProduct(BaseModel):
 
 class DomainProductsRead(BaseModel):
     items: list[DomainLinkedProduct] = Field(default_factory=list)
+
+
+class DomainHistoryEntry(BaseModel):
+    id: str
+    actor_name: str
+    action: str
+    detail: str | None = None
+    created_at: datetime
+
+
+class DomainHistoryResponse(BaseModel):
+    entries: list[DomainHistoryEntry] = Field(default_factory=list)
 
 
 class DomainDetailRead(BaseModel):
