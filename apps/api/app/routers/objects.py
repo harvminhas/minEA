@@ -14,11 +14,13 @@ from app.schemas.objects import (
     ObjectHistoryResponse,
     ObjectListResponse,
     ObjectRead,
+    ObjectTechDebtSummary,
     ObjectUpdate,
 )
 from app.services.authorization import require_limit
 from app.services.capability_validation import validate_object_write
 from app.services.object_history import describe_object_history
+from app.services.object_tech_debt import tech_debt_summary_for_object
 from app.services.object_stats import (
     DATA_TYPES,
     SYSTEM_TYPES,
@@ -27,6 +29,8 @@ from app.services.object_stats import (
     enrich_single_data,
     enrich_single_system,
     enrich_single_updated_by,
+    enrich_open_tech_debt_counts,
+    enrich_tech_debt_view_items,
     enrich_system_objects,
     enrich_updated_by_objects,
 )
@@ -91,14 +95,19 @@ async def list_objects(
     total_result = await db.execute(select(func.count()).select_from(q.subquery()))
     total = total_result.scalar_one()
 
-    q = q.order_by(MinEAObject.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    order_col = MinEAObject.created_at if type == "tech_debt" else MinEAObject.updated_at
+    q = q.order_by(order_col.desc()).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(q)
     items = list(result.scalars().all())
 
     system_stats = await enrich_system_objects(db, items)
     updated_by_stats = await enrich_updated_by_objects(db, items)
     data_stats = await enrich_data_objects(db, items)
-    stats_map = {**system_stats, **updated_by_stats, **data_stats}
+    debt_stats = await enrich_open_tech_debt_counts(db, items)
+    tech_debt_view_stats = (
+        await enrich_tech_debt_view_items(db, items) if type == "tech_debt" else {}
+    )
+    stats_map = {**system_stats, **updated_by_stats, **data_stats, **debt_stats, **tech_debt_view_stats}
     reads: list[ObjectRead] = []
     for obj in items:
         base = ObjectRead.model_validate(obj)
@@ -277,6 +286,21 @@ async def update_object(
     await db.commit()
     await db.refresh(obj)
     return await _to_read(db, obj)
+
+
+@router.get("/{object_id}/tech-debt", response_model=ObjectTechDebtSummary)
+async def get_object_tech_debt(
+    object_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> ObjectTechDebtSummary:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
+    summary = await tech_debt_summary_for_object(
+        db, object_id, ctx.workspace.id, ctx.org_id
+    )
+    return ObjectTechDebtSummary.model_validate(summary)
 
 
 @router.get("/{object_id}/history", response_model=ObjectHistoryResponse)

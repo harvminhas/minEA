@@ -115,7 +115,13 @@ def _debt_attached_to_scope(
     affects = props.get("affects") or {}
     obj_id = _normalize_object_id(affects.get("object_id"))
     kind = affects.get("object_kind")
-    return obj_id in scope_strs and kind in ("application", "component", None)
+    return obj_id in scope_strs and kind in (
+        "application",
+        "solution",
+        "technical_capability",
+        "component",
+        None,
+    )
 
 
 async def _tech_debt_for_product(
@@ -141,7 +147,9 @@ async def _tech_debt_for_product(
                 MinEAObject.org_id == org_id,
                 Relationship.type == "affects",
                 Relationship.from_type == "tech_debt",
-                Relationship.to_type.in_(("application", "component")),
+                Relationship.to_type.in_(
+                    ("application", "solution", "technical_capability", "component")
+                ),
                 Relationship.to_object_id.in_(scope_ids),
                 Relationship.workspace_id == workspace_id,
                 Relationship.org_id == org_id,

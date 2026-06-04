@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.products import ProductTechDebtItem
+
 VALID_TYPES = {
     "business_domain", "capability", "value_stream", "roadmap_item",
     "application", "solution", "technical_capability", "component", "agent",
@@ -60,6 +62,16 @@ class ObjectHistoryResponse(BaseModel):
     entries: list[ObjectHistoryEntry]
 
 
+class ObjectTechDebtRollupProduct(BaseModel):
+    id: str
+    name: str
+
+
+class ObjectTechDebtRemediationRef(BaseModel):
+    roadmap_id: str
+    roadmap_title: str
+
+
 class ObjectRead(BaseModel):
     id: UUID
     workspace_id: UUID
@@ -83,6 +95,9 @@ class ObjectRead(BaseModel):
     apis_provided_count: int = 0
     apis_consumed_count: int = 0
     data_store_count: int = 0
+    open_tech_debt_count: int = 0
+    tech_debt_rollup_products: list[ObjectTechDebtRollupProduct] = Field(default_factory=list)
+    tech_debt_remediation: ObjectTechDebtRemediationRef | None = None
     # Populated for data_object / data_store / data_domain cards
     data_domain_name: str | None = None
     system_of_record_name: str | None = None
@@ -91,6 +106,12 @@ class ObjectRead(BaseModel):
     governed_store_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ObjectTechDebtSummary(BaseModel):
+    open_count: int = 0
+    items: list[ProductTechDebtItem] = Field(default_factory=list)
+    rollup_products: list[ObjectTechDebtRollupProduct] = Field(default_factory=list)
 
 
 class ObjectListResponse(BaseModel):

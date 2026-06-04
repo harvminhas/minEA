@@ -11,6 +11,7 @@ from app.models.data_layer import DataLink
 from app.models.objects import MinEAObject
 from app.models.relationships import Relationship
 from app.models.tenancy import User
+from app.services.portfolio_signals import _is_open_debt, _normalize_object_id
 
 SYSTEM_TYPES = ("application", "solution", "technical_capability")
 COMPONENT_TYPES = ("component",)
@@ -22,6 +23,127 @@ DATA_TYPES = ("data_object", "data_store", "data_domain")
 UPDATED_BY_ONLY_TYPES = (
     COMPONENT_TYPES + API_TYPES + EVENT_TYPES + FLOW_TYPES + TECHNOLOGY_TYPES
 )
+TECH_DEBT_HOST_TYPES = (
+    SYSTEM_TYPES
+    + COMPONENT_TYPES
+    + API_TYPES
+    + EVENT_TYPES
+    + FLOW_TYPES
+    + TECHNOLOGY_TYPES
+    + DATA_TYPES
+)
+
+
+async def enrich_open_tech_debt_counts(
+    db: AsyncSession, objects: list[MinEAObject]
+) -> dict[uuid.UUID, dict]:
+    """Open tech debt items attached to each host object (relationship + properties.affects)."""
+    targets = [o for o in objects if o.type in TECH_DEBT_HOST_TYPES]
+    if not targets:
+        return {}
+
+    workspace_id = targets[0].workspace_id
+    org_id = targets[0].org_id
+    host_ids = [o.id for o in targets]
+    host_type_by_id = {o.id: o.type for o in targets}
+
+    seen: set[tuple[uuid.UUID, uuid.UUID]] = set()
+    counts: dict[uuid.UUID, int] = defaultdict(int)
+
+    rel_result = await db.execute(
+        select(Relationship.to_object_id, MinEAObject.id, MinEAObject.properties)
+        .join(MinEAObject, MinEAObject.id == Relationship.from_object_id)
+        .where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            Relationship.type == "affects",
+            Relationship.from_type == "tech_debt",
+            Relationship.to_object_id.in_(host_ids),
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.org_id == org_id,
+            MinEAObject.type == "tech_debt",
+        )
+    )
+    for host_id, debt_id, props in rel_result.all():
+        key = (host_id, debt_id)
+        if key in seen or not _is_open_debt(props):
+            continue
+        seen.add(key)
+        counts[host_id] += 1
+
+    debt_result = await db.execute(
+        select(MinEAObject.id, MinEAObject.properties).where(
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.org_id == org_id,
+            MinEAObject.type == "tech_debt",
+        )
+    )
+    for debt_id, props in debt_result.all():
+        if not props or not _is_open_debt(props):
+            continue
+        affects = props.get("affects") or {}
+        host_key = _normalize_object_id(affects.get("object_id"))
+        kind = affects.get("object_kind")
+        if not host_key or not kind:
+            continue
+        try:
+            host_uuid = uuid.UUID(host_key)
+        except (TypeError, ValueError):
+            continue
+        if host_uuid not in host_type_by_id or host_type_by_id[host_uuid] != kind:
+            continue
+        key = (host_uuid, debt_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        counts[host_uuid] += 1
+
+    return {host_id: {"open_tech_debt_count": counts[host_id]} for host_id in host_ids}
+
+
+async def enrich_tech_debt_view_items(
+    db: AsyncSession, objects: list[MinEAObject]
+) -> dict[uuid.UUID, dict]:
+    """Rollup products + remediation for tech debt list / view."""
+    debts = [o for o in objects if o.type == "tech_debt"]
+    if not debts:
+        return {}
+
+    from app.services.object_tech_debt import _build_host_product_rollup_index
+    from app.services.product_detail import _debt_remediation_map
+
+    workspace_id = debts[0].workspace_id
+    org_id = debts[0].org_id
+    debt_ids = {o.id for o in debts}
+    remediation = await _debt_remediation_map(db, debt_ids, workspace_id, org_id)
+    rollup_index = await _build_host_product_rollup_index(db, workspace_id, org_id)
+
+    out: dict[uuid.UUID, dict] = {}
+    for debt in debts:
+        props = debt.properties or {}
+        affects = props.get("affects") or {}
+        rollup: list[dict[str, str]] = []
+        host_key = affects.get("object_id")
+        kind = affects.get("object_kind")
+        if host_key and kind in (
+            "application",
+            "solution",
+            "technical_capability",
+            "component",
+        ):
+            rollup = rollup_index.get(str(host_key), [])
+        elif kind == "product" and host_key:
+            rollup = [{"id": str(host_key), "name": str(affects.get("object_name") or "Product")}]
+
+        rem = remediation.get(str(debt.id))
+        if rem is not None and not rem.get("roadmap_title"):
+            rem = {**rem, "roadmap_title": "Roadmap item"}
+
+        out[debt.id] = {
+            "tech_debt_rollup_products": rollup,
+            "tech_debt_remediation": rem,
+        }
+    return out
 
 
 async def _count_by_to(

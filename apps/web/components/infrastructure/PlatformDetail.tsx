@@ -16,6 +16,9 @@ import {
 } from "@/components/ui/DetailPanel";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
+import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
+import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
+import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { HistoryEntry } from "@/components/shared/EntityHistory";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { PlatformLinkDialog } from "@/components/infrastructure/PlatformLinkDialog";
@@ -163,23 +166,12 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
               </div>
             </div>
 
-            <div className="flex gap-6 px-6 mt-4">
-              {(["details", "history"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setActiveTab(tab)}
-                  className={cn(
-                    "pb-2 text-sm font-medium border-b-2 capitalize transition-colors",
-                    activeTab === tab
-                      ? "border-slate-600 text-slate-600"
-                      : "border-transparent text-gray-400 hover:text-gray-600"
-                  )}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
+            <ObjectDrawerTabs
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              openDebtCount={techDebtSummary?.open_count ?? 0}
+              className="mt-4"
+            />
           </div>
         }
         footer={
@@ -191,7 +183,17 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
           </div>
         }
       >
-        {activeTab === "history" ? (
+        {activeTab === "tech_debt" ? (
+          <ObjectTechDebtTab
+            objectId={platform.id}
+            objectName={platform.name}
+            objectKind="cloud_service"
+            summary={techDebtSummary}
+            isLoading={techDebtLoading}
+            defaultOwner={platform.owner}
+            onRefresh={refreshPlatform}
+          />
+        ) : activeTab === "history" ? (
           <EntityHistoryPanel
             entries={historyEntries}
             isLoading={historyQuery.isLoading}

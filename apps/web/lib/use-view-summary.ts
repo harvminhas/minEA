@@ -36,6 +36,8 @@ export function viewHasRepositoryData(
       return metrics.journeyCount > 0;
     case "investments":
       return metrics.investmentCount > 0;
+    case "tech-debt":
+      return true;
     default:
       return false;
   }

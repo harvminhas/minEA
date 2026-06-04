@@ -410,6 +410,8 @@ export function viewReadiness(
       return metrics.investmentCount > 0
         ? ready
         : { ready: false, statusLabel: "Needs investments", statusTone: "needs" };
+    case "tech-debt":
+      return ready;
     default:
       return { ready: false, statusLabel: "Needs data", statusTone: "needs" };
   }

@@ -150,6 +150,11 @@ export interface MinEAObject {
   apis_provided_count?: number;
   apis_consumed_count?: number;
   data_store_count?: number;
+  /** Open tech debt items attached to this object (repository cards). */
+  open_tech_debt_count?: number;
+  /** Populated when listing tech_debt objects (Views → Tech debt). */
+  tech_debt_rollup_products?: ObjectTechDebtRollupProduct[];
+  tech_debt_remediation?: { roadmap_id: string; roadmap_title: string } | null;
   /** Populated for data_object / data_store / data_domain cards */
   data_domain_name?: string | null;
   system_of_record_name?: string | null;
@@ -464,10 +469,26 @@ export interface ModelProperties {
   criticality?: "low" | "medium" | "high" | "tier1";
 }
 
+export type TechDebtHostKind =
+  | "product"
+  | "application"
+  | "solution"
+  | "technical_capability"
+  | "component"
+  | "api"
+  | "event"
+  | "integration_flow"
+  | "tool"
+  | "data_object"
+  | "data_store"
+  | "data_domain"
+  | "cloud_service"
+  | "model";
+
 export interface TechDebtAffectsRef {
   object_id: string;
   object_name: string;
-  object_kind: "product" | "application" | "component";
+  object_kind: TechDebtHostKind;
 }
 
 export interface TechDebtProperties {
@@ -701,6 +722,17 @@ export interface ProductHealthDimensions {
 export interface ProductTechDebtRemediation {
   roadmap_id: string;
   roadmap_title: string;
+}
+
+export interface ObjectTechDebtRollupProduct {
+  id: string;
+  name: string;
+}
+
+export interface ObjectTechDebtSummary {
+  open_count: number;
+  items: ProductTechDebtItem[];
+  rollup_products: ObjectTechDebtRollupProduct[];
 }
 
 export interface ProductTechDebtItem {

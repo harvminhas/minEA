@@ -6,7 +6,8 @@ import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link2, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { objectsApi, peopleApi, relationshipsApi } from "@/lib/api-client";
+import { objectsApi, peopleApi } from "@/lib/api-client";
+import { syncTechDebtRelationships } from "@/lib/tech-debt-relationships";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { PickAffectedDialog } from "@/components/risk/PickAffectedDialog";
 import {
@@ -20,6 +21,7 @@ import {
   TECH_DEBT_STATUS,
   TECH_DEBT_TYPES,
 } from "@/lib/tech-debt-utils";
+import { techDebtHostKindLabel } from "@/lib/object-tech-debt";
 import type { MinEAObject, TechDebtAffectsRef, TechDebtProperties } from "@minea/types";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +30,8 @@ interface Props {
   defaultOwner?: string;
   /** When set, debt is locked to this product (no system/component picker). */
   scopedProduct?: { product_id: string; product_name: string };
+  /** When set, debt is locked to this repository object (drawer tab). */
+  scopedObject?: TechDebtAffectsRef;
   onClose: () => void;
   onSuccess: (techDebtId: string) => void;
 }
@@ -98,50 +102,10 @@ function initFromTechDebt(item?: MinEAObject) {
   };
 }
 
-async function syncTechDebtRelationships(
-  orgSlug: string,
-  workspaceSlug: string,
-  techDebtId: string,
-  affects: TechDebtAffectsRef | null,
-  token: string
-) {
-  const existing = await relationshipsApi.list(
-    orgSlug,
-    workspaceSlug,
-    { from_object_id: techDebtId },
-    token
-  );
-
-  for (const rel of existing) {
-    if (rel.from_type === "tech_debt" && rel.type === "affects") {
-      await relationshipsApi.delete(orgSlug, workspaceSlug, rel.id, token);
-    }
-  }
-
-  if (affects && (affects.object_kind === "application" || affects.object_kind === "component")) {
-    await relationshipsApi.create(
-      orgSlug,
-      workspaceSlug,
-      {
-        type: "affects",
-        from_object_id: techDebtId,
-        from_type: "tech_debt",
-        to_object_id: affects.object_id,
-        to_type: affects.object_kind,
-      },
-      token
-    );
-  }
-}
-
 function affectsLabel(affects: TechDebtAffectsRef | null): string {
   if (!affects) return "";
   const kind =
-    affects.object_kind === "application"
-      ? "System"
-      : affects.object_kind === "component"
-        ? "Component"
-        : "Product";
+    affects.object_kind === "product" ? "Product" : techDebtHostKindLabel(affects.object_kind);
   return `${affects.object_name} (${kind})`;
 }
 
@@ -149,6 +113,8 @@ export function CreateTechDebtPanel({
   initialValues,
   defaultOwner,
   scopedProduct,
+  scopedObject,
+  allowUnattached = false,
   onClose,
   onSuccess,
 }: Props) {
@@ -162,6 +128,8 @@ export function CreateTechDebtPanel({
           object_kind: "product",
         }
       : null;
+  const lockedObjectAffects: TechDebtAffectsRef | null =
+    scopedObject && !isEdit ? scopedObject : null;
   const targetResolutionOptions = useMemo(() => {
     const options = buildTargetResolutionOptions();
     if (
@@ -189,7 +157,7 @@ export function CreateTechDebtPanel({
   const [debtTypeOther, setDebtTypeOther] = useState(init.debtTypeOther);
   const [debtStatus, setDebtStatus] = useState<string>(init.debtStatus);
   const [affects, setAffects] = useState<TechDebtAffectsRef | null>(
-    init.affects ?? lockedProductAffects
+    init.affects ?? lockedProductAffects ?? lockedObjectAffects
   );
   const [owner, setOwner] = useState(init.owner || defaultOwner || "");
   const [identifiedBy, setIdentifiedBy] = useState(init.identifiedBy);
@@ -233,11 +201,13 @@ export function CreateTechDebtPanel({
     ]
   );
 
+  const requiresAffects = !allowUnattached && !lockedProductAffects && !lockedObjectAffects;
+
   const canSubmit =
     title.trim().length > 0 &&
     severity.trim().length > 0 &&
     debtType.trim().length > 0 &&
-    !!affects &&
+    (!requiresAffects || !!affects) &&
     owner.trim().length > 0 &&
     (debtType !== "other" || debtTypeOther.trim().length > 0);
 
@@ -245,7 +215,7 @@ export function CreateTechDebtPanel({
     mutationFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
-      if (!affects) throw new Error("Affected object is required");
+      if (requiresAffects && !affects) throw new Error("Affected object is required");
       if (!owner.trim()) throw new Error("Owner is required");
 
       const body = {
@@ -399,10 +369,10 @@ export function CreateTechDebtPanel({
               <SectionHeader>Attachment</SectionHeader>
               <div className="space-y-3">
                 <div>
-                  <FieldLabel required>Affects</FieldLabel>
-                  {lockedProductAffects ? (
+                  <FieldLabel required={requiresAffects}>Affects</FieldLabel>
+                  {lockedProductAffects || lockedObjectAffects ? (
                     <div className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800">
-                      {lockedProductAffects.object_name} (Product)
+                      {affectsLabel(lockedProductAffects ?? lockedObjectAffects)}
                     </div>
                   ) : (
                     <button
@@ -415,13 +385,21 @@ export function CreateTechDebtPanel({
                           : "border-dashed border-gray-300 text-gray-400 hover:border-red-300"
                       )}
                     >
-                      {affects ? affectsLabel(affects) : "Search products, systems, components…"}
+                      {affects
+                        ? affectsLabel(affects)
+                        : allowUnattached
+                          ? "Optional — search products, systems, components…"
+                          : "Search products, systems, components…"}
                     </button>
                   )}
                   <p className="text-[11px] text-gray-400 mt-1.5">
                     {lockedProductAffects
                       ? "This debt is recorded against the open product."
-                      : "Attach to the thing it most directly affects — rolls up to Product automatically"}
+                      : lockedObjectAffects
+                        ? "This debt is recorded against the open object."
+                        : allowUnattached
+                          ? "Leave unattached to track floating debt, or link to roll up to products automatically"
+                          : "Attach to the thing it most directly affects — rolls up to products automatically"}
                   </p>
                 </div>
 
@@ -516,7 +494,7 @@ export function CreateTechDebtPanel({
         </div>
       </div>
 
-      {showAffectsDialog && !lockedProductAffects && (
+      {showAffectsDialog && !lockedProductAffects && !lockedObjectAffects && (
         <PickAffectedDialog
           selected={affects}
           onClose={() => setShowAffectsDialog(false)}

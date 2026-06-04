@@ -14,6 +14,7 @@ import {
   DataFormFooter,
   DataSelect,
 } from "@/components/data/DataDetailShell";
+import { DataDetailRightPanel } from "@/components/data/DataDetailRightPanel";
 import { DataLinksPanel, type AssignTarget } from "@/components/data/DataLinksPanel";
 import { initials, storeLinkSections, ROLE_TAG_STYLE } from "@/lib/data-utils";
 import { cn } from "@/lib/utils";
@@ -184,10 +185,23 @@ export function StoreDetailPanel({ storeId, onClose, onUpdate }: Props) {
           </>
         }
         right={
-          <DataLinksPanel
-            sections={storeLinkSections(store.links)}
-            headerText="What this store holds and who touches it"
-            onAssign={setAssignTarget}
+          <DataDetailRightPanel
+            objectId={storeId}
+            objectName={store.name}
+            objectKind="data_store"
+            onRefresh={() => {
+              queryClient.invalidateQueries({
+                queryKey: ["data-store", orgSlug, workspaceSlug, storeId],
+              });
+              onUpdate();
+            }}
+            links={
+              <DataLinksPanel
+                sections={storeLinkSections(store.links)}
+                headerText="What this store holds and who touches it"
+                onAssign={setAssignTarget}
+              />
+            }
           />
         }
       />

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { GitBranch, Grid3X3, Map, Package, TrendingUp } from "lucide-react";
+import { AlertTriangle, GitBranch, Grid3X3, Map, Package, TrendingUp } from "lucide-react";
 
 /** v1 fixed views — not user-defined (spec §2). */
 export type ViewId =
@@ -7,7 +7,8 @@ export type ViewId =
   | "processes"
   | "journeys"
   | "capability-heatmap"
-  | "investments";
+  | "investments"
+  | "tech-debt";
 
 export interface ViewConfig {
   id: ViewId;
@@ -105,6 +106,21 @@ export const VIEWS_V1: ViewConfig[] = [
     emptyDescription:
       "An investment targets a realization with a hypothesis and expected impact. Start from a bottleneck in Processes or the Capability heatmap, or create one here.",
     emptyCta: "Propose an investment",
+  },
+  {
+    id: "tech-debt",
+    label: "Tech debt",
+    description: "Open debt across the estate",
+    drawerDescription:
+      "All open debt items across systems, components, and platforms — attached and floating — with severity, ownership, and remediation plans.",
+    segment: "views/tech-debt",
+    icon: AlertTriangle,
+    color: "#dc2626",
+    anchorQuestion: "Show me all technical debt and what still needs to be linked.",
+    emptyTitle: "No tech debt yet",
+    emptyDescription:
+      "Record known issues as debt items. Attach them to systems or components for product roll-up, or leave them unattached until you know where they belong.",
+    emptyCta: "Add debt item",
   },
 ];
 

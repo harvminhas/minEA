@@ -63,6 +63,23 @@ function ProductsIllustration() {
   );
 }
 
+function TechDebtIllustration() {
+  return (
+    <div className="flex flex-col gap-1.5 px-4 py-4 w-full max-w-[200px]">
+      {[
+        { badge: "bg-red-100 text-red-700", w: "w-3/4" },
+        { badge: "bg-amber-100 text-amber-800", w: "w-2/3" },
+        { badge: "bg-gray-100 text-gray-600", w: "w-1/2" },
+      ].map((row, i) => (
+        <div key={i} className="rounded-md border border-gray-200 bg-white p-2 flex flex-col gap-1">
+          <span className={`text-[8px] font-bold px-1 py-0.5 rounded w-fit ${row.badge}`}>DEBT</span>
+          <div className={`h-2 rounded bg-gray-200 ${row.w}`} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function InvestmentsIllustration() {
   return (
     <div className="flex items-end justify-center gap-3 px-4 py-3">
@@ -83,6 +100,7 @@ const ILLUSTRATIONS: Record<string, () => React.ReactElement> = {
   journeys: JourneysIllustration,
   products: ProductsIllustration,
   investments: InvestmentsIllustration,
+  "tech-debt": TechDebtIllustration,
 };
 
 // ─── Gallery card ────────────────────────────────────────────────────────

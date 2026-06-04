@@ -16,6 +16,9 @@ import {
 } from "@/components/ui/DetailPanel";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
+import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
+import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
+import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { HistoryEntry } from "@/components/shared/EntityHistory";
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import {
@@ -45,7 +48,8 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
 
-  const [activeTab, setActiveTab] = useState<"details" | "history">("details");
+  const [activeTab, setActiveTab] = useState<ObjectDrawerTabId>("details");
+  const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(runtime.id);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -162,23 +166,12 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
               </div>
             </div>
 
-            <div className="flex gap-6 px-6 mt-4">
-              {(["details", "history"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setActiveTab(tab)}
-                  className={cn(
-                    "pb-2 text-sm font-medium border-b-2 capitalize transition-colors",
-                    activeTab === tab
-                      ? "border-slate-600 text-slate-600"
-                      : "border-transparent text-gray-400 hover:text-gray-600"
-                  )}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
+            <ObjectDrawerTabs
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              openDebtCount={techDebtSummary?.open_count ?? 0}
+              className="mt-4"
+            />
           </div>
         }
         footer={
@@ -190,7 +183,17 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
           </div>
         }
       >
-        {activeTab === "history" ? (
+        {activeTab === "tech_debt" ? (
+          <ObjectTechDebtTab
+            objectId={runtime.id}
+            objectName={runtime.name}
+            objectKind="model"
+            summary={techDebtSummary}
+            isLoading={techDebtLoading}
+            defaultOwner={runtime.owner}
+            onRefresh={refreshRuntime}
+          />
+        ) : activeTab === "history" ? (
           <EntityHistoryPanel
             entries={historyEntries}
             isLoading={historyQuery.isLoading}

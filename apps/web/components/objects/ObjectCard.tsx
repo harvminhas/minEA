@@ -8,6 +8,7 @@ import {
   systemStatusLabel,
   SYSTEM_STATUS_STYLE,
 } from "@/lib/system-utils";
+import { supportsTechDebtTab } from "@/lib/object-tech-debt";
 import { formatCurrency, getObjectInitial, cn } from "@/lib/utils";
 
 interface Props {
@@ -46,6 +47,7 @@ function SystemCard({
     ? Number(props.annual_cost)
     : null;
   const tags = object.tags ?? [];
+  const openDebt = object.open_tech_debt_count ?? 0;
 
   return (
     <div
@@ -68,14 +70,21 @@ function SystemCard({
             )}
           </div>
         </div>
-        <span
-          className={cn(
-            "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize flex-shrink-0",
-            SYSTEM_STATUS_STYLE[status] ?? SYSTEM_STATUS_STYLE.planned
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          {openDebt > 0 && (
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold bg-red-50 text-red-700 border border-red-100">
+              {openDebt} debt
+            </span>
           )}
-        >
-          {systemStatusLabel(status)}
-        </span>
+          <span
+            className={cn(
+              "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize",
+              SYSTEM_STATUS_STYLE[status] ?? SYSTEM_STATUS_STYLE.planned
+            )}
+          >
+            {systemStatusLabel(status)}
+          </span>
+        </div>
       </div>
 
       {/* Key-value rows */}
@@ -86,6 +95,11 @@ function SystemCard({
           <PropertyRow label="Annual cost" value={formatCurrency(annualCost)} />
         )}
         <PropertyRow label="Capabilities" value={String(capCount)} />
+        <PropertyRow
+          label="Tech debt"
+          value={openDebt === 0 ? "None open" : String(openDebt)}
+          valueClassName={openDebt > 0 ? "text-red-700" : undefined}
+        />
         {object.owner && <PropertyRow label="Owner" value={object.owner} />}
       </div>
 
@@ -115,38 +129,60 @@ function SystemCard({
   );
 }
 
-function PropertyRow({ label, value }: { label: string; value: string }) {
+function PropertyRow({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
   return (
     <div className="flex items-center justify-between">
       <span className="text-gray-400">{label}</span>
-      <span className="text-gray-700 font-medium">{value}</span>
+      <span className={cn("text-gray-700 font-medium", valueClassName)}>{value}</span>
     </div>
   );
 }
 
 /** Original card layout for non-system repository types. */
 function LegacyObjectCard({ object, layerColor, onClick }: Props) {
-  const props = object.properties as Record<string, unknown>;
+  const openDebt = object.open_tech_debt_count ?? 0;
+  const showDebt = supportsTechDebtTab(object.type);
 
   return (
     <div
       onClick={onClick}
       className="bg-white rounded-lg border border-gray-200 p-5 hover:border-indigo-300 hover:shadow-sm cursor-pointer transition-all group"
     >
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between mb-4 gap-2">
+        <div className="flex items-center gap-3 min-w-0">
           <div
             className="h-9 w-9 rounded-md flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
             style={{ backgroundColor: layerColor }}
           >
             {getObjectInitial(object.name)}
           </div>
-          <div>
-            <p className="font-semibold text-gray-900 text-sm leading-tight">{object.name}</p>
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{object.name}</p>
             <p className="text-xs text-gray-400">{OBJECT_TYPE_LABELS[object.type] ?? object.type}</p>
           </div>
         </div>
+        {showDebt && openDebt > 0 && (
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold bg-red-50 text-red-700 border border-red-100 flex-shrink-0">
+            {openDebt} debt
+          </span>
+        )}
       </div>
+      {showDebt && (
+        <p className="text-xs text-gray-500 mb-3">
+          <span className="text-gray-400">Tech debt · </span>
+          <span className={openDebt > 0 ? "font-medium text-red-700" : "text-gray-600"}>
+            {openDebt === 0 ? "None open" : openDebt}
+          </span>
+        </p>
+      )}
       {object.description && (
         <p className="text-xs text-gray-500 line-clamp-2">{object.description}</p>
       )}

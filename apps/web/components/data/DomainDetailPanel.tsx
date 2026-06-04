@@ -14,6 +14,7 @@ import {
   DataFormFooter,
   DataSelect,
 } from "@/components/data/DataDetailShell";
+import { DataDetailRightPanel } from "@/components/data/DataDetailRightPanel";
 import { DataLinksPanel, type AssignTarget } from "@/components/data/DataLinksPanel";
 import { domainLinkSections } from "@/lib/data-utils";
 
@@ -191,11 +192,24 @@ export function DomainDetailPanel({ domainId, onClose, onUpdate }: Props) {
           </>
         }
         right={
-          <DataLinksPanel
-            sections={domainLinkSections(domain.links)}
-            headerText="What this domain governs"
-            inferredSummary={domain.inferred_summary}
-            onAssign={setAssignTarget}
+          <DataDetailRightPanel
+            objectId={domainId}
+            objectName={domain.name}
+            objectKind="data_domain"
+            onRefresh={() => {
+              queryClient.invalidateQueries({
+                queryKey: ["data-domain", orgSlug, workspaceSlug, domainId],
+              });
+              onUpdate();
+            }}
+            links={
+              <DataLinksPanel
+                sections={domainLinkSections(domain.links)}
+                headerText="What this domain governs"
+                inferredSummary={domain.inferred_summary}
+                onAssign={setAssignTarget}
+              />
+            }
           />
         }
       />

@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
@@ -18,7 +19,6 @@ import { ComponentList } from "@/components/application/ComponentList";
 import { PlatformList } from "@/components/infrastructure/PlatformList";
 import { RuntimeList } from "@/components/infrastructure/RuntimeList";
 import { IntegrationInfraList } from "@/components/integration/IntegrationInfraList";
-import { TechDebtList } from "@/components/risk/TechDebtList";
 import { OBJECT_TYPE_LABELS, type ObjectType, type MinEAObject } from "@minea/types";
 import { getLayerColor } from "@/lib/utils";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
@@ -97,10 +97,6 @@ export default function ObjectListPage({ params }: { params: Promise<{ layer: st
 
   if (layer === "infrastructure" && typePath === "models") {
     return <RuntimeList />;
-  }
-
-  if (layer === "risk" && typePath === "tech-debt") {
-    return <TechDebtList />;
   }
 
   return <RepositoryObjectList layer={layer} typePath={typePath} />;

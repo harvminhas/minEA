@@ -3,6 +3,7 @@ import type {
   ObjectCreate,
   ObjectUpdate,
   ObjectHistoryResponse,
+  ObjectTechDebtSummary,
   ObjectListResponse,
   Relationship,
   RelationshipCreate,
@@ -217,6 +218,12 @@ export const objectsApi = {
   history: (orgSlug: string, workspaceSlug: string, objectId: string, token: string) =>
     apiFetch<ObjectHistoryResponse>(
       `${wsBase(orgSlug, workspaceSlug)}/objects/${objectId}/history`,
+      { token }
+    ),
+
+  techDebtSummary: (orgSlug: string, workspaceSlug: string, objectId: string, token: string) =>
+    apiFetch<ObjectTechDebtSummary>(
+      `${wsBase(orgSlug, workspaceSlug)}/objects/${objectId}/tech-debt`,
       { token }
     ),
 };

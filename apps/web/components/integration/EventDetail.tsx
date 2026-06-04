@@ -18,6 +18,9 @@ import { EventDiagramModal, type NodeLayout } from "@/components/integration/Eve
 import { EventDiagramPreview } from "@/components/integration/EventDiagramPreview";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
+import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
+import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
+import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { HistoryEntry } from "@/components/shared/EntityHistory";
 import {
   EVENT_AUDIENCES,
@@ -44,7 +47,8 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"details" | "history">("details");
+  const [activeTab, setActiveTab] = useState<ObjectDrawerTabId>("details");
+  const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(event.id);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -175,23 +179,12 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
               </div>
             </div>
 
-            <div className="flex gap-6 px-6 mt-4">
-              {(["details", "history"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setActiveTab(tab)}
-                  className={cn(
-                    "pb-2 text-sm font-medium border-b-2 capitalize transition-colors",
-                    activeTab === tab
-                      ? "border-teal-600 text-teal-600"
-                      : "border-transparent text-gray-400 hover:text-gray-600"
-                  )}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
+            <ObjectDrawerTabs
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              openDebtCount={techDebtSummary?.open_count ?? 0}
+              className="mt-4"
+            />
           </div>
         }
         footer={
@@ -203,7 +196,17 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
           </div>
         }
       >
-        {activeTab === "history" ? (
+        {activeTab === "tech_debt" ? (
+          <ObjectTechDebtTab
+            objectId={event.id}
+            objectName={event.name}
+            objectKind="event"
+            summary={techDebtSummary}
+            isLoading={techDebtLoading}
+            defaultOwner={event.owner}
+            onRefresh={refreshEvent}
+          />
+        ) : activeTab === "history" ? (
           <EntityHistoryPanel
             entries={historyEntries}
             isLoading={historyQuery.isLoading}

@@ -166,19 +166,6 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
       { label: "Teams", segment: "people/teams", countSource: { kind: "people-teams" } },
     ],
   },
-  {
-    id: "risk",
-    label: "Risk",
-    color: "#dc2626",
-    badge: "new",
-    items: [
-      {
-        label: "Tech Debt",
-        segment: "risk/tech-debt",
-        countSource: { kind: "objects", type: "tech_debt" },
-      },
-    ],
-  },
 ];
 
 export const REPOSITORY_NAV_ITEMS: RepositoryNavItem[] = REPOSITORY_LAYERS.flatMap((l) => l.items);

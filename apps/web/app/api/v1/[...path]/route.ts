@@ -74,7 +74,12 @@ async function handle(req: NextRequest, ctx: RouteContext) {
     return await proxyToApi(req, path);
   } catch (err) {
     const message = err instanceof Error ? err.message : "API proxy failed";
-    return NextResponse.json({ detail: message }, { status: 503 });
+    const hint =
+      message === "fetch failed"
+        ? "Could not reach the API. Ensure the API is running (npm run dev) and API_URL=http://localhost:8000 in apps/web/.env.local."
+        : message;
+    console.error("[api proxy]", `/api/v1/${path.join("/")}`, err);
+    return NextResponse.json({ detail: hint }, { status: 503 });
   }
 }
 

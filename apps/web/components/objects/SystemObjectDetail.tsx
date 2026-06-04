@@ -14,6 +14,10 @@ import {
 } from "@/components/ui/DetailPanel";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
+import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
+import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
+import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
+import type { TechDebtHostKind } from "@minea/types";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
 import { invalidateSystemCaches } from "@/lib/system-capability-utils";
@@ -33,7 +37,8 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<"details" | "history">("details");
+  const [activeTab, setActiveTab] = useState<ObjectDrawerTabId>("details");
+  const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(objectId);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRelForm, setShowRelForm] = useState(false);
@@ -198,23 +203,12 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
                 <DetailPanelCloseButton onClose={onClose} />
               </div>
             </div>
-            <div className="flex px-6 gap-4">
-              {(["details", "history"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setActiveTab(tab)}
-                  className={cn(
-                    "pb-2.5 text-sm font-medium border-b-2 transition-colors capitalize",
-                    activeTab === tab
-                      ? "border-indigo-600 text-indigo-700"
-                      : "border-transparent text-gray-500 hover:text-gray-700"
-                  )}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
+            <ObjectDrawerTabs
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              openDebtCount={techDebtSummary?.open_count ?? 0}
+              className="mt-4"
+            />
           </div>
         }
       >
@@ -222,6 +216,18 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
           <EntityHistoryPanel
             entries={historyData?.entries ?? []}
             isLoading={historyLoading}
+          />
+        )}
+
+        {activeTab === "tech_debt" && object && (
+          <ObjectTechDebtTab
+            objectId={object.id}
+            objectName={object.name}
+            objectKind={object.type as TechDebtHostKind}
+            summary={techDebtSummary}
+            isLoading={techDebtLoading}
+            defaultOwner={object.owner}
+            onRefresh={() => void refreshObject()}
           />
         )}
 

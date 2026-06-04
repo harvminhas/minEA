@@ -14,6 +14,7 @@ import {
   DataFormFooter,
   DataSelect,
 } from "@/components/data/DataDetailShell";
+import { DataDetailRightPanel } from "@/components/data/DataDetailRightPanel";
 import { DataLinksPanel, type AssignTarget } from "@/components/data/DataLinksPanel";
 import { DATA_LAYER_COLOR, entityLinkSections, initials } from "@/lib/data-utils";
 import { cn } from "@/lib/utils";
@@ -214,10 +215,23 @@ export function EntityDetailPanel({ entityId, onClose, onUpdate }: Props) {
           </>
         }
         right={
-          <DataLinksPanel
-            sections={sections}
-            headerText="Where this entity lives and who uses it"
-            onAssign={setAssignTarget}
+          <DataDetailRightPanel
+            objectId={entityId}
+            objectName={entity.name}
+            objectKind="data_object"
+            onRefresh={() => {
+              queryClient.invalidateQueries({
+                queryKey: ["data-entity", orgSlug, workspaceSlug, entityId],
+              });
+              onUpdate();
+            }}
+            links={
+              <DataLinksPanel
+                sections={sections}
+                headerText="Where this entity lives and who uses it"
+                onAssign={setAssignTarget}
+              />
+            }
           />
         }
       />
