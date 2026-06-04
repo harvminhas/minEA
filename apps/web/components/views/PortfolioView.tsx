@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, type MouseEvent } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -9,38 +9,28 @@ import {
   LayoutGrid,
   List,
   Map as MapIcon,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  ChevronDown,
 } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { productsApi, objectsApi } from "@/lib/api-client";
+import { productsApi } from "@/lib/api-client";
 import { useViewDataGate } from "@/lib/use-view-summary";
 import { invalidateProductQueries } from "@/lib/product-queries";
+import { ProductCard } from "@/components/views/ProductCard";
 import { ProductForm } from "@/components/views/ProductForm";
 import { ProductDetail } from "@/components/views/ProductDetail";
-import { ProductIntegrationsSummary } from "@/components/views/ProductIntegrationsSummary";
 import { PortfolioTable } from "@/components/views/PortfolioTable";
 import { PortfolioCapabilityMap } from "@/components/views/PortfolioCapabilityMap";
-import { ProductHealthDrilldown } from "@/components/views/ProductHealthDrilldown";
 import {
-  formatCompactDebt,
-  formatCompactIntegrationHint,
   formatDebtSummary,
   formatProductCost,
-  HEALTH_BORDER,
   HEALTH_LABEL,
   isUnowned,
-  primaryAction,
   productHealthStatus,
   roadmapStatusLabel,
   sortForCockpit,
-  trendIcon,
 } from "@/lib/portfolio-utils";
 import { cn } from "@/lib/utils";
 import { useViewEmbedded, useViewsTheme } from "@/lib/view-embed-context";
-import type { Product, MinEAObject, ProductHealthStatus } from "@minea/types";
+import type { Product, ProductHealthStatus } from "@minea/types";
 
 const HEALTH_DOT_CLASS: Record<ProductHealthStatus, string> = {
   healthy: "bg-emerald-500",
@@ -65,207 +55,6 @@ const LAYOUT_OPTIONS: {
   { id: "table", label: "Table", icon: List },
   { id: "capability-map", label: "Map", icon: MapIcon },
 ];
-
-// ─── Cockpit card ──────────────────────────────────────────────────────────
-function TrendBadge({ product }: { product: Product }) {
-  const direction = product.trend_direction ?? "stable";
-  const label = product.trend_label ?? "No recent changes";
-  const Icon =
-    direction === "up" ? TrendingUp : direction === "down" ? TrendingDown : Minus;
-
-  return (
-    <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
-      <Icon size={12} className="text-gray-400" />
-      <span>{trendIcon(direction)} {label}</span>
-    </span>
-  );
-}
-
-const VISIBLE_CAPABILITIES = 3;
-
-function CompactCapabilityTags({
-  product,
-  capabilityById,
-  expanded,
-}: {
-  product: Product;
-  capabilityById: Map<string, MinEAObject>;
-  expanded?: boolean;
-}) {
-  const linked = product.capability_ids
-    .map((id) => capabilityById.get(id))
-    .filter((cap): cap is MinEAObject => !!cap);
-
-  if (linked.length === 0) return null;
-
-  const visible = expanded ? linked : linked.slice(0, VISIBLE_CAPABILITIES);
-  const overflow = linked.length - VISIBLE_CAPABILITIES;
-
-  return (
-    <div className="flex flex-wrap gap-1.5 mt-3">
-      {visible.map((cap) => (
-        <span
-          key={cap.id}
-          className={cn(
-            "text-xs px-2 py-0.5 rounded-md bg-stone-100 text-gray-700 font-medium",
-            cap.status === "planned" && "border border-dashed border-gray-300 text-gray-500 bg-white"
-          )}
-        >
-          {cap.name}
-        </span>
-      ))}
-      {!expanded && overflow > 0 && (
-        <span className="text-xs px-1.5 py-0.5 font-semibold text-indigo-600">+{overflow}</span>
-      )}
-    </div>
-  );
-}
-
-function MetricCell({
-  label,
-  value,
-  valueClassName,
-}: {
-  label: string;
-  value: string;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="flex-1 min-w-0 px-4 py-2.5 text-center">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
-      <p className={cn("text-sm font-semibold truncate mt-0.5", valueClassName ?? "text-gray-900")}>
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function PortfolioCard({
-  product,
-  teamColor,
-  capabilityById,
-  onClick,
-}: {
-  product: Product;
-  teamColor: string;
-  capabilityById: Map<string, MinEAObject>;
-  onClick: () => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const health = productHealthStatus(product);
-  const unowned = isUnowned(product);
-  const debt = formatCompactDebt(product);
-  const openDebt = product.open_tech_debt_count ?? 0;
-  const footerAction = openDebt > 0 ? "Review tech debt register" : primaryAction(product);
-
-  const toggleExpand = (e: MouseEvent) => {
-    e.stopPropagation();
-    setExpanded((v) => !v);
-  };
-
-  return (
-    <div
-      className={cn(
-        "text-left bg-white rounded-xl border border-gray-200 w-full transition-all",
-        "hover:shadow-sm hover:border-gray-300",
-        HEALTH_BORDER[health]
-      )}
-    >
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onClick}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onClick();
-          }
-        }}
-        className="p-4 pb-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 rounded-t-xl"
-      >
-        <div className="flex items-start gap-3">
-          <div
-            className="h-8 w-8 rounded-md flex items-center justify-center text-white font-bold text-xs flex-shrink-0"
-            style={{ backgroundColor: teamColor }}
-          >
-            {product.name.slice(0, 2).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-gray-900 text-[15px] leading-tight truncate">
-              {product.name}
-            </p>
-            <p className="text-xs text-gray-500 mt-0.5 truncate capitalize">
-              {product.owner ?? "Unassigned"} · {product.lifecycle} ·{" "}
-              <span className="text-gray-400">{formatCompactIntegrationHint(product)}</span>
-            </p>
-          </div>
-          <ProductHealthDrilldown product={product} className="flex-shrink-0" />
-        </div>
-
-        <CompactCapabilityTags
-          product={product}
-          capabilityById={capabilityById}
-          expanded={expanded}
-        />
-      </div>
-
-      <div className="flex items-stretch border-t border-gray-100 bg-stone-50/80 rounded-b-xl overflow-hidden">
-        <MetricCell
-          label="Debt"
-          value={debt.value}
-          valueClassName={debt.critical ? "text-red-600" : "text-gray-900"}
-        />
-        <div className="w-px bg-gray-200 self-stretch my-2" />
-        <MetricCell label="Cost" value={formatProductCost(product.annual_cost_total)} />
-        <div className="w-px bg-gray-200 self-stretch my-2" />
-        <button
-          type="button"
-          onClick={toggleExpand}
-          className="flex-[1.2] min-w-0 flex items-center justify-center gap-1 px-2 py-2.5 hover:bg-stone-100/80 transition-colors"
-          aria-expanded={expanded}
-          aria-label={expanded ? "Collapse product details" : "Expand product details"}
-        >
-          <div className="min-w-0 text-center">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-              Roadmap
-            </p>
-            <p className="text-sm font-semibold text-gray-900 truncate mt-0.5">
-              {roadmapStatusLabel(product.roadmap_status)}
-            </p>
-          </div>
-          <ChevronDown
-            size={16}
-            className={cn(
-              "text-gray-400 flex-shrink-0 transition-transform",
-              expanded && "rotate-180"
-            )}
-          />
-        </button>
-      </div>
-
-      {expanded && (
-        <div className="px-4 pb-4 pt-3 border-t border-gray-100 space-y-3">
-          <ProductIntegrationsSummary product={product} />
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <div className="flex items-center gap-2 min-w-0">
-              <TrendBadge product={product} />
-              {unowned && (
-                <span className="text-[11px] text-gray-500 truncate">· No owner assigned</span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={onClick}
-              className="text-xs font-semibold text-gray-900 truncate flex-shrink-0 hover:text-indigo-600"
-            >
-              {footerAction} →
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── Main component ────────────────────────────────────────────────────────
 
@@ -296,25 +85,9 @@ export function PortfolioView() {
     enabled: !skipHeavyFetch,
   });
 
-  const { data: capsData } = useQuery({
-    queryKey: ["objects", orgSlug, workspaceSlug, "capability"],
-    queryFn: async () => {
-      const token = await getToken();
-      return objectsApi.list(orgSlug, workspaceSlug, { type: "capability" }, token!);
-    },
-    enabled: !skipHeavyFetch && !!data,
-  });
-
   const listLoading = !skipHeavyFetch && isLoading;
 
   const products = useMemo(() => data?.items ?? [], [data]);
-  const capabilities = capsData?.items ?? [];
-
-  const capabilityById = useMemo(() => {
-    const map = new Map<string, MinEAObject>();
-    for (const cap of capabilities) map.set(cap.id, cap);
-    return map;
-  }, [capabilities]);
 
   // Aggregate stats
   const healthCounts = useMemo(() => {
@@ -519,11 +292,11 @@ export function PortfolioView() {
                 )}
                 <div className="grid grid-cols-1 gap-4">
                   {group.items.map((p) => (
-                    <PortfolioCard
+                    <ProductCard
                       key={p.id}
                       product={p}
-                      teamColor={teamColorMap[p.owner ?? ""] ?? TEAM_COLORS[0]!}
-                      capabilityById={capabilityById}
+                      color={teamColorMap[p.owner ?? ""] ?? TEAM_COLORS[0]!}
+                      selected={selectedProductId === p.id}
                       onClick={() => openProduct(p)}
                     />
                   ))}

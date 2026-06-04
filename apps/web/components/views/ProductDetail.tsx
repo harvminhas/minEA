@@ -8,7 +8,6 @@ import { Edit2, Link2, Trash2 } from "lucide-react";
 import type {
   MinEAObject,
   Product,
-  ProductHealthDimensions,
   ProductIntegrationItem,
   ProductRoadmapItem,
   ProductTechDebtItem,
@@ -25,15 +24,14 @@ import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
 import { invalidateProductQueries } from "@/lib/product-queries";
 import { ProductForm } from "@/components/views/ProductForm";
 import { ProductIntegrationsSummary } from "@/components/views/ProductIntegrationsSummary";
+import { ProductSignalDots } from "@/components/views/ProductSignalDots";
 import { CreateTechDebtPanel } from "@/components/risk/CreateTechDebtPanel";
 import { TechDebtDetail } from "@/components/risk/TechDebtDetail";
 import {
   formatDebtCockpit,
   formatProductCost,
   formatProductCoverageLine,
-  HEALTH_LABEL,
   isUnowned,
-  productHealthStatus,
   roadmapStatusLabel,
 } from "@/lib/portfolio-utils";
 import { roadmapDetailPath } from "@/lib/roadmap-utils";
@@ -48,27 +46,83 @@ const LIFECYCLE_STYLE: Record<string, string> = {
   retired: "bg-gray-100 text-gray-400",
 };
 
-const DIM_LABELS: { key: keyof ProductHealthDimensions; label: string }[] = [
-  { key: "ops", label: "Ops" },
-  { key: "debt", label: "Debt" },
-  { key: "lifecycle", label: "Lifecycle" },
-  { key: "ownership", label: "Ownership" },
-];
-
-const DIM_DOT: Record<string, string> = {
-  healthy: "bg-emerald-500",
-  warning: "bg-amber-400",
-  critical: "bg-red-500",
-};
-
 const MILESTONE_SEGMENT: Record<string, string> = {
   done: "bg-emerald-500",
   in_flight: "bg-blue-500",
   not_started: "bg-gray-200",
 };
 
+type ProductDetailTab = "details" | "roadmap_debt" | "history";
+
+const PRODUCT_DETAIL_TABS: { id: ProductDetailTab; label: string }[] = [
+  { id: "details", label: "Details" },
+  { id: "roadmap_debt", label: "Roadmap & Debt" },
+  { id: "history", label: "History" },
+];
+
 function formatLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function ProductIntegrationDetail({ product }: { product: Product }) {
+  const [view, setView] = useState<"provided" | "consumed">("provided");
+  const providedCount = product.apis_provided?.length ?? 0;
+  const consumedCount = product.apis_consumed?.length ?? 0;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setView("provided")}
+          className={cn(
+            "rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
+            view === "provided"
+              ? "border-indigo-200 bg-indigo-50 text-indigo-800"
+              : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+          )}
+        >
+          APIs provided ({providedCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("consumed")}
+          className={cn(
+            "rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
+            view === "consumed"
+              ? "border-indigo-200 bg-indigo-50 text-indigo-800"
+              : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+          )}
+        >
+          APIs consumed ({consumedCount})
+        </button>
+      </div>
+      {view === "provided" ? (
+        <IntegrationSubsection title="APIs provided" items={product.apis_provided} variant="owned" />
+      ) : (
+        <IntegrationSubsection title="APIs consumed" items={product.apis_consumed} variant="dependency" />
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <IntegrationSubsection
+          title="Events produced"
+          items={product.events_produced}
+          variant="owned"
+        />
+        <IntegrationSubsection
+          title="Events subscribed"
+          items={product.events_subscribed}
+          variant="dependency"
+        />
+        <IntegrationSubsection title="Flows in" items={product.flows_in} variant="dependency" />
+        <IntegrationSubsection title="Flows out" items={product.flows_out} variant="owned" />
+      </div>
+      <IntegrationSubsection
+        title="Data stores touched"
+        items={product.data_stores}
+        variant="owned"
+      />
+    </div>
+  );
 }
 
 function IntegrationSubsection({
@@ -124,29 +178,6 @@ function SignalCard({
         {value}
       </p>
       {subtext && <p className="text-[11px] text-gray-400 truncate mt-0.5">{subtext}</p>}
-    </div>
-  );
-}
-
-function CompositeHealth({ product }: { product: Product }) {
-  const dims = product.health_dimensions;
-  const health = productHealthStatus(product);
-
-  return (
-    <div className="px-6 pb-4 space-y-3">
-      <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700">
-        {HEALTH_LABEL[health]}
-      </span>
-      {dims && (
-        <div className="flex items-start gap-4">
-          {DIM_LABELS.map(({ key, label }) => (
-            <div key={key} className="flex flex-col items-center gap-1.5 min-w-[3rem]">
-              <span className={cn("h-2.5 w-2.5 rounded-full", DIM_DOT[dims[key]] ?? DIM_DOT.healthy)} />
-              <span className="text-[10px] text-gray-500">{label}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -269,7 +300,7 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<"details" | "history">("details");
+  const [activeTab, setActiveTab] = useState<ProductDetailTab>("details");
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
@@ -410,20 +441,20 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
               </div>
             </div>
             {/* Tab bar */}
-            <div className="flex px-6 gap-4">
-              {(["details", "history"] as const).map((tab) => (
+            <div className="flex px-6 gap-4 overflow-x-auto">
+              {PRODUCT_DETAIL_TABS.map((tab) => (
                 <button
-                  key={tab}
+                  key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    "pb-2.5 text-sm font-medium border-b-2 transition-colors capitalize",
-                    activeTab === tab
+                    "pb-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0",
+                    activeTab === tab.id
                       ? "border-indigo-600 text-indigo-700"
                       : "border-transparent text-gray-500 hover:text-gray-700"
                   )}
                 >
-                  {tab}
+                  {tab.label}
                 </button>
               ))}
             </div>
@@ -447,172 +478,152 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
           />
         )}
 
-        {activeTab === "details" && <>
-        <DetailSection title="Health">
-          <CompositeHealth product={product} />
-        </DetailSection>
-
-        <DetailSection title="Signals">
-          <div className="px-6 pb-4 space-y-4">
-            <div className="flex gap-2">
-              <SignalCard
-                label="Tech debt"
-                value={debtCockpit?.value ?? "—"}
-                subtext={debtCockpit?.subtext}
-                valueClassName={
-                  debtCockpit?.critical
-                    ? "text-red-700"
-                    : debtCockpit?.value === "None open"
-                      ? "text-gray-700"
-                      : "text-gray-900"
-                }
-              />
-              <SignalCard label="Cost / yr" value={formatProductCost(product.annual_cost_total)} />
-              <SignalCard
-                label="Roadmap"
-                value={roadmapStatusLabel(product.roadmap_status)}
-                subtext={activeRoadmaps > 0 ? `${activeRoadmaps} active` : undefined}
-              />
-            </div>
-            <ProductIntegrationsSummary product={product} />
-          </div>
-        </DetailSection>
-
-        <DetailSection
-          title={`Tech debt (${debtItems.length})`}
-          action={
-            <button
-              type="button"
-              onClick={() => setShowCreateDebt(true)}
-              className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700"
-            >
-              + Add
-            </button>
-          }
-        >
-          <div className="px-6 pb-4 space-y-2">
-            {debtItems.length === 0 ? (
-              <p className="text-sm text-gray-400">No open tech debt rolled up to this product.</p>
-            ) : (
-              debtItems.map((item) => (
-                <TechDebtCard
-                  key={item.id}
-                  item={item}
-                  onOpenDebt={() => setSelectedDebtId(item.id)}
-                  onOpenRoadmap={openRoadmap}
-                />
-              ))
-            )}
-          </div>
-        </DetailSection>
-
-        <DetailSection title={`Roadmap (${activeRoadmaps} active)`}>
-          <div className="px-6 pb-4 space-y-2">
-            {roadmapItems.length === 0 ? (
-              <p className="text-sm text-gray-400">No roadmap items for this product yet.</p>
-            ) : (
-              roadmapItems.map((item) => (
-                <RoadmapCard key={item.id} item={item} onOpen={() => openRoadmap(item.id)} />
-              ))
-            )}
-          </div>
-        </DetailSection>
-
-        {product.description && (
-          <DetailSection title="Description">
-            <p className="text-sm text-gray-700 px-6 pb-4">{product.description}</p>
-          </DetailSection>
-        )}
-
-        <DetailSection title="Integration detail">
-          <div className="px-6 pb-4 space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <IntegrationSubsection
-                title="APIs provided"
-                items={product.apis_provided}
-                variant="owned"
-              />
-              <IntegrationSubsection
-                title="APIs consumed"
-                items={product.apis_consumed}
-                variant="dependency"
-              />
-              <IntegrationSubsection
-                title="Events produced"
-                items={product.events_produced}
-                variant="owned"
-              />
-              <IntegrationSubsection
-                title="Events subscribed"
-                items={product.events_subscribed}
-                variant="dependency"
-              />
-              <IntegrationSubsection title="Flows in" items={product.flows_in} variant="dependency" />
-              <IntegrationSubsection title="Flows out" items={product.flows_out} variant="owned" />
-            </div>
-            <IntegrationSubsection
-              title="Data stores touched"
-              items={product.data_stores}
-              variant="owned"
-            />
-          </div>
-        </DetailSection>
-
-        <DetailSection title="Properties">
-          <div className="px-6 pb-4 space-y-3 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-gray-500">Owner</span>
-              {unowned ? (
-                <button
-                  type="button"
-                  onClick={() => setShowEditForm(true)}
-                  className="font-semibold text-indigo-600 hover:text-indigo-700"
-                >
-                  Assign a team →
-                </button>
-              ) : (
-                <span className="text-gray-900 font-medium">{product.owner}</span>
-              )}
-            </div>
-            {product.product_line && (
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-gray-500">Product line</span>
-                <span className="text-gray-900">{product.product_line}</span>
+        {activeTab === "details" && (
+          <>
+            <DetailSection title="Signals">
+              <div className="space-y-4">
+                <ProductSignalDots product={product} />
+                <div className="flex gap-2">
+                  <SignalCard
+                    label="Tech debt"
+                    value={debtCockpit?.value ?? "—"}
+                    subtext={debtCockpit?.subtext}
+                    valueClassName={
+                      debtCockpit?.critical
+                        ? "text-red-700"
+                        : debtCockpit?.value === "None open"
+                          ? "text-gray-700"
+                          : "text-gray-900"
+                    }
+                  />
+                  <SignalCard label="Cost / yr" value={formatProductCost(product.annual_cost_total)} />
+                  <SignalCard
+                    label="Roadmap"
+                    value={roadmapStatusLabel(product.roadmap_status)}
+                    subtext={activeRoadmaps > 0 ? `${activeRoadmaps} active` : undefined}
+                  />
+                </div>
               </div>
-            )}
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-gray-500">Lifecycle</span>
-              <span className="text-gray-900 capitalize">{formatLabel(product.lifecycle)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-gray-500">Coverage</span>
-              <span className="text-gray-900 text-right">{formatProductCoverageLine(product)}</span>
-            </div>
-          </div>
-        </DetailSection>
+            </DetailSection>
 
-        <DetailSection title={`Business capabilities (${linkedCapabilities.length})`}>
-          {linkedCapabilities.length === 0 ? (
-            <p className="text-sm text-gray-400 px-6 pb-4">No capabilities mapped yet.</p>
-          ) : (
-            <div className="space-y-1.5 px-6 pb-4">
-              {linkedCapabilities.map((cap) => (
-                <div
-                  key={cap.id}
-                  className="flex items-center justify-between py-2 px-3 bg-stone-50 rounded-md text-sm"
-                >
-                  <span className="text-gray-800 font-medium truncate">{cap.name}</span>
-                  {cap.status && (
-                    <span className="text-xs text-gray-400 capitalize ml-2 flex-shrink-0">
-                      {cap.status.replace(/_/g, " ")}
-                    </span>
+            <DetailSection title="Properties">
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-gray-500">Owner</span>
+                  {unowned ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowEditForm(true)}
+                      className="font-semibold text-indigo-600 hover:text-indigo-700"
+                    >
+                      Assign a team →
+                    </button>
+                  ) : (
+                    <span className="text-gray-900 font-medium">{product.owner}</span>
                   )}
                 </div>
-              ))}
-            </div>
-          )}
-        </DetailSection>
-        </>}
+                {product.product_line && (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-500">Product line</span>
+                    <span className="text-gray-900">{product.product_line}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-gray-500">Lifecycle</span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-xs font-medium capitalize",
+                      LIFECYCLE_STYLE[product.lifecycle] ?? LIFECYCLE_STYLE.planned
+                    )}
+                  >
+                    {formatLabel(product.lifecycle)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-gray-500">Coverage</span>
+                  <span className="text-gray-900 text-right">{formatProductCoverageLine(product)}</span>
+                </div>
+                {product.description && (
+                  <div className="pt-2 border-t border-gray-100">
+                    <p className="text-gray-500 text-xs mb-1">Description</p>
+                    <p className="text-gray-800">{product.description}</p>
+                  </div>
+                )}
+              </div>
+            </DetailSection>
+
+            <DetailSection
+              title={`Business capabilities · ${linkedCapabilities.length}`}
+            >
+              {linkedCapabilities.length === 0 ? (
+                <p className="text-sm text-gray-400">No capabilities mapped yet.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {linkedCapabilities.map((cap) => (
+                    <span
+                      key={cap.id}
+                      className="inline-block rounded-full bg-violet-50 border border-violet-100 px-2.5 py-1 text-xs font-medium text-violet-800"
+                    >
+                      {cap.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </DetailSection>
+
+            <ProductIntegrationsSummary product={product} />
+          </>
+        )}
+
+        {activeTab === "roadmap_debt" && (
+          <>
+            <DetailSection
+              title={`Roadmap · ${activeRoadmaps} active`}
+            >
+              <div className="space-y-2">
+                {roadmapItems.length === 0 ? (
+                  <p className="text-sm text-gray-400">No roadmap items for this product yet.</p>
+                ) : (
+                  roadmapItems.map((item) => (
+                    <RoadmapCard key={item.id} item={item} onOpen={() => openRoadmap(item.id)} />
+                  ))
+                )}
+              </div>
+            </DetailSection>
+
+            <DetailSection
+              title={`Tech debt · ${debtItems.length}`}
+              action={
+                <button
+                  type="button"
+                  onClick={() => setShowCreateDebt(true)}
+                  className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700"
+                >
+                  + Add
+                </button>
+              }
+            >
+              <div className="space-y-2">
+                {debtItems.length === 0 ? (
+                  <p className="text-sm text-gray-400">No open tech debt rolled up to this product.</p>
+                ) : (
+                  debtItems.map((item) => (
+                    <TechDebtCard
+                      key={item.id}
+                      item={item}
+                      onOpenDebt={() => setSelectedDebtId(item.id)}
+                      onOpenRoadmap={openRoadmap}
+                    />
+                  ))
+                )}
+              </div>
+            </DetailSection>
+
+            <DetailSection title="Integration detail">
+              <ProductIntegrationDetail product={product} />
+            </DetailSection>
+          </>
+        )}
       </DetailPanel>
 
       {showDeleteConfirm && (

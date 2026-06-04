@@ -19,7 +19,7 @@ from app.schemas.products import (
     ProductUpdate,
 )
 from app.services.portfolio_signals import enrich_portfolio_signals
-from app.services.product_detail import enrich_product_detail
+from app.services.product_detail import compute_health_dimensions, enrich_product_detail
 from app.services.product_graph import build_product_graph, load_product_for_graph
 from app.services.product_stats import enrich_product, validate_capability_ids
 from app.services.product_stats import capability_ids_for_product as _capability_ids
@@ -113,6 +113,14 @@ async def _to_read(db: AsyncSession, product: Product, *, include_detail: bool =
         capability_count=stats["capability_count"],
         maturity_indicator=stats.get("maturity_indicator"),
     )
+    health_dimensions = compute_health_dimensions(
+        lifecycle=product_fields["lifecycle"],
+        owner=product_fields["owner"],
+        open_debt=portfolio["open_tech_debt_count"],
+        critical_debt=portfolio["critical_tech_debt_count"],
+        maturity_indicator=stats.get("maturity_indicator"),
+        system_count=stats["system_count"],
+    )
     detail: dict = {}
     if include_detail:
         detail = await enrich_product_detail(
@@ -123,8 +131,10 @@ async def _to_read(db: AsyncSession, product: Product, *, include_detail: bool =
             maturity_indicator=stats.get("maturity_indicator"),
             system_count=stats["system_count"],
         )
+        detail.pop("health_dimensions", None)
     return ProductRead(
         capability_ids=cap_ids,
+        health_dimensions=health_dimensions,
         **product_fields,
         **stats,
         **portfolio,

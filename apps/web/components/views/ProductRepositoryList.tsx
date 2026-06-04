@@ -3,85 +3,17 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, Plus, Users } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { productsApi } from "@/lib/api-client";
 import { invalidateProductQueries } from "@/lib/product-queries";
+import { ProductCard } from "@/components/views/ProductCard";
 import { ProductForm } from "@/components/views/ProductForm";
 import { ProductDetail } from "@/components/views/ProductDetail";
 import type { Product } from "@minea/types";
-import { formatProductCoverageLine } from "@/lib/portfolio-utils";
-import { formatUpdatedAgo } from "@/lib/system-utils";
-import { cn } from "@/lib/utils";
 
 const STRATEGY_LAYER_COLOR = "#8b5cf6";
 const CARD_COLORS = ["#6366f1", "#22c55e", "#f59e0b", "#ec4899", "#0ea5e9", "#8b5cf6"];
-
-const LIFECYCLE_STYLE: Record<string, string> = {
-  live: "bg-emerald-50 text-emerald-700",
-  beta: "bg-amber-50 text-amber-700",
-  planned: "bg-stone-100 text-gray-600",
-  retiring: "bg-orange-50 text-orange-700",
-  retired: "bg-gray-100 text-gray-400",
-};
-
-function ProductCard({
-  product,
-  color,
-  onClick,
-}: {
-  product: Product;
-  color: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="text-left bg-white rounded-xl border border-gray-200 p-5 hover:border-violet-200 hover:shadow-sm transition-all cursor-pointer w-full flex flex-col"
-    >
-      <div className="flex items-start gap-3">
-        <div
-          className="h-10 w-10 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-          style={{ backgroundColor: color }}
-        >
-          {product.name.charAt(0).toUpperCase()}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-gray-900 text-base leading-tight truncate">{product.name}</h3>
-          <p className="flex items-center gap-1.5 text-xs text-gray-500 mt-1">
-            <Users size={13} className="flex-shrink-0 text-gray-400" />
-            <span className="truncate">{product.owner ?? "Unassigned"}</span>
-          </p>
-        </div>
-      </div>
-
-      <p className="text-sm text-gray-600 mt-4">{formatProductCoverageLine(product)}</p>
-
-      <div className="flex flex-wrap gap-2 mt-3">
-        <span
-          className={cn(
-            "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize",
-            LIFECYCLE_STYLE[product.lifecycle] ?? LIFECYCLE_STYLE.planned
-          )}
-        >
-          {product.lifecycle}
-        </span>
-        <span className="rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-50 text-blue-700">
-          {product.capability_count} capabilit{product.capability_count === 1 ? "y" : "ies"}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">
-        <Clock size={12} className="flex-shrink-0" />
-        <span>
-          Updated{product.updated_by_name ? ` by ${product.updated_by_name}` : ""}{" "}
-          {formatUpdatedAgo(product.updated_at)}
-        </span>
-      </div>
-    </button>
-  );
-}
 
 /** Repository list — edit and manage individual products. */
 export function ProductRepositoryList() {
@@ -172,6 +104,7 @@ export function ProductRepositoryList() {
                         key={product.id}
                         product={product}
                         color={CARD_COLORS[i % CARD_COLORS.length]!}
+                        selected={selectedProductId === product.id}
                         onClick={() => openProduct(product, CARD_COLORS[i % CARD_COLORS.length]!)}
                       />
                     ))}
@@ -191,6 +124,7 @@ export function ProductRepositoryList() {
                         key={product.id}
                         product={product}
                         color={CARD_COLORS[i % CARD_COLORS.length]!}
+                        selected={selectedProductId === product.id}
                         onClick={() => openProduct(product, CARD_COLORS[i % CARD_COLORS.length]!)}
                       />
                     ))}

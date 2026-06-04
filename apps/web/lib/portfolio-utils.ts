@@ -1,4 +1,9 @@
-import type { Product, ProductHealthFactor, ProductHealthStatus } from "@minea/types";
+import type {
+  Product,
+  ProductHealthDimensions,
+  ProductHealthFactor,
+  ProductHealthStatus,
+} from "@minea/types";
 import { formatCurrency } from "@/lib/utils";
 import { ROADMAP_STATUS_LABEL } from "@/lib/roadmap-utils";
 
@@ -25,6 +30,33 @@ export const HEALTH_BORDER: Record<ProductHealthStatus, string> = {
 
 export function productHealthStatus(product: Product): ProductHealthStatus {
   return (product.health_status as ProductHealthStatus) ?? "no_data";
+}
+
+/** Derive Ops / Debt / Lifecycle / Ownership signal dots when API omits health_dimensions. */
+export function deriveProductHealthDimensions(product: Product): ProductHealthDimensions {
+  const ownership = !product.owner?.trim() ? "critical" : "healthy";
+  const openDebt = product.open_tech_debt_count ?? 0;
+  const criticalDebt = product.critical_tech_debt_count ?? 0;
+  const debt =
+    criticalDebt > 0 ? "critical" : openDebt > 0 ? "warning" : "healthy";
+
+  const lifecycle = product.lifecycle;
+  const lifecycleStatus =
+    lifecycle === "retiring" || lifecycle === "retired"
+      ? "critical"
+      : lifecycle === "planned" || lifecycle === "beta"
+        ? "warning"
+        : "healthy";
+
+  const systemCount = product.system_count ?? 0;
+  const maturity = product.maturity_indicator;
+  let ops: ProductHealthDimensions["ops"] = "healthy";
+  if (systemCount === 0) ops = "warning";
+  else if (maturity === "manual" || maturity === "partial" || maturity === "outsourced") {
+    ops = "warning";
+  }
+
+  return { ops, debt, lifecycle: lifecycleStatus, ownership };
 }
 
 /** Table view — show Critical when any factor is critical. */

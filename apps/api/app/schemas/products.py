@@ -120,7 +120,6 @@ class ProductRead(BaseModel):
     health_factors: list[dict] = Field(default_factory=list)
     trend_direction: str = "stable"
     trend_label: str = "No recent changes"
-    # Populated on GET /products/{id} only
     health_dimensions: ProductHealthDimensions | None = None
     tech_debt_items: list[ProductTechDebtItem] = Field(default_factory=list)
     roadmap_items: list[ProductRoadmapItem] = Field(default_factory=list)
