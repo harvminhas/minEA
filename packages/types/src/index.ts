@@ -1178,6 +1178,25 @@ export interface DomainDetail {
   stats: DomainMappingStats;
 }
 
+export interface DomainLinkedCapabilityRef {
+  id: string;
+  name: string;
+}
+
+export interface DomainLinkedProduct {
+  id: string;
+  name: string;
+  lifecycle: string;
+  owner?: string | null;
+  product_line?: string | null;
+  system_count: number;
+  linked_capabilities: DomainLinkedCapabilityRef[];
+}
+
+export interface DomainProductsResponse {
+  items: DomainLinkedProduct[];
+}
+
 export interface UpsertDomainMappingRequest {
   capability_id: string;
   system_id: string;

@@ -10,6 +10,7 @@ export function invalidateProductQueries(
 ) {
   void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
   queryClient.invalidateQueries({ queryKey: ["products", orgSlug, workspaceSlug] });
+  queryClient.invalidateQueries({ queryKey: ["domain-products", orgSlug, workspaceSlug] });
   if (productId) {
     queryClient.invalidateQueries({ queryKey: ["product", orgSlug, workspaceSlug, productId] });
     queryClient.invalidateQueries({ queryKey: ["product-history", orgSlug, workspaceSlug, productId] });

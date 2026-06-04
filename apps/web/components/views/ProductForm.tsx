@@ -1,14 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { objectsApi, productsApi } from "@/lib/api-client";
+import { capabilityMapApi, productsApi } from "@/lib/api-client";
 import { invalidateProductQueries } from "@/lib/product-queries";
+import {
+  flattenMapCapabilities,
+  resolveToMapCapability,
+} from "@/lib/system-capability-utils";
 import { formFieldClass } from "@/components/ui/FormDrawer";
-import type { MinEAObject, Product } from "@minea/types";
+import type { Product } from "@minea/types";
 
 const LIFECYCLES = ["planned", "beta", "live", "retiring", "retired"];
 
@@ -33,29 +37,74 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
   );
   const [capSearch, setCapSearch] = useState("");
 
-  const { data: capabilities } = useQuery({
-    queryKey: ["objects", orgSlug, workspaceSlug, "capability"],
+  const { data: capabilityMapData } = useQuery({
+    queryKey: ["capability-map", orgSlug, workspaceSlug],
     queryFn: async () => {
       const token = await getToken();
-      return objectsApi.list(orgSlug, workspaceSlug, { type: "capability" }, token!);
+      return capabilityMapApi.get(orgSlug, workspaceSlug, token!);
     },
   });
 
-  const allCaps: MinEAObject[] = capabilities?.items ?? [];
+  const mapCapabilityRows = useMemo(
+    () => (capabilityMapData ? flattenMapCapabilities(capabilityMapData) : []),
+    [capabilityMapData]
+  );
 
-  const filteredCaps = capSearch
-    ? allCaps.filter((c) => c.name.toLowerCase().includes(capSearch.toLowerCase()))
-    : allCaps;
+  const mapCapabilityIdSet = useMemo(
+    () => new Set(mapCapabilityRows.map((row) => row.capability.id)),
+    [mapCapabilityRows]
+  );
 
-  // Group by owner (business domain) → first tag → "Other"
+  useEffect(() => {
+    if (!isEdit || !initialValues?.capability_ids.length || !capabilityMapData) return;
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      const resolved = await Promise.all(
+        initialValues.capability_ids.map((id) =>
+          resolveToMapCapability(orgSlug, workspaceSlug, id, token, capabilityMapData)
+        )
+      );
+      const ids = [
+        ...new Set(
+          resolved
+            .map((r) => r.capabilityId)
+            .filter((id) => mapCapabilityIdSet.has(id))
+        ),
+      ];
+      if (!cancelled) setSelectedCaps(ids);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isEdit,
+    initialValues,
+    capabilityMapData,
+    orgSlug,
+    workspaceSlug,
+    getToken,
+    mapCapabilityIdSet,
+  ]);
+
+  const filteredRows = useMemo(() => {
+    const query = capSearch.trim().toLowerCase();
+    if (!query) return mapCapabilityRows;
+    return mapCapabilityRows.filter(
+      (row) =>
+        row.capability.name.toLowerCase().includes(query) ||
+        row.domainName.toLowerCase().includes(query)
+    );
+  }, [mapCapabilityRows, capSearch]);
+
   const grouped = useMemo(() => {
-    const groups: Record<string, MinEAObject[]> = {};
-    for (const cap of filteredCaps) {
-      const group = cap.owner || cap.tags?.[0] || "Other";
-      (groups[group] ??= []).push(cap);
+    const groups: Record<string, typeof mapCapabilityRows> = {};
+    for (const row of filteredRows) {
+      (groups[row.domainName] ??= []).push(row);
     }
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
-  }, [filteredCaps]);
+  }, [filteredRows]);
 
   const toggleCap = (id: string, checked: boolean) =>
     setSelectedCaps((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)));
@@ -63,12 +112,22 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
   const mutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
+      const map =
+        capabilityMapData ?? (await capabilityMapApi.get(orgSlug, workspaceSlug, token!));
+      const resolved = await Promise.all(
+        selectedCaps.map((id) => resolveToMapCapability(orgSlug, workspaceSlug, id, token!, map))
+      );
+      const capability_ids = [
+        ...new Set(
+          resolved.map((r) => r.capabilityId).filter((id) => mapCapabilityIdSet.has(id))
+        ),
+      ];
       const body = {
         name,
         owner: owner || undefined,
         product_line: productLine || undefined,
         lifecycle,
-        capability_ids: selectedCaps,
+        capability_ids,
       };
       if (isEdit) {
         return productsApi.update(orgSlug, workspaceSlug, initialValues!.id, body, token!);
@@ -83,12 +142,9 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
 
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 bg-black/20 z-50" onClick={onClose} />
 
-      {/* Drawer */}
       <div className="fixed right-0 top-0 h-full w-[480px] bg-white shadow-xl z-50 flex flex-col">
-        {/* Header */}
         <div className="flex items-start justify-between px-6 pt-6 pb-2 flex-shrink-0">
           <div>
             <h2 className="font-semibold text-gray-900 text-base">
@@ -107,9 +163,7 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
           </button>
         </div>
 
-        {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
-          {/* Name */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               Name <span className="text-red-500">*</span>
@@ -123,7 +177,6 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
             />
           </div>
 
-          {/* Business capabilities */}
           <div>
             <div className="flex items-baseline justify-between mb-1">
               <label className="text-xs font-medium text-gray-700">
@@ -136,10 +189,10 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
               )}
             </div>
             <p className="text-xs text-gray-400 mb-2 leading-relaxed">
-              What this product delivers. Systems and processes will be inferred from these.
+              L2 capabilities from your capability map. Domain product tabs only show links to
+              capabilities in that domain.
             </p>
 
-            {/* Search */}
             <div className="relative mb-2">
               <Search
                 size={13}
@@ -153,15 +206,15 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
               />
             </div>
 
-            {/* Grouped list */}
-            {allCaps.length === 0 ? (
+            {mapCapabilityRows.length === 0 ? (
               <p className="text-xs text-gray-400 py-3">
-                No capabilities in repository yet. Add some under Repository → Business first.
+                No capabilities on the capability map yet. Add domains and L2 capabilities under
+                Strategy → Capability map first.
               </p>
             ) : (
               <div className="border border-gray-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
                 {grouped.length === 0 ? (
-                  <p className="text-xs text-gray-400 px-3 py-3">No results for "{capSearch}"</p>
+                  <p className="text-xs text-gray-400 px-3 py-3">No results for &ldquo;{capSearch}&rdquo;</p>
                 ) : (
                   grouped.map(([group, items]) => (
                     <div key={group}>
@@ -170,23 +223,23 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
                           {group}
                         </span>
                       </div>
-                      {items.map((cap) => {
-                        const maturity = cap.properties?.maturity as string | undefined;
+                      {items.map(({ capability }) => {
+                        const maturity = capability.maturity;
                         return (
                           <label
-                            key={cap.id}
+                            key={capability.id}
                             className="flex items-center justify-between px-3 py-2.5 hover:bg-indigo-50/50 cursor-pointer border-t border-gray-100"
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
                               <input
                                 type="checkbox"
-                                checked={selectedCaps.includes(cap.id)}
-                                onChange={(e) => toggleCap(cap.id, e.target.checked)}
+                                checked={selectedCaps.includes(capability.id)}
+                                onChange={(e) => toggleCap(capability.id, e.target.checked)}
                                 className="accent-indigo-600 flex-shrink-0"
                               />
-                              <span className="text-sm text-gray-800 truncate">{cap.name}</span>
+                              <span className="text-sm text-gray-800 truncate">{capability.name}</span>
                             </div>
-                            {maturity && (
+                            {maturity != null && (
                               <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
                                 maturity {maturity}
                               </span>
@@ -200,21 +253,19 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
               </div>
             )}
 
-            {/* Coverage summary */}
             {selectedCaps.length > 0 && (
               <div className="mt-2 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2.5">
                 <p className="text-xs text-indigo-700">
                   <span className="font-medium">
                     Based on these capabilities, this product will cover:
                   </span>{" "}
-                  {selectedCaps.length} capabilit
-                  {selectedCaps.length === 1 ? "y" : "ies"} selected
+                  {selectedCaps.length}{" "}
+                  {selectedCaps.length === 1 ? "capability" : "capabilities"} selected
                 </p>
               </div>
             )}
           </div>
 
-          {/* Details section */}
           <div className="pt-3 border-t border-gray-100">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-3">
               Details
@@ -260,14 +311,12 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
           </div>
         </div>
 
-        {/* Error */}
         {mutation.isError && (
           <p className="px-6 pb-1 text-xs text-red-600">
             {(mutation.error as Error).message}
           </p>
         )}
 
-        {/* Footer */}
         <div className="border-t border-gray-100 px-6 py-4 flex-shrink-0">
           <p className="text-xs text-gray-400 mb-3">
             You can edit systems directly after creating
@@ -283,10 +332,10 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
             <button
               type="button"
               onClick={() => mutation.mutate()}
-              disabled={!name || mutation.isPending}
+              disabled={!name || selectedCaps.length === 0 || mutation.isPending}
               className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-md py-2 text-sm font-medium transition-colors"
             >
-              {mutation.isPending ? "Creating..." : isEdit ? "Save changes" : "Create product"}
+              {mutation.isPending ? "Saving..." : isEdit ? "Save changes" : "Create product"}
             </button>
           </div>
         </div>

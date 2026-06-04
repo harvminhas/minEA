@@ -1,3 +1,4 @@
+from collections import defaultdict
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -6,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.data.capability_templates import get_template, list_templates
 from app.models.objects import MinEAObject
 from app.models.relationships import Relationship
+from app.models.views_graph import Product, ProductCapability
 
 VALID_FITNESS = frozenset({"none", "weak", "adequate", "strong"})
 
@@ -633,3 +635,92 @@ async def upsert_domain_mapping(
         created_by=user_id,
     )
     db.add(rel)
+
+
+async def load_domain_products(
+    db: AsyncSession, workspace_id: UUID, org_id: UUID, domain_id: UUID
+) -> list[dict]:
+    """Products linked via product_capabilities to this domain's L2 capabilities (incl. name aliases)."""
+    from app.services.product_stats import enrich_product
+
+    domain = await get_domain(db, workspace_id, org_id, domain_id)
+    if not domain:
+        return []
+
+    capabilities = await load_domain_capabilities(db, workspace_id, org_id, domain_id)
+    if not capabilities:
+        return []
+
+    canonical_by_id = {str(c.id): c for c in capabilities}
+    canonical_by_name = {c.name.strip().lower(): str(c.id) for c in capabilities}
+    cap_ids = [c.id for c in capabilities]
+
+    match_ids: set[UUID] = set(cap_ids)
+    id_to_canonical: dict[UUID, str] = {c.id: str(c.id) for c in capabilities}
+
+    if canonical_by_name:
+        alias_result = await db.execute(
+            select(MinEAObject.id, MinEAObject.name).where(
+                MinEAObject.workspace_id == workspace_id,
+                MinEAObject.org_id == org_id,
+                MinEAObject.type == "capability",
+                func.lower(MinEAObject.name).in_(list(canonical_by_name.keys())),
+                MinEAObject.id.notin_(cap_ids),
+            )
+        )
+        for cap_id, cap_name in alias_result.all():
+            match_ids.add(cap_id)
+            canon = canonical_by_name.get(cap_name.strip().lower())
+            if canon:
+                id_to_canonical[cap_id] = canon
+
+    pc_products = await db.execute(
+        select(Product)
+        .join(ProductCapability, ProductCapability.product_id == Product.id)
+        .where(
+            Product.workspace_id == workspace_id,
+            Product.org_id == org_id,
+            ProductCapability.capability_id.in_(list(match_ids)),
+        )
+        .distinct()
+    )
+    products = list(pc_products.scalars().unique().all())
+    if not products:
+        return []
+
+    product_ids = [p.id for p in products]
+    links_result = await db.execute(
+        select(ProductCapability).where(
+            ProductCapability.product_id.in_(product_ids),
+            ProductCapability.capability_id.in_(list(match_ids)),
+        )
+    )
+    links_by_product: dict[UUID, set[str]] = defaultdict(set)
+    for link in links_result.scalars().all():
+        canon_id = id_to_canonical.get(link.capability_id)
+        if canon_id:
+            links_by_product[link.product_id].add(canon_id)
+
+    items: list[dict] = []
+    for product in sorted(products, key=lambda p: p.name.lower()):
+        linked_ids = sorted(links_by_product.get(product.id, set()))
+        linked_capabilities = [
+            {
+                "id": cid,
+                "name": canonical_by_id[cid].name if cid in canonical_by_id else cid,
+            }
+            for cid in linked_ids
+        ]
+        stats = await enrich_product(db, product)
+        items.append(
+            {
+                "id": str(product.id),
+                "name": product.name,
+                "lifecycle": product.lifecycle,
+                "owner": product.owner,
+                "product_line": product.product_line,
+                "system_count": stats["system_count"],
+                "linked_capabilities": linked_capabilities,
+            }
+        )
+    return items

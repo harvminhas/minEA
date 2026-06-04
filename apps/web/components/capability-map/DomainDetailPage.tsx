@@ -10,6 +10,7 @@ import { fetchDomainDetail } from "@/lib/domain-detail";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { DomainMappingTab } from "@/components/capability-map/DomainMappingTab";
 import { DomainProcessesTab } from "@/components/capability-map/DomainProcessesTab";
+import { DomainProductsTab } from "@/components/capability-map/DomainProductsTab";
 import { domainIcon } from "@/lib/capability-map-icons";
 import { objectListPath } from "@/lib/tenancy";
 import { useTenancy } from "@/lib/tenancy";
@@ -223,24 +224,9 @@ export function DomainDetailPage({ domainId }: Props) {
 
         {activeTab === "processes" && <DomainProcessesTab domain={domain} />}
 
-        {activeTab === "products" && (
-          <PlaceholderTab
-            title="Products"
-            body="Products that rely on this domain's capabilities will appear here."
-          />
-        )}
+        {activeTab === "products" && <DomainProductsTab domain={domain} />}
       </div>
     </div>
   );
 }
 
-function PlaceholderTab({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="p-8">
-      <div className="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center max-w-lg">
-        <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-        <p className="text-sm text-gray-500 mt-2">{body}</p>
-      </div>
-    </div>
-  );
-}

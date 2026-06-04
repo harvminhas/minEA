@@ -18,6 +18,7 @@ from app.schemas.capability_map import (
     CapabilityTemplateSummary,
     CreateDomainMappingSystemRequest,
     DomainDetailRead,
+    DomainProductsRead,
     LibraryDomainGroup,
     UpsertDomainMappingRequest,
 )
@@ -27,9 +28,11 @@ from app.services.capability_map import (
     adopt_template,
     capability_picker_suggestions,
     create_domain_mapping_system,
+    get_domain,
     library_domain_groups,
     load_capability_map,
     load_domain_detail,
+    load_domain_products,
     map_is_initialized,
     template_detail_for_api,
     templates_for_api,
@@ -203,6 +206,23 @@ async def get_domain_detail(
     if not detail:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Domain not found")
     return DomainDetailRead(**detail)
+
+
+@router.get("/domains/{domain_id}/products", response_model=DomainProductsRead)
+async def get_domain_products(
+    domain_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> DomainProductsRead:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
+    domain = await get_domain(db, ctx.workspace.id, ctx.org_id, domain_id)
+    if not domain:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Domain not found")
+
+    items = await load_domain_products(db, ctx.workspace.id, ctx.org_id, domain_id)
+    return DomainProductsRead(items=items)
 
 
 @router.post("/domains/{domain_id}/mapping-systems", status_code=status.HTTP_204_NO_CONTENT)

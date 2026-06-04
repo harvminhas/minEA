@@ -120,6 +120,25 @@ class DomainMappingStats(BaseModel):
     gap_count: int
 
 
+class DomainLinkedCapabilityRef(BaseModel):
+    id: str
+    name: str
+
+
+class DomainLinkedProduct(BaseModel):
+    id: str
+    name: str
+    lifecycle: str
+    owner: str | None = None
+    product_line: str | None = None
+    system_count: int = 0
+    linked_capabilities: list[DomainLinkedCapabilityRef] = Field(default_factory=list)
+
+
+class DomainProductsRead(BaseModel):
+    items: list[DomainLinkedProduct] = Field(default_factory=list)
+
+
 class DomainDetailRead(BaseModel):
     id: str
     name: str

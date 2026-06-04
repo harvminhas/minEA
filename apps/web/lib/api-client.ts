@@ -43,6 +43,7 @@ import type {
   AddDomainMappingSystemRequest,
   CreateDomainMappingSystemRequest,
   DomainDetail,
+  DomainProductsResponse,
   UpsertDomainMappingRequest,
   PeopleRole,
   PeopleRoleCreate,
@@ -421,6 +422,12 @@ export const capabilityMapApi = {
     apiFetch<DomainDetail>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/domains/${domainId}`, {
       token,
     }),
+
+  getDomainProducts: (orgSlug: string, workspaceSlug: string, domainId: string, token: string) =>
+    apiFetch<DomainProductsResponse>(
+      `${wsBase(orgSlug, workspaceSlug)}/capability-map/domains/${domainId}/products`,
+      { token }
+    ),
 
   addMappingSystem: (
     orgSlug: string,
