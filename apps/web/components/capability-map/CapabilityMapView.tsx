@@ -3,17 +3,25 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
-import type { CapabilityMap, CapabilityMapDomain } from "@minea/types";
+import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import type { CapabilityMap, CapabilityMapCapability, CapabilityMapDomain } from "@minea/types";
+import { capabilityCoverageDisplay } from "@/lib/capability-map-card-utils";
 import { useAuth } from "@/lib/auth-context";
 import { objectsApi } from "@/lib/api-client";
 import { AddCapabilityPickerDialog } from "@/components/capability-map/AddCapabilityPickerDialog";
+import { EditCapabilityDialog } from "@/components/capability-map/EditCapabilityDialog";
 import { AddDomainPickerDialog } from "@/components/capability-map/AddDomainPickerDialog";
 import { domainIcon } from "@/lib/capability-map-icons";
 import { objectListPath } from "@/lib/tenancy";
 import { useTenancy } from "@/lib/tenancy";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { cn } from "@/lib/utils";
+import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
+import { HoverActionMenu } from "@/components/ui/HoverActionMenu";
+import {
+  capabilityDeleteMessage,
+  domainDeleteMessage,
+} from "@/lib/capability-delete-messages";
 
 interface Props {
   map: CapabilityMap;
@@ -26,6 +34,15 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
   const queryClient = useQueryClient();
   const [showDomainPicker, setShowDomainPicker] = useState(false);
   const [capPickerDomain, setCapPickerDomain] = useState<CapabilityMapDomain | null>(null);
+  const [editCapability, setEditCapability] = useState<{
+    capability: CapabilityMapCapability;
+    domainName: string;
+  } | null>(null);
+  const [deleteDomain, setDeleteDomain] = useState<CapabilityMapDomain | null>(null);
+  const [deleteCapability, setDeleteCapability] = useState<{
+    capability: CapabilityMapCapability;
+    domainName: string;
+  } | null>(null);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
@@ -76,7 +93,15 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
   });
 
   const createCapabilityMutation = useMutation({
-    mutationFn: async ({ domainId, name }: { domainId: string; name: string }) => {
+    mutationFn: async ({
+      domainId,
+      name,
+      owner,
+    }: {
+      domainId: string;
+      name: string;
+      owner?: string;
+    }) => {
       const token = await getToken();
       const domain = map.domains.find((d) => d.id === domainId);
       return objectsApi.create(
@@ -85,6 +110,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
         {
           type: "capability",
           name,
+          owner,
           status: "active",
           properties: {
             domain_id: domainId,
@@ -96,6 +122,30 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
     },
     onSuccess: () => {
       setCapPickerDomain(null);
+      invalidate();
+      onRefresh();
+    },
+  });
+
+  const deleteDomainMutation = useMutation({
+    mutationFn: async (domainId: string) => {
+      const token = await getToken();
+      await objectsApi.delete(orgSlug, workspaceSlug, domainId, token!);
+    },
+    onSuccess: () => {
+      setDeleteDomain(null);
+      invalidate();
+      onRefresh();
+    },
+  });
+
+  const deleteCapabilityMutation = useMutation({
+    mutationFn: async (capabilityId: string) => {
+      const token = await getToken();
+      await objectsApi.delete(orgSlug, workspaceSlug, capabilityId, token!);
+    },
+    onSuccess: () => {
+      setDeleteCapability(null);
       invalidate();
       onRefresh();
     },
@@ -152,6 +202,13 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
                   key={domain.id}
                   domain={domain}
                   onAddCapability={() => setCapPickerDomain(domain)}
+                  onEditCapability={(capability) =>
+                    setEditCapability({ capability, domainName: domain.name })
+                  }
+                  onDeleteDomain={() => setDeleteDomain(domain)}
+                  onDeleteCapability={(capability) =>
+                    setDeleteCapability({ capability, domainName: domain.name })
+                  }
                 />
               ))}
             </div>
@@ -176,15 +233,59 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
           domain={capPickerDomain}
           isSubmitting={createCapabilityMutation.isPending}
           onClose={() => setCapPickerDomain(null)}
-          onAdd={(name) =>
-            createCapabilityMutation.mutate({ domainId: capPickerDomain.id, name })
+          onAdd={({ name, owner }) =>
+            createCapabilityMutation.mutate({ domainId: capPickerDomain.id, name, owner })
           }
         />
       )}
 
-      {(createDomainMutation.isError || createCapabilityMutation.isError) && (
+      {editCapability && (
+        <EditCapabilityDialog
+          capability={editCapability.capability}
+          domainName={editCapability.domainName}
+          onClose={() => setEditCapability(null)}
+          onSuccess={() => {
+            invalidate();
+            onRefresh();
+          }}
+        />
+      )}
+
+      {deleteDomain && (
+        <ConfirmDeleteDialog
+          title={`Delete ${deleteDomain.name}?`}
+          message={domainDeleteMessage(deleteDomain.capabilities.length)}
+          confirmLabel="Delete domain"
+          size="md"
+          isPending={deleteDomainMutation.isPending}
+          onCancel={() => setDeleteDomain(null)}
+          onConfirm={() => deleteDomainMutation.mutate(deleteDomain.id)}
+        />
+      )}
+
+      {deleteCapability && (
+        <ConfirmDeleteDialog
+          title={`Delete ${deleteCapability.capability.name}?`}
+          message={capabilityDeleteMessage(deleteCapability.capability)}
+          confirmLabel="Delete capability"
+          size="md"
+          isPending={deleteCapabilityMutation.isPending}
+          onCancel={() => setDeleteCapability(null)}
+          onConfirm={() => deleteCapabilityMutation.mutate(deleteCapability.capability.id)}
+        />
+      )}
+
+      {(createDomainMutation.isError ||
+        createCapabilityMutation.isError ||
+        deleteDomainMutation.isError ||
+        deleteCapabilityMutation.isError) && (
         <p className="fixed bottom-4 right-4 z-[100] text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2 shadow-sm">
-          {(createDomainMutation.error ?? createCapabilityMutation.error)?.message}
+          {(
+            createDomainMutation.error ??
+            createCapabilityMutation.error ??
+            deleteDomainMutation.error ??
+            deleteCapabilityMutation.error
+          )?.message}
         </p>
       )}
     </>
@@ -194,41 +295,68 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
 function DomainCard({
   domain,
   onAddCapability,
+  onEditCapability,
+  onDeleteDomain,
+  onDeleteCapability,
 }: {
   domain: CapabilityMapDomain;
   onAddCapability: () => void;
+  onEditCapability: (capability: CapabilityMapCapability) => void;
+  onDeleteDomain: () => void;
+  onDeleteCapability: (capability: CapabilityMapCapability) => void;
 }) {
   const { orgSlug, workspaceSlug } = useTenancy();
   const Icon = domainIcon(domain.icon);
   const detailPath = `${objectListPath(orgSlug, workspaceSlug, "business", "capabilities")}/domains/${domain.id}`;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 hover:border-indigo-200 transition-colors">
-      <Link href={detailPath} className="block group">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="rounded-md bg-gray-100 p-1.5 text-gray-600 group-hover:bg-indigo-50 group-hover:text-indigo-700">
-            <Icon size={16} />
+    <div className="group/card rounded-xl border border-gray-200 bg-white p-4 hover:border-indigo-200 transition-colors flex flex-col">
+      <div className="flex items-start gap-3 mb-3">
+        <Link href={detailPath} className="flex items-start gap-3 min-w-0 flex-1 group">
+          <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 flex-shrink-0 group-hover:bg-indigo-50 group-hover:text-indigo-700 transition-colors">
+            <Icon size={18} />
           </div>
-          <div>
-            <h3 className="font-semibold text-gray-900 group-hover:text-indigo-700">{domain.name}</h3>
-            <p className="text-xs text-gray-400">Domain · Level 1</p>
+          <div className="min-w-0">
+            <h3 className="font-semibold text-gray-900 text-base group-hover:text-indigo-700">
+              {domain.name}
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">Domain · Level 1</p>
           </div>
-        </div>
+        </Link>
+        <HoverActionMenu
+          className="group-hover:opacity-100"
+          buttonClassName="opacity-0 group-hover/card:opacity-100"
+          ariaLabel={`Actions for ${domain.name}`}
+          items={[
+            {
+              label: "Add capability",
+              icon: <Plus size={14} />,
+              onClick: onAddCapability,
+            },
+            {
+              label: "Delete domain",
+              icon: <Trash2 size={14} />,
+              variant: "danger",
+              onClick: onDeleteDomain,
+            },
+          ]}
+        />
+      </div>
 
-        <ul className="space-y-1.5 mb-3">
-          {domain.capabilities.slice(0, 5).map((cap) => (
-            <li key={cap.id} className="text-sm text-gray-700 pl-3 border-l-2 border-indigo-100">
-              {cap.name}
-            </li>
+      {domain.capabilities.length === 0 ? (
+        <p className="text-sm text-gray-400 italic mb-2">No capabilities yet</p>
+      ) : (
+        <ul className="space-y-1 mb-2">
+          {domain.capabilities.map((cap) => (
+            <CapabilityL2Row
+              key={cap.id}
+              capability={cap}
+              onEdit={() => onEditCapability(cap)}
+              onDelete={() => onDeleteCapability(cap)}
+            />
           ))}
-          {domain.capabilities.length === 0 && (
-            <li className="text-sm text-gray-400 italic">No capabilities yet</li>
-          )}
-          {domain.capabilities.length > 5 && (
-            <li className="text-xs text-gray-400 pl-3">+{domain.capabilities.length - 5} more</li>
-          )}
         </ul>
-      </Link>
+      )}
 
       <button
         type="button"
@@ -241,5 +369,63 @@ function DomainCard({
         Add capability
       </button>
     </div>
+  );
+}
+
+function CapabilityL2Row({
+  capability,
+  onEdit,
+  onDelete,
+}: {
+  capability: CapabilityMapCapability;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const coverage = capabilityCoverageDisplay(capability);
+  const unowned = !capability.owner?.trim();
+
+  return (
+    <li className="group/row flex items-center justify-between gap-2 py-1">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-gray-900 leading-snug">{capability.name}</p>
+        <p
+          className={cn(
+            "flex items-center gap-1 text-[11px] leading-tight",
+            unowned ? "text-red-600" : "text-gray-500"
+          )}
+        >
+          <Users
+            size={11}
+            className={cn("flex-shrink-0", unowned ? "text-red-500" : "text-gray-400")}
+          />
+          <span className="truncate">{unowned ? "Unassigned" : capability.owner}</span>
+        </p>
+      </div>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1.5">
+          <span className={cn("h-2 w-2 rounded-full", coverage.dot)} aria-hidden />
+          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", coverage.badge)}>
+            {coverage.label}
+          </span>
+        </div>
+        <HoverActionMenu
+          buttonClassName="opacity-0 group-hover/row:opacity-100"
+          ariaLabel={`Actions for ${capability.name}`}
+          items={[
+            {
+              label: "Edit capability",
+              icon: <Pencil size={14} />,
+              onClick: onEdit,
+            },
+            {
+              label: "Delete capability",
+              icon: <Trash2 size={14} />,
+              variant: "danger",
+              onClick: onDelete,
+            },
+          ]}
+        />
+      </div>
+    </li>
   );
 }

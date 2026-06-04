@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Plus, Search } from "lucide-react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import type {
   CapabilityMapCapability,
   CapabilityMapDomain,
@@ -18,10 +18,14 @@ import {
   upsertDomainMapping,
 } from "@/lib/domain-detail";
 import { AddCapabilityPickerDialog } from "@/components/capability-map/AddCapabilityPickerDialog";
+import { EditCapabilityDialog } from "@/components/capability-map/EditCapabilityDialog";
 import { AddMappingSystemDialog } from "@/components/capability-map/AddMappingSystemDialog";
 import { MapCapabilitySystemDialog } from "@/components/capability-map/MapCapabilitySystemDialog";
 import { useTenancy } from "@/lib/tenancy";
 import { cn } from "@/lib/utils";
+import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
+import { HoverActionMenu } from "@/components/ui/HoverActionMenu";
+import { capabilityDeleteMessage } from "@/lib/capability-delete-messages";
 
 // Solid saturated colours matching the wireframe
 const FITNESS_CELL: Record<MappingFitness, { cell: string; hover: string; text: string }> = {
@@ -77,6 +81,8 @@ export function DomainMappingTab({ domain, pickerDomain, onRefresh }: Props) {
   const [filter, setFilter] = useState("");
   const [showAddSystem, setShowAddSystem] = useState(false);
   const [showAddCapability, setShowAddCapability] = useState(false);
+  const [editCapability, setEditCapability] = useState<CapabilityMapCapability | null>(null);
+  const [deleteCapability, setDeleteCapability] = useState<CapabilityMapCapability | null>(null);
   const [cellSelection, setCellSelection] = useState<CellSelection | null>(null);
 
   const mappingLookup = useMemo(() => {
@@ -161,7 +167,7 @@ export function DomainMappingTab({ domain, pickerDomain, onRefresh }: Props) {
   });
 
   const createCapabilityMutation = useMutation({
-    mutationFn: async (name: string) => {
+    mutationFn: async ({ name, owner }: { name: string; owner?: string }) => {
       const token = await getToken();
       return objectsApi.create(
         orgSlug,
@@ -169,6 +175,7 @@ export function DomainMappingTab({ domain, pickerDomain, onRefresh }: Props) {
         {
           type: "capability",
           name,
+          owner,
           status: "active",
           properties: {
             domain_id: domain.id,
@@ -184,8 +191,22 @@ export function DomainMappingTab({ domain, pickerDomain, onRefresh }: Props) {
     },
   });
 
+  const deleteCapabilityMutation = useMutation({
+    mutationFn: async (capabilityId: string) => {
+      const token = await getToken();
+      await objectsApi.delete(orgSlug, workspaceSlug, capabilityId, token!);
+    },
+    onSuccess: () => {
+      setDeleteCapability(null);
+      onRefresh();
+    },
+  });
+
   const isBusy =
-    upsertMutation.isPending || addSystemMutation.isPending || createCapabilityMutation.isPending;
+    upsertMutation.isPending ||
+    addSystemMutation.isPending ||
+    createCapabilityMutation.isPending ||
+    deleteCapabilityMutation.isPending;
 
   return (
     <>
@@ -282,10 +303,34 @@ export function DomainMappingTab({ domain, pickerDomain, onRefresh }: Props) {
                         rowMeta.isGap ? "bg-red-50 group-hover:bg-red-100/60" : "bg-white group-hover:bg-gray-50"
                       )}
                     >
-                      <p className="text-sm font-semibold text-gray-900 leading-snug">{capability.name}</p>
-                      <p className={cn("text-xs mt-1", rowMeta.isGap ? "text-red-500 font-medium" : "text-gray-400")}>
-                        {rowMeta.label}
-                      </p>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 leading-snug">{capability.name}</p>
+                          {capability.owner?.trim() && (
+                            <p className="text-xs text-gray-500 mt-0.5">{capability.owner}</p>
+                          )}
+                          <p className={cn("text-xs mt-1", rowMeta.isGap ? "text-red-500 font-medium" : "text-gray-400")}>
+                            {rowMeta.label}
+                          </p>
+                        </div>
+                        <HoverActionMenu
+                          buttonClassName="opacity-0 group-hover:opacity-100"
+                          ariaLabel={`Actions for ${capability.name}`}
+                          items={[
+                            {
+                              label: "Edit capability",
+                              icon: <Pencil size={14} />,
+                              onClick: () => setEditCapability(capability),
+                            },
+                            {
+                              label: "Delete capability",
+                              icon: <Trash2 size={14} />,
+                              variant: "danger",
+                              onClick: () => setDeleteCapability(capability),
+                            },
+                          ]}
+                        />
+                      </div>
                     </td>
 
                     {/* Fitness cells */}
@@ -365,7 +410,28 @@ export function DomainMappingTab({ domain, pickerDomain, onRefresh }: Props) {
           domain={pickerDomain}
           isSubmitting={createCapabilityMutation.isPending}
           onClose={() => setShowAddCapability(false)}
-          onAdd={(name) => createCapabilityMutation.mutate(name)}
+          onAdd={({ name, owner }) => createCapabilityMutation.mutate({ name, owner })}
+        />
+      )}
+
+      {editCapability && (
+        <EditCapabilityDialog
+          capability={editCapability}
+          domainName={domain.name}
+          onClose={() => setEditCapability(null)}
+          onSuccess={onRefresh}
+        />
+      )}
+
+      {deleteCapability && (
+        <ConfirmDeleteDialog
+          title={`Delete ${deleteCapability.name}?`}
+          message={capabilityDeleteMessage(deleteCapability)}
+          confirmLabel="Delete capability"
+          size="md"
+          isPending={deleteCapabilityMutation.isPending}
+          onCancel={() => setDeleteCapability(null)}
+          onConfirm={() => deleteCapabilityMutation.mutate(deleteCapability.id)}
         />
       )}
 
@@ -388,9 +454,17 @@ export function DomainMappingTab({ domain, pickerDomain, onRefresh }: Props) {
         />
       )}
 
-      {(upsertMutation.isError || addSystemMutation.isError || createCapabilityMutation.isError) && (
+      {(upsertMutation.isError ||
+        addSystemMutation.isError ||
+        createCapabilityMutation.isError ||
+        deleteCapabilityMutation.isError) && (
         <p className="fixed bottom-4 right-4 z-[100] text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2 shadow-sm">
-          {(upsertMutation.error ?? addSystemMutation.error ?? createCapabilityMutation.error)?.message}
+          {(
+            upsertMutation.error ??
+            addSystemMutation.error ??
+            createCapabilityMutation.error ??
+            deleteCapabilityMutation.error
+          )?.message}
         </p>
       )}
     </>

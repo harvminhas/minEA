@@ -730,10 +730,16 @@ export interface ProductRoadmapItem {
   status_label: string;
   target_label: string;
   owner?: string | null;
+  product_name?: string | null;
+  spend_label?: string;
+  effort_label?: string;
+  resolves_debt_count?: number;
   milestone_strip: { status: string }[];
   milestones_done: number;
   milestones_total: number;
   next_milestone?: ProductRoadmapNextMilestone | null;
+  updated_at?: string;
+  updated_by_name?: string | null;
 }
 
 export interface ProductIntegrationItem {
@@ -1054,6 +1060,8 @@ export interface WorkspaceSnapshot {
   metrics: WorkspaceSummary;
 }
 
+export type CapabilityCoverageStatus = "active" | "planned" | "no_system";
+
 export interface CapabilityMapCapability {
   id: string;
   name: string;
@@ -1061,6 +1069,11 @@ export interface CapabilityMapCapability {
   order_index?: number | null;
   maturity?: number | null;
   investment?: string | null;
+  owner?: string | null;
+  object_status?: string | null;
+  system_count?: number;
+  product_count?: number;
+  coverage_status?: CapabilityCoverageStatus;
 }
 
 export interface CapabilityMapDomain {

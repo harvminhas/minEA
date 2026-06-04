@@ -62,10 +62,16 @@ class ProductRoadmapItem(BaseModel):
     status_label: str
     target_label: str
     owner: str | None = None
+    product_name: str | None = None
+    spend_label: str = "—"
+    effort_label: str = "—"
+    resolves_debt_count: int = 0
     milestone_strip: list[dict] = Field(default_factory=list)
     milestones_done: int = 0
     milestones_total: int = 0
     next_milestone: ProductRoadmapNextMilestone | None = None
+    updated_at: datetime | None = None
+    updated_by_name: str | None = None
 
 
 class ProductIntegrationItem(BaseModel):

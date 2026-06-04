@@ -304,6 +304,11 @@ async def delete_object(
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
 
+    if obj.type == "business_domain":
+        from app.services.capability_map import delete_capabilities_for_domain
+
+        await delete_capabilities_for_domain(db, ctx.workspace.id, ctx.org_id, obj.id)
+
     db.add(ChangeLog(
         workspace_id=ctx.workspace.id,
         org_id=ctx.org_id,

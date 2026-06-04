@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Circle, Loader2 } from "lucide-react";
+import { Check, Circle, Loader2, Maximize2 } from "lucide-react";
 import type { RoadmapItemProperties, RoadmapMilestone } from "@minea/types";
 import {
   buildTimelineQuarters,
@@ -22,6 +22,10 @@ interface Props {
   milestones: RoadmapMilestone[];
   onAddAtQuarter: (quarter: string) => void;
   onEditMilestone: (milestone: RoadmapMilestone) => void;
+  /** When true, timeline uses full width (e.g. fullscreen overlay). */
+  fullWidth?: boolean;
+  /** Shows expand control in the milestones header. */
+  onExpand?: () => void;
 }
 
 const MILESTONE_CARD_WIDTH = 144;
@@ -89,7 +93,14 @@ function groupMilestonesByQuarter(milestones: RoadmapMilestone[]) {
   return groups;
 }
 
-export function RoadmapTimeline({ properties, milestones, onAddAtQuarter, onEditMilestone }: Props) {
+export function RoadmapTimeline({
+  properties,
+  milestones,
+  onAddAtQuarter,
+  onEditMilestone,
+  fullWidth = false,
+  onExpand,
+}: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>("quarter");
   const ordered = sortedMilestones(milestones);
   const doneCount = milestoneDoneCount(milestones);
@@ -113,13 +124,31 @@ export function RoadmapTimeline({ properties, milestones, onAddAtQuarter, onEdit
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-6 w-full max-w-5xl mx-auto">
+    <div
+      className={cn(
+        "rounded-xl border border-gray-200 bg-white p-6 w-full",
+        !fullWidth && "max-w-5xl mx-auto"
+      )}
+    >
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
           Milestones · {doneCount} of {milestones.length} done
         </p>
 
-        <div className="flex items-center gap-3 ml-auto">
+        <div className="flex items-center gap-2 ml-auto">
+          {onExpand && (
+            <button
+              type="button"
+              onClick={onExpand}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 rounded-md border border-gray-200 hover:bg-gray-50 hover:text-violet-700 hover:border-violet-200 transition-colors"
+              aria-label="Expand timeline fullscreen"
+              title="Expand timeline"
+            >
+              <Maximize2 size={14} />
+              Expand
+            </button>
+          )}
+
           <div className="inline-flex rounded-full border border-gray-200 p-0.5 bg-gray-50 text-xs">
             <button
               type="button"
@@ -155,7 +184,7 @@ export function RoadmapTimeline({ properties, milestones, onAddAtQuarter, onEdit
 
       <div className={cn(needsHorizontalScroll && "overflow-x-auto -mx-2 px-2")}>
         <div
-          className="relative pt-8 pb-32 min-h-[240px] w-full"
+          className={cn("relative pt-8 pb-32 w-full", fullWidth ? "min-h-[360px]" : "min-h-[240px]")}
           style={{
             ...(needsHorizontalScroll ? { minWidth: quarters.length * 120 } : undefined),
             paddingLeft: MILESTONE_CARD_WIDTH / 2,

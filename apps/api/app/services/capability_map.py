@@ -88,6 +88,125 @@ async def domain_name_exists(
     return result.scalar_one_or_none() is not None
 
 
+async def enrich_map_capability_rollups(
+    db: AsyncSession,
+    workspace_id: UUID,
+    org_id: UUID,
+    domains: list[MinEAObject],
+    capabilities: list[MinEAObject],
+) -> dict[str, dict]:
+    """Per L2 capability id: owner, object_status, system_count, product_count, coverage_status."""
+    from collections import defaultdict
+
+    caps_by_domain: dict[str, list[MinEAObject]] = defaultdict(list)
+    for cap in capabilities:
+        domain_id = str((cap.properties or {}).get("domain_id", ""))
+        if domain_id:
+            caps_by_domain[domain_id].append(cap)
+
+    system_counts: dict[str, int] = defaultdict(int)
+    product_counts: dict[str, int] = defaultdict(int)
+
+    for domain in domains:
+        domain_id = str(domain.id)
+        domain_caps = caps_by_domain.get(domain_id, [])
+        if not domain_caps:
+            continue
+
+        cap_ids = [c.id for c in domain_caps]
+        name_to_domain_cap_id = {c.name.strip().lower(): str(c.id) for c in domain_caps}
+        from_ids: list[UUID] = list(cap_ids)
+
+        if name_to_domain_cap_id:
+            alias_result = await db.execute(
+                select(MinEAObject.id).where(
+                    MinEAObject.workspace_id == workspace_id,
+                    MinEAObject.org_id == org_id,
+                    MinEAObject.type == "capability",
+                    func.lower(MinEAObject.name).in_(list(name_to_domain_cap_id.keys())),
+                    MinEAObject.id.notin_(cap_ids),
+                )
+            )
+            from_ids.extend(list(alias_result.scalars().all()))
+
+        if not from_ids:
+            continue
+
+        rel_result = await db.execute(
+            select(Relationship.from_object_id, Relationship.to_object_id).where(
+                Relationship.workspace_id == workspace_id,
+                Relationship.org_id == org_id,
+                Relationship.type == "supported_by",
+                Relationship.from_object_id.in_(from_ids),
+                Relationship.to_type == "application",
+            )
+        )
+
+        alias_name_by_id: dict[UUID, str] = {}
+        alias_ids = [uid for uid in from_ids if uid not in cap_ids]
+        if alias_ids:
+            alias_names_result = await db.execute(
+                select(MinEAObject.id, MinEAObject.name).where(MinEAObject.id.in_(alias_ids))
+            )
+            alias_name_by_id = {row[0]: row[1] for row in alias_names_result.all()}
+
+        cap_id_set = {str(c.id) for c in domain_caps}
+        seen_pairs: dict[str, set[str]] = defaultdict(set)
+
+        for from_id, to_id in rel_result.all():
+            from_str = str(from_id)
+            if from_str in cap_id_set:
+                canonical = from_str
+            else:
+                alias_name = alias_name_by_id.get(from_id, "")
+                canonical = name_to_domain_cap_id.get(alias_name.strip().lower())
+                if not canonical:
+                    continue
+            seen_pairs[canonical].add(str(to_id))
+
+        for canonical, system_ids in seen_pairs.items():
+            system_counts[canonical] = len(system_ids)
+
+        pc_result = await db.execute(
+            select(ProductCapability.product_id, ProductCapability.capability_id).where(
+                ProductCapability.capability_id.in_(from_ids),
+            )
+        )
+        products_by_canonical: dict[str, set[str]] = defaultdict(set)
+        for product_id, cap_id in pc_result.all():
+            from_str = str(cap_id)
+            if from_str in cap_id_set:
+                canonical = from_str
+            else:
+                alias_name = alias_name_by_id.get(cap_id, "")
+                canonical = name_to_domain_cap_id.get(alias_name.strip().lower())
+                if not canonical:
+                    continue
+            products_by_canonical[canonical].add(str(product_id))
+        for canonical, product_ids in products_by_canonical.items():
+            product_counts[canonical] = len(product_ids)
+
+    rollups: dict[str, dict] = {}
+    for cap in capabilities:
+        cid = str(cap.id)
+        count = system_counts.get(cid, 0)
+        obj_status = cap.status or "active"
+        if count == 0:
+            coverage = "no_system"
+        elif obj_status in ("planned", "under_evaluation"):
+            coverage = "planned"
+        else:
+            coverage = "active"
+        rollups[cid] = {
+            "owner": cap.owner,
+            "object_status": obj_status,
+            "system_count": count,
+            "product_count": product_counts.get(cid, 0),
+            "coverage_status": coverage,
+        }
+    return rollups
+
+
 async def load_capability_map(
     db: AsyncSession, workspace_id: UUID, org_id: UUID
 ) -> tuple[list[MinEAObject], list[MinEAObject]]:
@@ -304,6 +423,19 @@ async def load_domain_capabilities(
     return list(result.scalars().all())
 
 
+async def delete_capabilities_for_domain(
+    db: AsyncSession,
+    workspace_id: UUID,
+    org_id: UUID,
+    domain_id: UUID,
+) -> int:
+    """Delete all L2 capabilities scoped to a domain. Returns count deleted."""
+    capabilities = await load_domain_capabilities(db, workspace_id, org_id, domain_id)
+    for cap in capabilities:
+        await db.delete(cap)
+    return len(capabilities)
+
+
 def _normalize_fitness(value: object | None) -> str:
     if isinstance(value, str) and value in VALID_FITNESS and value != "none":
         return value
@@ -325,6 +457,9 @@ async def load_domain_detail(
     ]
 
     capabilities = await load_domain_capabilities(db, workspace_id, org_id, domain_id)
+    rollups = await enrich_map_capability_rollups(
+        db, workspace_id, org_id, [domain], capabilities
+    )
     cap_ids = [cap.id for cap in capabilities]
 
     mappings: list[dict] = []
@@ -469,6 +604,11 @@ async def load_domain_detail(
                 "order_index": cap.properties.get("order_index"),
                 "maturity": cap.properties.get("maturity"),
                 "investment": cap.properties.get("investment"),
+                "owner": rollups.get(str(cap.id), {}).get("owner"),
+                "object_status": rollups.get(str(cap.id), {}).get("object_status"),
+                "system_count": rollups.get(str(cap.id), {}).get("system_count", 0),
+                "product_count": rollups.get(str(cap.id), {}).get("product_count", 0),
+                "coverage_status": rollups.get(str(cap.id), {}).get("coverage_status", "no_system"),
             }
             for cap in capabilities
         ],

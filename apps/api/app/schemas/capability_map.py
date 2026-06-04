@@ -42,6 +42,11 @@ class CapabilityMapCapability(BaseModel):
     order_index: int | None = None
     maturity: int | None = None
     investment: str | None = None
+    owner: str | None = None
+    object_status: str | None = None
+    system_count: int = 0
+    product_count: int = 0
+    coverage_status: str = "no_system"  # active | planned | no_system
 
 
 class CapabilityMapRead(BaseModel):

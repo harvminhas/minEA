@@ -16,6 +16,8 @@ import { objectListPath } from "@/lib/tenancy";
 import { useTenancy } from "@/lib/tenancy";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { cn } from "@/lib/utils";
+import { RefreshingOverlay } from "@/components/ui/RefreshingOverlay";
+import { useQueryRefreshing } from "@/lib/use-query-refreshing";
 
 type TabId = "overview" | "mapping" | "processes" | "products";
 
@@ -30,7 +32,7 @@ export function DomainDetailPage({ domainId }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("mapping");
   const queryEnabled = useAuthQueryEnabled(orgSlug, workspaceSlug, domainId);
 
-  const { data: domain, isLoading, isError, error, refetch } = useQuery({
+  const domainQuery = useQuery({
     queryKey: ["domain-detail", orgSlug, workspaceSlug, domainId],
     enabled: queryEnabled,
     queryFn: async () => {
@@ -40,6 +42,9 @@ export function DomainDetailPage({ domainId }: Props) {
     },
     retry: 1,
   });
+
+  const { data: domain, isLoading, isError, error, refetch } = domainQuery;
+  const isRefreshing = useQueryRefreshing(domainQuery);
 
   const pickerDomain: CapabilityMapDomain | null = useMemo(() => {
     if (!domain) return null;
@@ -101,7 +106,7 @@ export function DomainDetailPage({ domainId }: Props) {
       : `${domain.stats.mapped_system_count} system${domain.stats.mapped_system_count === 1 ? "" : "s"} mapped`;
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-white">
+    <RefreshingOverlay active={isRefreshing} className="flex flex-col h-full min-h-0 bg-white">
       {/* Page header */}
       <div className="px-8 pt-5 pb-0 border-b border-gray-200 bg-white">
         <div className="flex items-start justify-between gap-4 mb-4">
@@ -226,7 +231,7 @@ export function DomainDetailPage({ domainId }: Props) {
 
         {activeTab === "products" && <DomainProductsTab domain={domain} />}
       </div>
-    </div>
+    </RefreshingOverlay>
   );
 }
 

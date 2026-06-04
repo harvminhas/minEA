@@ -9,7 +9,6 @@ import type {
   MinEAObject,
   Product,
   ProductIntegrationItem,
-  ProductRoadmapItem,
   ProductTechDebtItem,
 } from "@minea/types";
 import { useTenancy } from "@/lib/tenancy";
@@ -34,7 +33,8 @@ import {
   isUnowned,
   roadmapStatusLabel,
 } from "@/lib/portfolio-utils";
-import { roadmapDetailPath } from "@/lib/roadmap-utils";
+import { roadmapCardFromProductItem, roadmapDetailPath } from "@/lib/roadmap-utils";
+import { RoadmapCard } from "@/components/views/RoadmapCard";
 import { SEVERITY_STYLE, TECH_DEBT_SEVERITY_LABEL } from "@/lib/tech-debt-utils";
 import { cn } from "@/lib/utils";
 
@@ -44,12 +44,6 @@ const LIFECYCLE_STYLE: Record<string, string> = {
   planned: "bg-gray-100 text-gray-600",
   retiring: "bg-orange-50 text-orange-700",
   retired: "bg-gray-100 text-gray-400",
-};
-
-const MILESTONE_SEGMENT: Record<string, string> = {
-  done: "bg-emerald-500",
-  in_flight: "bg-blue-500",
-  not_started: "bg-gray-200",
 };
 
 type ProductDetailTab = "details" | "roadmap_debt" | "history";
@@ -231,57 +225,6 @@ function TechDebtCard({
           <Link2 size={11} className="flex-shrink-0" />
           Planned remediation:{" "}
           <span className="font-medium text-gray-800">{item.remediation.roadmap_title}</span>
-        </p>
-      )}
-    </button>
-  );
-}
-
-function MilestoneStrip({ segments }: { segments: { status: string }[] }) {
-  const display = [...segments.slice(0, 4)];
-  while (display.length < 4) display.push({ status: "not_started" });
-
-  return (
-    <div className="flex gap-1 mt-3">
-      {display.map((seg, i) => (
-        <div
-          key={i}
-          className={cn("h-1.5 flex-1 rounded-full", MILESTONE_SEGMENT[seg.status] ?? MILESTONE_SEGMENT.not_started)}
-        />
-      ))}
-    </div>
-  );
-}
-
-function RoadmapCard({ item, onOpen }: { item: ProductRoadmapItem; onOpen: () => void }) {
-  const next = item.next_milestone;
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="w-full text-left rounded-lg border border-gray-200 bg-white p-3.5 hover:border-gray-300 hover:shadow-sm transition-all"
-    >
-      <div className="flex items-center gap-1.5 flex-wrap mb-2">
-        <span className="text-[10px] font-semibold uppercase text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
-          {item.kind_label}
-        </span>
-        <span className="text-[10px] font-medium text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded uppercase">
-          {item.status_label}
-        </span>
-        <span className="text-[10px] text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">{item.target_label}</span>
-        {item.owner && (
-          <span className="text-[10px] text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded truncate max-w-[8rem]">
-            {item.owner}
-          </span>
-        )}
-      </div>
-      <p className="text-sm font-semibold text-gray-900">{item.name}</p>
-      <MilestoneStrip segments={item.milestone_strip} />
-      {item.milestones_total > 0 && (
-        <p className="text-[11px] text-gray-500 mt-2">
-          {item.milestones_done} of {item.milestones_total} milestones done
-          {next ? ` · next: ${next.title} (${next.target_label})` : ""}
         </p>
       )}
     </button>
@@ -585,7 +528,11 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
                   <p className="text-sm text-gray-400">No roadmap items for this product yet.</p>
                 ) : (
                   roadmapItems.map((item) => (
-                    <RoadmapCard key={item.id} item={item} onOpen={() => openRoadmap(item.id)} />
+                    <RoadmapCard
+                      key={item.id}
+                      model={roadmapCardFromProductItem(item)}
+                      onClick={() => openRoadmap(item.id)}
+                    />
                   ))
                 )}
               </div>

@@ -11,6 +11,7 @@ import { ResizableSplitLayout } from "@/components/sidebar/ResizableSplitLayout"
 import { useAppStore } from "@/lib/store";
 import { orgsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { GlobalRefetchIndicator } from "@/components/ui/GlobalRefetchIndicator";
 
 export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
@@ -47,6 +48,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <RequireAuth>
+      <GlobalRefetchIndicator />
       <div className={`h-screen overflow-hidden ${bgClass}`}>
         <TopNav />
         <div className="flex h-full pt-12">

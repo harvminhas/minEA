@@ -13,6 +13,7 @@ import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { AddMilestoneDialog } from "@/components/strategy/AddMilestoneDialog";
 import { CreateRoadmapPanel } from "@/components/strategy/CreateRoadmapPanel";
 import { RoadmapTimeline } from "@/components/strategy/RoadmapTimeline";
+import { RoadmapTimelineFullscreen } from "@/components/strategy/RoadmapTimelineFullscreen";
 import {
   roadmapKindLabel,
   roadmapListPath,
@@ -40,6 +41,7 @@ export function RoadmapDetailPage({ roadmapId }: Props) {
 
   const [showEditForm, setShowEditForm] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [timelineFullscreen, setTimelineFullscreen] = useState(false);
   const [milestoneDialog, setMilestoneDialog] = useState<{
     mode: "add" | "edit";
     defaultTarget?: string;
@@ -233,6 +235,7 @@ export function RoadmapDetailPage({ roadmapId }: Props) {
           <RoadmapTimeline
             properties={props}
             milestones={milestones}
+            onExpand={() => setTimelineFullscreen(true)}
             onAddAtQuarter={(quarter) =>
               setMilestoneDialog({ mode: "add", defaultTarget: quarter })
             }
@@ -242,6 +245,22 @@ export function RoadmapDetailPage({ roadmapId }: Props) {
           />
         </div>
       </div>
+
+      {timelineFullscreen && (
+        <RoadmapTimelineFullscreen
+          title={roadmap.name}
+          subtitle={subtitleParts.join(" · ")}
+          properties={props}
+          milestones={milestones}
+          onClose={() => setTimelineFullscreen(false)}
+          onAddAtQuarter={(quarter) =>
+            setMilestoneDialog({ mode: "add", defaultTarget: quarter })
+          }
+          onEditMilestone={(milestone) =>
+            setMilestoneDialog({ mode: "edit", milestone })
+          }
+        />
+      )}
 
       {showEditForm && (
         <CreateRoadmapPanel

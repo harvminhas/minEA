@@ -7,6 +7,7 @@ interface Props {
   onConfirm: () => void;
   onCancel: () => void;
   isPending?: boolean;
+  size?: "sm" | "md";
 }
 
 export function ConfirmDeleteDialog({
@@ -16,6 +17,7 @@ export function ConfirmDeleteDialog({
   onConfirm,
   onCancel,
   isPending = false,
+  size = "sm",
 }: Props) {
   return (
     <>
@@ -24,7 +26,9 @@ export function ConfirmDeleteDialog({
         role="dialog"
         aria-labelledby="confirm-delete-title"
         aria-modal="true"
-        className="fixed left-1/2 top-1/2 z-[90] w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white p-6 shadow-xl"
+        className={`fixed left-1/2 top-1/2 z-[90] w-full -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white p-6 shadow-xl ${
+          size === "md" ? "max-w-md" : "max-w-sm"
+        }`}
       >
         <h3 id="confirm-delete-title" className="font-semibold text-gray-900">
           {title}

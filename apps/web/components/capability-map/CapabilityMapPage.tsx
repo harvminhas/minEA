@@ -7,6 +7,8 @@ import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { useTenancy } from "@/lib/tenancy";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { CapabilityMapView } from "@/components/capability-map/CapabilityMapView";
+import { RefreshingOverlay } from "@/components/ui/RefreshingOverlay";
+import { useQueryRefreshing } from "@/lib/use-query-refreshing";
 
 export function CapabilityMapPage() {
   const { getToken } = useAuth();
@@ -30,6 +32,8 @@ export function CapabilityMapPage() {
     void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
   };
 
+  const isRefreshing = useQueryRefreshing(mapQuery);
+
   if (mapQuery.isLoading || !queryEnabled) {
     return <p className="p-8 text-sm text-gray-400">Loading capability map…</p>;
   }
@@ -40,5 +44,9 @@ export function CapabilityMapPage() {
     );
   }
 
-  return <CapabilityMapView map={mapQuery.data!} onRefresh={refresh} />;
+  return (
+    <RefreshingOverlay active={isRefreshing} className="h-full">
+      <CapabilityMapView map={mapQuery.data!} onRefresh={refresh} />
+    </RefreshingOverlay>
+  );
 }

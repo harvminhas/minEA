@@ -12,9 +12,14 @@ import { formFieldClass } from "@/components/ui/FormDrawer";
 import { useTenancy } from "@/lib/tenancy";
 import { cn } from "@/lib/utils";
 
+export interface AddCapabilityPayload {
+  name: string;
+  owner?: string;
+}
+
 interface Props {
   domain: CapabilityMapDomain;
-  onAdd: (name: string) => void;
+  onAdd: (payload: AddCapabilityPayload) => void;
   onClose: () => void;
   isSubmitting?: boolean;
 }
@@ -66,6 +71,7 @@ export function AddCapabilityPickerDialog({ domain, onAdd, onClose, isSubmitting
   const { orgSlug, workspaceSlug } = useTenancy();
   const [mode, setMode] = useState<"suggestions" | "create">("suggestions");
   const [newName, setNewName] = useState("");
+  const [owner, setOwner] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["capability-library-caps", orgSlug, workspaceSlug, domain.id],
@@ -87,10 +93,14 @@ export function AddCapabilityPickerDialog({ domain, onAdd, onClose, isSubmitting
     (g) => g.template_id === domain.source_template_id
   )?.template_name;
 
-  const handleCreate = () => {
-    const trimmed = newName.trim();
+  const submitAdd = (name: string) => {
+    const trimmed = name.trim();
     if (!trimmed) return;
-    onAdd(trimmed);
+    onAdd({ name: trimmed, owner: owner.trim() || undefined });
+  };
+
+  const handleCreate = () => {
+    submitAdd(newName);
   };
 
   const DomainIcon = domainIcon(domain.icon);
@@ -131,6 +141,18 @@ export function AddCapabilityPickerDialog({ domain, onAdd, onClose, isSubmitting
           </TabButton>
         </div>
 
+        <div className="px-5 pt-3 flex-shrink-0">
+          <label className="block">
+            <span className="text-xs font-medium text-gray-600 mb-1.5 block">Owner</span>
+            <input
+              value={owner}
+              onChange={(e) => setOwner(e.target.value)}
+              placeholder="e.g. PDY, Sales Team"
+              className={formFieldClass}
+            />
+          </label>
+        </div>
+
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {mode === "suggestions" ? (
             isLoading ? (
@@ -146,7 +168,7 @@ export function AddCapabilityPickerDialog({ domain, onAdd, onClose, isSubmitting
                           label={item.name}
                           hint={`Used in ${item.from_domain}`}
                           disabled={isSubmitting}
-                          onClick={() => onAdd(item.name)}
+                          onClick={() => submitAdd(item.name)}
                         />
                       ))}
                     </div>
@@ -162,7 +184,7 @@ export function AddCapabilityPickerDialog({ domain, onAdd, onClose, isSubmitting
                         : `Common for ${domain.name}`
                     }
                   >
-                    <SuggestionList items={recommended} isSubmitting={isSubmitting} onAdd={onAdd} />
+                    <SuggestionList items={recommended} isSubmitting={isSubmitting} onAdd={submitAdd} />
                   </SuggestionSection>
                 )}
 
@@ -171,7 +193,7 @@ export function AddCapabilityPickerDialog({ domain, onAdd, onClose, isSubmitting
                     title={domain.source_template_id ? "More ideas" : `Suggested for ${domain.name}`}
                     subtitle="From industry libraries — click to add to this domain"
                   >
-                    <SuggestionList items={otherSuggestions} isSubmitting={isSubmitting} onAdd={onAdd} />
+                    <SuggestionList items={otherSuggestions} isSubmitting={isSubmitting} onAdd={submitAdd} />
                   </SuggestionSection>
                 )}
 

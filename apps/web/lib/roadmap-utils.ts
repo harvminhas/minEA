@@ -1,5 +1,13 @@
-import type { RoadmapItemProperties, RoadmapMilestone } from "@minea/types";
+import type {
+  MinEAObject,
+  ProductRoadmapItem,
+  ProductRoadmapNextMilestone,
+  RoadmapItemProperties,
+  RoadmapMilestone,
+} from "@minea/types";
 import { aiRoleForProperties } from "@/lib/ai-role-utils";
+import { resolveRoadmapSpend } from "@/lib/investment-pipeline";
+import { formatCurrency } from "@/lib/utils";
 import {
   buildTargetResolutionOptions,
   targetResolutionLabel,
@@ -218,6 +226,107 @@ export function milestoneDoneCount(milestones: RoadmapMilestone[] = []): number 
 
 export function newMilestoneId() {
   return `ms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export const ROADMAP_EFFORT_SHORT: Record<string, string> = {
+  s: "S · <2 wk",
+  m: "M · 2–8 wk",
+  l: "L · 2–6 mo",
+  xl: "XL · 6+ mo",
+};
+
+export const ROADMAP_MILESTONE_SEGMENT: Record<string, string> = {
+  done: "bg-emerald-500",
+  in_flight: "bg-violet-500",
+  not_started: "bg-gray-200",
+};
+
+export interface RoadmapCardModel {
+  id: string;
+  name: string;
+  kindLabel: string;
+  statusLabel: string;
+  subtitle: string;
+  spendLabel: string;
+  targetLabel: string;
+  effortLabel: string;
+  resolvesDebtCount: number;
+  milestoneStrip: { status: string }[];
+  milestonesDone: number;
+  milestonesTotal: number;
+  nextMilestone?: ProductRoadmapNextMilestone | null;
+  updatedAt?: string;
+  updatedByName?: string | null;
+}
+
+export function formatRoadmapSpendDisplay(props: RoadmapItemProperties): string {
+  const { amount, estimated } = resolveRoadmapSpend(props);
+  if (amount <= 0) return "—";
+  return `${formatCurrency(amount)}${estimated ? " est" : ""}`;
+}
+
+export function formatRoadmapEffortDisplay(props: RoadmapItemProperties): string {
+  const effort = props.effort_estimate ?? "";
+  return ROADMAP_EFFORT_SHORT[effort] ?? "—";
+}
+
+function nextMilestoneFromList(milestones: RoadmapMilestone[]): ProductRoadmapNextMilestone | null {
+  const ordered = sortedMilestones(milestones);
+  for (const m of ordered) {
+    if (m.status !== "done") {
+      return {
+        title: m.title,
+        target_label: targetResolutionLabel(m.target_resolution) || "",
+      };
+    }
+  }
+  return null;
+}
+
+export function roadmapCardFromObject(item: MinEAObject): RoadmapCardModel {
+  const props = (item.properties ?? {}) as RoadmapItemProperties;
+  const milestones = props.milestones ?? [];
+  const done = milestoneDoneCount(milestones);
+  const strip = sortedMilestones(milestones).map((m) => ({ status: m.status }));
+
+  return {
+    id: item.id,
+    name: item.name,
+    kindLabel: roadmapKindLabel(props) || "Item",
+    statusLabel: ROADMAP_STATUS_LABEL[props.roadmap_status ?? "discovery"] ?? "Discovery",
+    subtitle: [props.product?.product_name, item.owner].filter(Boolean).join(" · "),
+    spendLabel: formatRoadmapSpendDisplay(props),
+    targetLabel: targetResolutionLabel(props.target_resolution ?? "") || "—",
+    effortLabel: formatRoadmapEffortDisplay(props),
+    resolvesDebtCount: props.resolves_debt?.length ?? 0,
+    milestoneStrip: strip,
+    milestonesDone: done,
+    milestonesTotal: milestones.length,
+    nextMilestone: nextMilestoneFromList(milestones),
+    updatedAt: item.updated_at,
+    updatedByName: item.updated_by_name,
+  };
+}
+
+export function roadmapCardFromProductItem(item: ProductRoadmapItem): RoadmapCardModel {
+  const subtitle = [item.product_name, item.owner].filter(Boolean).join(" · ");
+  return {
+    id: item.id,
+    name: item.name,
+    kindLabel: item.kind_label,
+    statusLabel: item.status_label,
+    subtitle,
+    spendLabel: item.spend_label ?? "—",
+    targetLabel: item.target_label,
+    effortLabel: item.effort_label ?? "—",
+    resolvesDebtCount: item.resolves_debt_count ?? 0,
+    milestoneStrip: item.milestone_strip,
+    milestonesDone: item.milestones_done,
+    milestonesTotal: item.milestones_total,
+    nextMilestone: item.next_milestone,
+    updatedAt: item.updated_at,
+    updatedByName: item.updated_by_name,
+  };
 }
 
 export function roadmapStatusToObjectStatus(

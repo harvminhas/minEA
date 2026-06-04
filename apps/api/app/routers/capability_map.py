@@ -30,6 +30,7 @@ from app.services.capability_map import (
     create_domain_mapping_system,
     get_domain,
     library_domain_groups,
+    enrich_map_capability_rollups,
     load_capability_map,
     load_domain_detail,
     load_domain_products,
@@ -47,20 +48,30 @@ router = APIRouter(
 )
 
 
-def _map_to_read(domains, capabilities) -> CapabilityMapRead:
+def _map_to_read(
+    domains, capabilities, rollups: dict[str, dict] | None = None
+) -> CapabilityMapRead:
+    rollups = rollups or {}
     caps_by_domain: dict[str, list[CapabilityMapCapability]] = {}
     for cap in capabilities:
         domain_id = str(cap.properties.get("domain_id", ""))
         if not domain_id:
             continue
+        cid = str(cap.id)
+        extra = rollups.get(cid, {})
         caps_by_domain.setdefault(domain_id, []).append(
             CapabilityMapCapability(
-                id=str(cap.id),
+                id=cid,
                 name=cap.name,
                 domain_id=domain_id,
                 order_index=cap.properties.get("order_index"),
                 maturity=cap.properties.get("maturity"),
                 investment=cap.properties.get("investment"),
+                owner=extra.get("owner"),
+                object_status=extra.get("object_status"),
+                system_count=extra.get("system_count", 0),
+                product_count=extra.get("product_count", 0),
+                coverage_status=extra.get("coverage_status", "no_system"),
             )
         )
 
@@ -110,7 +121,10 @@ async def get_capability_map(
     assert ctx.workspace
 
     domains, capabilities = await load_capability_map(db, ctx.workspace.id, ctx.org_id)
-    return _map_to_read(domains, capabilities)
+    rollups = await enrich_map_capability_rollups(
+        db, ctx.workspace.id, ctx.org_id, domains, capabilities
+    )
+    return _map_to_read(domains, capabilities, rollups)
 
 
 @router.get("/heatmap", response_model=CapabilityHeatmapRead)

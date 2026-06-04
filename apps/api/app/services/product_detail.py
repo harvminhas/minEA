@@ -41,6 +41,9 @@ ROADMAP_KIND_LABEL = {
     "discovery": "Discovery",
 }
 
+EFFORT_SPEND_RATES = {"s": 50_000, "m": 200_000, "l": 500_000, "xl": 1_000_000}
+EFFORT_DISPLAY = {"s": "S · <2 wk", "m": "M · 2–8 wk", "l": "L · 2–6 mo", "xl": "XL · 6+ mo"}
+
 ROADMAP_STATUS_LABEL = {
     "discovery": "Discovery",
     "planned": "Planned",
@@ -271,11 +274,33 @@ async def _tech_debt_items_for_product(
     return result_items
 
 
-def _milestone_strip(milestones: list[dict], limit: int = 4) -> list[dict]:
-    ordered = sorted(
-        milestones,
-        key=lambda m: m.get("target_resolution") or "",
-    )[:limit]
+def _format_spend_label(props: dict) -> str:
+    cost = props.get("cost")
+    if cost is not None and float(cost) > 0:
+        amount = float(cost)
+        if amount >= 1_000_000:
+            return f"${amount / 1_000_000:.1f}M"
+        if amount >= 1_000:
+            return f"${round(amount / 1_000)}k"
+        return f"${int(amount)}"
+    effort = props.get("effort_estimate") or ""
+    rate = EFFORT_SPEND_RATES.get(effort)
+    if rate:
+        if rate >= 1_000_000:
+            return f"${rate / 1_000_000:.1f}M est"
+        if rate >= 1_000:
+            return f"${round(rate / 1_000)}k est"
+        return f"${rate} est"
+    return "—"
+
+
+def _effort_label(props: dict) -> str:
+    effort = props.get("effort_estimate") or ""
+    return EFFORT_DISPLAY.get(effort, "—")
+
+
+def _milestone_strip(milestones: list[dict]) -> list[dict]:
+    ordered = sorted(milestones, key=lambda m: m.get("target_resolution") or "")
     return [{"status": m.get("status", "not_started")} for m in ordered]
 
 
@@ -299,6 +324,8 @@ async def _roadmap_items_for_product(
     workspace_id: uuid.UUID,
     org_id: uuid.UUID,
 ) -> list[dict]:
+    from app.models.tenancy import User
+
     pid = str(product_id)
     result = await db.execute(
         select(
@@ -306,6 +333,8 @@ async def _roadmap_items_for_product(
             MinEAObject.name,
             MinEAObject.owner,
             MinEAObject.properties,
+            MinEAObject.updated_at,
+            MinEAObject.updated_by,
         ).where(
             MinEAObject.type == "roadmap_item",
             MinEAObject.workspace_id == workspace_id,
@@ -313,8 +342,16 @@ async def _roadmap_items_for_product(
         )
     )
 
+    rows = result.all()
+    updater_ids = {row[5] for row in rows if row[5] is not None}
+    updater_names: dict[uuid.UUID, str | None] = {}
+    if updater_ids:
+        users = await db.execute(select(User.id, User.full_name, User.email).where(User.id.in_(updater_ids)))
+        for uid, full_name, email in users.all():
+            updater_names[uid] = (full_name.split()[0] if full_name else None) or email.split("@")[0]
+
     items: list[dict] = []
-    for obj_id, name, owner, props in result.all():
+    for obj_id, name, owner, props, updated_at, updated_by in rows:
         props = props or {}
         product_ref = props.get("product") or {}
         if product_ref.get("product_id") != pid:
@@ -329,6 +366,7 @@ async def _roadmap_items_for_product(
         elif target == "no_target" or not target:
             target_label = "No target"
 
+        resolves_debt = props.get("resolves_debt") or []
         items.append(
             {
                 "id": str(obj_id),
@@ -341,10 +379,16 @@ async def _roadmap_items_for_product(
                 ),
                 "target_label": target_label,
                 "owner": owner,
+                "product_name": product_ref.get("product_name"),
+                "spend_label": _format_spend_label(props),
+                "effort_label": _effort_label(props),
+                "resolves_debt_count": len(resolves_debt),
                 "milestone_strip": _milestone_strip(milestones),
                 "milestones_done": done,
                 "milestones_total": len(milestones),
                 "next_milestone": _next_milestone(milestones),
+                "updated_at": updated_at,
+                "updated_by_name": updater_names.get(updated_by) if updated_by else None,
             }
         )
 
