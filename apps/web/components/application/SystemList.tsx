@@ -83,7 +83,7 @@ export function SystemList() {
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
 
-  const [viewLayout, setViewLayout] = useState<SystemViewLayout>("cards");
+  const [viewLayout, setViewLayout] = useState<SystemViewLayout>("table");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");

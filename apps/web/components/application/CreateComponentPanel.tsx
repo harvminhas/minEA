@@ -3,10 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/lib/auth-context";
-import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { objectsApi, peopleApi, relationshipsApi } from "@/lib/api-client";
+import { objectsApi, peopleApi } from "@/lib/api-client";
+import {
+  persistComponentArchitecture,
+  syncComponentRelationships,
+} from "@/lib/component-relationship-utils";
+import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { AddSystemDialog } from "@/components/application/AddSystemDialog";
 import { ComponentDiagramModal, type NodeLayout } from "@/components/application/ComponentDiagram";
@@ -59,61 +64,6 @@ function initFromComponent(component?: MinEAObject) {
     status: (component?.status ?? "planned") as ObjectStatus,
     draftLayout: props.node_layout ?? {},
   };
-}
-
-async function syncComponentRelationships(
-  orgSlug: string,
-  workspaceSlug: string,
-  componentId: string,
-  systems: ComponentSystemRef[],
-  runtime: ComponentRuntimeRef | null,
-  token: string
-) {
-  const existing = await relationshipsApi.list(
-    orgSlug,
-    workspaceSlug,
-    { from_object_id: componentId },
-    token
-  );
-
-  for (const rel of existing) {
-    if (
-      rel.from_type === "component" &&
-      (rel.type === "part_of" || rel.type === "runs_on")
-    ) {
-      await relationshipsApi.delete(orgSlug, workspaceSlug, rel.id, token);
-    }
-  }
-
-  for (const sys of systems) {
-    await relationshipsApi.create(
-      orgSlug,
-      workspaceSlug,
-      {
-        type: "part_of",
-        from_object_id: componentId,
-        from_type: "component",
-        to_object_id: sys.system_id,
-        to_type: "application",
-      },
-      token
-    );
-  }
-
-  if (runtime) {
-    await relationshipsApi.create(
-      orgSlug,
-      workspaceSlug,
-      {
-        type: "runs_on",
-        from_object_id: componentId,
-        from_type: "component",
-        to_object_id: runtime.runtime_id,
-        to_type: runtime.runtime_kind,
-      },
-      token
-    );
-  }
 }
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
@@ -178,6 +128,7 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
 
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
   const [mounted, setMounted] = useState(false);
 
@@ -351,6 +302,13 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
           workspaceSlug,
           initialValues.id,
           selectedPlatform,
+          token
+        );
+        await refreshObjectRelationshipQueries(
+          queryClient,
+          orgSlug,
+          workspaceSlug,
+          initialValues.id,
           token
         );
 
@@ -621,6 +579,35 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
           onClose={() => setShowChart(false)}
           onLayoutSave={setDraftLayout}
           onResetLayout={() => setDraftLayout({})}
+          onArchitectureChange={async (updates) => {
+            if (updates.systems !== undefined) setSystems(updates.systems);
+            if (updates.runtime !== undefined) {
+              setRuntimeKey(
+                updates.runtime
+                  ? `${updates.runtime.runtime_kind}:${updates.runtime.runtime_id}`
+                  : ""
+              );
+            }
+            if (isEdit && initialValues) {
+              const token = await getToken();
+              if (!token) throw new Error("Not signed in");
+              const updated = await persistComponentArchitecture(
+                orgSlug,
+                workspaceSlug,
+                initialValues,
+                updates,
+                token
+              );
+              await refreshObjectRelationshipQueries(
+                queryClient,
+                orgSlug,
+                workspaceSlug,
+                initialValues.id,
+                token
+              );
+              return updated;
+            }
+          }}
         />
       )}
     </>,

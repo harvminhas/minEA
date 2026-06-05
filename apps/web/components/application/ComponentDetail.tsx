@@ -1,11 +1,18 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Box, Edit2, Trash2 } from "lucide-react";
-import type { ComponentProperties, MinEAObject, ObjectListResponse } from "@minea/types";
-import { objectsApi } from "@/lib/api-client";
+import type { ComponentProperties, MinEAObject, ObjectListResponse, Relationship } from "@minea/types";
+import { objectsApi, relationshipsApi } from "@/lib/api-client";
+import {
+  architectureRelationshipsFromComponent,
+  mergeArchitectureRelationships,
+  persistComponentArchitecture,
+} from "@/lib/component-relationship-utils";
+import { excludeTechDebtRelationships } from "@/lib/relationship-display";
+import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useTenancy } from "@/lib/tenancy";
 import {
   DetailPanel,
@@ -14,8 +21,12 @@ import {
   DetailSection,
 } from "@/components/ui/DetailPanel";
 import { CreateComponentPanel } from "@/components/application/CreateComponentPanel";
-import { ComponentDiagramModal, type NodeLayout } from "@/components/application/ComponentDiagram";
-import { ComponentDiagramPreview } from "@/components/application/ComponentDiagramPreview";
+import {
+  ComponentDiagramModal,
+  sanitizeNodeLayout,
+  type NodeLayout,
+} from "@/components/application/ComponentDiagram";
+import { ComponentRelationshipsTab } from "@/components/application/ComponentRelationshipsTab";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
 import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
@@ -46,12 +57,46 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
   const [showEditForm, setShowEditForm] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [liveComponent, setLiveComponent] = useState(component);
+  const [relationshipsSnapshot, setRelationshipsSnapshot] = useState<Relationship[] | null>(null);
+  const liveComponentRef = useRef(component);
 
-  const props = (component.properties ?? {}) as ComponentProperties;
-  const systems = props.systems ?? [];
+  useEffect(() => {
+    setLiveComponent(component);
+    liveComponentRef.current = component;
+  }, [component.id, component.updated_at]);
+
+  useEffect(() => {
+    setRelationshipsSnapshot(null);
+  }, [component.id]);
+
+  const props = (liveComponent.properties ?? {}) as ComponentProperties;
   const typeLabel = COMPONENT_TYPE_LABEL[props.component_type ?? ""] ?? props.component_type;
 
   const componentsQueryKey = ["objects", orgSlug, workspaceSlug, "component"] as const;
+
+  const { data: outRels } = useQuery({
+    queryKey: ["relationships", "from", component.id],
+    queryFn: async () => {
+      const token = await getToken();
+      return relationshipsApi.list(orgSlug, workspaceSlug, { from_object_id: component.id }, token!);
+    },
+    staleTime: 0,
+  });
+
+  const { data: inRels } = useQuery({
+    queryKey: ["relationships", "to", component.id],
+    queryFn: async () => {
+      const token = await getToken();
+      return relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: component.id }, token!);
+    },
+    staleTime: 0,
+  });
+
+  const drawerRels = useMemo(() => {
+    const apiRels = relationshipsSnapshot ?? [...(outRels ?? []), ...(inRels ?? [])];
+    return excludeTechDebtRelationships(mergeArchitectureRelationships(apiRels, liveComponent));
+  }, [relationshipsSnapshot, outRels, inRels, liveComponent]);
   const historyQueryKey = ["object-history", orgSlug, workspaceSlug, component.id] as const;
 
   const historyQuery = useQuery({
@@ -76,6 +121,59 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
     queryClient.invalidateQueries({ queryKey: historyQueryKey });
   };
 
+  const syncRelationshipsFromServer = useCallback(async () => {
+    const token = await getToken();
+    if (!token) return;
+    const { outbound, inbound } = await refreshObjectRelationshipQueries(
+      queryClient,
+      orgSlug,
+      workspaceSlug,
+      component.id,
+      token
+    );
+    setRelationshipsSnapshot(excludeTechDebtRelationships([...outbound, ...inbound]));
+  }, [getToken, queryClient, orgSlug, workspaceSlug, component.id]);
+
+  const handleArchitectureChange = useCallback(
+    async (updates: Parameters<typeof persistComponentArchitecture>[3]) => {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const updated = await persistComponentArchitecture(
+        orgSlug,
+        workspaceSlug,
+        liveComponentRef.current,
+        updates,
+        token
+      );
+      setLiveComponent(updated);
+      liveComponentRef.current = updated;
+      setRelationshipsSnapshot(
+        excludeTechDebtRelationships(architectureRelationshipsFromComponent(updated))
+      );
+      await syncRelationshipsFromServer();
+      queryClient.setQueryData<ObjectListResponse>(componentsQueryKey, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          items: old.items.map((o) => (o.id === updated.id ? updated : o)),
+        };
+      });
+      refreshComponent();
+      onUpdate();
+      return updated;
+    },
+    [
+      getToken,
+      orgSlug,
+      workspaceSlug,
+      component.id,
+      queryClient,
+      componentsQueryKey,
+      onUpdate,
+      syncRelationshipsFromServer,
+    ]
+  );
+
   const deleteMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
@@ -92,31 +190,36 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
       const token = await getToken();
       if (!token) return;
 
-      const cached = queryClient.getQueryData<ObjectListResponse>(componentsQueryKey);
-      const current = cached?.items.find((o) => o.id === component.id) ?? component;
+      const current = liveComponentRef.current;
       const currentProps = (current.properties ?? {}) as ComponentProperties;
+
+      const cleanLayout = sanitizeNodeLayout(layout) ?? {};
 
       await objectsApi.update(
         orgSlug,
         workspaceSlug,
         component.id,
         {
-          properties: { ...currentProps, node_layout: layout } as Record<string, unknown>,
+          properties: { ...currentProps, node_layout: cleanLayout } as Record<string, unknown>,
         },
         token
       );
+
+      const withLayout = {
+        ...current,
+        properties: { ...currentProps, node_layout: cleanLayout },
+      };
 
       queryClient.setQueryData<ObjectListResponse>(componentsQueryKey, (old) => {
         if (!old) return old;
         return {
           ...old,
-          items: old.items.map((o) =>
-            o.id === component.id
-              ? { ...o, properties: { ...currentProps, node_layout: layout } }
-              : o
-          ),
+          items: old.items.map((o) => (o.id === component.id ? withLayout : o)),
         };
       });
+
+      setLiveComponent(withLayout);
+      liveComponentRef.current = withLayout;
     },
     [getToken, orgSlug, workspaceSlug, component, queryClient, componentsQueryKey]
   );
@@ -145,14 +248,14 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {component.status && (
+                {liveComponent.status && (
                   <span
                     className={cn(
                       "rounded-full px-2.5 py-1 text-xs font-medium capitalize",
-                      getStatusColor(component.status)
+                      getStatusColor(liveComponent.status)
                     )}
                   >
-                    {getStatusLabel(component.status)}
+                    {getStatusLabel(liveComponent.status)}
                   </span>
                 )}
                 <button
@@ -177,7 +280,12 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
 
             <ObjectDrawerTabs
               activeTab={activeTab}
-              onTabChange={setActiveTab}
+              onTabChange={(tab) => {
+                setActiveTab(tab);
+                if (tab === "relationships") void syncRelationshipsFromServer();
+              }}
+              showRelationships
+              relationshipCount={drawerRels.length}
               openDebtCount={techDebtSummary?.open_count ?? 0}
               className="mt-4"
             />
@@ -186,20 +294,26 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
         footer={
           <div className="border-t border-gray-100 px-6 py-3">
             <p className="text-xs text-gray-400">
-              Updated{component.updated_by_name ? ` by ${component.updated_by_name}` : ""}{" "}
-              {formatUpdatedAgo(component.updated_at)}
+              Updated{liveComponent.updated_by_name ? ` by ${liveComponent.updated_by_name}` : ""}{" "}
+              {formatUpdatedAgo(liveComponent.updated_at)}
             </p>
           </div>
         }
       >
-        {activeTab === "tech_debt" ? (
+        {activeTab === "relationships" ? (
+          <ComponentRelationshipsTab
+            component={liveComponent}
+            relationships={drawerRels}
+            onExpandDiagram={() => setShowChart(true)}
+          />
+        ) : activeTab === "tech_debt" ? (
           <ObjectTechDebtTab
-            objectId={component.id}
-            objectName={component.name}
+            objectId={liveComponent.id}
+            objectName={liveComponent.name}
             objectKind="component"
             summary={techDebtSummary}
             isLoading={techDebtLoading}
-            defaultOwner={component.owner}
+            defaultOwner={liveComponent.owner}
             onRefresh={refreshComponent}
           />
         ) : activeTab === "history" ? (
@@ -214,43 +328,19 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
               <div className="space-y-2 text-sm">
                 {typeLabel && <DetailRow label="Type" value={typeLabel} />}
                 {props.tech_stack && <DetailRow label="Tech stack" value={props.tech_stack} />}
-                {component.owner && <DetailRow label="Owner" value={component.owner} />}
+                {liveComponent.owner && <DetailRow label="Owner" value={liveComponent.owner} />}
                 {props.runtime && (
                   <DetailRow label="Runs on" value={props.runtime.runtime_name} />
                 )}
                 {props.platform && (
                   <DetailRow label="Built on platform" value={props.platform.platform_name} />
                 )}
-                {component.tags.length > 0 && (
-                  <DetailRow label="Tags" value={component.tags.join(", ")} />
+                {liveComponent.tags.length > 0 && (
+                  <DetailRow label="Tags" value={liveComponent.tags.join(", ")} />
                 )}
               </div>
             </DetailSection>
 
-            <DetailSection title="Architecture">
-              <ComponentDiagramPreview component={component} onExpand={() => setShowChart(true)} />
-              <p className="text-xs text-gray-400 mt-2">
-                {systems.length} system{systems.length !== 1 ? "s" : ""}
-                {props.platform ? ` · ${props.platform.platform_name}` : ""}
-                {props.runtime ? ` · ${props.runtime.runtime_name}` : ""}
-                {typeLabel ? ` · ${typeLabel}` : ""}
-              </p>
-            </DetailSection>
-
-            {systems.length > 0 && (
-              <DetailSection title="Systems">
-                <div className="flex flex-wrap gap-1.5">
-                  {systems.map((s) => (
-                    <span
-                      key={s.system_id}
-                      className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full"
-                    >
-                      {s.system_name}
-                    </span>
-                  ))}
-                </div>
-              </DetailSection>
-            )}
           </>
         )}
       </DetailPanel>
@@ -267,10 +357,14 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
 
       {showChart && (
         <ComponentDiagramModal
-          component={component}
-          onClose={() => setShowChart(false)}
+          component={liveComponent}
+          onClose={() => {
+            setShowChart(false);
+            void syncRelationshipsFromServer();
+          }}
           onLayoutSave={handleLayoutSave}
           onResetLayout={handleResetLayout}
+          onArchitectureChange={handleArchitectureChange}
         />
       )}
 

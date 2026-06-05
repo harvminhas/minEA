@@ -1,11 +1,16 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { AddRuntimeDialog } from "@/components/application/AddRuntimeDialog";
+import { AddSystemDialog } from "@/components/application/AddSystemDialog";
+import type { ComponentArchitectureUpdate } from "@/lib/component-relationship-utils";
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
   Controls,
+  getNodesBounds,
+  getViewportForBounds,
   Handle,
   MarkerType,
   MiniMap,
@@ -17,16 +22,40 @@ import {
   type Edge,
   type Node,
   type NodeDragHandler,
+  type NodeMouseHandler,
   type NodeProps,
   type NodeTypes,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { Box, Cpu, Monitor, RotateCcw, X } from "lucide-react";
+import { toPng } from "html-to-image";
+import { Box, Cpu, Download, Monitor, Plus, RotateCcw, X } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { COMPONENT_TYPE_LABEL } from "@/lib/component-utils";
-import type { ComponentProperties, MinEAObject } from "@minea/types";
+import type {
+  ComponentProperties,
+  ComponentRuntimeRef,
+  ComponentSystemRef,
+  MinEAObject,
+} from "@minea/types";
 
 export type NodeLayout = Record<string, { x: number; y: number }>;
+
+const PLACEHOLDER_NODE_IDS = new Set(["sys-placeholder", "rt-placeholder"]);
+const NODE_H = 76;
+const GAP = 32;
+
+function diagramExportFilename(name: string) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "component";
+}
+
+export function sanitizeNodeLayout(layout?: NodeLayout): NodeLayout | undefined {
+  if (!layout) return layout;
+  const clean = Object.fromEntries(
+    Object.entries(layout).filter(([id]) => !PLACEHOLDER_NODE_IDS.has(id))
+  );
+  return Object.keys(clean).length > 0 ? clean : undefined;
+}
 
 const RUNTIME_KIND_LABEL: Record<string, string> = {
   tool: "Integration tool",
@@ -105,24 +134,59 @@ const RuntimeNode = memo(({ data }: NodeProps) => (
 ));
 RuntimeNode.displayName = "RuntimeNode";
 
+const DiagramPlaceholderNode = memo(({ data }: NodeProps) => (
+  <button
+    type="button"
+    disabled={!data.clickable}
+    onClick={(e) => {
+      e.stopPropagation();
+      if (data.clickable) data.onClick?.();
+    }}
+    className={cn(
+      "rounded-lg border-2 border-dashed bg-white/90 px-4 py-3 text-center transition-colors w-full",
+      data.clickable
+        ? "border-gray-300 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/60"
+        : "border-gray-200 opacity-60 cursor-default"
+    )}
+    style={{ width: 160 }}
+  >
+    {data.handleSide === "right" && (
+      <Handle type="source" position={Position.Right} className="!bg-gray-300 !w-2 !h-2" />
+    )}
+    {data.handleSide === "left" && (
+      <Handle type="target" position={Position.Left} className="!bg-gray-300 !w-2 !h-2" />
+    )}
+    <p className="text-xs text-gray-400">{data.label}</p>
+    {data.clickable && (
+      <p className="text-[10px] text-indigo-600 font-medium mt-1 inline-flex items-center gap-0.5 justify-center">
+        <Plus size={10} />
+        {data.hint}
+      </p>
+    )}
+  </button>
+));
+DiagramPlaceholderNode.displayName = "DiagramPlaceholderNode";
+
 export const COMPONENT_NODE_TYPES: NodeTypes = {
   systemNode: SystemNode,
   componentCenterNode: ComponentCenterNode,
   runtimeNode: RuntimeNode,
+  placeholderNode: DiagramPlaceholderNode,
 };
 
 export function buildComponentGraph(
   component: MinEAObject,
-  savedLayout?: NodeLayout
+  savedLayout?: NodeLayout,
+  options?: { interactive?: boolean }
 ): { nodes: Node[]; edges: Edge[] } {
+  const interactive = options?.interactive ?? false;
   const props = (component.properties ?? {}) as ComponentProperties;
   const systems = props.systems ?? [];
   const runtime = props.runtime;
 
-  const NODE_H = 72;
-  const GAP = 24;
   const CENTER_X = 300;
   const RUNTIME_X = CENTER_X + 260;
+  const layout = sanitizeNodeLayout(savedLayout);
 
   function autoPositions(count: number, x: number) {
     const total = Math.max(count, 1) * NODE_H + Math.max(count - 1, 0) * GAP;
@@ -131,23 +195,32 @@ export function buildComponentGraph(
   }
 
   function pos(id: string, auto: { x: number; y: number }) {
-    return savedLayout?.[id] ?? auto;
+    return layout?.[id] ?? auto;
   }
 
-  const sysPos = autoPositions(systems.length, 0);
+  const systemSlotCount = systems.length === 0 ? 1 : systems.length;
+  const sysPos = autoPositions(systemSlotCount, 0);
   const nodes: Node[] = [];
   const edges: Edge[] = [];
   const edgeStyle = { stroke: "#6366f1", strokeWidth: 1.5 };
   const marker = { type: MarkerType.ArrowClosed, color: "#6366f1", width: 14, height: 14 };
+  const edgeLabelStyle = { fontSize: 10, fontWeight: 500, fill: "#4f46e5" };
+  const edgeLabelBgStyle = { fill: "#ffffff", fillOpacity: 0.92, stroke: "#e0e7ff", strokeWidth: 1 };
 
   if (systems.length === 0) {
-    nodes.push({
-      id: "sys-placeholder",
-      type: "default",
-      position: pos("sys-placeholder", sysPos[0]!),
-      data: { label: "No systems" },
-      style: { opacity: 0.4, fontSize: 11, width: 160 },
-    });
+    if (!interactive) {
+      nodes.push({
+        id: "sys-placeholder",
+        type: "placeholderNode",
+        position: pos("sys-placeholder", sysPos[0]!),
+        data: {
+          label: "No systems",
+          hint: "Add systems",
+          handleSide: "right",
+          clickable: false,
+        },
+      });
+    }
   } else {
     systems.forEach((sys, i) => {
       const id = `sys-${sys.system_id}`;
@@ -165,6 +238,11 @@ export function buildComponentGraph(
         animated: true,
         style: edgeStyle,
         markerEnd: marker,
+        label: "is part of",
+        labelStyle: edgeLabelStyle,
+        labelBgStyle: edgeLabelBgStyle,
+        labelBgPadding: [4, 6] as [number, number],
+        labelBgBorderRadius: 4,
       });
     });
   }
@@ -176,12 +254,15 @@ export function buildComponentGraph(
     data: { component, props },
   });
 
+  const rtPos = autoPositions(1, RUNTIME_X);
+
   if (runtime) {
     const rtId = `rt-${runtime.runtime_id}`;
+    const rtPosition = pos(rtId, rtPos[0]!);
     nodes.push({
       id: rtId,
       type: "runtimeNode",
-      position: pos(rtId, { x: RUNTIME_X, y: -36 }),
+      position: rtPosition,
       data: { name: runtime.runtime_name, kind: runtime.runtime_kind },
     });
     edges.push({
@@ -192,14 +273,24 @@ export function buildComponentGraph(
       animated: true,
       style: { stroke: "#8b5cf6", strokeWidth: 1.5 },
       markerEnd: { type: MarkerType.ArrowClosed, color: "#8b5cf6", width: 14, height: 14 },
+      label: "runs on",
+      labelStyle: { fontSize: 10, fontWeight: 500, fill: "#7c3aed" },
+      labelBgStyle: { fill: "#ffffff", fillOpacity: 0.92, stroke: "#ede9fe", strokeWidth: 1 },
+      labelBgPadding: [4, 6] as [number, number],
+      labelBgBorderRadius: 4,
     });
-  } else {
+  } else if (!interactive) {
     nodes.push({
       id: "rt-placeholder",
-      type: "default",
-      position: pos("rt-placeholder", { x: RUNTIME_X, y: -20 }),
-      data: { label: "No runtime" },
-      style: { opacity: 0.4, fontSize: 11, width: 140 },
+      type: "placeholderNode",
+      position: { x: RUNTIME_X, y: rtPos[0]!.y },
+      draggable: false,
+      data: {
+        label: "No runtime",
+        hint: "Add runtime",
+        handleSide: "left",
+        clickable: false,
+      },
     });
   }
 
@@ -332,6 +423,164 @@ interface CanvasProps {
   onLayoutSave?: (layout: NodeLayout) => void;
   onResetLayout?: () => void;
   hasCustomLayout: boolean;
+  onPlaceholderClick?: (kind: "systems" | "runtime") => void;
+}
+
+function enrichPlaceholderNodes(
+  nodes: Node[],
+  onPlaceholderClick?: (kind: "systems" | "runtime") => void
+): Node[] {
+  return nodes.map((node) => {
+    if (node.type !== "placeholderNode") return node;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        onClick: () => {
+          if (node.id === "sys-placeholder") onPlaceholderClick?.("systems");
+          if (node.id === "rt-placeholder") onPlaceholderClick?.("runtime");
+        },
+      },
+    };
+  });
+}
+
+function downloadDataUrl(dataUrl: string, name: string) {
+  const link = document.createElement("a");
+  link.download = name;
+  link.href = dataUrl;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function isExportChromeNode(domNode: unknown) {
+  if (!(domNode instanceof HTMLElement)) return true;
+  if (domNode instanceof HTMLLinkElement) return false;
+  return (
+    !domNode.classList.contains("react-flow__controls") &&
+    !domNode.classList.contains("react-flow__minimap") &&
+    !domNode.classList.contains("react-flow__attribution") &&
+    !domNode.closest("[data-export-ignore]")
+  );
+}
+
+async function captureVisibleDiagram(flowEl: HTMLElement) {
+  return toPng(flowEl, {
+    backgroundColor: "#fafafa",
+    pixelRatio: 2,
+    skipFonts: true,
+    cacheBust: true,
+    filter: isExportChromeNode,
+  });
+}
+
+async function captureFullDiagram(viewportEl: HTMLElement, exportNodes: Node[]) {
+  const nodesBounds = getNodesBounds(exportNodes);
+  const padding = 64;
+  const imageWidth = Math.max(900, Math.ceil(nodesBounds.width + padding * 2));
+  const imageHeight = Math.max(700, Math.ceil(nodesBounds.height + padding * 2));
+  const viewport = getViewportForBounds(
+    nodesBounds,
+    imageWidth,
+    imageHeight,
+    0.5,
+    2,
+    padding / Math.min(imageWidth, imageHeight)
+  );
+
+  return toPng(viewportEl, {
+    backgroundColor: "#fafafa",
+    width: imageWidth,
+    height: imageHeight,
+    skipFonts: true,
+    cacheBust: true,
+    filter: isExportChromeNode,
+    style: {
+      width: `${imageWidth}px`,
+      height: `${imageHeight}px`,
+      transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+    },
+  });
+}
+
+function DiagramExportButton({
+  filename,
+  containerRef,
+}: {
+  filename: string;
+  containerRef: RefObject<HTMLDivElement | null>;
+}) {
+  const { getNodes } = useReactFlow();
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const handleExport = async () => {
+    setExportError(null);
+
+    const exportNodes = getNodes().filter(
+      (n) => n.type !== "placeholderNode" && !PLACEHOLDER_NODE_IDS.has(n.id)
+    );
+    if (exportNodes.length === 0) {
+      const message = "Add at least one system or runtime before exporting.";
+      setExportError(message);
+      toast({ title: "Export failed", description: message, variant: "destructive" });
+      return;
+    }
+
+    const flowEl = containerRef.current?.querySelector(".react-flow") as HTMLElement | null;
+    const viewportEl = containerRef.current?.querySelector(
+      ".react-flow__viewport"
+    ) as HTMLElement | null;
+    if (!flowEl || !viewportEl) {
+      const message = "Diagram canvas not ready. Try again in a moment.";
+      setExportError(message);
+      toast({ title: "Export failed", description: message, variant: "destructive" });
+      return;
+    }
+
+    const downloadName = `${diagramExportFilename(filename)}-architecture.png`;
+    setExporting(true);
+
+    try {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      let dataUrl: string;
+      try {
+        dataUrl = await captureVisibleDiagram(flowEl);
+      } catch {
+        dataUrl = await captureFullDiagram(viewportEl, exportNodes);
+      }
+      downloadDataUrl(dataUrl, downloadName);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not export diagram.";
+      setExportError(message);
+      toast({ title: "Export failed", description: message, variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 max-w-xs" data-export-ignore>
+      <button
+        type="button"
+        onClick={() => void handleExport()}
+        disabled={exporting}
+        className={cn(
+          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium shadow-sm border transition-colors",
+          "bg-white border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-400 disabled:opacity-50"
+        )}
+      >
+        <Download size={12} />
+        {exporting ? "Exporting…" : "Export PNG"}
+      </button>
+      {exportError && (
+        <p className="text-[11px] leading-snug text-red-600 bg-red-50 border border-red-200 rounded-md px-2.5 py-1.5 shadow-sm">
+          {exportError}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function ComponentCanvasInner({
@@ -340,39 +589,61 @@ function ComponentCanvasInner({
   onLayoutSave,
   onResetLayout,
   hasCustomLayout,
+  onPlaceholderClick,
 }: CanvasProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState(
+    enrichPlaceholderNodes(initialNodes, onPlaceholderClick)
+  );
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { fitView } = useReactFlow();
   const layoutRef = useRef<NodeLayout>({});
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    layoutRef.current = Object.fromEntries(
-      initialNodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }])
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    for (const node of initialNodes) {
+      if (PLACEHOLDER_NODE_IDS.has(node.id)) continue;
+      if (!layoutRef.current[node.id]) {
+        layoutRef.current[node.id] = { x: node.position.x, y: node.position.y };
+      }
+    }
+  }, [initialNodes]);
 
   useEffect(() => {
     setNodes((prev) =>
-      initialNodes.map((node) => {
+      enrichPlaceholderNodes(initialNodes, onPlaceholderClick).map((node) => {
+        if (PLACEHOLDER_NODE_IDS.has(node.id)) return node;
         const prevNode = prev.find((n) => n.id === node.id);
-        return prevNode?.dragging ? { ...node, position: prevNode.position } : node;
+        const dragged = layoutRef.current[node.id];
+        if (dragged) return { ...node, position: dragged };
+        if (prevNode?.dragging) return { ...node, position: prevNode.position };
+        return node;
       })
     );
-  }, [initialNodes, setNodes]);
+  }, [initialNodes, setNodes, onPlaceholderClick]);
+
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
 
   useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); }, []);
 
   const scheduleSave = useCallback(() => {
     if (!onLayoutSave) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => onLayoutSave({ ...layoutRef.current }), 600);
+    saveTimerRef.current = setTimeout(
+      () => onLayoutSave(sanitizeNodeLayout(layoutRef.current) ?? {}),
+      600
+    );
   }, [onLayoutSave]);
+
+  const handleNodeDrag: NodeDragHandler = useCallback((_event, node) => {
+    if (PLACEHOLDER_NODE_IDS.has(node.id)) return;
+    layoutRef.current[node.id] = { x: node.position.x, y: node.position.y };
+  }, []);
 
   const handleNodeDragStop: NodeDragHandler = useCallback(
     (_event, node) => {
+      if (PLACEHOLDER_NODE_IDS.has(node.id)) return;
       layoutRef.current[node.id] = { x: node.position.x, y: node.position.y };
       scheduleSave();
     },
@@ -385,6 +656,15 @@ function ComponentCanvasInner({
     setTimeout(() => fitView({ duration: 300, padding: 0.2 }), 50);
   }, [onResetLayout, fitView]);
 
+  const handleNodeClick: NodeMouseHandler = useCallback(
+    (_event, node) => {
+      if (!onPlaceholderClick || node.type !== "placeholderNode") return;
+      if (node.id === "sys-placeholder") onPlaceholderClick("systems");
+      if (node.id === "rt-placeholder") onPlaceholderClick("runtime");
+    },
+    [onPlaceholderClick]
+  );
+
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       <ReactFlow
@@ -393,7 +673,9 @@ function ComponentCanvasInner({
         nodeTypes={COMPONENT_NODE_TYPES}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
+        onNodeClick={handleNodeClick}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         nodesDraggable
@@ -422,6 +704,7 @@ function ComponentCanvasInner({
       <button
         type="button"
         onClick={handleReset}
+        data-export-ignore
         className={cn(
           "absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium shadow-sm border transition-colors",
           hasCustomLayout
@@ -434,9 +717,9 @@ function ComponentCanvasInner({
         {hasCustomLayout ? "Reset layout" : "Auto layout"}
       </button>
 
-      <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+      <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-10 pointer-events-none" data-export-ignore>
         <span className="text-[10px] text-gray-400 bg-white/90 border border-gray-200 rounded-full px-2.5 py-1 shadow-sm whitespace-nowrap">
-          Drag nodes · Scroll to zoom · Click background to pan
+          Drag nodes to reposition · Scroll to zoom · Click background to pan
         </span>
       </div>
     </div>
@@ -448,24 +731,78 @@ export function ComponentDiagramModal({
   onClose,
   onLayoutSave,
   onResetLayout,
+  onArchitectureChange,
 }: {
   component: MinEAObject;
   onClose: () => void;
   onLayoutSave?: (layout: NodeLayout) => void;
   onResetLayout?: () => void;
+  onArchitectureChange?: (
+    updates: ComponentArchitectureUpdate
+  ) => void | Promise<MinEAObject | void>;
 }) {
-  const props = (component.properties ?? {}) as ComponentProperties;
-  const savedLayout = props.node_layout;
+  const [liveComponent, setLiveComponent] = useState(component);
+  const [showSystemDialog, setShowSystemDialog] = useState(false);
+  const [showRuntimeDialog, setShowRuntimeDialog] = useState(false);
+  const [savingArch, setSavingArch] = useState(false);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLiveComponent(component);
+  }, [component]);
+
+  const props = (liveComponent.properties ?? {}) as ComponentProperties;
+  const savedLayout = sanitizeNodeLayout(props.node_layout);
   const hasCustomLayout = !!(savedLayout && Object.keys(savedLayout).length > 0);
   const sysCount = props.systems?.length ?? 0;
+  const editable = !!onArchitectureChange;
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
-    () => buildComponentGraph(component, savedLayout),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [component.id, component.properties]
+    () => buildComponentGraph(liveComponent, savedLayout, { interactive: editable }),
+    [liveComponent, savedLayout, editable]
   );
 
   const typeLabel = COMPONENT_TYPE_LABEL[props.component_type ?? ""] ?? props.component_type;
+
+  const applyArchitecture = async (updates: ComponentArchitectureUpdate) => {
+    if (!onArchitectureChange) return;
+    setSavingArch(true);
+    try {
+      const result = await onArchitectureChange(updates);
+      if (result) {
+        setLiveComponent(result);
+      } else {
+        const currentProps = (liveComponent.properties ?? {}) as ComponentProperties;
+        setLiveComponent({
+          ...liveComponent,
+          properties: {
+            ...currentProps,
+            ...(updates.systems !== undefined ? { systems: updates.systems } : {}),
+            ...(updates.runtime !== undefined ? { runtime: updates.runtime } : {}),
+          },
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not save architecture changes.";
+      toast({
+        title: "Failed to save",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setSavingArch(false);
+    }
+  };
+
+  const handleSystemsApply = (systems: ComponentSystemRef[]) => {
+    setShowSystemDialog(false);
+    void applyArchitecture({ systems });
+  };
+
+  const handleRuntimeApply = (runtime: ComponentRuntimeRef | null) => {
+    setShowRuntimeDialog(false);
+    void applyArchitecture({ runtime });
+  };
 
   return (
     <>
@@ -476,7 +813,7 @@ export function ComponentDiagramModal({
             <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider mb-0.5">
               Component architecture
             </p>
-            <h2 className="text-base font-bold text-gray-900">{component.name}</h2>
+            <h2 className="text-base font-bold text-gray-900">{liveComponent.name}</h2>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className="text-xs text-gray-500">
                 {sysCount} system{sysCount !== 1 ? "s" : ""}
@@ -487,14 +824,39 @@ export function ComponentDiagramModal({
                   {typeLabel}
                 </span>
               )}
+              {savingArch && (
+                <span className="text-[10px] text-gray-400">Saving…</span>
+              )}
             </div>
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors" aria-label="Close">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            {editable && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowSystemDialog(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors"
+                >
+                  <Plus size={12} />
+                  {sysCount > 0 ? "Edit systems" : "Add systems"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRuntimeDialog(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 transition-colors"
+                >
+                  <Plus size={12} />
+                  {props.runtime ? "Change runtime" : "Add runtime"}
+                </button>
+              </>
+            )}
+            <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors" aria-label="Close">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 relative bg-[#fafafa]">
+        <div ref={canvasRef} className="flex-1 relative bg-[#fafafa]">
           <ReactFlowProvider>
             <ComponentCanvasInner
               initialNodes={initialNodes}
@@ -503,16 +865,35 @@ export function ComponentDiagramModal({
               onResetLayout={onResetLayout}
               hasCustomLayout={hasCustomLayout}
             />
+            <DiagramExportButton filename={liveComponent.name} containerRef={canvasRef} />
           </ReactFlowProvider>
         </div>
 
         <div className="px-6 py-2.5 border-t border-gray-100 bg-gray-50/50 flex items-center gap-4 flex-shrink-0 flex-wrap">
           {props.tech_stack && <span className="text-xs text-gray-500">{props.tech_stack}</span>}
-          {component.status && <span className="text-xs text-gray-500 capitalize">Lifecycle: {component.status}</span>}
+          {liveComponent.status && (
+            <span className="text-xs text-gray-500 capitalize">Lifecycle: {liveComponent.status}</span>
+          )}
           {hasCustomLayout && <span className="text-[10px] text-indigo-600 font-medium">Layout saved ✓</span>}
-          {component.owner && <span className="text-xs text-gray-500 ml-auto">Owner: {component.owner}</span>}
+          {liveComponent.owner && <span className="text-xs text-gray-500 ml-auto">Owner: {liveComponent.owner}</span>}
         </div>
       </div>
+
+      {showSystemDialog && (
+        <AddSystemDialog
+          selected={props.systems ?? []}
+          onClose={() => setShowSystemDialog(false)}
+          onApply={handleSystemsApply}
+        />
+      )}
+
+      {showRuntimeDialog && (
+        <AddRuntimeDialog
+          selected={props.runtime ?? null}
+          onClose={() => setShowRuntimeDialog(false)}
+          onApply={handleRuntimeApply}
+        />
+      )}
     </>
   );
 }

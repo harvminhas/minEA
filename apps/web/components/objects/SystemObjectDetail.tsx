@@ -229,6 +229,8 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
         {activeTab === "relationships" && (
           <ObjectRelationshipsTab
             objectId={objectId}
+            objectName={object?.name ?? "System"}
+            objectType="application"
             relationships={drawerRels}
             onAdd={() => setShowRelForm(true)}
             onRemove={(id) => deleteRelMutation.mutate(id)}

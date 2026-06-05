@@ -177,6 +177,8 @@ function LegacyObjectDetail({
             </h3>
             <ObjectRelationshipsTab
               objectId={object.id}
+              objectName={object.name}
+              objectType={object.type}
               relationships={allRels}
               onAdd={() => setShowRelForm(true)}
               onRemove={(id) => deleteRelMutation.mutate(id)}

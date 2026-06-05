@@ -73,7 +73,7 @@ async def delete_relationship(
     ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    await ctx.require_permission(db, "object.delete")
+    await ctx.require_permission(db, "object.edit")
     assert ctx.workspace
 
     result = await db.execute(

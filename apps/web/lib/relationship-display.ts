@@ -5,6 +5,33 @@ import {
   type RelationshipType,
 } from "@minea/types";
 
+const RELATIONSHIP_VERBS: Partial<Record<RelationshipType, string>> = {
+  runs_on: "runs on",
+  supported_by: "is supported by",
+  affects: "affects",
+  exposes: "exposes",
+  consumes: "consumes",
+  part_of: "is part of",
+  resolves: "resolves",
+  depends_on: "depends on",
+  calls: "calls",
+  uses: "uses",
+  stores_in: "stores data in",
+  publishes: "publishes",
+  subscribes: "subscribes to",
+  built_on: "is built on",
+  supports: "supports",
+  connects: "connects to",
+  connects_to: "connects to",
+  uses_model: "uses model",
+  can_call: "can call",
+  contains: "contains",
+  routes: "routes to",
+  accesses: "accesses",
+  escalates_to: "escalates to",
+  replaces: "replaces",
+};
+
 const OUTBOUND_LABELS: Partial<Record<RelationshipType, (name: string) => string>> = {
   runs_on: (n) => `Runs on ${n}`,
   supported_by: (n) => `Supports ${n}`,
@@ -76,6 +103,34 @@ export function otherRelationshipObjectType(
   currentObjectId: string
 ): ObjectType {
   return rel.from_object_id === currentObjectId ? rel.to_type : rel.from_type;
+}
+
+export function relationshipEndpointLabel(type: ObjectType): string {
+  if (type === "application") return "System";
+  return OBJECT_TYPE_LABELS[type] ?? type;
+}
+
+export function relationshipVerb(type: RelationshipType): string {
+  return RELATIONSHIP_VERBS[type] ?? type.replace(/_/g, " ");
+}
+
+export function formatRelationshipTriple(
+  rel: Relationship,
+  currentObjectId: string,
+  currentName: string,
+  otherName: string
+): { nameLine: string; typeLine: string } {
+  const fromName =
+    rel.from_object_id === currentObjectId ? currentName : otherName;
+  const toName = rel.to_object_id === currentObjectId ? currentName : otherName;
+  const verb = relationshipVerb(rel.type);
+  const fromType = relationshipEndpointLabel(rel.from_type);
+  const toType = relationshipEndpointLabel(rel.to_type);
+
+  return {
+    nameLine: `${fromName} → ${verb} → ${toName}`,
+    typeLine: `${fromType} → ${verb} → ${toType}`,
+  };
 }
 
 export function describeRelationship(

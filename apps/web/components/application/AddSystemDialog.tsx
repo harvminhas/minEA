@@ -51,8 +51,8 @@ export function AddSystemDialog({ selected, onClose, onApply }: Props) {
 
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[200] bg-black/30" onClick={onClose} />
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[210] w-full max-w-md bg-white rounded-xl shadow-2xl flex flex-col max-h-[80vh]">
+      <div className="fixed inset-0 z-[300] bg-black/30" onClick={onClose} />
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[310] w-full max-w-md bg-white rounded-xl shadow-2xl flex flex-col max-h-[80vh]">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <div>
             <h3 className="text-sm font-semibold text-gray-900">Add systems</h3>

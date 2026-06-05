@@ -4,11 +4,11 @@ import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQueries } from "@tanstack/react-query";
 import { Link2, Plus, X } from "lucide-react";
-import type { MinEAObject, Relationship } from "@minea/types";
+import type { MinEAObject, ObjectType, Relationship } from "@minea/types";
 import { objectsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import {
-  describeRelationship,
+  formatRelationshipTriple,
   otherRelationshipObjectId,
   relationshipFitnessLabel,
 } from "@/lib/relationship-display";
@@ -16,18 +16,27 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   objectId: string;
+  objectName: string;
+  objectType?: ObjectType;
   relationships: Relationship[];
-  onAdd: () => void;
-  onRemove: (relationshipId: string) => void;
+  relatedNameOverrides?: Record<string, string>;
+  onAdd?: () => void;
+  onRemove?: (relationshipId: string) => void;
   isRemoving?: boolean;
+  hideAdd?: boolean;
+  hideRemove?: boolean;
 }
 
 export function ObjectRelationshipsTab({
   objectId,
+  objectName,
   relationships,
+  relatedNameOverrides,
   onAdd,
   onRemove,
   isRemoving,
+  hideAdd = false,
+  hideRemove = false,
 }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
@@ -68,14 +77,16 @@ export function ObjectRelationshipsTab({
             ? "No connections yet."
             : `${relationships.length} connection${relationships.length === 1 ? "" : "s"}`}
         </p>
-        <button
-          type="button"
-          onClick={onAdd}
-          className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
-        >
-          <Plus size={12} />
-          Add
-        </button>
+        {!hideAdd && onAdd && (
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
+          >
+            <Plus size={12} />
+            Add
+          </button>
+        )}
       </div>
 
       {relationships.length === 0 ? (
@@ -87,8 +98,16 @@ export function ObjectRelationshipsTab({
           {relationships.map((rel) => {
             const otherId = otherRelationshipObjectId(rel, objectId);
             const other = nameById.get(otherId);
-            const otherName = other?.name ?? (namesLoading ? "Loading…" : "Unknown object");
-            const { label, typeLabel } = describeRelationship(rel, objectId, otherName);
+            const otherName =
+              relatedNameOverrides?.[otherId] ??
+              other?.name ??
+              (namesLoading ? "Loading…" : "Unknown object");
+            const { nameLine, typeLine } = formatRelationshipTriple(
+              rel,
+              objectId,
+              objectName,
+              otherName
+            );
             const fitness = relationshipFitnessLabel(rel);
 
             return (
@@ -100,26 +119,28 @@ export function ObjectRelationshipsTab({
                   <Link2 size={14} className="text-gray-400 flex-shrink-0 mt-0.5" />
                   <div className="min-w-0">
                     <p className="text-sm text-gray-900 leading-snug">
-                      {label}
+                      {typeLine}
                       {fitness && (
                         <span className="text-gray-500 font-normal"> · {fitness}</span>
                       )}
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5">{typeLabel}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{nameLine}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onRemove(rel.id)}
-                  disabled={isRemoving}
-                  className={cn(
-                    "text-gray-300 hover:text-red-400 transition-colors flex-shrink-0",
-                    isRemoving && "opacity-50 cursor-not-allowed"
-                  )}
-                  aria-label="Remove relationship"
-                >
-                  <X size={14} />
-                </button>
+                {!hideRemove && onRemove && (
+                  <button
+                    type="button"
+                    onClick={() => onRemove(rel.id)}
+                    disabled={isRemoving}
+                    className={cn(
+                      "text-gray-300 hover:text-red-400 transition-colors flex-shrink-0",
+                      isRemoving && "opacity-50 cursor-not-allowed"
+                    )}
+                    aria-label="Remove relationship"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             );
           })}
