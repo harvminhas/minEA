@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { X, Trash2, Edit2, Link2, Plus } from "lucide-react";
+import { X, Trash2, Edit2 } from "lucide-react";
+import { ObjectRelationshipsTab } from "@/components/objects/ObjectRelationshipsTab";
 import { type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
-import { getStatusColor, getStatusLabel, getObjectInitial, formatCurrency } from "@/lib/utils";
+import { buildDetailPropertyRows } from "@/lib/object-property-display";
+import { getStatusColor, getStatusLabel, getObjectInitial } from "@/lib/utils";
 import { isSystemObject } from "@/lib/system-utils";
 import { SystemObjectDetail } from "@/components/objects/SystemObjectDetail";
 import { RelationshipForm } from "./RelationshipForm";
@@ -81,6 +83,7 @@ function LegacyObjectDetail({
   });
 
   const allRels = [...(outRels ?? []), ...(inRels ?? [])];
+  const detailPropertyRows = buildDetailPropertyRows(props, object.type);
 
   return (
     <>
@@ -155,57 +158,30 @@ function LegacyObjectDetail({
           </div>
 
           {/* Type-specific properties */}
-          {Object.keys(props).length > 0 && (
+          {detailPropertyRows.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                 {OBJECT_TYPE_LABELS[object.type]} Details
               </h3>
               <div className="space-y-2 text-sm">
-                {Object.entries(props).map(([k, v]) => {
-                  if (v === null || v === undefined || v === "") return null;
-                  const label = k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-                  const displayValue = k === "annual_cost" ? formatCurrency(Number(v)) : String(v);
-                  return <DetailRow key={k} label={label} value={displayValue} />;
-                })}
+                {detailPropertyRows.map((row) => (
+                  <DetailRow key={row.key} label={row.label} value={row.value} />
+                ))}
               </div>
             </div>
           )}
 
-          {/* Relationships */}
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Relationships ({allRels.length})
-              </h3>
-              <button
-                onClick={() => setShowRelForm(true)}
-                className="flex items-center gap-1 text-xs text-indigo-600 hover:underline"
-              >
-                <Plus size={12} /> Add
-              </button>
-            </div>
-            {allRels.length === 0 ? (
-              <p className="text-sm text-gray-400">No relationships yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {allRels.map((rel) => (
-                  <div key={rel.id} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-md">
-                    <div className="flex items-center gap-2 text-xs">
-                      <Link2 size={11} className="text-gray-400" />
-                      <span className="font-medium text-gray-600">{rel.type}</span>
-                      <span className="text-gray-400">→</span>
-                      <span className="text-gray-700">{rel.to_type}</span>
-                    </div>
-                    <button
-                      onClick={() => deleteRelMutation.mutate(rel.id)}
-                      className="text-gray-300 hover:text-red-400 transition-colors"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+              Relationships
+            </h3>
+            <ObjectRelationshipsTab
+              objectId={object.id}
+              relationships={allRels}
+              onAdd={() => setShowRelForm(true)}
+              onRemove={(id) => deleteRelMutation.mutate(id)}
+              isRemoving={deleteRelMutation.isPending}
+            />
           </div>
         </div>
 

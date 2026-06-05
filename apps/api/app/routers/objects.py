@@ -107,7 +107,16 @@ async def list_objects(
     tech_debt_view_stats = (
         await enrich_tech_debt_view_items(db, items) if type == "tech_debt" else {}
     )
-    stats_map = {**system_stats, **updated_by_stats, **data_stats, **debt_stats, **tech_debt_view_stats}
+    stats_map: dict[UUID, dict[str, Any]] = {}
+    for partial in (
+        system_stats,
+        updated_by_stats,
+        data_stats,
+        debt_stats,
+        tech_debt_view_stats,
+    ):
+        for obj_id, fields in partial.items():
+            stats_map.setdefault(obj_id, {}).update(fields)
     reads: list[ObjectRead] = []
     for obj in items:
         base = ObjectRead.model_validate(obj)

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit2, Link2, Plus, Trash2, X } from "lucide-react";
+import { Edit2, Trash2 } from "lucide-react";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import { formatCurrency, getObjectInitial } from "@/lib/utils";
@@ -19,7 +19,10 @@ import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
 import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { TechDebtHostKind } from "@minea/types";
 import { ObjectForm } from "@/components/objects/ObjectForm";
+import { ObjectRelationshipsTab } from "@/components/objects/ObjectRelationshipsTab";
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
+import { buildDetailPropertyRows } from "@/lib/object-property-display";
+import { excludeTechDebtRelationships } from "@/lib/relationship-display";
 import { invalidateSystemCaches } from "@/lib/system-capability-utils";
 import { systemStatusLabel, SYSTEM_STATUS_STYLE } from "@/lib/system-utils";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
@@ -114,6 +117,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   };
 
   const allRels = [...(outRels ?? []), ...(inRels ?? [])];
+  const drawerRels = excludeTechDebtRelationships(allRels);
 
   const supportedCapabilityIds = (inRels ?? [])
     .filter(
@@ -161,6 +165,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const platformFromRel = (outRels ?? []).find(
     (r) => r.type === "runs_on" && r.from_type === "application" && r.to_type === "cloud_service"
   );
+  const detailPropertyRows = buildDetailPropertyRows(props, object.type);
 
   return (
     <>
@@ -206,6 +211,8 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
             <ObjectDrawerTabs
               activeTab={activeTab}
               onTabChange={setActiveTab}
+              showRelationships
+              relationshipCount={drawerRels.length}
               openDebtCount={techDebtSummary?.open_count ?? 0}
               className="mt-4"
             />
@@ -216,6 +223,16 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
           <EntityHistoryPanel
             entries={historyData?.entries ?? []}
             isLoading={historyLoading}
+          />
+        )}
+
+        {activeTab === "relationships" && (
+          <ObjectRelationshipsTab
+            objectId={objectId}
+            relationships={drawerRels}
+            onAdd={() => setShowRelForm(true)}
+            onRemove={(id) => deleteRelMutation.mutate(id)}
+            isRemoving={deleteRelMutation.isPending}
           />
         )}
 
@@ -300,67 +317,19 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
               </div>
             </DetailSection>
 
-            {Object.keys(props).length > 0 && (
+            {detailPropertyRows.length > 0 && (
               <DetailSection title={`${layerLabel} details`}>
                 <div className="px-6 pb-4 space-y-2 text-sm">
-                  {Object.entries(props).map(([k, v]) => {
-                    if (v === null || v === undefined || v === "" || k === "vendor" || k === "annual_cost") {
-                      return null;
-                    }
-                    const label = k.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-                    return (
-                      <div key={k} className="flex items-center justify-between gap-3">
-                        <span className="text-gray-500">{label}</span>
-                        <span className="text-gray-900 font-medium">{String(v)}</span>
-                      </div>
-                    );
-                  })}
+                  {detailPropertyRows.map((row) => (
+                    <div key={row.key} className="flex items-center justify-between gap-3">
+                      <span className="text-gray-500">{row.label}</span>
+                      <span className="text-gray-900 font-medium text-right">{row.value}</span>
+                    </div>
+                  ))}
                 </div>
               </DetailSection>
             )}
 
-            <DetailSection
-              title={`Relationships (${allRels.length})`}
-              action={
-                <button
-                  type="button"
-                  onClick={() => setShowRelForm(true)}
-                  className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700"
-                >
-                  + Add
-                </button>
-              }
-            >
-              <div className="px-6 pb-4">
-                {allRels.length === 0 ? (
-                  <p className="text-sm text-gray-400">No relationships yet.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {allRels.map((rel) => (
-                      <div
-                        key={rel.id}
-                        className="flex items-center justify-between py-2 px-3 bg-stone-50 rounded-md"
-                      >
-                        <div className="flex items-center gap-2 text-xs min-w-0">
-                          <Link2 size={11} className="text-gray-400 flex-shrink-0" />
-                          <span className="font-medium text-gray-600">{rel.type}</span>
-                          <span className="text-gray-400">→</span>
-                          <span className="text-gray-700 truncate">{rel.to_type}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => deleteRelMutation.mutate(rel.id)}
-                          className="text-gray-300 hover:text-red-400 transition-colors flex-shrink-0"
-                          aria-label="Remove relationship"
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </DetailSection>
           </>
         )}
       </DetailPanel>

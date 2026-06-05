@@ -2,12 +2,14 @@
 
 import { cn } from "@/lib/utils";
 
-export type ObjectDrawerTabId = "details" | "tech_debt" | "history";
+export type ObjectDrawerTabId = "details" | "relationships" | "tech_debt" | "history";
 
 interface Props {
   activeTab: ObjectDrawerTabId;
   onTabChange: (tab: ObjectDrawerTabId) => void;
   openDebtCount?: number;
+  relationshipCount?: number;
+  showRelationships?: boolean;
   showTechDebt?: boolean;
   showHistory?: boolean;
   className?: string;
@@ -17,18 +19,32 @@ export function ObjectDrawerTabs({
   activeTab,
   onTabChange,
   openDebtCount = 0,
+  relationshipCount = 0,
+  showRelationships = false,
   showTechDebt = true,
   showHistory = true,
   className,
 }: Props) {
-  const tabs: { id: ObjectDrawerTabId; label: string; badge?: number }[] = [
-    { id: "details", label: "Details" },
-  ];
+  const tabs: {
+    id: ObjectDrawerTabId;
+    label: string;
+    badge?: number;
+    badgeTone?: "alert" | "neutral";
+  }[] = [{ id: "details", label: "Details" }];
+  if (showRelationships) {
+    tabs.push({
+      id: "relationships",
+      label: "Relationships",
+      badge: relationshipCount > 0 ? relationshipCount : undefined,
+      badgeTone: "neutral",
+    });
+  }
   if (showTechDebt) {
     tabs.push({
       id: "tech_debt",
       label: "Tech debt",
       badge: openDebtCount > 0 ? openDebtCount : undefined,
+      badgeTone: "alert",
     });
   }
   if (showHistory) {
@@ -51,7 +67,14 @@ export function ObjectDrawerTabs({
         >
           {tab.label}
           {tab.badge != null && (
-            <span className="inline-flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+            <span
+              className={cn(
+                "inline-flex min-w-[18px] h-[18px] items-center justify-center rounded-full text-[10px] font-bold px-1",
+                tab.badgeTone === "alert"
+                  ? "bg-red-500 text-white"
+                  : "bg-gray-200 text-gray-600"
+              )}
+            >
               {tab.badge}
             </span>
           )}

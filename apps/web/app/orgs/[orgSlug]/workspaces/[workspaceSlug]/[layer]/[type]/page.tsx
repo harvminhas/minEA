@@ -16,6 +16,7 @@ import { FlowList } from "@/components/integration/FlowList";
 import { ApiList } from "@/components/integration/ApiList";
 import { EventList } from "@/components/integration/EventList";
 import { ComponentList } from "@/components/application/ComponentList";
+import { SystemList } from "@/components/application/SystemList";
 import { PlatformList } from "@/components/infrastructure/PlatformList";
 import { RuntimeList } from "@/components/infrastructure/RuntimeList";
 import { IntegrationInfraList } from "@/components/integration/IntegrationInfraList";
@@ -85,6 +86,10 @@ export default function ObjectListPage({ params }: { params: Promise<{ layer: st
 
   if (layer === "integration" && typePath === "tools") {
     return <IntegrationInfraList />;
+  }
+
+  if (layer === "application" && typePath === "applications") {
+    return <SystemList />;
   }
 
   if (layer === "application" && typePath === "components") {
