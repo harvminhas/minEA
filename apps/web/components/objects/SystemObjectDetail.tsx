@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Edit2, Trash2 } from "lucide-react";
@@ -19,7 +19,8 @@ import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
 import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { TechDebtHostKind } from "@minea/types";
 import { ObjectForm } from "@/components/objects/ObjectForm";
-import { ObjectRelationshipsTab } from "@/components/objects/ObjectRelationshipsTab";
+import { SystemDiagramModal, type NodeLayout } from "@/components/application/SystemDiagram";
+import { SystemRelationshipsTab } from "@/components/application/SystemRelationshipsTab";
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
 import { buildDetailPropertyRows } from "@/lib/object-property-display";
 import { excludeTechDebtRelationships } from "@/lib/relationship-display";
@@ -27,7 +28,7 @@ import { invalidateSystemCaches } from "@/lib/system-capability-utils";
 import { systemStatusLabel, SYSTEM_STATUS_STYLE } from "@/lib/system-utils";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { cn } from "@/lib/utils";
-import { type ApplicationProperties, OBJECT_TYPE_LABELS } from "@minea/types";
+import { type ApplicationProperties, type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
 
 interface Props {
   objectId: string;
@@ -45,6 +46,9 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRelForm, setShowRelForm] = useState(false);
+  const [showChart, setShowChart] = useState(false);
+  const [liveSystem, setLiveSystem] = useState<MinEAObject | null>(null);
+  const liveSystemRef = useRef<MinEAObject | null>(null);
 
   const { data: object, isLoading, refetch } = useQuery({
     queryKey: ["object", orgSlug, workspaceSlug, objectId],
@@ -63,23 +67,27 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
     enabled: activeTab === "history",
   });
 
-  const { data: outRels } = useQuery({
+  const { data: outRels, isFetching: outRelsFetching } = useQuery({
     queryKey: ["relationships", "from", objectId],
     enabled: !!object,
     queryFn: async () => {
       const token = await getToken();
       return relationshipsApi.list(orgSlug, workspaceSlug, { from_object_id: objectId }, token!);
     },
+    staleTime: 0,
   });
 
-  const { data: inRels } = useQuery({
+  const { data: inRels, isFetching: inRelsFetching } = useQuery({
     queryKey: ["relationships", "to", objectId],
     enabled: !!object,
     queryFn: async () => {
       const token = await getToken();
       return relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: objectId }, token!);
     },
+    staleTime: 0,
   });
+
+  const diagramRefreshing = outRelsFetching || inRelsFetching;
 
   const deleteRelMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -118,6 +126,47 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
 
   const allRels = [...(outRels ?? []), ...(inRels ?? [])];
   const drawerRels = excludeTechDebtRelationships(allRels);
+
+  useEffect(() => {
+    if (!object) return;
+    setLiveSystem(object);
+    liveSystemRef.current = object;
+  }, [object]);
+
+  const handleLayoutSave = useCallback(
+    async (layout: NodeLayout) => {
+      const token = await getToken();
+      if (!token) return;
+
+      const current = liveSystemRef.current ?? object;
+      if (!current) return;
+      const currentProps = (current.properties ?? {}) as ApplicationProperties;
+
+      const updated = await objectsApi.update(
+        orgSlug,
+        workspaceSlug,
+        objectId,
+        {
+          properties: { ...currentProps, node_layout: layout } as Record<string, unknown>,
+        },
+        token
+      );
+
+      const withLayout = {
+        ...updated,
+        properties: { ...currentProps, node_layout: layout },
+      };
+
+      queryClient.setQueryData<MinEAObject>(["object", orgSlug, workspaceSlug, objectId], withLayout);
+      setLiveSystem(withLayout);
+      liveSystemRef.current = withLayout;
+    },
+    [getToken, orgSlug, workspaceSlug, objectId, queryClient]
+  );
+
+  const handleResetLayout = useCallback(() => {
+    handleLayoutSave({});
+  }, [handleLayoutSave]);
 
   const supportedCapabilityIds = (inRels ?? [])
     .filter(
@@ -226,12 +275,12 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
           />
         )}
 
-        {activeTab === "relationships" && (
-          <ObjectRelationshipsTab
-            objectId={objectId}
-            objectName={object?.name ?? "System"}
-            objectType="application"
+        {activeTab === "relationships" && object && (
+          <SystemRelationshipsTab
+            system={liveSystem ?? object}
             relationships={drawerRels}
+            diagramRefreshing={diagramRefreshing}
+            onExpandDiagram={() => setShowChart(true)}
             onAdd={() => setShowRelForm(true)}
             onRemove={(id) => deleteRelMutation.mutate(id)}
             isRemoving={deleteRelMutation.isPending}
@@ -372,6 +421,20 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
             setShowRelForm(false);
             queryClient.invalidateQueries({ queryKey: ["relationships"] });
             refreshObject();
+          }}
+        />
+      )}
+
+      {showChart && object && (
+        <SystemDiagramModal
+          system={liveSystem ?? object}
+          relationships={drawerRels}
+          onClose={() => setShowChart(false)}
+          onLayoutSave={handleLayoutSave}
+          onResetLayout={handleResetLayout}
+          onAddConnection={() => {
+            setShowChart(false);
+            setShowRelForm(true);
           }}
         />
       )}

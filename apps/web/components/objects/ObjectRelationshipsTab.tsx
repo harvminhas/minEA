@@ -118,13 +118,13 @@ export function ObjectRelationshipsTab({
                 <div className="flex items-start gap-2 min-w-0">
                   <Link2 size={14} className="text-gray-400 flex-shrink-0 mt-0.5" />
                   <div className="min-w-0">
-                    <p className="text-sm text-gray-900 leading-snug">
+                    <p className="text-sm text-gray-900 leading-snug">{nameLine}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
                       {typeLine}
                       {fitness && (
                         <span className="text-gray-500 font-normal"> · {fitness}</span>
                       )}
                     </p>
-                    <p className="text-xs text-gray-500 mt-0.5">{nameLine}</p>
                   </div>
                 </div>
                 {!hideRemove && onRemove && (

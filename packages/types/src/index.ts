@@ -214,6 +214,8 @@ export interface ApplicationProperties {
   platform?: PlatformRef | null;
   /** How this entity relates to AI workloads. Omitted or "none" = not AI-related. */
   ai_role?: AiRole;
+  /** Persisted node positions for the system relationship canvas. */
+  node_layout?: Record<string, { x: number; y: number }>;
 }
 
 export interface AgentProperties {
