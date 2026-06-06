@@ -41,7 +41,7 @@ export function integrationInfraCarrierOptions(
         id: item.id,
         name: item.name,
         subtitle: infraKindLabel(props),
-        object_type: "tool",
+        object_type: "tool" as const,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -71,7 +71,7 @@ export function apiGatewayCarrierOptions(items: MinEAObject[]): InfraCarrierOpti
         name: item.name,
         subtitle: "Legacy gateway",
         platform: props.gateway_platform,
-        object_type: "tool",
+        object_type: "tool" as const,
       });
     }
   }
@@ -95,7 +95,7 @@ export function eventBrokerCarrierOptions(
       name: broker.name,
       subtitle: "Message broker",
       transport: (broker.properties as Record<string, unknown>)?.transport as string | undefined,
-      object_type: "message_broker",
+      object_type: "message_broker" as const,
     });
   }
 

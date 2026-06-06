@@ -1,5 +1,6 @@
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import type {
+  FlowCarrierRef,
   FlowEndpointSide,
   IntegrationFlowProperties,
   MinEAObject,
@@ -14,7 +15,58 @@ function relationshipKey(rel: Pick<Relationship, "type" | "from_object_id" | "to
 export type FlowArchitectureUpdate = {
   sources?: FlowEndpointSide;
   destinations?: FlowEndpointSide;
+  carrier?: FlowCarrierRef | null;
 };
+
+function isFlowArchitectureRel(rel: Relationship): boolean {
+  return rel.to_type === "integration_flow" && rel.type === "carries";
+}
+
+export async function syncFlowCarrierRelationship(
+  orgSlug: string,
+  workspaceSlug: string,
+  flowId: string,
+  carrier: FlowCarrierRef | null,
+  token: string
+): Promise<void> {
+  const existing = await relationshipsApi.list(
+    orgSlug,
+    workspaceSlug,
+    { to_object_id: flowId },
+    token
+  );
+  const archRels = existing.filter(isFlowArchitectureRel);
+
+  const existingCarries = archRels.find((r) => r.type === "carries");
+  const desiredCarriesKey = carrier?.carrier_id
+    ? relationshipKey({
+        type: "carries",
+        from_object_id: carrier.carrier_id,
+        to_object_id: flowId,
+      })
+    : null;
+  const existingCarriesKey = existingCarries ? relationshipKey(existingCarries) : null;
+
+  if (desiredCarriesKey !== existingCarriesKey) {
+    if (existingCarries) {
+      await relationshipsApi.delete(orgSlug, workspaceSlug, existingCarries.id, token);
+    }
+    if (carrier?.carrier_id) {
+      await relationshipsApi.create(
+        orgSlug,
+        workspaceSlug,
+        {
+          type: "carries",
+          from_object_id: carrier.carrier_id,
+          from_type: "tool",
+          to_object_id: flowId,
+          to_type: "integration_flow",
+        },
+        token
+      );
+    }
+  }
+}
 
 export function architectureRelationshipsFromFlow(flow: MinEAObject): Relationship[] {
   const props = (flow.properties ?? {}) as IntegrationFlowProperties;
@@ -137,6 +189,7 @@ export async function persistFlowArchitecture(
       ...(updated.properties ?? {}),
       sources: properties.sources,
       destinations: properties.destinations,
+      carrier: properties.carrier,
     },
   };
 }

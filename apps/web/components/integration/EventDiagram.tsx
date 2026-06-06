@@ -375,7 +375,7 @@ function EditBrokerDialog({
   }>;
   onClose: () => void;
   onApply: (broker: EventBrokerRef | null) => void;
-  onRegister: () => void;
+  onRegister?: () => void;
 }) {
   const [key, setKey] = useState(brokerKey);
 

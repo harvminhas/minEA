@@ -126,18 +126,27 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
     queryClient.invalidateQueries({ queryKey: historyQueryKey });
   };
 
-  const syncRelationshipsFromServer = useCallback(async () => {
-    const token = await getToken();
-    if (!token) return;
-    const { outbound, inbound } = await refreshObjectRelationshipQueries(
-      queryClient,
-      orgSlug,
-      workspaceSlug,
-      component.id,
-      token
-    );
-    setRelationshipsSnapshot(excludeTechDebtRelationships([...outbound, ...inbound]));
-  }, [getToken, queryClient, orgSlug, workspaceSlug, component.id]);
+  const syncRelationshipsFromServer = useCallback(
+    async (options?: { manageSpinner?: boolean }) => {
+      const token = await getToken();
+      if (!token) return;
+      const manageSpinner = options?.manageSpinner !== false;
+      if (manageSpinner) setArchitectureUpdating(true);
+      try {
+        const { outbound, inbound } = await refreshObjectRelationshipQueries(
+          queryClient,
+          orgSlug,
+          workspaceSlug,
+          component.id,
+          token
+        );
+        setRelationshipsSnapshot(excludeTechDebtRelationships([...outbound, ...inbound]));
+      } finally {
+        if (manageSpinner) setArchitectureUpdating(false);
+      }
+    },
+    [getToken, queryClient, orgSlug, workspaceSlug, component.id]
+  );
 
   const handleArchitectureChange = useCallback(
     async (updates: Parameters<typeof persistComponentArchitecture>[3]) => {

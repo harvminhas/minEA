@@ -86,7 +86,9 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
   const [handles, setHandles] = useState<IntegrationInfraHandle[]>(init.handles);
   const [vendor, setVendor] = useState(init.vendor);
   const [vendorProduct, setVendorProduct] = useState(init.vendorProduct);
-  const [hostingModel, setHostingModel] = useState(init.hostingModel);
+  const [hostingModel, setHostingModel] = useState<
+    NonNullable<ToolProperties["hosting_model"]>
+  >((init.hostingModel as NonNullable<ToolProperties["hosting_model"]>) ?? "saas");
   const [region, setRegion] = useState(init.region);
   const [error, setError] = useState<string | null>(null);
   const [showAddVendor, setShowAddVendor] = useState(false);
@@ -384,7 +386,11 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
                   <div className="relative">
                     <select
                       value={hostingModel}
-                      onChange={(e) => setHostingModel(e.target.value)}
+                      onChange={(e) =>
+                        setHostingModel(
+                          e.target.value as NonNullable<ToolProperties["hosting_model"]>
+                        )
+                      }
                       className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 pr-8"
                     >
                       {INFRA_HOSTING.map((h) => (
