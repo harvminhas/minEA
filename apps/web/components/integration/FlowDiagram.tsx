@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   ReactFlow,
   Background,
@@ -21,9 +21,14 @@ import {
   type NodeTypes,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { Layers, Monitor, RotateCcw, X } from "lucide-react";
+import { Layers, Monitor, Plus, RotateCcw, X } from "lucide-react";
+import { AddFlowEndpointDialog } from "@/components/integration/AddFlowEndpointDialog";
+import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
+import { DiagramExportButton } from "@/components/shared/DiagramExportButton";
+import { toast } from "@/hooks/use-toast";
+import type { FlowArchitectureUpdate } from "@/lib/flow-relationship-utils";
 import { cn } from "@/lib/utils";
-import type { IntegrationFlowProperties, MinEAObject } from "@minea/types";
+import type { FlowEndpointSide, IntegrationFlowProperties, MinEAObject } from "@minea/types";
 
 export type NodeLayout = Record<string, { x: number; y: number }>;
 
@@ -349,34 +354,46 @@ interface CanvasProps {
   onLayoutSave?: (layout: NodeLayout) => void;
   onResetLayout?: () => void;
   hasCustomLayout: boolean;
+  exportFilename?: string;
+  containerRef?: RefObject<HTMLDivElement | null>;
 }
 
-function FlowCanvasInner({ initialNodes, initialEdges, onLayoutSave, onResetLayout, hasCustomLayout }: CanvasProps) {
+function FlowCanvasInner({
+  initialNodes,
+  initialEdges,
+  onLayoutSave,
+  onResetLayout,
+  hasCustomLayout,
+  exportFilename,
+  containerRef,
+}: CanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const { fitView } = useReactFlow();
 
-  // Tracks current positions for full-snapshot saves
   const layoutRef = useRef<NodeLayout>({});
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initialise position snapshot once on mount
   useEffect(() => {
-    layoutRef.current = Object.fromEntries(
-      initialNodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }])
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    for (const node of initialNodes) {
+      if (!layoutRef.current[node.id]) {
+        layoutRef.current[node.id] = { x: node.position.x, y: node.position.y };
+      }
+    }
+  }, [initialNodes]);
 
-  // Sync external data changes while preserving in-progress drags
   useEffect(() => {
     setNodes((prev) =>
       initialNodes.map((node) => {
+        const dragged = layoutRef.current[node.id];
+        if (dragged) return { ...node, position: dragged };
         const prevNode = prev.find((n) => n.id === node.id);
-        return prevNode?.dragging ? { ...node, position: prevNode.position } : node;
+        if (prevNode?.dragging) return { ...node, position: prevNode.position };
+        return node;
       })
     );
-  }, [initialNodes, setNodes]);
+    setEdges(initialEdges);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
 
   useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); }, []);
 
@@ -434,6 +451,13 @@ function FlowCanvasInner({ initialNodes, initialEdges, onLayoutSave, onResetLayo
         />
       </ReactFlow>
 
+      {exportFilename && (
+        <DiagramExportButton
+          filename={exportFilename}
+          containerEl={containerRef?.current ?? null}
+        />
+      )}
+
       {/* Reset layout — always visible so users discover the feature */}
       <button
         type="button"
@@ -466,36 +490,87 @@ export function FlowDiagramModal({
   onClose,
   onLayoutSave,
   onResetLayout,
+  onArchitectureChange,
 }: {
   flow: MinEAObject;
   onClose: () => void;
   onLayoutSave?: (layout: NodeLayout) => void;
   onResetLayout?: () => void;
+  onArchitectureChange?: (
+    updates: FlowArchitectureUpdate
+  ) => void | Promise<MinEAObject | void>;
 }) {
-  const props = (flow.properties ?? {}) as IntegrationFlowProperties;
+  const [liveFlow, setLiveFlow] = useState(flow);
+  const [showSourceDialog, setShowSourceDialog] = useState(false);
+  const [showDestDialog, setShowDestDialog] = useState(false);
+  const [savingArch, setSavingArch] = useState(false);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLiveFlow(flow);
+  }, [flow]);
+
+  const props = (liveFlow.properties ?? {}) as IntegrationFlowProperties;
   const savedLayout = props.node_layout;
   const hasCustomLayout = !!(savedLayout && Object.keys(savedLayout).length > 0);
   const srcCount = (props.sources?.systems?.length ?? 0) + (props.sources?.entities?.length ?? 0);
   const dstCount = (props.destinations?.systems?.length ?? 0) + (props.destinations?.entities?.length ?? 0);
+  const editable = !!onArchitectureChange;
+  const defaultSide: FlowEndpointSide = { systems: [], entities: [] };
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
-    () => buildFlowGraph(flow, savedLayout),
-    // Rebuild when flow id or its saved properties change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [flow.id, flow.properties]
+    () => buildFlowGraph(liveFlow, savedLayout),
+    [liveFlow, savedLayout]
   );
+
+  const applyArchitecture = async (updates: FlowArchitectureUpdate) => {
+    if (!onArchitectureChange) return;
+    setSavingArch(true);
+    try {
+      const result = await onArchitectureChange(updates);
+      if (result) {
+        setLiveFlow(result);
+      } else {
+        const currentProps = (liveFlow.properties ?? {}) as IntegrationFlowProperties;
+        setLiveFlow({
+          ...liveFlow,
+          properties: {
+            ...currentProps,
+            ...(updates.sources !== undefined ? { sources: updates.sources } : {}),
+            ...(updates.destinations !== undefined ? { destinations: updates.destinations } : {}),
+          },
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not save architecture changes.";
+      toast({ title: "Failed to save", description: message, variant: "destructive" });
+    } finally {
+      setSavingArch(false);
+    }
+  };
+
+  const handleSourcesApply = (next: FlowEndpointSide) => {
+    setShowSourceDialog(false);
+    void applyArchitecture({ sources: next });
+  };
+
+  const handleDestinationsApply = (next: FlowEndpointSide) => {
+    setShowDestDialog(false);
+    void applyArchitecture({ destinations: next });
+  };
 
   return (
     <>
       <div className="fixed inset-0 z-[200] bg-black/40" onClick={onClose} />
       <div className="fixed inset-6 z-[210] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <DiagramSavingBar active={savingArch} />
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
           <div>
             <p className="text-[10px] font-semibold text-teal-600 uppercase tracking-wider mb-0.5">
               Integration Flow
             </p>
-            <h2 className="text-base font-bold text-gray-900">{flow.name}</h2>
+            <h2 className="text-base font-bold text-gray-900">{liveFlow.name}</h2>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className="text-xs text-gray-500">
                 {srcCount} source{srcCount !== 1 ? "s" : ""} → {dstCount} destination{dstCount !== 1 ? "s" : ""}
@@ -525,13 +600,36 @@ export function FlowDiagramModal({
               )}
             </div>
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors" aria-label="Close">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            {editable && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowSourceDialog(true)}
+                  disabled={savingArch}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Plus size={12} />
+                  {srcCount > 0 ? "Edit sources" : "Add sources"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDestDialog(true)}
+                  disabled={savingArch}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Plus size={12} />
+                  {dstCount > 0 ? "Edit destinations" : "Add destinations"}
+                </button>
+              </>
+            )}
+            <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors" aria-label="Close">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
-        {/* Canvas — relative container so children's position:absolute resolves correctly */}
-        <div className="flex-1 relative bg-[#fafafa]">
+        <div ref={canvasRef} className="flex-1 relative bg-[#fafafa] min-h-0">
           <ReactFlowProvider>
             <FlowCanvasInner
               initialNodes={initialNodes}
@@ -539,6 +637,8 @@ export function FlowDiagramModal({
               onLayoutSave={onLayoutSave}
               onResetLayout={onResetLayout}
               hasCustomLayout={hasCustomLayout}
+              exportFilename={liveFlow.name}
+              containerRef={canvasRef}
             />
           </ReactFlowProvider>
         </div>
@@ -552,11 +652,29 @@ export function FlowDiagramModal({
               Classification: <span className="font-medium">{props.data_classification}</span>
             </span>
           )}
-          {flow.status && <span className="text-xs text-gray-500 capitalize">Status: {flow.status}</span>}
+          {liveFlow.status && <span className="text-xs text-gray-500 capitalize">Status: {liveFlow.status}</span>}
           {hasCustomLayout && <span className="text-[10px] text-teal-600 font-medium">Layout saved ✓</span>}
-          {flow.owner && <span className="text-xs text-gray-500 ml-auto">Owner: {flow.owner}</span>}
+          {liveFlow.owner && <span className="text-xs text-gray-500 ml-auto">Owner: {liveFlow.owner}</span>}
         </div>
       </div>
+
+      {showSourceDialog && (
+        <AddFlowEndpointDialog
+          side="source"
+          current={props.sources ?? defaultSide}
+          onClose={() => setShowSourceDialog(false)}
+          onApply={handleSourcesApply}
+        />
+      )}
+
+      {showDestDialog && (
+        <AddFlowEndpointDialog
+          side="destination"
+          current={props.destinations ?? defaultSide}
+          onClose={() => setShowDestDialog(false)}
+          onApply={handleDestinationsApply}
+        />
+      )}
     </>
   );
 }

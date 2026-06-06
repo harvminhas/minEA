@@ -23,14 +23,67 @@ export {
   TECHNOLOGY_LAYER_COLOR,
 };
 
+export type IntegrationInfraHandle = "apis" | "events" | "flows" | "data";
+
 export const INFRA_KINDS = [
-  { value: "ipaas", label: "iPaaS", hint: "MuleSoft, Workato, Boomi" },
-  { value: "etl_elt", label: "ETL / ELT", hint: "Fivetran, Airbyte, ADF" },
-  { value: "broker", label: "Broker", hint: "Kafka, EventBridge" },
-  { value: "gateway", label: "Gateway", hint: "Apigee, Kong, APIM" },
-  { value: "transport", label: "Transport", hint: "SFTP, VPN, file drop" },
-  { value: "custom", label: "Custom", hint: "In-house carrier" },
+  { value: "gateway", label: "Gateway" },
+  { value: "ipaas", label: "iPaaS" },
+  { value: "broker", label: "Broker" },
+  { value: "etl_elt", label: "ETL / ELT" },
+  { value: "transport", label: "Transport" },
+  { value: "custom", label: "Custom" },
 ] as const;
+
+export const INFRA_HANDLES: { value: IntegrationInfraHandle; label: string }[] = [
+  { value: "apis", label: "APIs" },
+  { value: "events", label: "Events" },
+  { value: "flows", label: "Flows" },
+  { value: "data", label: "Data" },
+];
+
+/** Suggested handles when the user picks a kind (they can toggle after). */
+export const DEFAULT_HANDLES_BY_KIND: Record<string, IntegrationInfraHandle[]> = {
+  gateway: ["apis"],
+  ipaas: ["apis", "events", "flows"],
+  broker: ["events"],
+  etl_elt: ["data", "flows"],
+  transport: ["flows", "data"],
+  custom: [],
+};
+
+export function defaultHandlesForKind(kind: string): IntegrationInfraHandle[] {
+  return DEFAULT_HANDLES_BY_KIND[kind] ?? [];
+}
+
+export function formatInfraHandles(handles: IntegrationInfraHandle[] | undefined): string {
+  if (!handles?.length) return "";
+  const labels = Object.fromEntries(INFRA_HANDLES.map((h) => [h.value, h.label]));
+  return handles.map((h) => labels[h] ?? h).join(", ");
+}
+
+/** Resolved handles for an infra object (stored handles, or kind defaults). */
+export function resolvedInfraHandles(props: ToolProperties): IntegrationInfraHandle[] {
+  if (props.integration_infra_handles?.length) return props.integration_infra_handles;
+  if (props.integration_infra_kind) return defaultHandlesForKind(props.integration_infra_kind);
+  return [];
+}
+
+export function infraSupportsHandle(
+  props: ToolProperties,
+  handle: IntegrationInfraHandle
+): boolean {
+  return resolvedInfraHandles(props).includes(handle);
+}
+
+export function isIntegrationInfra(props: ToolProperties): boolean {
+  return props.integration_infra_kind != null;
+}
+
+/** API gateway picker: legacy gateway_platform tools or any infra that handles APIs. */
+export function isApiGatewayCarrier(props: ToolProperties): boolean {
+  if (props.gateway_platform) return true;
+  return isIntegrationInfra(props) && infraSupportsHandle(props, "apis");
+}
 
 export const INFRA_VENDORS = [
   { value: "salesforce_mulesoft", label: "Salesforce (MuleSoft)" },
@@ -56,10 +109,6 @@ export const INFRA_KIND_LABEL = Object.fromEntries(INFRA_KINDS.map((k) => [k.val
 export const INFRA_VENDOR_LABEL = Object.fromEntries(INFRA_VENDORS.map((v) => [v.value, v.label]));
 export const INFRA_HOSTING_LABEL = Object.fromEntries(INFRA_HOSTING.map((h) => [h.value, h.label]));
 export const INFRA_LICENSE_LABEL = Object.fromEntries(INFRA_LICENSE.map((l) => [l.value, l.label]));
-
-export function isIntegrationInfra(props: ToolProperties): boolean {
-  return props.integration_infra_kind != null;
-}
 
 export function infraKindLabel(props: ToolProperties): string {
   if (props.integration_infra_kind === "custom" && props.integration_infra_kind_other?.trim()) {
@@ -91,6 +140,7 @@ export function collectCustomVendors(items: MinEAObject[]): string[] {
 export function buildIntegrationInfraProperties(params: {
   kind: string;
   kindOther: string;
+  handles: IntegrationInfraHandle[];
   vendor: string;
   vendorProduct: string;
   hostingModel: string;
@@ -108,6 +158,7 @@ export function buildIntegrationInfraProperties(params: {
     integration_infra_kind: params.kind as ToolProperties["integration_infra_kind"],
     integration_infra_kind_other:
       params.kind === "custom" ? params.kindOther.trim() || undefined : undefined,
+    integration_infra_handles: params.handles.length > 0 ? params.handles : undefined,
     vendor: params.vendor || undefined,
     vendor_product: params.vendorProduct.trim() || undefined,
     hosting_model: params.hostingModel as ToolProperties["hosting_model"],

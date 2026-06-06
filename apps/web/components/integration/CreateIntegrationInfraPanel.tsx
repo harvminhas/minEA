@@ -4,23 +4,22 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight, Plus, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { objectsApi, peopleApi } from "@/lib/api-client";
+import { objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { AddVendorDialog } from "@/components/integration/AddVendorDialog";
 import {
   buildIntegrationInfraProperties,
   collectCustomVendors,
+  defaultHandlesForKind,
+  INFRA_HANDLES,
   INFRA_HOSTING,
   INFRA_KINDS,
-  INFRA_LICENSE,
   INFRA_VENDORS,
   lifecycleToStatus,
-  PLATFORM_CRITICALITY,
-  PLATFORM_LIFECYCLE,
-  PLATFORM_SLA,
   statusToLifecycle,
+  type IntegrationInfraHandle,
 } from "@/lib/integration-infra-utils";
 import type { MinEAObject, ToolProperties } from "@minea/types";
 import { cn } from "@/lib/utils";
@@ -48,55 +47,24 @@ function FieldLabel({ children, required }: { children: React.ReactNode; require
   );
 }
 
-function SelectField({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-slate-500 pr-8"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
-        ▾
-      </span>
-    </div>
-  );
-}
-
 function initFromInfra(infra?: MinEAObject) {
   const props = (infra?.properties ?? {}) as ToolProperties;
+  const kind = props.integration_infra_kind ?? "";
   return {
     name: infra?.name ?? "",
     description: infra?.description ?? "",
     tags: (infra?.tags ?? []).join(", "),
-    kind: props.integration_infra_kind ?? "ipaas",
+    kind,
     kindOther: props.integration_infra_kind_other ?? "",
-    vendor: props.vendor ?? "salesforce_mulesoft",
+    handles:
+      props.integration_infra_handles ??
+      (kind ? defaultHandlesForKind(kind) : ([] as IntegrationInfraHandle[])),
+    vendor: props.vendor ?? "",
     vendorProduct: props.vendor_product ?? "",
     hostingModel: props.hosting_model ?? "saas",
     region: props.region ?? "",
-    environments: props.environments ?? [],
-    adminUrl: props.admin_url ?? "",
-    licenseModel: props.license_model ?? "per_vcore",
-    contractRenewal: props.contract_renewal ?? "",
-    annualCost: props.annual_cost ?? "",
-    slaTarget: props.sla_target ?? "99_9",
+    existingProps: props,
     lifecycle: props.lifecycle ?? statusToLifecycle(infra?.status),
-    criticality: props.criticality ?? "low",
     owner: infra?.owner ?? "",
   };
 }
@@ -113,36 +81,18 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
   const [name, setName] = useState(init.name);
   const [description, setDescription] = useState(init.description);
   const [tags, setTags] = useState(init.tags);
-  const [kind, setKind] = useState<string>(init.kind);
+  const [kind, setKind] = useState(init.kind);
   const [kindOther, setKindOther] = useState(init.kindOther);
-  const [vendor, setVendor] = useState<string>(init.vendor);
+  const [handles, setHandles] = useState<IntegrationInfraHandle[]>(init.handles);
+  const [vendor, setVendor] = useState(init.vendor);
   const [vendorProduct, setVendorProduct] = useState(init.vendorProduct);
-  const [hostingModel, setHostingModel] = useState<string>(init.hostingModel);
+  const [hostingModel, setHostingModel] = useState(init.hostingModel);
   const [region, setRegion] = useState(init.region);
-  const [environments, setEnvironments] = useState<string[]>(init.environments);
-  const [envInput, setEnvInput] = useState("");
-  const [adminUrl, setAdminUrl] = useState(init.adminUrl);
-  const [licenseModel, setLicenseModel] = useState<string>(init.licenseModel);
-  const [contractRenewal, setContractRenewal] = useState(init.contractRenewal);
-  const [annualCost, setAnnualCost] = useState(init.annualCost);
-  const [slaTarget, setSlaTarget] = useState<string>(init.slaTarget);
-  const [lifecycle, setLifecycle] = useState<string>(init.lifecycle);
-  const [criticality, setCriticality] = useState<string>(init.criticality);
-  const [owner, setOwner] = useState(init.owner);
   const [error, setError] = useState<string | null>(null);
   const [showAddVendor, setShowAddVendor] = useState(false);
   const [sessionVendors, setSessionVendors] = useState<string[]>([]);
 
   useEffect(() => setMounted(true), []);
-
-  const { data: teamsData } = useQuery({
-    queryKey: ["teams", orgSlug, workspaceSlug],
-    queryFn: async () => {
-      const token = await getToken();
-      return peopleApi.listTeams(orgSlug, workspaceSlug, token!);
-    },
-    enabled,
-  });
 
   const { data: toolsData } = useQuery({
     queryKey: ["objects", orgSlug, workspaceSlug, "integration_infra"],
@@ -164,62 +114,57 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
     return [...new Set([...fromItems, ...sessionVendors])];
   }, [toolsData, sessionVendors]);
 
-  const properties = useMemo(
-    () =>
-      buildIntegrationInfraProperties({
-        kind,
-        kindOther,
-        vendor,
-        vendorProduct,
-        hostingModel,
-        region,
-        environments,
-        adminUrl,
-        licenseModel,
-        contractRenewal,
-        annualCost,
-        slaTarget,
-        lifecycle,
-        criticality,
-      }),
-    [
-      kind,
-      kindOther,
-      vendor,
-      vendorProduct,
-      hostingModel,
-      region,
-      environments,
-      adminUrl,
-      licenseModel,
-      contractRenewal,
-      annualCost,
-      slaTarget,
-      lifecycle,
-      criticality,
-    ]
-  );
+  const updateKind = (value: string) => {
+    setKind(value);
+    setHandles(value ? defaultHandlesForKind(value) : []);
+  };
+
+  const toggleHandle = (handle: IntegrationInfraHandle) => {
+    setHandles((prev) =>
+      prev.includes(handle) ? prev.filter((h) => h !== handle) : [...prev, handle]
+    );
+  };
 
   const canSubmit =
     name.trim().length > 0 &&
     kind.trim().length > 0 &&
     vendor.trim().length > 0 &&
-    owner.trim().length > 0 &&
+    handles.length > 0 &&
     (kind !== "custom" || kindOther.trim().length > 0);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
-      if (!owner.trim()) throw new Error("Owner is required");
+
+      const baseProps = buildIntegrationInfraProperties({
+        kind,
+        kindOther,
+        handles,
+        vendor,
+        vendorProduct,
+        hostingModel,
+        region,
+        environments: init.existingProps.environments ?? [],
+        adminUrl: init.existingProps.admin_url ?? "",
+        licenseModel: init.existingProps.license_model ?? "per_vcore",
+        contractRenewal: init.existingProps.contract_renewal ?? "",
+        annualCost: init.existingProps.annual_cost ?? "",
+        slaTarget: init.existingProps.sla_target ?? "99_9",
+        lifecycle: init.lifecycle,
+        criticality: init.existingProps.criticality ?? "low",
+      });
 
       const body = {
         name: name.trim(),
         description: description.trim() || undefined,
-        owner: owner.trim(),
-        status: lifecycleToStatus(lifecycle),
-        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
-        properties: properties as Record<string, unknown>,
+        owner: init.owner.trim() || undefined,
+        status: lifecycleToStatus(init.lifecycle),
+        tags: tags
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean),
+        properties: baseProps as Record<string, unknown>,
       };
 
       if (isEdit && initialValues) {
@@ -235,13 +180,6 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
       ),
   });
 
-  const addEnvironment = () => {
-    const trimmed = envInput.trim().toLowerCase();
-    if (!trimmed || environments.includes(trimmed)) return;
-    setEnvironments((list) => [...list, trimmed]);
-    setEnvInput("");
-  };
-
   if (!mounted) return null;
 
   return createPortal(
@@ -250,7 +188,7 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
 
       <div
         className={cn(
-          "fixed right-0 top-0 h-full w-full max-w-[560px] bg-white shadow-2xl flex flex-col overflow-hidden",
+          "fixed right-0 top-0 h-full w-full max-w-[480px] bg-white shadow-2xl flex flex-col overflow-hidden",
           isEdit ? "z-[120]" : "z-[110]"
         )}
       >
@@ -263,7 +201,11 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
               A carrier that moves data — not an endpoint
             </p>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 -mt-0.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 -mt-0.5"
+          >
             <X size={16} />
           </button>
         </div>
@@ -271,36 +213,75 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="px-6 py-5 pb-8 space-y-7">
             <section>
-              <FieldLabel required>Kind</FieldLabel>
-              <div className="grid grid-cols-2 gap-2">
-                {INFRA_KINDS.map((k) => (
-                  <button
-                    key={k.value}
-                    type="button"
-                    onClick={() => setKind(k.value)}
-                    className={cn(
-                      "text-left rounded-lg border px-3 py-2.5 transition-colors",
-                      kind === k.value
-                        ? "border-slate-500 bg-slate-50 ring-1 ring-slate-500"
-                        : "border-gray-200 hover:border-slate-300"
-                    )}
-                  >
-                    <span className="text-sm font-medium text-gray-900 block">{k.label}</span>
-                    <span className="text-[11px] text-gray-400 mt-0.5 block">{k.hint}</span>
-                  </button>
-                ))}
-              </div>
-              {kind === "custom" && (
-                <div className="mt-3">
-                  <FieldLabel required>Custom kind</FieldLabel>
-                  <input
-                    value={kindOther}
-                    onChange={(e) => setKindOther(e.target.value)}
-                    placeholder="Describe the carrier type"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  />
+              <SectionHeader>Kind</SectionHeader>
+              <div className="space-y-3">
+                <div>
+                  <FieldLabel required>Kind</FieldLabel>
+                  <div className="relative">
+                    <select
+                      value={kind}
+                      onChange={(e) => updateKind(e.target.value)}
+                      className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 pr-8"
+                    >
+                      <option value="">Select kind...</option>
+                      {INFRA_KINDS.map((k) => (
+                        <option key={k.value} value={k.value}>
+                          {k.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+                      ▾
+                    </span>
+                  </div>
                 </div>
-              )}
+
+                {kind === "custom" && (
+                  <div>
+                    <FieldLabel required>Custom kind</FieldLabel>
+                    <input
+                      value={kindOther}
+                      onChange={(e) => setKindOther(e.target.value)}
+                      placeholder="Describe the carrier type"
+                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <FieldLabel>Handles</FieldLabel>
+                  <p className="text-[11px] text-gray-400 mb-2">
+                    Which integration objects can link to this carrier
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {INFRA_HANDLES.map((h) => {
+                      const on = handles.includes(h.value);
+                      return (
+                        <button
+                          key={h.value}
+                          type="button"
+                          onClick={() => toggleHandle(h.value)}
+                          disabled={!kind}
+                          className={cn(
+                            "px-3 py-1.5 rounded-md text-xs font-medium border transition-colors",
+                            on
+                              ? "bg-teal-50 text-teal-800 border-teal-300 ring-1 ring-teal-200"
+                              : "bg-white text-gray-600 border-gray-200 hover:border-gray-300",
+                            !kind && "opacity-40 cursor-not-allowed"
+                          )}
+                        >
+                          {h.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {kind && handles.length === 0 && (
+                    <p className="text-[11px] text-amber-600 mt-1.5">
+                      Select at least one handle so APIs, events, and flows can find this carrier.
+                    </p>
+                  )}
+                </div>
+              </div>
             </section>
 
             <section>
@@ -312,8 +293,8 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
                     autoFocus
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. MuleSoft Anypoint (prod)"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+                    placeholder="e.g. Apigee prod"
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -330,8 +311,9 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
                           }
                           setVendor(e.target.value);
                         }}
-                        className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-slate-500 pr-8"
+                        className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 pr-8"
                       >
+                        <option value="">Select vendor...</option>
                         <optgroup label="Vendors">
                           {INFRA_VENDORS.map((v) => (
                             <option key={v.value} value={v.value}>
@@ -365,8 +347,8 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
                     <input
                       value={vendorProduct}
                       onChange={(e) => setVendorProduct(e.target.value)}
-                      placeholder="e.g. Anypoint Platform"
-                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+                      placeholder="e.g. Apigee X"
+                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
                 </div>
@@ -376,9 +358,9 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
                   <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="What's this used for in our integration landscape?"
+                    placeholder="What's this used for in your integration landscape?"
                     rows={3}
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-slate-500"
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -387,8 +369,8 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
                   <input
                     value={tags}
                     onChange={(e) => setTags(e.target.value)}
-                    placeholder="ipaas, strategic, eu"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+                    placeholder="e.g. strategic, eu, prod"
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
               </div>
@@ -396,152 +378,37 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
 
             <section>
               <SectionHeader>Deployment</SectionHeader>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <div>
-                    <FieldLabel>Hosting model</FieldLabel>
-                    <SelectField value={hostingModel} onChange={setHostingModel} options={INFRA_HOSTING} />
-                  </div>
-                  <div>
-                    <FieldLabel>Region</FieldLabel>
-                    <input
-                      value={region}
-                      onChange={(e) => setRegion(e.target.value)}
-                      placeholder="e.g. EU-West"
-                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <FieldLabel>Environments</FieldLabel>
-                  <div className="rounded-lg border border-gray-200 min-h-[44px] p-2.5 flex flex-wrap gap-1.5 items-center">
-                    {environments.map((env) => (
-                      <span
-                        key={env}
-                        className="inline-flex items-center gap-1 text-xs bg-slate-50 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full"
-                      >
-                        {env}
-                        <button
-                          type="button"
-                          onClick={() => setEnvironments((list) => list.filter((e) => e !== env))}
-                          className="opacity-60 hover:opacity-100"
-                          aria-label={`Remove ${env}`}
-                        >
-                          <X size={12} />
-                        </button>
-                      </span>
-                    ))}
-                    <div className="inline-flex items-center gap-1">
-                      <input
-                        value={envInput}
-                        onChange={(e) => setEnvInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addEnvironment();
-                          }
-                        }}
-                        placeholder="prod"
-                        className="w-16 text-xs border-0 focus:outline-none focus:ring-0 px-1 py-0.5"
-                      />
-                      <button
-                        type="button"
-                        onClick={addEnvironment}
-                        className="inline-flex items-center gap-1 text-xs text-slate-600 border border-dashed border-slate-300 px-2 py-0.5 rounded-full hover:bg-slate-50 transition-colors"
-                      >
-                        <Plus size={12} />
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <FieldLabel>Admin URL / endpoint</FieldLabel>
-                  <input
-                    value={adminUrl}
-                    onChange={(e) => setAdminUrl(e.target.value)}
-                    placeholder="https://anypoint.mulesoft.com/..."
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  />
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Where operators go to manage runs, monitor health, and configure
-                  </p>
-                </div>
-              </div>
-            </section>
-
-            <section>
-              <SectionHeader>Contract</SectionHeader>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <div>
-                    <FieldLabel>License model</FieldLabel>
-                    <SelectField value={licenseModel} onChange={setLicenseModel} options={INFRA_LICENSE} />
-                  </div>
-                  <div>
-                    <FieldLabel>Contract renewal</FieldLabel>
-                    <input
-                      value={contractRenewal}
-                      onChange={(e) => setContractRenewal(e.target.value)}
-                      placeholder="YYYY-MM-DD"
-                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <FieldLabel>Annual cost</FieldLabel>
-                  <input
-                    value={annualCost}
-                    onChange={(e) => setAnnualCost(e.target.value)}
-                    placeholder="e.g. $320,000"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  />
-                </div>
-              </div>
-            </section>
-
-            <section>
-              <SectionHeader>Governance</SectionHeader>
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <div className="col-span-2">
-                  <FieldLabel required>Owner (team)</FieldLabel>
+                <div>
+                  <FieldLabel>Hosting model</FieldLabel>
+                  <div className="relative">
+                    <select
+                      value={hostingModel}
+                      onChange={(e) => setHostingModel(e.target.value)}
+                      className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 pr-8"
+                    >
+                      {INFRA_HOSTING.map((h) => (
+                        <option key={h.value} value={h.value}>
+                          {h.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+                      ▾
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <FieldLabel>Region</FieldLabel>
                   <input
-                    value={owner}
-                    onChange={(e) => setOwner(e.target.value)}
-                    list="infra-owner-options"
-                    placeholder="Search team…"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    placeholder="e.g. EU-West"
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
-                  <datalist id="infra-owner-options">
-                    {(teamsData?.items ?? []).map((team) => (
-                      <option key={team.id} value={team.name} />
-                    ))}
-                  </datalist>
-                </div>
-                <div>
-                  <FieldLabel>SLA target</FieldLabel>
-                  <SelectField value={slaTarget} onChange={setSlaTarget} options={PLATFORM_SLA} />
-                </div>
-                <div>
-                  <FieldLabel>Lifecycle</FieldLabel>
-                  <SelectField value={lifecycle} onChange={setLifecycle} options={PLATFORM_LIFECYCLE} />
-                </div>
-                <div className="col-span-2">
-                  <FieldLabel>Criticality</FieldLabel>
-                  <SelectField value={criticality} onChange={setCriticality} options={PLATFORM_CRITICALITY} />
                 </div>
               </div>
             </section>
-
-            <div className="flex gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
-              <ArrowLeftRight size={13} className="text-amber-600 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-800">
-                Integrations running on this infrastructure appear on the detail page.
-              </p>
-            </div>
 
             {error && (
               <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">
@@ -563,15 +430,9 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
             type="button"
             onClick={() => saveMutation.mutate()}
             disabled={!canSubmit || saveMutation.isPending}
-            className="px-4 py-2 text-sm bg-slate-600 hover:bg-slate-700 text-white rounded-md disabled:bg-slate-300 disabled:text-slate-600 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 text-sm text-gray-700 rounded-md border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            {saveMutation.isPending
-              ? isEdit
-                ? "Saving…"
-                : "Creating…"
-              : isEdit
-                ? "Save"
-                : "Create infrastructure"}
+            {saveMutation.isPending ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save" : "Create"}
           </button>
         </div>
       </div>

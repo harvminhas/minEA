@@ -9,8 +9,6 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  getNodesBounds,
-  getViewportForBounds,
   Handle,
   MarkerType,
   MiniMap,
@@ -27,8 +25,8 @@ import {
   type NodeTypes,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { toPng } from "html-to-image";
-import { Box, Cpu, Download, Monitor, Plus, RotateCcw, X } from "lucide-react";
+import { DiagramExportButton } from "@/components/shared/DiagramExportButton";
+import { Box, Cpu, Monitor, Plus, RotateCcw, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { COMPONENT_TYPE_LABEL } from "@/lib/component-utils";
@@ -44,10 +42,6 @@ export type NodeLayout = Record<string, { x: number; y: number }>;
 const PLACEHOLDER_NODE_IDS = new Set(["sys-placeholder", "rt-placeholder"]);
 const NODE_H = 76;
 const GAP = 32;
-
-function diagramExportFilename(name: string) {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "component";
-}
 
 export function sanitizeNodeLayout(layout?: NodeLayout): NodeLayout | undefined {
   if (!layout) return layout;
@@ -445,144 +439,6 @@ function enrichPlaceholderNodes(
   });
 }
 
-function downloadDataUrl(dataUrl: string, name: string) {
-  const link = document.createElement("a");
-  link.download = name;
-  link.href = dataUrl;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
-function isExportChromeNode(domNode: unknown) {
-  if (!(domNode instanceof HTMLElement)) return true;
-  if (domNode instanceof HTMLLinkElement) return false;
-  return (
-    !domNode.classList.contains("react-flow__controls") &&
-    !domNode.classList.contains("react-flow__minimap") &&
-    !domNode.classList.contains("react-flow__attribution") &&
-    !domNode.closest("[data-export-ignore]")
-  );
-}
-
-async function captureVisibleDiagram(flowEl: HTMLElement) {
-  return toPng(flowEl, {
-    backgroundColor: "#fafafa",
-    pixelRatio: 2,
-    skipFonts: true,
-    cacheBust: true,
-    filter: isExportChromeNode,
-  });
-}
-
-async function captureFullDiagram(viewportEl: HTMLElement, exportNodes: Node[]) {
-  const nodesBounds = getNodesBounds(exportNodes);
-  const padding = 64;
-  const imageWidth = Math.max(900, Math.ceil(nodesBounds.width + padding * 2));
-  const imageHeight = Math.max(700, Math.ceil(nodesBounds.height + padding * 2));
-  const viewport = getViewportForBounds(
-    nodesBounds,
-    imageWidth,
-    imageHeight,
-    0.5,
-    2,
-    padding / Math.min(imageWidth, imageHeight)
-  );
-
-  return toPng(viewportEl, {
-    backgroundColor: "#fafafa",
-    width: imageWidth,
-    height: imageHeight,
-    skipFonts: true,
-    cacheBust: true,
-    filter: isExportChromeNode,
-    style: {
-      width: `${imageWidth}px`,
-      height: `${imageHeight}px`,
-      transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
-    },
-  });
-}
-
-function DiagramExportButton({
-  filename,
-  containerRef,
-}: {
-  filename: string;
-  containerRef: RefObject<HTMLDivElement | null>;
-}) {
-  const { getNodes } = useReactFlow();
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
-
-  const handleExport = async () => {
-    setExportError(null);
-
-    const exportNodes = getNodes().filter(
-      (n) => n.type !== "placeholderNode" && !PLACEHOLDER_NODE_IDS.has(n.id)
-    );
-    if (exportNodes.length === 0) {
-      const message = "Add at least one system or runtime before exporting.";
-      setExportError(message);
-      toast({ title: "Export failed", description: message, variant: "destructive" });
-      return;
-    }
-
-    const flowEl = containerRef.current?.querySelector(".react-flow") as HTMLElement | null;
-    const viewportEl = containerRef.current?.querySelector(
-      ".react-flow__viewport"
-    ) as HTMLElement | null;
-    if (!flowEl || !viewportEl) {
-      const message = "Diagram canvas not ready. Try again in a moment.";
-      setExportError(message);
-      toast({ title: "Export failed", description: message, variant: "destructive" });
-      return;
-    }
-
-    const downloadName = `${diagramExportFilename(filename)}-architecture.png`;
-    setExporting(true);
-
-    try {
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      let dataUrl: string;
-      try {
-        dataUrl = await captureVisibleDiagram(flowEl);
-      } catch {
-        dataUrl = await captureFullDiagram(viewportEl, exportNodes);
-      }
-      downloadDataUrl(dataUrl, downloadName);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not export diagram.";
-      setExportError(message);
-      toast({ title: "Export failed", description: message, variant: "destructive" });
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  return (
-    <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 max-w-xs" data-export-ignore>
-      <button
-        type="button"
-        onClick={() => void handleExport()}
-        disabled={exporting}
-        className={cn(
-          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium shadow-sm border transition-colors",
-          "bg-white border-gray-200 text-gray-600 hover:text-gray-900 hover:border-gray-400 disabled:opacity-50"
-        )}
-      >
-        <Download size={12} />
-        {exporting ? "Exporting…" : "Export PNG"}
-      </button>
-      {exportError && (
-        <p className="text-[11px] leading-snug text-red-600 bg-red-50 border border-red-200 rounded-md px-2.5 py-1.5 shadow-sm">
-          {exportError}
-        </p>
-      )}
-    </div>
-  );
-}
-
 function ComponentCanvasInner({
   initialNodes,
   initialEdges,
@@ -865,7 +721,17 @@ export function ComponentDiagramModal({
               onResetLayout={onResetLayout}
               hasCustomLayout={hasCustomLayout}
             />
-            <DiagramExportButton filename={liveComponent.name} containerRef={canvasRef} />
+            <DiagramExportButton
+              filename={liveComponent.name}
+              containerRef={canvasRef}
+              slugFallback="component"
+              emptyMessage="Add at least one system or runtime before exporting."
+              filterNodes={(nodes) =>
+                nodes.filter(
+                  (n) => n.type !== "placeholderNode" && !PLACEHOLDER_NODE_IDS.has(n.id)
+                )
+              }
+            />
           </ReactFlowProvider>
         </div>
 

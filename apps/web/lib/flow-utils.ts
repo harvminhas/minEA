@@ -1,4 +1,5 @@
 import type {
+  FlowCarrierRef,
   FlowEndpointCatalog,
   FlowEndpointEntity,
   FlowEndpointSide,
@@ -252,4 +253,21 @@ export function toSystemSelection(
     system_name: system.name,
     wildcard: true,
   };
+}
+
+export function carrierKeyFromRef(carrier: FlowCarrierRef | null | undefined): string {
+  if (!carrier?.carrier_id) return "";
+  return `registered:${carrier.carrier_id}`;
+}
+
+export function carrierRefFromKey(
+  key: string,
+  registeredCarriers: Array<{ id: string; name: string }>
+): FlowCarrierRef | null {
+  if (!key || key === "__register__") return null;
+  if (!key.startsWith("registered:")) return null;
+  const id = key.slice(11);
+  const carrier = registeredCarriers.find((c) => c.id === id);
+  if (!carrier) return null;
+  return { carrier_id: carrier.id, carrier_name: carrier.name };
 }

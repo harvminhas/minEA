@@ -3,22 +3,29 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/lib/auth-context";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Info, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { objectsApi, peopleApi, relationshipsApi } from "@/lib/api-client";
+import { objectsApi, peopleApi } from "@/lib/api-client";
+import { syncEventRelationships } from "@/lib/event-relationship-utils";
+import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { AddSubscriberDialog } from "@/components/integration/AddSubscriberDialog";
 import { EventDiagramModal, type NodeLayout } from "@/components/integration/EventDiagram";
 import { EventDiagramPreview } from "@/components/integration/EventDiagramPreview";
 import { PickProducerDialog } from "@/components/integration/PickProducerDialog";
-import { RegisterBrokerDialog } from "@/components/integration/RegisterBrokerDialog";
+import {
+  eventBrokerCarrierOptions,
+  formatCarrierOptionLabel,
+  infraCarrierFieldHint,
+  integrationInfraToolsQueryKey,
+} from "@/lib/integration-infra-carriers";
 import {
   brokerKeyFromRef,
   brokerRefFromKey,
   buildEventDraft,
+  normalizeEventBrokerRef,
   EVENT_AUDIENCES,
-  EVENT_BROKER_TRANSPORTS,
   EVENT_CRITICALITY,
   EVENT_DELIVERY,
   EVENT_STATUSES,
@@ -37,7 +44,7 @@ import { cn } from "@/lib/utils";
 interface Props {
   initialValues?: MinEAObject;
   onClose: () => void;
-  onSuccess: (eventId: string) => void;
+  onSuccess: (event: MinEAObject) => void;
 }
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
@@ -108,92 +115,6 @@ function initFromEvent(event?: MinEAObject) {
   };
 }
 
-async function syncEventRelationships(
-  orgSlug: string,
-  workspaceSlug: string,
-  eventId: string,
-  producer: EventProducerRef | null,
-  subscribers: EventSubscriberRef[],
-  broker: EventBrokerRef | null,
-  token: string
-) {
-  const existing = await relationshipsApi.list(
-    orgSlug,
-    workspaceSlug,
-    { to_object_id: eventId },
-    token
-  );
-
-  for (const rel of existing) {
-    if (
-      rel.to_type === "event" &&
-      (rel.type === "publishes" || rel.type === "subscribes" || rel.type === "routes")
-    ) {
-      await relationshipsApi.delete(orgSlug, workspaceSlug, rel.id, token);
-    }
-  }
-
-  if (producer) {
-    await relationshipsApi.create(
-      orgSlug,
-      workspaceSlug,
-      {
-        type: "publishes",
-        from_object_id: producer.producer_id,
-        from_type: producer.producer_kind,
-        to_object_id: eventId,
-        to_type: "event",
-      },
-      token
-    );
-  }
-
-  for (const sub of subscribers) {
-    if (sub.subscriber_kind === "application" && sub.subscriber_id) {
-      await relationshipsApi.create(
-        orgSlug,
-        workspaceSlug,
-        {
-          type: "subscribes",
-          from_object_id: sub.subscriber_id,
-          from_type: "application",
-          to_object_id: eventId,
-          to_type: "event",
-        },
-        token
-      );
-    } else if (sub.subscriber_kind === "component" && sub.subscriber_id) {
-      await relationshipsApi.create(
-        orgSlug,
-        workspaceSlug,
-        {
-          type: "subscribes",
-          from_object_id: sub.subscriber_id,
-          from_type: "component",
-          to_object_id: eventId,
-          to_type: "event",
-        },
-        token
-      );
-    }
-  }
-
-  if (broker?.broker_id) {
-    await relationshipsApi.create(
-      orgSlug,
-      workspaceSlug,
-      {
-        type: "routes",
-        from_object_id: broker.broker_id,
-        from_type: "message_broker",
-        to_object_id: eventId,
-        to_type: "event",
-      },
-      token
-    );
-  }
-}
-
 function subscriberChipClass(sub: EventSubscriberRef) {
   if (sub.subscriber_kind === "custom") {
     const lower = sub.subscriber_name.toLowerCase();
@@ -209,7 +130,9 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
 
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
+  const eventsQueryKey = ["objects", orgSlug, workspaceSlug, "event"] as const;
   const [mounted, setMounted] = useState(false);
 
   const [name, setName] = useState(init.name);
@@ -229,7 +152,6 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showProducerDialog, setShowProducerDialog] = useState(false);
   const [showSubscriberDialog, setShowSubscriberDialog] = useState(false);
-  const [showRegisterBroker, setShowRegisterBroker] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [draftLayout, setDraftLayout] = useState<NodeLayout>(init.draftLayout);
 
@@ -244,7 +166,16 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
     enabled,
   });
 
-  const { data: brokersData } = useQuery({
+  const { data: infraToolsData } = useQuery({
+    queryKey: integrationInfraToolsQueryKey(orgSlug, workspaceSlug),
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "tool" }, token!);
+    },
+    enabled,
+  });
+
+  const { data: legacyBrokersData } = useQuery({
     queryKey: ["objects", orgSlug, workspaceSlug, "message_broker"],
     queryFn: async () => {
       const token = await getToken();
@@ -255,18 +186,24 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
 
   const registeredBrokers = useMemo(
     () =>
-      (brokersData?.items ?? []).map((b) => ({
-        id: b.id,
-        name: b.name,
-        transport: (b.properties as Record<string, unknown>)?.transport as string | undefined,
-      })),
-    [brokersData]
+      eventBrokerCarrierOptions(
+        infraToolsData?.items ?? [],
+        legacyBrokersData?.items ?? []
+      ),
+    [infraToolsData, legacyBrokersData]
   );
 
-  const selectedBroker: EventBrokerRef | null = useMemo(
-    () => brokerRefFromKey(brokerKey, registeredBrokers),
-    [brokerKey, registeredBrokers]
-  );
+  const selectedBroker: EventBrokerRef | null = useMemo(() => {
+    const ref = brokerRefFromKey(brokerKey, registeredBrokers);
+    if (ref) return ref;
+    if (brokerKey.startsWith("registered:") && initialValues) {
+      const initBroker = ((initialValues.properties ?? {}) as EventProperties).broker;
+      if (initBroker?.broker_id === brokerKey.slice(11)) {
+        return normalizeEventBrokerRef(initBroker);
+      }
+    }
+    return null;
+  }, [brokerKey, registeredBrokers, initialValues]);
 
   const draftEvent = useMemo(
     () =>
@@ -312,7 +249,12 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
       if (!producer) throw new Error("Producer is required");
-      if (!selectedBroker) throw new Error("Broker is required");
+      const broker = normalizeEventBrokerRef(selectedBroker);
+      if (!broker) throw new Error("Broker is required");
+
+      const previousBrokerId = isEdit
+        ? (((initialValues?.properties ?? {}) as EventProperties).broker?.broker_id ?? null)
+        : null;
 
       const existingLayout = ((initialValues?.properties ?? {}) as EventProperties).node_layout;
       const properties: EventProperties = {
@@ -322,7 +264,7 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
         delivery: delivery as EventProperties["delivery"],
         producer,
         subscribers,
-        broker: selectedBroker,
+        broker,
         audience: audience as EventProperties["audience"],
         criticality: criticality as EventProperties["criticality"],
         node_layout: Object.keys(draftLayout).length > 0 ? draftLayout : existingLayout,
@@ -345,10 +287,10 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
           initialValues.id,
           producer,
           subscribers,
-          selectedBroker,
+          broker,
           token
         );
-        return event;
+        return { event, previousBrokerId };
       }
 
       const event = await objectsApi.create(
@@ -363,12 +305,55 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
         event.id,
         producer,
         subscribers,
-        selectedBroker,
+        broker,
         token
       );
-      return event;
+      return { event, previousBrokerId: null };
     },
-    onSuccess: (event) => onSuccess(event.id),
+    onSuccess: async ({ event, previousBrokerId }) => {
+      const savedProps = (event.properties ?? {}) as EventProperties;
+      const savedEvent: MinEAObject = {
+        ...event,
+        properties: {
+          ...savedProps,
+          broker: normalizeEventBrokerRef(savedProps.broker ?? null) ?? undefined,
+        },
+      };
+
+      queryClient.setQueryData(eventsQueryKey, (old: { items: MinEAObject[] } | undefined) => {
+        if (!old) return old;
+        const exists = old.items.some((o) => o.id === savedEvent.id);
+        return {
+          ...old,
+          items: exists
+            ? old.items.map((o) => (o.id === savedEvent.id ? savedEvent : o))
+            : [savedEvent, ...old.items],
+        };
+      });
+
+      const token = await getToken();
+      const brokerIds = new Set(
+        [previousBrokerId, ((savedEvent.properties ?? {}) as EventProperties).broker?.broker_id].filter(
+          Boolean
+        ) as string[]
+      );
+      if (token) {
+        for (const brokerId of brokerIds) {
+          await refreshObjectRelationshipQueries(
+            queryClient,
+            orgSlug,
+            workspaceSlug,
+            brokerId,
+            token
+          );
+        }
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ["objects", orgSlug, workspaceSlug, "event", "infra-refs"],
+      });
+
+      onSuccess(savedEvent);
+    },
     onError: (err) =>
       setError(err instanceof Error ? err.message : `Could not ${isEdit ? "save" : "create"} event`),
   });
@@ -566,41 +551,42 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
                 <div className="relative">
                   <select
                     value={brokerKey}
-                    onChange={(e) => {
-                      if (e.target.value === "__register__") {
-                        setShowRegisterBroker(true);
-                        return;
-                      }
-                      setBrokerKey(e.target.value);
-                    }}
+                    onChange={(e) => setBrokerKey(e.target.value)}
                     className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 pr-8"
                   >
-                    <option value="" disabled>
-                      Select transport or broker…
+                    <option value="" disabled={registeredBrokers.length === 0}>
+                      {registeredBrokers.length > 0
+                        ? "Select integration infrastructure…"
+                        : "No event infrastructure available"}
                     </option>
-                    <optgroup label="Event transport / broker">
-                      {EVENT_BROKER_TRANSPORTS.map((t) => (
-                        <option key={t.value} value={`preset:${t.value}`}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </optgroup>
                     {registeredBrokers.length > 0 && (
-                      <optgroup label="Registered brokers">
+                      <optgroup label="Integration infrastructure">
                         {registeredBrokers.map((b) => (
                           <option key={b.id} value={`registered:${b.id}`}>
-                            {b.name}
+                            {formatCarrierOptionLabel(b)}
                           </option>
                         ))}
                       </optgroup>
                     )}
-                    <option value="__register__">+ Register broker</option>
                   </select>
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
                     ▾
                   </span>
                 </div>
-                <p className="text-[11px] text-gray-400 mt-1.5">
+                {(() => {
+                  const hint = infraCarrierFieldHint("events", registeredBrokers.length > 0);
+                  return (
+                    <p
+                      className={cn(
+                        "text-[11px] mt-1.5",
+                        hint.tone === "notice" ? "text-amber-700" : "text-gray-400"
+                      )}
+                    >
+                      {hint.text}
+                    </p>
+                  );
+                })()}
+                <p className="text-[11px] text-gray-400 mt-1">
                   Where the event physically travels — connection &amp; retention live here
                 </p>
               </div>
@@ -703,18 +689,6 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
         />
       )}
 
-      {showRegisterBroker && (
-        <RegisterBrokerDialog
-          defaultTransport={
-            brokerKey.startsWith("preset:") ? brokerKey.slice(7) : undefined
-          }
-          onClose={() => setShowRegisterBroker(false)}
-          onCreated={(id) => {
-            setBrokerKey(`registered:${id}`);
-            setShowRegisterBroker(false);
-          }}
-        />
-      )}
     </>,
     document.body
   );

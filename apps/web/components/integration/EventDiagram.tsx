@@ -1,15 +1,40 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Handle, MarkerType, Position, type Edge, type Node, type NodeProps, type NodeTypes } from "reactflow";
-import { Box, Database, Layers, Radio, X, Zap } from "lucide-react";
+import { Box, Database, Layers, Plus, Radio, X, Zap } from "lucide-react";
+import { AddSubscriberDialog } from "@/components/integration/AddSubscriberDialog";
+import { PickProducerDialog } from "@/components/integration/PickProducerDialog";
 import { EntityFlowCanvas, type NodeLayout } from "@/components/shared/EntityFlowCanvas";
+import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
+import { objectsApi } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
+import type { EventArchitectureUpdate } from "@/lib/event-relationship-utils";
+import { useTenancy } from "@/lib/tenancy";
+import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { toast } from "@/hooks/use-toast";
 import {
+  eventBrokerCarrierOptions,
+  formatCarrierOptionLabel,
+  infraCarrierFieldHint,
+  integrationInfraToolsQueryKey,
+} from "@/lib/integration-infra-carriers";
+import {
+  brokerKeyFromRef,
+  brokerRefFromKey,
+  normalizeEventBrokerRef,
   EVENT_DELIVERY_LABEL,
   formatProducerLabel,
   INTEGRATION_LAYER_COLOR,
 } from "@/lib/event-utils";
-import type { EventProperties, MinEAObject } from "@minea/types";
+import type {
+  EventBrokerRef,
+  EventProducerRef,
+  EventProperties,
+  EventSubscriberRef,
+  MinEAObject,
+} from "@minea/types";
 import { cn } from "@/lib/utils";
 
 export type { NodeLayout };
@@ -289,6 +314,8 @@ interface ArchitectureProps {
   compact?: boolean;
   onLayoutSave?: (layout: NodeLayout) => void;
   onResetLayout?: () => void;
+  exportFilename?: string;
+  containerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 export function EventArchitectureGraph({
@@ -297,6 +324,8 @@ export function EventArchitectureGraph({
   compact,
   onLayoutSave,
   onResetLayout,
+  exportFilename,
+  containerRef,
 }: ArchitectureProps) {
   const props = (event.properties ?? {}) as EventProperties;
   const savedLayout = props.node_layout;
@@ -319,10 +348,105 @@ export function EventArchitectureGraph({
         onLayoutSave={compact ? undefined : onLayoutSave}
         onResetLayout={compact ? undefined : onResetLayout}
         hasCustomLayout={hasCustomLayout}
+        exportFilename={compact ? undefined : exportFilename}
+        containerRef={containerRef}
         emptyLabel="Select a producer to preview the event architecture"
         className={cn("h-full rounded-lg border border-gray-200", compact && "rounded-none border-0")}
       />
     </div>
+  );
+}
+
+function EditBrokerDialog({
+  brokerKey,
+  currentBroker,
+  registeredBrokers,
+  onClose,
+  onApply,
+  onRegister,
+}: {
+  brokerKey: string;
+  currentBroker?: EventBrokerRef | null;
+  registeredBrokers: Array<{
+    id: string;
+    name: string;
+    transport?: string;
+    object_type?: "tool" | "message_broker";
+  }>;
+  onClose: () => void;
+  onApply: (broker: EventBrokerRef | null) => void;
+  onRegister: () => void;
+}) {
+  const [key, setKey] = useState(brokerKey);
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[220] bg-black/30" onClick={onClose} />
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[230] w-full max-w-md bg-white rounded-xl shadow-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-900">Broker / transport</h3>
+          <button type="button" onClick={onClose} className="p-1 rounded-md hover:bg-gray-100 text-gray-400">
+            <X size={16} />
+          </button>
+        </div>
+        <select
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+        >
+          <option value="">None</option>
+          {registeredBrokers.length > 0 && (
+            <optgroup label="Integration infrastructure">
+              {registeredBrokers.map((b) => (
+                <option key={b.id} value={`registered:${b.id}`}>
+                  {formatCarrierOptionLabel(b)}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+        {(() => {
+          const hint = infraCarrierFieldHint("events", registeredBrokers.length > 0);
+          return (
+            <p
+              className={cn(
+                "text-[11px] mt-2",
+                hint.tone === "notice" ? "text-amber-700" : "text-gray-400"
+              )}
+            >
+              {hint.text}
+            </p>
+          );
+        })()}
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 text-sm text-gray-600 rounded-md border border-gray-200 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const ref = brokerRefFromKey(key, registeredBrokers);
+              if (ref) {
+                onApply(ref);
+                return;
+              }
+              if (key.startsWith("registered:") && currentBroker?.broker_id === key.slice(11)) {
+                onApply(normalizeEventBrokerRef(currentBroker));
+                return;
+              }
+              if (!key) onApply(null);
+            }}
+            className="px-3 py-1.5 text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-md"
+          >
+            Apply
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -331,25 +455,110 @@ export function EventDiagramModal({
   onClose,
   onLayoutSave,
   onResetLayout,
+  onArchitectureChange,
 }: {
   event: MinEAObject;
   onClose: () => void;
   onLayoutSave?: (layout: NodeLayout) => void;
   onResetLayout?: () => void;
+  onArchitectureChange?: (
+    updates: EventArchitectureUpdate
+  ) => void | Promise<MinEAObject | void>;
 }) {
-  const props = (event.properties ?? {}) as EventProperties;
-  const subCount = props.subscribers?.length ?? 0;
+  const [liveEvent, setLiveEvent] = useState(event);
+  const [showProducerDialog, setShowProducerDialog] = useState(false);
+  const [showSubscriberDialog, setShowSubscriberDialog] = useState(false);
+  const [showBrokerDialog, setShowBrokerDialog] = useState(false);
+  const [savingArch, setSavingArch] = useState(false);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const { getToken } = useAuth();
+  const { orgSlug, workspaceSlug } = useTenancy();
+  const enabled = useAuthQueryEnabled();
+
+  const { data: infraToolsData } = useQuery({
+    queryKey: integrationInfraToolsQueryKey(orgSlug, workspaceSlug),
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "tool" }, token!);
+    },
+    enabled,
+  });
+
+  const { data: legacyBrokersData } = useQuery({
+    queryKey: ["objects", orgSlug, workspaceSlug, "message_broker"],
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "message_broker" }, token!);
+    },
+    enabled,
+  });
+
+  const registeredBrokers = useMemo(
+    () =>
+      eventBrokerCarrierOptions(
+        infraToolsData?.items ?? [],
+        legacyBrokersData?.items ?? []
+      ),
+    [infraToolsData, legacyBrokersData]
+  );
+
+  useEffect(() => {
+    setLiveEvent(event);
+  }, [event]);
+
+  const props = (liveEvent.properties ?? {}) as EventProperties;
+  const subscribers = props.subscribers ?? [];
+  const editable = !!onArchitectureChange;
+  const hasCustomLayout = !!(props.node_layout && Object.keys(props.node_layout).length > 0);
+
+  const applyArchitecture = async (updates: EventArchitectureUpdate) => {
+    if (!onArchitectureChange) return;
+    setSavingArch(true);
+    try {
+      const result = await onArchitectureChange(updates);
+      if (result) {
+        setLiveEvent(result);
+      } else {
+        const currentProps = (liveEvent.properties ?? {}) as EventProperties;
+        setLiveEvent({
+          ...liveEvent,
+          properties: {
+            ...currentProps,
+            ...(updates.producer !== undefined ? { producer: updates.producer ?? undefined } : {}),
+            ...(updates.subscribers !== undefined ? { subscribers: updates.subscribers } : {}),
+            ...(updates.broker !== undefined ? { broker: updates.broker ?? undefined } : {}),
+          },
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not save architecture changes.";
+      toast({ title: "Failed to save", description: message, variant: "destructive" });
+    } finally {
+      setSavingArch(false);
+    }
+  };
+
+  const handleProducerApply = (producer: EventProducerRef | null) => {
+    setShowProducerDialog(false);
+    void applyArchitecture({ producer });
+  };
+
+  const handleSubscribersApply = (nextSubscribers: EventSubscriberRef[]) => {
+    setShowSubscriberDialog(false);
+    void applyArchitecture({ subscribers: nextSubscribers });
+  };
 
   return (
     <>
       <div className="fixed inset-0 z-[200] bg-black/40" onClick={onClose} />
       <div className="fixed inset-6 z-[210] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <DiagramSavingBar active={savingArch} />
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
           <div>
             <p className="text-[10px] font-semibold text-teal-600 uppercase tracking-wider mb-0.5">
               Event architecture
             </p>
-            <h2 className="text-base font-bold text-gray-900">{event.name}</h2>
+            <h2 className="text-base font-bold text-gray-900">{liveEvent.name}</h2>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               {props.producer && (
                 <span className="text-xs text-gray-500">
@@ -357,7 +566,7 @@ export function EventDiagramModal({
                 </span>
               )}
               <span className="text-xs text-gray-500">
-                {subCount} subscriber{subCount !== 1 ? "s" : ""}
+                {subscribers.length} subscriber{subscribers.length !== 1 ? "s" : ""}
               </span>
               {props.topic && (
                 <span className="text-[10px] bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded-full font-medium font-mono">
@@ -366,13 +575,52 @@ export function EventDiagramModal({
               )}
             </div>
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400" aria-label="Close">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            {editable && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowProducerDialog(true)}
+                  disabled={savingArch}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Plus size={12} />
+                  {props.producer ? "Change producer" : "Add producer"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSubscriberDialog(true)}
+                  disabled={savingArch}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Plus size={12} />
+                  {subscribers.length > 0 ? "Edit subscribers" : "Add subscribers"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBrokerDialog(true)}
+                  disabled={savingArch}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Plus size={12} />
+                  {props.broker ? "Edit broker" : "Add broker"}
+                </button>
+              </>
+            )}
+            <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400" aria-label="Close">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 relative min-h-0">
-          <EventArchitectureGraph event={event} onLayoutSave={onLayoutSave} onResetLayout={onResetLayout} />
+        <div ref={canvasRef} className="flex-1 relative min-h-0">
+          <EventArchitectureGraph
+            event={liveEvent}
+            onLayoutSave={onLayoutSave}
+            onResetLayout={onResetLayout}
+            exportFilename={liveEvent.name}
+            containerRef={canvasRef}
+          />
         </div>
 
         <div className="px-6 py-2.5 border-t border-gray-100 bg-gray-50/50 flex items-center gap-4 flex-shrink-0 flex-wrap">
@@ -382,9 +630,39 @@ export function EventDiagramModal({
               {EVENT_DELIVERY_LABEL[props.delivery] ?? props.delivery}
             </span>
           )}
-          {event.owner && <span className="text-xs text-gray-500 ml-auto">Owner: {event.owner}</span>}
+          {hasCustomLayout && <span className="text-[10px] text-teal-600 font-medium">Layout saved ✓</span>}
+          {liveEvent.owner && <span className="text-xs text-gray-500 ml-auto">Owner: {liveEvent.owner}</span>}
         </div>
       </div>
+
+      {showProducerDialog && (
+        <PickProducerDialog
+          selected={props.producer ?? null}
+          onClose={() => setShowProducerDialog(false)}
+          onApply={handleProducerApply}
+        />
+      )}
+
+      {showSubscriberDialog && (
+        <AddSubscriberDialog
+          selected={subscribers}
+          onClose={() => setShowSubscriberDialog(false)}
+          onApply={handleSubscribersApply}
+        />
+      )}
+
+      {showBrokerDialog && (
+        <EditBrokerDialog
+          brokerKey={brokerKeyFromRef(props.broker ?? null)}
+          currentBroker={props.broker ?? null}
+          registeredBrokers={registeredBrokers}
+          onClose={() => setShowBrokerDialog(false)}
+          onApply={(broker) => {
+            setShowBrokerDialog(false);
+            void applyArchitecture({ broker });
+          }}
+        />
+      )}
     </>
   );
 }

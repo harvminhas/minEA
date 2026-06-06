@@ -8,23 +8,25 @@ import { X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { integrationInfraToolsQueryKey } from "@/lib/integration-infra-carriers";
-import { buildIntegrationInfraProperties } from "@/lib/integration-infra-utils";
-import { API_GATEWAY_PRESETS } from "@/lib/api-utils";
+import { buildIntegrationInfraProperties, INFRA_KINDS } from "@/lib/integration-infra-utils";
 
 interface Props {
-  defaultPlatform?: string;
   onClose: () => void;
-  onCreated: (gatewayId: string) => void;
+  onCreated: (carrierId: string) => void;
 }
 
-export function RegisterGatewayDialog({ defaultPlatform, onClose, onCreated }: Props) {
+export function RegisterFlowCarrierDialog({ onClose, onCreated }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
 
   const [name, setName] = useState("");
-  const [platform, setPlatform] = useState(defaultPlatform ?? "apigee");
+  const [kind, setKind] = useState("ipaas");
   const [error, setError] = useState<string | null>(null);
+
+  const flowKinds = INFRA_KINDS.filter((k) =>
+    ["ipaas", "etl_elt", "transport"].includes(k.value)
+  );
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -34,11 +36,11 @@ export function RegisterGatewayDialog({ defaultPlatform, onClose, onCreated }: P
       if (!trimmed) throw new Error("Name is required");
 
       const properties = buildIntegrationInfraProperties({
-        kind: "gateway",
+        kind,
         kindOther: "",
-        handles: ["apis"],
-        vendor: platform,
-        vendorProduct: API_GATEWAY_PRESETS.find((g) => g.value === platform)?.label ?? "",
+        handles: ["flows"],
+        vendor: "",
+        vendorProduct: "",
         hostingModel: "saas",
         region: "",
         environments: [],
@@ -58,19 +60,16 @@ export function RegisterGatewayDialog({ defaultPlatform, onClose, onCreated }: P
           type: "tool",
           name: trimmed,
           status: "active",
-          properties: {
-            ...properties,
-            gateway_platform: platform,
-          } as Record<string, unknown>,
+          properties: properties as Record<string, unknown>,
         },
         token
       );
     },
-    onSuccess: (gateway) => {
+    onSuccess: (carrier) => {
       queryClient.invalidateQueries({
         queryKey: integrationInfraToolsQueryKey(orgSlug, workspaceSlug),
       });
-      onCreated(gateway.id);
+      onCreated(carrier.id);
     },
     onError: (err) =>
       setError(err instanceof Error ? err.message : "Could not create integration infrastructure"),
@@ -82,8 +81,8 @@ export function RegisterGatewayDialog({ defaultPlatform, onClose, onCreated }: P
       <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[230] w-full max-w-sm bg-white rounded-xl shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">New API infrastructure</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Quick-add a gateway carrier for APIs</p>
+            <h3 className="text-sm font-semibold text-gray-900">New flow infrastructure</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Quick-add a carrier for integration flows</p>
           </div>
           <button type="button" onClick={onClose} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400">
             <X size={16} />
@@ -97,20 +96,20 @@ export function RegisterGatewayDialog({ defaultPlatform, onClose, onCreated }: P
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Apigee (prod)"
+              placeholder="e.g. MuleSoft (prod)"
               className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Platform</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Kind</label>
             <select
-              value={platform}
-              onChange={(e) => setPlatform(e.target.value)}
+              value={kind}
+              onChange={(e) => setKind(e.target.value)}
               className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
             >
-              {API_GATEWAY_PRESETS.map((g) => (
-                <option key={g.value} value={g.value}>
-                  {g.label}
+              {flowKinds.map((k) => (
+                <option key={k.value} value={k.value}>
+                  {k.label}
                 </option>
               ))}
             </select>

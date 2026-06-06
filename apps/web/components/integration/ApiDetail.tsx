@@ -1,11 +1,17 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Braces, Edit2, Trash2 } from "lucide-react";
-import type { ApiProperties, MinEAObject, ObjectListResponse } from "@minea/types";
-import { objectsApi } from "@/lib/api-client";
+import type { ApiProperties, MinEAObject, ObjectListResponse, Relationship } from "@minea/types";
+import { objectsApi, relationshipsApi } from "@/lib/api-client";
+import {
+  mergeArchitectureRelationships,
+  persistApiArchitecture,
+} from "@/lib/api-relationship-utils";
+import { excludeTechDebtRelationships } from "@/lib/relationship-display";
+import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useTenancy } from "@/lib/tenancy";
 import {
   DetailPanel,
@@ -15,7 +21,7 @@ import {
 } from "@/components/ui/DetailPanel";
 import { CreateApiPanel } from "@/components/integration/CreateApiPanel";
 import { ApiDiagramModal, type NodeLayout } from "@/components/integration/ApiDiagram";
-import { ApiDiagramPreview } from "@/components/integration/ApiDiagramPreview";
+import { ApiRelationshipsTab } from "@/components/integration/ApiRelationshipsTab";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
 import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
@@ -53,12 +59,48 @@ export function ApiDetail({ api, onClose, onDelete, onUpdate }: Props) {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [liveApi, setLiveApi] = useState(api);
+  const [relationshipsSnapshot, setRelationshipsSnapshot] = useState<Relationship[] | null>(null);
+  const liveApiRef = useRef(api);
 
-  const props = (api.properties ?? {}) as ApiProperties;
+  useEffect(() => {
+    setLiveApi(api);
+    liveApiRef.current = api;
+  }, [api.id, api.updated_at]);
+
+  useEffect(() => {
+    setRelationshipsSnapshot(null);
+  }, [api.id]);
+
+  const props = (liveApi.properties ?? {}) as ApiProperties;
   const styleLabel = API_STYLE_LABEL[props.protocol ?? ""] ?? props.protocol;
   const consumers = props.consumers ?? [];
 
   const apisQueryKey = ["objects", orgSlug, workspaceSlug, "api"] as const;
+
+  const { data: outRels } = useQuery({
+    queryKey: ["relationships", "from", api.id],
+    queryFn: async () => {
+      const token = await getToken();
+      return relationshipsApi.list(orgSlug, workspaceSlug, { from_object_id: api.id }, token!);
+    },
+    staleTime: 0,
+  });
+
+  const { data: inRels } = useQuery({
+    queryKey: ["relationships", "to", api.id],
+    queryFn: async () => {
+      const token = await getToken();
+      return relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: api.id }, token!);
+    },
+    staleTime: 0,
+  });
+
+  const drawerRels = useMemo(() => {
+    const apiRels = relationshipsSnapshot ?? [...(outRels ?? []), ...(inRels ?? [])];
+    return excludeTechDebtRelationships(mergeArchitectureRelationships(apiRels, liveApi));
+  }, [relationshipsSnapshot, outRels, inRels, liveApi]);
+
   const historyQueryKey = ["object-history", orgSlug, workspaceSlug, api.id] as const;
 
   const historyQuery = useQuery({
@@ -83,6 +125,81 @@ export function ApiDetail({ api, onClose, onDelete, onUpdate }: Props) {
     queryClient.invalidateQueries({ queryKey: historyQueryKey });
   };
 
+  const syncRelationshipsFromServer = useCallback(async () => {
+    const token = await getToken();
+    if (!token) return;
+    const { outbound, inbound } = await refreshObjectRelationshipQueries(
+      queryClient,
+      orgSlug,
+      workspaceSlug,
+      api.id,
+      token
+    );
+    setRelationshipsSnapshot(
+      excludeTechDebtRelationships(
+        mergeArchitectureRelationships([...outbound, ...inbound], liveApiRef.current)
+      )
+    );
+  }, [getToken, queryClient, orgSlug, workspaceSlug, api.id]);
+
+  const handleArchitectureChange = useCallback(
+    async (updates: Parameters<typeof persistApiArchitecture>[3]) => {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const previousProviderId = (
+        (liveApiRef.current.properties ?? {}) as ApiProperties
+      ).provider?.provider_id;
+
+      const updated = await persistApiArchitecture(
+        orgSlug,
+        workspaceSlug,
+        liveApiRef.current,
+        updates,
+        token
+      );
+      setLiveApi(updated);
+      liveApiRef.current = updated;
+
+      const nextProviderId = ((updated.properties ?? {}) as ApiProperties).provider?.provider_id;
+      const refreshIds = new Set(
+        [api.id, previousProviderId, nextProviderId].filter(Boolean) as string[]
+      );
+      let mergedRels: Relationship[] = [];
+      for (const objectId of refreshIds) {
+        const { outbound, inbound } = await refreshObjectRelationshipQueries(
+          queryClient,
+          orgSlug,
+          workspaceSlug,
+          objectId,
+          token
+        );
+        if (objectId === api.id) {
+          mergedRels = mergeArchitectureRelationships([...outbound, ...inbound], updated);
+        }
+      }
+      setRelationshipsSnapshot(excludeTechDebtRelationships(mergedRels));
+      queryClient.setQueryData<ObjectListResponse>(apisQueryKey, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          items: old.items.map((o) => (o.id === updated.id ? updated : o)),
+        };
+      });
+      refreshApi();
+      onUpdate();
+      return updated;
+    },
+    [
+      getToken,
+      orgSlug,
+      workspaceSlug,
+      api.id,
+      queryClient,
+      apisQueryKey,
+      onUpdate,
+    ]
+  );
+
   const deleteMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
@@ -99,8 +216,7 @@ export function ApiDetail({ api, onClose, onDelete, onUpdate }: Props) {
       const token = await getToken();
       if (!token) return;
 
-      const cached = queryClient.getQueryData<ObjectListResponse>(apisQueryKey);
-      const current = cached?.items.find((o) => o.id === api.id) ?? api;
+      const current = liveApiRef.current;
       const currentProps = (current.properties ?? {}) as ApiProperties;
 
       await objectsApi.update(
@@ -113,19 +229,23 @@ export function ApiDetail({ api, onClose, onDelete, onUpdate }: Props) {
         token
       );
 
+      const withLayout = {
+        ...current,
+        properties: { ...currentProps, node_layout: layout },
+      };
+
       queryClient.setQueryData<ObjectListResponse>(apisQueryKey, (old) => {
         if (!old) return old;
         return {
           ...old,
-          items: old.items.map((o) =>
-            o.id === api.id
-              ? { ...o, properties: { ...currentProps, node_layout: layout } }
-              : o
-          ),
+          items: old.items.map((o) => (o.id === api.id ? withLayout : o)),
         };
       });
+
+      setLiveApi(withLayout);
+      liveApiRef.current = withLayout;
     },
-    [getToken, orgSlug, workspaceSlug, api, queryClient, apisQueryKey]
+    [getToken, orgSlug, workspaceSlug, api.id, queryClient, apisQueryKey]
   );
 
   const handleResetLayout = useCallback(() => {
@@ -144,19 +264,19 @@ export function ApiDetail({ api, onClose, onDelete, onUpdate }: Props) {
                   <Braces size={16} strokeWidth={2.25} />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="font-semibold text-gray-900 truncate">{api.name}</h2>
+                  <h2 className="font-semibold text-gray-900 truncate">{liveApi.name}</h2>
                   <p className="text-sm text-gray-400">{formatApiSubtitle(props.protocol)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {api.status && (
+                {liveApi.status && (
                   <span
                     className={cn(
                       "rounded-full px-2.5 py-1 text-xs font-medium capitalize",
-                      getStatusColor(api.status)
+                      getStatusColor(liveApi.status)
                     )}
                   >
-                    {getStatusLabel(api.status)}
+                    {getStatusLabel(liveApi.status)}
                   </span>
                 )}
                 <button
@@ -181,7 +301,12 @@ export function ApiDetail({ api, onClose, onDelete, onUpdate }: Props) {
 
             <ObjectDrawerTabs
               activeTab={activeTab}
-              onTabChange={setActiveTab}
+              onTabChange={(tab) => {
+                setActiveTab(tab);
+                if (tab === "relationships") void syncRelationshipsFromServer();
+              }}
+              showRelationships
+              relationshipCount={drawerRels.length}
               openDebtCount={techDebtSummary?.open_count ?? 0}
               className="mt-4"
             />
@@ -190,20 +315,26 @@ export function ApiDetail({ api, onClose, onDelete, onUpdate }: Props) {
         footer={
           <div className="border-t border-gray-100 px-6 py-3">
             <p className="text-xs text-gray-400">
-              Updated{api.updated_by_name ? ` by ${api.updated_by_name}` : ""}{" "}
-              {formatUpdatedAgo(api.updated_at)}
+              Updated{liveApi.updated_by_name ? ` by ${liveApi.updated_by_name}` : ""}{" "}
+              {formatUpdatedAgo(liveApi.updated_at)}
             </p>
           </div>
         }
       >
-        {activeTab === "tech_debt" ? (
+        {activeTab === "relationships" ? (
+          <ApiRelationshipsTab
+            api={liveApi}
+            relationships={drawerRels}
+            onExpandDiagram={() => setShowChart(true)}
+          />
+        ) : activeTab === "tech_debt" ? (
           <ObjectTechDebtTab
-            objectId={api.id}
-            objectName={api.name}
+            objectId={liveApi.id}
+            objectName={liveApi.name}
             objectKind="api"
             summary={techDebtSummary}
             isLoading={techDebtLoading}
-            defaultOwner={api.owner}
+            defaultOwner={liveApi.owner}
             onRefresh={refreshApi}
           />
         ) : activeTab === "history" ? (
@@ -214,19 +345,42 @@ export function ApiDetail({ api, onClose, onDelete, onUpdate }: Props) {
           />
         ) : (
           <>
-            {api.description && (
+            {liveApi.description && (
               <DetailSection title="Description">
-                <p className="text-sm text-gray-700">{api.description}</p>
+                <p className="text-sm text-gray-700">{liveApi.description}</p>
               </DetailSection>
             )}
 
-            <DetailSection title="Architecture">
-              <ApiDiagramPreview api={api} onExpand={() => setShowChart(true)} />
-              <p className="text-xs text-gray-400 mt-2">
-                {props.provider ? formatProviderLabel(props.provider) : "No provider"}
-                {consumers.length > 0 && ` · ${consumers.length} consumer${consumers.length !== 1 ? "s" : ""}`}
-                {styleLabel && ` · ${styleLabel}`}
-              </p>
+            <DetailSection title="Contract">
+              <div className="space-y-2 text-sm">
+                {styleLabel && (
+                  <DetailRow
+                    label="Style"
+                    value={[styleLabel, props.version].filter(Boolean).join(" ")}
+                  />
+                )}
+                {props.base_url && <DetailRow label="Base URL" value={props.base_url} />}
+                {props.auth && (
+                  <DetailRow label="Auth" value={API_AUTH_LABEL[props.auth] ?? props.auth} />
+                )}
+              </div>
+            </DetailSection>
+
+            <DetailSection title="Governance">
+              <div className="space-y-2 text-sm">
+                {liveApi.owner && <DetailRow label="Owner" value={liveApi.owner} />}
+                {props.audience && (
+                  <DetailRow label="Audience" value={AUDIENCE_LABEL[props.audience] ?? props.audience} />
+                )}
+                {props.criticality && (
+                  <DetailRow
+                    label="Criticality"
+                    value={CRITICALITY_LABEL[props.criticality] ?? props.criticality}
+                  />
+                )}
+                {props.gateway && <DetailRow label="Gateway" value={props.gateway.gateway_name} />}
+                {liveApi.tags.length > 0 && <DetailRow label="Tags" value={liveApi.tags.join(", ")} />}
+              </div>
             </DetailSection>
 
             <DetailSection title="Provider & consumers">
@@ -260,38 +414,6 @@ export function ApiDetail({ api, onClose, onDelete, onUpdate }: Props) {
                 )}
               </div>
             </DetailSection>
-
-            <DetailSection title="Contract">
-              <div className="space-y-2 text-sm">
-                {styleLabel && (
-                  <DetailRow
-                    label="Style"
-                    value={[styleLabel, props.version].filter(Boolean).join(" ")}
-                  />
-                )}
-                {props.base_url && <DetailRow label="Base URL" value={props.base_url} />}
-                {props.auth && (
-                  <DetailRow label="Auth" value={API_AUTH_LABEL[props.auth] ?? props.auth} />
-                )}
-              </div>
-            </DetailSection>
-
-            <DetailSection title="Governance">
-              <div className="space-y-2 text-sm">
-                {api.owner && <DetailRow label="Owner" value={api.owner} />}
-                {props.audience && (
-                  <DetailRow label="Audience" value={AUDIENCE_LABEL[props.audience] ?? props.audience} />
-                )}
-                {props.criticality && (
-                  <DetailRow
-                    label="Criticality"
-                    value={CRITICALITY_LABEL[props.criticality] ?? props.criticality}
-                  />
-                )}
-                {props.gateway && <DetailRow label="Gateway" value={props.gateway.gateway_name} />}
-                {api.tags.length > 0 && <DetailRow label="Tags" value={api.tags.join(", ")} />}
-              </div>
-            </DetailSection>
           </>
         )}
       </DetailPanel>
@@ -299,7 +421,7 @@ export function ApiDetail({ api, onClose, onDelete, onUpdate }: Props) {
       {showDeleteConfirm && (
         <ConfirmDeleteDialog
           title="Delete API"
-          message={`Are you sure you want to delete "${api.name}"? This cannot be undone.`}
+          message={`Are you sure you want to delete "${liveApi.name}"? This cannot be undone.`}
           onConfirm={() => deleteMutation.mutate()}
           onCancel={() => setShowDeleteConfirm(false)}
           isPending={deleteMutation.isPending}
@@ -308,19 +430,48 @@ export function ApiDetail({ api, onClose, onDelete, onUpdate }: Props) {
 
       {showChart && (
         <ApiDiagramModal
-          api={api}
+          api={liveApi}
           onClose={() => setShowChart(false)}
           onLayoutSave={handleLayoutSave}
           onResetLayout={handleResetLayout}
+          onArchitectureChange={handleArchitectureChange}
         />
       )}
 
       {showEditForm && (
         <CreateApiPanel
-          initialValues={api}
+          initialValues={liveApi}
           onClose={() => setShowEditForm(false)}
-          onSuccess={() => {
+          onSuccess={async (apiId) => {
             setShowEditForm(false);
+            const token = await getToken();
+            if (token) {
+              const nextApi = await objectsApi.get(orgSlug, workspaceSlug, apiId, token);
+              setLiveApi(nextApi);
+              liveApiRef.current = nextApi;
+              const { outbound, inbound } = await refreshObjectRelationshipQueries(
+                queryClient,
+                orgSlug,
+                workspaceSlug,
+                apiId,
+                token
+              );
+              setRelationshipsSnapshot(
+                excludeTechDebtRelationships(
+                  mergeArchitectureRelationships([...outbound, ...inbound], nextApi)
+                )
+              );
+              const providerId = ((nextApi.properties ?? {}) as ApiProperties).provider?.provider_id;
+              if (providerId) {
+                await refreshObjectRelationshipQueries(
+                  queryClient,
+                  orgSlug,
+                  workspaceSlug,
+                  providerId,
+                  token
+                );
+              }
+            }
             refreshApi();
             onUpdate();
           }}

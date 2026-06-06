@@ -1,30 +1,94 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
+import {
+  ArrowLeftRight,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
+  Download,
+  LayoutGrid,
+  List,
+  Loader2,
+  Plus,
+  Search,
+  User,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, Clock, Plus } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { CreateFlowPanel } from "@/components/integration/CreateFlowPanel";
 import { FlowDetail } from "@/components/integration/FlowDetail";
+import { FlowTable } from "@/components/integration/FlowTable";
 import {
   API_CRITICALITY_LABEL,
   API_CRITICALITY_STYLE,
   API_STATUS_STYLE,
 } from "@/lib/api-utils";
 import {
+  filterFlows,
+  flowDestinationCount,
+  flowDirectionLabel,
+  flowFilterOptions,
+  flowFrequencyLabel,
+  flowProtocolLabel,
+  flowSourceCount,
+} from "@/lib/flow-list-utils";
+import {
   FLOW_AUTH_LABEL,
   FLOW_CRITICALITY_LABEL,
+  FLOW_PROTOCOL_LABEL,
   flowDestinationLine,
   flowSourceLine,
   formatFlowSubtitle,
-  INTEGRATION_LAYER_COLOR,
 } from "@/lib/flow-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import type { IntegrationFlowProperties, MinEAObject } from "@minea/types";
 import { cn, getStatusLabel } from "@/lib/utils";
+
+type FlowViewLayout = "cards" | "table";
+
+const LAYOUT_OPTIONS: { id: FlowViewLayout; label: string; icon: typeof LayoutGrid }[] = [
+  { id: "cards", label: "Cards", icon: LayoutGrid },
+  { id: "table", label: "Table", icon: List },
+];
+
+function FilterDropdown({
+  icon: Icon,
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <label className="relative inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white pl-2.5 pr-2 py-1.5 cursor-pointer hover:border-gray-300 hover:bg-gray-50/80 transition-colors">
+      <Icon size={14} className="text-gray-500 shrink-0" />
+      <span className="text-sm font-medium text-gray-700">{label}</span>
+      <ChevronDown size={14} className="text-gray-400 shrink-0" />
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        aria-label={label}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 function PropertyRow({
   label,
@@ -128,12 +192,17 @@ export function FlowList() {
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
 
+  const [viewLayout, setViewLayout] = useState<FlowViewLayout>("table");
+  const [search, setSearch] = useState("");
+  const [protocolFilter, setProtocolFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [ownerFilter, setOwnerFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const flowsQueryKey = ["objects", orgSlug, workspaceSlug, "integration_flow"] as const;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isPending } = useQuery({
     queryKey: flowsQueryKey,
     queryFn: async () => {
       const token = await getToken();
@@ -142,75 +211,213 @@ export function FlowList() {
     enabled,
   });
 
+  const listLoading = isLoading || (isPending && !data);
   const items = data?.items ?? [];
   const selected = items.find((o) => o.id === selectedId) ?? null;
+  const filterOpts = useMemo(() => flowFilterOptions(items), [items]);
+
+  const filtered = useMemo(
+    () =>
+      filterFlows(items, {
+        search,
+        protocol: protocolFilter,
+        status: statusFilter,
+        owner: ownerFilter,
+      }),
+    [items, search, protocolFilter, statusFilter, ownerFilter]
+  );
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: flowsQueryKey });
   };
 
+  const exportCsv = () => {
+    const header = [
+      "Name",
+      "Protocol",
+      "Direction",
+      "Sources",
+      "Destinations",
+      "Frequency",
+      "Owner",
+      "Status",
+      "Updated by",
+      "Updated",
+    ];
+    const rows = filtered.map((item) => [
+        item.name,
+        flowProtocolLabel(item),
+        flowDirectionLabel(item),
+        String(flowSourceCount(item)),
+        String(flowDestinationCount(item)),
+        flowFrequencyLabel(item),
+        item.owner ?? "",
+        getStatusLabel(item.status),
+        item.updated_by_name ?? "",
+        formatUpdatedAgo(item.updated_at),
+      ]);
+    const csv = [header, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "flows.csv";
+    a.click();
+  };
+
   return (
-    <>
-      <div className="flex flex-col h-full">
-        <div className="flex items-center justify-between px-8 py-4 border-b border-gray-200 bg-white sticky top-0 z-10">
-          <div className="flex items-center gap-3">
-            <span
-              className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded"
-              style={{
-                backgroundColor: `${INTEGRATION_LAYER_COLOR}20`,
-                color: INTEGRATION_LAYER_COLOR,
-              }}
-            >
-              Integration Layer
-            </span>
-            <h1 className="text-lg font-semibold text-gray-900">Flows</h1>
-            {data && (
-              <span className="text-sm text-gray-400">
-                {data.total} {data.total === 1 ? "flow" : "flows"}
-              </span>
-            )}
+    <div className="flex flex-col h-full">
+      <div className="px-8 pt-6 pb-4 border-b border-gray-200 bg-white sticky top-0 z-10">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Flows</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Integration layer · {data?.total ?? items.length} flow
+              {(data?.total ?? items.length) === 1 ? "" : "s"}
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-md text-sm font-medium"
-          >
-            <Plus size={14} />
-            New flow
-          </button>
+          <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5 shrink-0">
+            {LAYOUT_OPTIONS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setViewLayout(id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                  viewLayout === id
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                )}
+              >
+                <Icon size={12} />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8">
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-36 bg-gray-100 rounded-lg animate-pulse" />
-              ))}
-            </div>
-          ) : items.length === 0 ? (
-            <div className="text-center py-16">
-              <div
-                className="mx-auto h-12 w-12 rounded-xl flex items-center justify-center text-teal-700 bg-teal-50 mb-4"
-              >
-                <ArrowLeftRight size={20} strokeWidth={2.25} />
-              </div>
-              <p className="text-gray-400 text-sm mb-3">No integration flows yet.</p>
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-2",
+            listLoading && "opacity-60 pointer-events-none"
+          )}
+        >
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search flows..."
+              className="w-full pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+          <FilterDropdown
+            icon={ArrowLeftRight}
+            label="Protocol"
+            value={protocolFilter}
+            onChange={setProtocolFilter}
+            options={[
+              { value: "all", label: "All protocols" },
+              ...filterOpts.protocols.map((p) => ({
+                value: p,
+                label: FLOW_PROTOCOL_LABEL[p] ?? p,
+              })),
+            ]}
+          />
+          <FilterDropdown
+            icon={CheckCircle2}
+            label="Status"
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={[
+              { value: "all", label: "All statuses" },
+              ...filterOpts.statuses.map((s) => ({
+                value: s,
+                label: getStatusLabel(s),
+              })),
+            ]}
+          />
+          <FilterDropdown
+            icon={User}
+            label="Owner"
+            value={ownerFilter}
+            onChange={setOwnerFilter}
+            options={[
+              { value: "all", label: "All owners" },
+              ...filterOpts.owners.map((o) => ({ value: o, label: o })),
+            ]}
+          />
+          <div className="ml-auto flex items-center gap-2">
+            {viewLayout === "cards" && (
               <button
                 type="button"
                 onClick={() => setShowCreate(true)}
-                className="text-teal-600 hover:underline text-sm"
+                className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+              >
+                <Plus size={14} />
+                New flow
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={filtered.length === 0}
+              className="flex items-center gap-1.5 border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:pointer-events-none px-3 py-1.5 rounded-lg text-sm font-medium text-gray-700 transition-colors"
+            >
+              <Download size={14} />
+              Export
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-8">
+        {listLoading ? (
+          <div
+            className="flex flex-col items-center justify-center py-20 rounded-xl border border-gray-200 bg-white"
+            role="status"
+            aria-busy="true"
+          >
+            <Loader2 className="h-8 w-8 animate-spin text-teal-600" aria-hidden />
+            <p className="mt-3 text-sm text-gray-500">Loading flows…</p>
+          </div>
+        ) : viewLayout === "table" ? (
+          filtered.length === 0 ? (
+            <div className="text-center py-16 rounded-xl border border-dashed border-gray-200 bg-white/60">
+              <p className="text-gray-500 text-sm mb-3">
+                {items.length === 0 ? "No flows yet." : "No flows match your filters."}
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowCreate(true)}
+                className="text-teal-600 hover:underline text-sm font-medium"
               >
                 Create your first flow →
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map((item) => (
-                <FlowCard key={item.id} item={item} onOpenDetail={() => setSelectedId(item.id)} />
-              ))}
-            </div>
-          )}
-        </div>
+            <FlowTable items={filtered} onOpen={setSelectedId} />
+          )
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16 rounded-xl border border-dashed border-gray-200 bg-white/60">
+            <p className="text-gray-500 text-sm mb-3">
+              {items.length === 0 ? "No flows yet." : "No flows match your filters."}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="text-teal-600 hover:underline text-sm font-medium"
+            >
+              Create your first flow →
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map((item) => (
+              <FlowCard key={item.id} item={item} onOpenDetail={() => setSelectedId(item.id)} />
+            ))}
+          </div>
+        )}
       </div>
 
       {showCreate && (
@@ -229,12 +436,12 @@ export function FlowList() {
           flow={selected}
           onClose={() => setSelectedId(null)}
           onDelete={() => {
-            refresh();
             setSelectedId(null);
+            refresh();
           }}
           onUpdate={refresh}
         />
       )}
-    </>
+    </div>
   );
 }

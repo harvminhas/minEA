@@ -18,7 +18,8 @@
  *   />
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, type RefObject } from "react";
+import { DiagramExportButton } from "@/components/shared/DiagramExportButton";
 import {
   ReactFlow,
   Background,
@@ -80,6 +81,12 @@ export interface EntityFlowCanvasProps {
 
   /** Whether a custom layout is currently active (shows Reset button). */
   hasCustomLayout?: boolean;
+
+  /** When set, shows an Export PNG button (full mode only). */
+  exportFilename?: string;
+
+  /** Container element for PNG export capture. */
+  containerRef?: RefObject<HTMLDivElement | null>;
 }
 
 // ─── Inner canvas (must be inside ReactFlowProvider) ──────────────────────────
@@ -95,6 +102,8 @@ function CanvasInner({
   accentColor = "#14b8a6",
   fitViewPadding = 0.2,
   hasCustomLayout = false,
+  exportFilename,
+  containerRef,
 }: Omit<EntityFlowCanvasProps, "className" | "emptyLabel">) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -104,18 +113,21 @@ function CanvasInner({
   const layoutRef = useRef<NodeLayout>({});
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initialise position snapshot from whatever positions are on the nodes
+  // Seed layout ref for new nodes only — never overwrite dragged positions
   useEffect(() => {
-    layoutRef.current = Object.fromEntries(
-      initialNodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }])
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount
+    for (const node of initialNodes) {
+      if (!layoutRef.current[node.id]) {
+        layoutRef.current[node.id] = { x: node.position.x, y: node.position.y };
+      }
+    }
+  }, [initialNodes]);
 
-  // Sync data changes without clobbering in-progress drags
+  // Sync data changes without clobbering in-progress drags or saved layout
   useEffect(() => {
     setNodes((prev) =>
       initialNodes.map((node) => {
+        const dragged = layoutRef.current[node.id];
+        if (dragged) return { ...node, position: dragged };
         const prevNode = prev.find((n) => n.id === node.id);
         if (prevNode?.dragging) return { ...node, position: prevNode.position };
         return node;
@@ -214,6 +226,13 @@ function CanvasInner({
         </div>
       )}
 
+      {interactive && exportFilename && (
+        <DiagramExportButton
+          filename={exportFilename}
+          containerEl={containerRef?.current ?? null}
+        />
+      )}
+
       {interactive && onResetLayout && (
         <button
           type="button"
@@ -242,8 +261,11 @@ export function EntityFlowCanvas({
   emptyLabel = "Nothing to show yet",
   className,
   mode = "full",
+  containerRef: externalContainerRef,
   ...rest
 }: EntityFlowCanvasProps) {
+  const internalContainerRef = useRef<HTMLDivElement>(null);
+  const containerRef = externalContainerRef ?? internalContainerRef;
   const isEmpty = nodes.length <= 1;
 
   if (isEmpty) {
@@ -260,9 +282,18 @@ export function EntityFlowCanvas({
   }
 
   return (
-    <div className={cn("relative bg-[#fafafa] rounded-lg overflow-hidden", className ?? "w-full h-full")}>
+    <div
+      ref={containerRef}
+      className={cn("relative bg-[#fafafa] rounded-lg overflow-hidden", className ?? "w-full h-full")}
+    >
       <ReactFlowProvider>
-        <CanvasInner nodes={nodes} edges={edges} mode={mode} {...rest} />
+        <CanvasInner
+          nodes={nodes}
+          edges={edges}
+          mode={mode}
+          containerRef={containerRef}
+          {...rest}
+        />
       </ReactFlowProvider>
     </div>
   );

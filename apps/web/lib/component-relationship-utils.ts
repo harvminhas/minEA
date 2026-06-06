@@ -100,13 +100,14 @@ export async function syncComponentRelationships(
     ? `${existingRunsOn.to_type}:${existingRunsOn.to_object_id}`
     : null;
 
+  const linkedSystemIds = new Set(existingPartOf.map((r) => r.to_object_id));
   for (const rel of existingPartOf) {
     if (!desiredSystemIds.has(rel.to_object_id)) {
       await relationshipsApi.delete(orgSlug, workspaceSlug, rel.id, token);
+      linkedSystemIds.delete(rel.to_object_id);
     }
   }
 
-  const linkedSystemIds = new Set(existingPartOf.map((r) => r.to_object_id));
   for (const sys of systems) {
     if (!linkedSystemIds.has(sys.system_id)) {
       await relationshipsApi.create(
@@ -121,6 +122,7 @@ export async function syncComponentRelationships(
         },
         token
       );
+      linkedSystemIds.add(sys.system_id);
     }
   }
 

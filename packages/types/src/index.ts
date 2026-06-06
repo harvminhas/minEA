@@ -298,6 +298,7 @@ export interface EventBrokerRef {
   /** Set when linked to a registered message_broker object */
   broker_id?: string;
   broker_name: string;
+  broker_kind?: "tool" | "message_broker";
   transport?: "kafka" | "eventbridge" | "pub_sub" | "rabbitmq" | "solace";
 }
 
@@ -316,6 +317,12 @@ export interface EventProperties {
   node_layout?: Record<string, { x: number; y: number }>;
 }
 
+export interface FlowCarrierRef {
+  /** Integration infrastructure tool that moves this flow */
+  carrier_id?: string;
+  carrier_name: string;
+}
+
 export interface IntegrationFlowProperties {
   direction?: "one_way" | "bidirectional" | "inbound" | "outbound";
   protocol?: string;
@@ -326,6 +333,7 @@ export interface IntegrationFlowProperties {
   data_classification?: string;
   sources?: FlowEndpointSide;
   destinations?: FlowEndpointSide;
+  carrier?: FlowCarrierRef | null;
   /** Persisted node positions for the flow diagram canvas. */
   node_layout?: Record<string, { x: number; y: number }>;
 }
@@ -406,6 +414,8 @@ export interface ToolProperties {
   /** Integration infrastructure (Technology → Integration Infra) */
   integration_infra_kind?: "ipaas" | "etl_elt" | "broker" | "gateway" | "transport" | "custom";
   integration_infra_kind_other?: string;
+  /** What integration object types this carrier can link to (APIs, events, flows, data). */
+  integration_infra_handles?: Array<"apis" | "events" | "flows" | "data">;
   vendor?: string;
   vendor_product?: string;
   hosting_model?: "saas" | "self_hosted" | "hybrid";
@@ -418,6 +428,8 @@ export interface ToolProperties {
   sla_target?: "99_9" | "99_95" | "99_99" | "best_effort";
   lifecycle?: "pilot" | "active" | "deprecated" | "end_of_life";
   criticality?: "low" | "medium" | "high" | "tier1";
+  /** Persisted node positions for the integration infra relationship diagram. */
+  node_layout?: Record<string, { x: number; y: number }>;
 }
 
 export interface CloudServiceProperties {
@@ -566,6 +578,8 @@ export type RelationshipType =
   | "contains"
   | "connects"
   | "routes"
+  | "hosts"
+  | "carries"
   | "supported_by"
   | "exposes"
   | "publishes"

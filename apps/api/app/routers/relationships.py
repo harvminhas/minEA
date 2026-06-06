@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.objects import MinEAObject
 from app.models.relationships import Relationship
 from app.schemas.relationships import RelationshipCreate, RelationshipRead
 from app.services.tenancy import TenancyContext, get_workspace_context
@@ -41,6 +42,28 @@ async def list_relationships(
     return list(result.scalars().all())
 
 
+async def _require_object_in_workspace(
+    db: AsyncSession,
+    *,
+    workspace_id: UUID,
+    org_id: UUID,
+    object_id: UUID,
+    role: str,
+) -> None:
+    result = await db.execute(
+        select(MinEAObject.id).where(
+            MinEAObject.id == object_id,
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.org_id == org_id,
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{role} object {object_id} was not found in this workspace",
+        )
+
+
 @router.post("", response_model=RelationshipRead, status_code=status.HTTP_201_CREATED)
 async def create_relationship(
     body: RelationshipCreate,
@@ -49,6 +72,21 @@ async def create_relationship(
 ) -> Relationship:
     await ctx.require_permission(db, "object.edit")
     assert ctx.workspace
+
+    await _require_object_in_workspace(
+        db,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        object_id=body.from_object_id,
+        role="Source",
+    )
+    await _require_object_in_workspace(
+        db,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        object_id=body.to_object_id,
+        role="Target",
+    )
 
     rel = Relationship(
         workspace_id=ctx.workspace.id,
@@ -62,7 +100,7 @@ async def create_relationship(
         created_by=ctx.user_id,
     )
     db.add(rel)
-    await db.commit()
+    await db.flush()
     await db.refresh(rel)
     return rel
 
@@ -87,4 +125,4 @@ async def delete_relationship(
     if not rel:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relationship not found")
     await db.delete(rel)
-    await db.commit()
+    await db.flush()

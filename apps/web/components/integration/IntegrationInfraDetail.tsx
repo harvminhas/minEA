@@ -1,13 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftRight, Edit2, Trash2 } from "lucide-react";
-import type { MinEAObject, ToolProperties } from "@minea/types";
+import type { MinEAObject, ObjectListResponse, ToolProperties } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { excludeTechDebtRelationships, otherRelationshipObjectId } from "@/lib/relationship-display";
+import {
+  infraDiagramNameById,
+  mergeInfraArchitectureRelationships,
+} from "@/lib/integration-infra-relationship-utils";
 import {
   DetailPanel,
   DetailPanelCloseButton,
@@ -22,15 +27,23 @@ import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { HistoryEntry } from "@/components/shared/EntityHistory";
 import { CreateIntegrationInfraPanel } from "@/components/integration/CreateIntegrationInfraPanel";
 import {
+  IntegrationInfraDiagramModal,
+  type NodeLayout,
+} from "@/components/integration/IntegrationInfraDiagram";
+import { IntegrationInfraRelationshipsTab } from "@/components/integration/IntegrationInfraRelationshipsTab";
+import {
+  formatInfraHandles,
   formatInfraSubtitle,
   infraKindLabel,
   infraVendorLabel,
+  INFRA_HANDLES,
   INFRA_HOSTING_LABEL,
   INFRA_ICON_STYLE,
   INFRA_LICENSE_LABEL,
   PLATFORM_CRITICALITY_LABEL,
   PLATFORM_LIFECYCLE_LABEL,
   PLATFORM_SLA_LABEL,
+  resolvedInfraHandles,
 } from "@/lib/integration-infra-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import { cn } from "@/lib/utils";
@@ -51,9 +64,19 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
   const [activeTab, setActiveTab] = useState<ObjectDrawerTabId>("details");
   const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(infra.id);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showChart, setShowChart] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [liveInfra, setLiveInfra] = useState(infra);
+  const liveInfraRef = useRef(infra);
 
-  const props = (infra.properties ?? {}) as ToolProperties;
+  useEffect(() => {
+    setLiveInfra(infra);
+    liveInfraRef.current = infra;
+  }, [infra.id, infra.updated_at]);
+
+  const infraQueryKey = ["objects", orgSlug, workspaceSlug, "integration_infra"] as const;
+
+  const props = (liveInfra.properties ?? {}) as ToolProperties;
   const kindLabel = infraKindLabel(props);
   const vendorLabel = infraVendorLabel(props.vendor);
 
@@ -68,6 +91,107 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
     enabled: activeTab === "history",
   });
 
+  const { data: outRels } = useQuery({
+    queryKey: ["relationships", "from", infra.id],
+    queryFn: async () => {
+      const token = await getToken();
+      return relationshipsApi.list(orgSlug, workspaceSlug, { from_object_id: infra.id }, token!);
+    },
+    enabled,
+    staleTime: 0,
+  });
+
+  const { data: inRels } = useQuery({
+    queryKey: ["relationships", "to", infra.id],
+    queryFn: async () => {
+      const token = await getToken();
+      return relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: infra.id }, token!);
+    },
+    enabled,
+    staleTime: 0,
+  });
+
+  const { data: linkedApis } = useQuery({
+    queryKey: ["objects", orgSlug, workspaceSlug, "api", "infra-refs"],
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "api", page: 1 }, token!);
+    },
+    enabled,
+    staleTime: 0,
+  });
+
+  const { data: linkedEvents } = useQuery({
+    queryKey: ["objects", orgSlug, workspaceSlug, "event", "infra-refs"],
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "event", page: 1 }, token!);
+    },
+    enabled,
+    staleTime: 0,
+  });
+
+  const { data: linkedFlows } = useQuery({
+    queryKey: ["objects", orgSlug, workspaceSlug, "integration_flow", "infra-refs"],
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "integration_flow", page: 1 }, token!);
+    },
+    enabled,
+    staleTime: 0,
+  });
+
+  const drawerRels = useMemo(
+    () =>
+      excludeTechDebtRelationships(
+        mergeInfraArchitectureRelationships(
+          [...(outRels ?? []), ...(inRels ?? [])],
+          liveInfra,
+          linkedApis?.items ?? [],
+          linkedEvents?.items ?? [],
+          linkedFlows?.items ?? []
+        )
+      ),
+    [outRels, inRels, liveInfra, linkedApis, linkedEvents, linkedFlows]
+  );
+
+  const baseNameById = useMemo(
+    () =>
+      infraDiagramNameById(
+        liveInfra,
+        linkedApis?.items ?? [],
+        linkedEvents?.items ?? [],
+        linkedFlows?.items ?? []
+      ),
+    [liveInfra, linkedApis, linkedEvents, linkedFlows]
+  );
+
+  const unresolvedRelatedIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const rel of drawerRels) {
+      ids.add(otherRelationshipObjectId(rel, infra.id));
+    }
+    return [...ids].filter((id) => !baseNameById[id]);
+  }, [drawerRels, infra.id, baseNameById]);
+
+  const relatedNameQueries = useQueries({
+    queries: unresolvedRelatedIds.map((id) => ({
+      queryKey: ["object", orgSlug, workspaceSlug, id],
+      queryFn: async () => {
+        const token = await getToken();
+        return objectsApi.get(orgSlug, workspaceSlug, id, token!);
+      },
+    })),
+  });
+
+  const relationshipNameById = useMemo(() => {
+    const names = { ...baseNameById };
+    for (const query of relatedNameQueries) {
+      if (query.data) names[query.data.id] = query.data.name;
+    }
+    return names;
+  }, [baseNameById, relatedNameQueries]);
+
   const historyEntries: HistoryEntry[] = (historyQuery.data?.entries ?? []).map((e) => ({
     id: e.id,
     actor_name: e.actor_name,
@@ -78,26 +202,15 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
 
   const refreshInfra = () => {
     queryClient.invalidateQueries({ queryKey: historyQueryKey });
+    queryClient.invalidateQueries({ queryKey: ["relationships", "from", infra.id] });
+    queryClient.invalidateQueries({ queryKey: ["relationships", "to", infra.id] });
+    queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, "api", "infra-refs"] });
+    queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, "event", "infra-refs"] });
+    queryClient.invalidateQueries({
+      queryKey: ["objects", orgSlug, workspaceSlug, "integration_flow", "infra-refs"],
+    });
     onUpdate();
   };
-
-  const { data: flowsData } = useQuery({
-    queryKey: ["infra-flows", orgSlug, workspaceSlug, infra.id],
-    queryFn: async () => {
-      const token = await getToken();
-      const [rels, flows] = await Promise.all([
-        relationshipsApi.list(orgSlug, workspaceSlug, { from_object_id: infra.id }, token!),
-        objectsApi.list(orgSlug, workspaceSlug, { type: "integration_flow" }, token!),
-      ]);
-      const relIds = new Set(
-        rels
-          .filter((r) => r.type === "connects_to" && r.to_type === "integration_flow")
-          .map((r) => r.to_object_id)
-      );
-      return flows.items.filter((item) => relIds.has(item.id));
-    },
-    enabled: enabled && activeTab === "details",
-  });
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -110,7 +223,46 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
     },
   });
 
-  const flows = flowsData ?? [];
+  const handleLayoutSave = useCallback(
+    async (layout: NodeLayout) => {
+      const token = await getToken();
+      if (!token) return;
+
+      const current = liveInfraRef.current;
+      const currentProps = (current.properties ?? {}) as ToolProperties;
+
+      await objectsApi.update(
+        orgSlug,
+        workspaceSlug,
+        infra.id,
+        {
+          properties: { ...currentProps, node_layout: layout } as Record<string, unknown>,
+        },
+        token
+      );
+
+      const withLayout = {
+        ...current,
+        properties: { ...currentProps, node_layout: layout },
+      };
+
+      queryClient.setQueryData<ObjectListResponse>(infraQueryKey, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          items: old.items.map((o) => (o.id === infra.id ? withLayout : o)),
+        };
+      });
+
+      setLiveInfra(withLayout);
+      liveInfraRef.current = withLayout;
+    },
+    [getToken, orgSlug, workspaceSlug, infra.id, queryClient, infraQueryKey]
+  );
+
+  const handleResetLayout = useCallback(() => {
+    handleLayoutSave({});
+  }, [handleLayoutSave]);
 
   return (
     <>
@@ -157,6 +309,8 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
             <ObjectDrawerTabs
               activeTab={activeTab}
               onTabChange={setActiveTab}
+              showRelationships
+              relationshipCount={drawerRels.length}
               openDebtCount={techDebtSummary?.open_count ?? 0}
               className="mt-4"
             />
@@ -171,7 +325,14 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
           </div>
         }
       >
-        {activeTab === "tech_debt" ? (
+        {activeTab === "relationships" ? (
+          <IntegrationInfraRelationshipsTab
+            infra={liveInfra}
+            relationships={drawerRels}
+            nameById={relationshipNameById}
+            onExpandDiagram={() => setShowChart(true)}
+          />
+        ) : activeTab === "tech_debt" ? (
           <ObjectTechDebtTab
             objectId={infra.id}
             objectName={infra.name}
@@ -191,6 +352,29 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
           <>
             <DetailSection title="Kind">
               {kindLabel && <DetailRow label="Type" value={kindLabel} />}
+              {resolvedInfraHandles(props).length > 0 && (
+                <div className="mt-2">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                    Handles
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {resolvedInfraHandles(props).map((handle) => {
+                      const label = INFRA_HANDLES.find((h) => h.value === handle)?.label ?? handle;
+                      return (
+                        <span
+                          key={handle}
+                          className="text-xs bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded-full"
+                        >
+                          {label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    {formatInfraHandles(resolvedInfraHandles(props))} can link to this carrier
+                  </p>
+                </div>
+              )}
             </DetailSection>
 
             <DetailSection title="Identity">
@@ -243,22 +427,6 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
                 />
               )}
             </DetailSection>
-
-            <DetailSection title="Integrations">
-              {flows.length === 0 ? (
-                <p className="text-sm text-gray-400 px-6 pb-4">
-                  No integrations reference this infrastructure yet.
-                </p>
-              ) : (
-                <ul className="px-6 pb-4 space-y-1.5">
-                  {flows.map((flow) => (
-                    <li key={flow.id} className="text-sm text-gray-700">
-                      {flow.name}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </DetailSection>
           </>
         )}
       </DetailPanel>
@@ -273,9 +441,20 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
         />
       )}
 
+      {showChart && (
+        <IntegrationInfraDiagramModal
+          infra={liveInfra}
+          relationships={drawerRels}
+          nameById={relationshipNameById}
+          onLayoutSave={handleLayoutSave}
+          onResetLayout={handleResetLayout}
+          onClose={() => setShowChart(false)}
+        />
+      )}
+
       {showEditForm && (
         <CreateIntegrationInfraPanel
-          initialValues={infra}
+          initialValues={liveInfra}
           onClose={() => setShowEditForm(false)}
           onSuccess={() => {
             setShowEditForm(false);

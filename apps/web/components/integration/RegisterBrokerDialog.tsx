@@ -7,6 +7,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
+import { integrationInfraToolsQueryKey } from "@/lib/integration-infra-carriers";
+import { buildIntegrationInfraProperties } from "@/lib/integration-infra-utils";
 import { EVENT_BROKER_TRANSPORTS } from "@/lib/event-utils";
 
 interface Props {
@@ -31,26 +33,44 @@ export function RegisterBrokerDialog({ defaultTransport, onClose, onCreated }: P
       const trimmed = name.trim();
       if (!trimmed) throw new Error("Name is required");
 
+      const properties = buildIntegrationInfraProperties({
+        kind: "broker",
+        kindOther: "",
+        handles: ["events"],
+        vendor: transport,
+        vendorProduct: EVENT_BROKER_TRANSPORTS.find((t) => t.value === transport)?.label ?? "",
+        hostingModel: "saas",
+        region: "",
+        environments: [],
+        adminUrl: "",
+        licenseModel: "per_message_volume",
+        contractRenewal: "",
+        annualCost: "",
+        slaTarget: "99_9",
+        lifecycle: "active",
+        criticality: "low",
+      });
+
       return objectsApi.create(
         orgSlug,
         workspaceSlug,
         {
-          type: "message_broker",
+          type: "tool",
           name: trimmed,
           status: "active",
-          properties: { transport },
+          properties: properties as Record<string, unknown>,
         },
         token
       );
     },
     onSuccess: (broker) => {
       queryClient.invalidateQueries({
-        queryKey: ["objects", orgSlug, workspaceSlug, "message_broker"],
+        queryKey: integrationInfraToolsQueryKey(orgSlug, workspaceSlug),
       });
       onCreated(broker.id);
     },
     onError: (err) =>
-      setError(err instanceof Error ? err.message : "Could not register broker"),
+      setError(err instanceof Error ? err.message : "Could not create integration infrastructure"),
   });
 
   return createPortal(
@@ -59,8 +79,8 @@ export function RegisterBrokerDialog({ defaultTransport, onClose, onCreated }: P
       <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[230] w-full max-w-sm bg-white rounded-xl shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">Register broker</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Add a workspace message broker instance</p>
+            <h3 className="text-sm font-semibold text-gray-900">New event infrastructure</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Quick-add a broker carrier for events</p>
           </div>
           <button type="button" onClick={onClose} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400">
             <X size={16} />
@@ -113,7 +133,7 @@ export function RegisterBrokerDialog({ defaultTransport, onClose, onCreated }: P
             disabled={!name.trim() || createMutation.isPending}
             className="px-4 py-2 text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-md disabled:opacity-40"
           >
-            {createMutation.isPending ? "Registering…" : "Register"}
+            {createMutation.isPending ? "Creating…" : "Create"}
           </button>
         </div>
       </div>

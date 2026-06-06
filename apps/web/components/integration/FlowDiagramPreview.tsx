@@ -8,9 +8,10 @@ import { cn } from "@/lib/utils";
 interface Props {
   flow: MinEAObject;
   onExpand: () => void;
+  disabled?: boolean;
 }
 
-export function FlowDiagramPreview({ flow, onExpand }: Props) {
+export function FlowDiagramPreview({ flow, onExpand, disabled }: Props) {
   const props = (flow.properties ?? {}) as IntegrationFlowProperties;
   const srcCount =
     (props.sources?.systems.length ?? 0) + (props.sources?.entities.length ?? 0);
@@ -22,9 +23,11 @@ export function FlowDiagramPreview({ flow, onExpand }: Props) {
     <button
       type="button"
       onClick={onExpand}
+      disabled={disabled}
       className={cn(
         "group relative w-full text-left rounded-lg border border-gray-200 overflow-hidden",
-        "hover:border-teal-300 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-teal-500"
+        "hover:border-teal-300 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-teal-500",
+        disabled && "pointer-events-none opacity-80"
       )}
       aria-label="Expand flow chart"
     >

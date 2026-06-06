@@ -8,8 +8,16 @@ import { ArrowRight, Info, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { dataApi, objectsApi, peopleApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { syncFlowCarrierRelationship } from "@/lib/flow-relationship-utils";
 import { AddFlowEndpointDialog } from "@/components/integration/AddFlowEndpointDialog";
 import {
+  formatCarrierOptionLabel,
+  infraCarrierFieldHint,
+  integrationInfraCarrierOptions,
+  integrationInfraToolsQueryKey,
+} from "@/lib/integration-infra-carriers";
+import {
+  carrierRefFromKey,
   emptyEndpointSide,
   FLOW_AUTH,
   FLOW_CRITICALITY,
@@ -192,6 +200,7 @@ export function CreateFlowPanel({ onClose, onSuccess }: Props) {
   const [status, setStatus] = useState("planned");
   const [criticality, setCriticality] = useState("low");
   const [dataClassification, setDataClassification] = useState("inherited");
+  const [carrierKey, setCarrierKey] = useState("");
 
   const [error, setError] = useState<string | null>(null);
 
@@ -214,6 +223,25 @@ export function CreateFlowPanel({ onClose, onSuccess }: Props) {
     },
     enabled,
   });
+
+  const { data: infraToolsData } = useQuery({
+    queryKey: integrationInfraToolsQueryKey(orgSlug, workspaceSlug),
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "tool" }, token!);
+    },
+    enabled,
+  });
+
+  const flowCarriers = useMemo(
+    () => integrationInfraCarrierOptions(infraToolsData?.items ?? [], "flows"),
+    [infraToolsData]
+  );
+
+  const selectedCarrier = useMemo(
+    () => carrierRefFromKey(carrierKey, flowCarriers),
+    [carrierKey, flowCarriers]
+  );
 
   const inherited = useMemo(() => {
     if (!catalog) return { level: "internal", piiLabels: [] as string[], hasWildcard: false };
@@ -253,6 +281,7 @@ export function CreateFlowPanel({ onClose, onSuccess }: Props) {
         data_classification: classification,
         sources,
         destinations,
+        carrier: selectedCarrier,
       };
 
       const flow = await objectsApi.create(
@@ -269,6 +298,16 @@ export function CreateFlowPanel({ onClose, onSuccess }: Props) {
         },
         token
       );
+
+      if (selectedCarrier) {
+        await syncFlowCarrierRelationship(
+          orgSlug,
+          workspaceSlug,
+          flow.id,
+          selectedCarrier,
+          token
+        );
+      }
 
       // Create data links for resolved entities
       if (catalog) {
@@ -437,6 +476,51 @@ export function CreateFlowPanel({ onClose, onSuccess }: Props) {
               </div>
             </section>
 
+            {/* INFRASTRUCTURE ───────────────────────────────────────────── */}
+            <section>
+              <SectionHeader>Infrastructure</SectionHeader>
+              <div>
+                <FieldLabel>Carried by</FieldLabel>
+                <div className="relative">
+                  <select
+                    value={carrierKey}
+                    onChange={(e) => setCarrierKey(e.target.value)}
+                    className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 pr-8"
+                  >
+                    <option value="">— None / unspecified</option>
+                    {flowCarriers.length > 0 && (
+                      <optgroup label="Integration infrastructure">
+                        {flowCarriers.map((c) => (
+                          <option key={c.id} value={`registered:${c.id}`}>
+                            {formatCarrierOptionLabel(c)}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+                    ▾
+                  </span>
+                </div>
+                {(() => {
+                  const hint = infraCarrierFieldHint("flows", flowCarriers.length > 0);
+                  return (
+                    <p
+                      className={cn(
+                        "text-[11px] mt-1.5",
+                        hint.tone === "notice" ? "text-amber-700" : "text-gray-400"
+                      )}
+                    >
+                      {hint.text}
+                    </p>
+                  );
+                })()}
+                <p className="text-[11px] text-gray-400 mt-1">
+                  iPaaS, ETL, or transport that physically moves this flow
+                </p>
+              </div>
+            </section>
+
             {/* TRANSPORT & SCHEDULE ─────────────────────────────────────── */}
             <section>
               <SectionHeader>Transport &amp; Schedule</SectionHeader>
@@ -551,6 +635,7 @@ export function CreateFlowPanel({ onClose, onSuccess }: Props) {
           }}
         />
       )}
+
     </>,
     document.body
   );

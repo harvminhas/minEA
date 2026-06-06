@@ -1,11 +1,18 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftRight, Edit2, Trash2 } from "lucide-react";
-import type { IntegrationFlowProperties, MinEAObject, ObjectListResponse } from "@minea/types";
-import { objectsApi } from "@/lib/api-client";
+import type { IntegrationFlowProperties, MinEAObject, ObjectListResponse, Relationship } from "@minea/types";
+import { objectsApi, relationshipsApi } from "@/lib/api-client";
+import {
+  architectureRelationshipsFromFlow,
+  mergeArchitectureRelationships,
+  persistFlowArchitecture,
+} from "@/lib/flow-relationship-utils";
+import { excludeTechDebtRelationships } from "@/lib/relationship-display";
+import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useTenancy } from "@/lib/tenancy";
 import {
   DetailPanel,
@@ -15,7 +22,7 @@ import {
 } from "@/components/ui/DetailPanel";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { FlowDiagramModal, type NodeLayout } from "@/components/integration/FlowDiagram";
-import { FlowDiagramPreview } from "@/components/integration/FlowDiagramPreview";
+import { FlowRelationshipsTab } from "@/components/integration/FlowRelationshipsTab";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
 import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
@@ -63,15 +70,51 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [liveFlow, setLiveFlow] = useState(flow);
+  const [relationshipsSnapshot, setRelationshipsSnapshot] = useState<Relationship[] | null>(null);
+  const liveFlowRef = useRef(flow);
 
-  const props = (flow.properties ?? {}) as IntegrationFlowProperties;
-  const srcSystems = props.sources?.systems ?? [];
-  const dstSystems = props.destinations?.systems ?? [];
-  const srcCount = srcSystems.length + (props.sources?.entities?.length ?? 0);
-  const dstCount = dstSystems.length + (props.destinations?.entities?.length ?? 0);
+  useEffect(() => {
+    setLiveFlow(flow);
+    liveFlowRef.current = flow;
+  }, [flow.id, flow.updated_at]);
+
+  useEffect(() => {
+    setRelationshipsSnapshot(null);
+  }, [flow.id]);
+
+  const props = (liveFlow.properties ?? {}) as IntegrationFlowProperties;
 
   const flowsQueryKey = ["objects", orgSlug, workspaceSlug, "integration_flow"] as const;
   const historyQueryKey = ["object-history", orgSlug, workspaceSlug, flow.id] as const;
+
+  const [architectureUpdating, setArchitectureUpdating] = useState(false);
+
+  const { data: outRels, isFetching: outRelsFetching } = useQuery({
+    queryKey: ["relationships", "from", flow.id],
+    queryFn: async () => {
+      const token = await getToken();
+      return relationshipsApi.list(orgSlug, workspaceSlug, { from_object_id: flow.id }, token!);
+    },
+    staleTime: 0,
+  });
+
+  const { data: inRels, isFetching: inRelsFetching } = useQuery({
+    queryKey: ["relationships", "to", flow.id],
+    queryFn: async () => {
+      const token = await getToken();
+      return relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: flow.id }, token!);
+    },
+    staleTime: 0,
+  });
+
+  const diagramRefreshing =
+    architectureUpdating || outRelsFetching || inRelsFetching;
+
+  const drawerRels = useMemo(() => {
+    const flowRels = relationshipsSnapshot ?? [...(outRels ?? []), ...(inRels ?? [])];
+    return excludeTechDebtRelationships(mergeArchitectureRelationships(flowRels, liveFlow));
+  }, [relationshipsSnapshot, outRels, inRels, liveFlow]);
 
   const historyQuery = useQuery({
     queryKey: historyQueryKey,
@@ -95,6 +138,73 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
     queryClient.invalidateQueries({ queryKey: historyQueryKey });
   };
 
+  const syncRelationshipsFromServer = useCallback(
+    async (options?: { manageSpinner?: boolean }) => {
+      const token = await getToken();
+      if (!token) return;
+      const manageSpinner = options?.manageSpinner !== false;
+      if (manageSpinner) setArchitectureUpdating(true);
+      try {
+        const { outbound, inbound } = await refreshObjectRelationshipQueries(
+          queryClient,
+          orgSlug,
+          workspaceSlug,
+          flow.id,
+          token
+        );
+        setRelationshipsSnapshot(excludeTechDebtRelationships([...outbound, ...inbound]));
+      } finally {
+        if (manageSpinner) setArchitectureUpdating(false);
+      }
+    },
+    [getToken, queryClient, orgSlug, workspaceSlug, flow.id]
+  );
+
+  const handleArchitectureChange = useCallback(
+    async (updates: Parameters<typeof persistFlowArchitecture>[3]) => {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      setArchitectureUpdating(true);
+      try {
+        const updated = await persistFlowArchitecture(
+          orgSlug,
+          workspaceSlug,
+          liveFlowRef.current,
+          updates,
+          token
+        );
+        setLiveFlow(updated);
+        liveFlowRef.current = updated;
+        setRelationshipsSnapshot(
+          excludeTechDebtRelationships(architectureRelationshipsFromFlow(updated))
+        );
+        await syncRelationshipsFromServer({ manageSpinner: false });
+        queryClient.setQueryData<ObjectListResponse>(flowsQueryKey, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            items: old.items.map((o) => (o.id === updated.id ? updated : o)),
+          };
+        });
+        refreshFlow();
+        onUpdate();
+        return updated;
+      } finally {
+        setArchitectureUpdating(false);
+      }
+    },
+    [
+      getToken,
+      orgSlug,
+      workspaceSlug,
+      flow.id,
+      queryClient,
+      flowsQueryKey,
+      onUpdate,
+      syncRelationshipsFromServer,
+    ]
+  );
+
   const deleteMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
@@ -111,27 +221,36 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
       const token = await getToken();
       if (!token) return;
 
-      const cached = queryClient.getQueryData<ObjectListResponse>(flowsQueryKey);
-      const current = cached?.items.find((o) => o.id === flow.id) ?? flow;
+      const current = liveFlowRef.current;
       const currentProps = (current.properties ?? {}) as IntegrationFlowProperties;
 
-      await objectsApi.update(orgSlug, workspaceSlug, flow.id, {
-        properties: { ...currentProps, node_layout: layout } as Record<string, unknown>,
-      }, token);
+      await objectsApi.update(
+        orgSlug,
+        workspaceSlug,
+        flow.id,
+        {
+          properties: { ...currentProps, node_layout: layout } as Record<string, unknown>,
+        },
+        token
+      );
+
+      const withLayout = {
+        ...current,
+        properties: { ...currentProps, node_layout: layout },
+      };
 
       queryClient.setQueryData<ObjectListResponse>(flowsQueryKey, (old) => {
         if (!old) return old;
         return {
           ...old,
-          items: old.items.map((o) =>
-            o.id === flow.id
-              ? { ...o, properties: { ...currentProps, node_layout: layout } }
-              : o
-          ),
+          items: old.items.map((o) => (o.id === flow.id ? withLayout : o)),
         };
       });
+
+      setLiveFlow(withLayout);
+      liveFlowRef.current = withLayout;
     },
-    [getToken, orgSlug, workspaceSlug, flow, queryClient, flowsQueryKey]
+    [getToken, orgSlug, workspaceSlug, flow.id, queryClient, flowsQueryKey]
   );
 
   const handleResetLayout = useCallback(() => {
@@ -150,19 +269,19 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
                   <ArrowLeftRight size={16} strokeWidth={2.25} />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="font-semibold text-gray-900 truncate">{flow.name}</h2>
+                  <h2 className="font-semibold text-gray-900 truncate">{liveFlow.name}</h2>
                   <p className="text-sm text-gray-400">{formatFlowSubtitle(props.protocol)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {flow.status && (
+                {liveFlow.status && (
                   <span
                     className={cn(
                       "rounded-full px-2.5 py-1 text-xs font-medium capitalize",
-                      getStatusColor(flow.status)
+                      getStatusColor(liveFlow.status)
                     )}
                   >
-                    {getStatusLabel(flow.status)}
+                    {getStatusLabel(liveFlow.status)}
                   </span>
                 )}
                 <button
@@ -187,7 +306,12 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
 
             <ObjectDrawerTabs
               activeTab={activeTab}
-              onTabChange={setActiveTab}
+              onTabChange={(tab) => {
+                setActiveTab(tab);
+                if (tab === "relationships") void syncRelationshipsFromServer();
+              }}
+              showRelationships
+              relationshipCount={drawerRels.length}
               openDebtCount={techDebtSummary?.open_count ?? 0}
               className="mt-4"
             />
@@ -196,20 +320,27 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
         footer={
           <div className="border-t border-gray-100 px-6 py-3">
             <p className="text-xs text-gray-400">
-              Updated{flow.updated_by_name ? ` by ${flow.updated_by_name}` : ""}{" "}
-              {formatUpdatedAgo(flow.updated_at)}
+              Updated{liveFlow.updated_by_name ? ` by ${liveFlow.updated_by_name}` : ""}{" "}
+              {formatUpdatedAgo(liveFlow.updated_at)}
             </p>
           </div>
         }
       >
-        {activeTab === "tech_debt" ? (
+        {activeTab === "relationships" ? (
+          <FlowRelationshipsTab
+            flow={liveFlow}
+            relationships={drawerRels}
+            diagramRefreshing={diagramRefreshing}
+            onExpandDiagram={() => setShowChart(true)}
+          />
+        ) : activeTab === "tech_debt" ? (
           <ObjectTechDebtTab
-            objectId={flow.id}
-            objectName={flow.name}
+            objectId={liveFlow.id}
+            objectName={liveFlow.name}
             objectKind="integration_flow"
             summary={techDebtSummary}
             isLoading={techDebtLoading}
-            defaultOwner={flow.owner}
+            defaultOwner={liveFlow.owner}
             onRefresh={refreshFlow}
           />
         ) : activeTab === "history" ? (
@@ -220,15 +351,15 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
           />
         ) : (
           <>
-            {flow.description && (
+            {liveFlow.description && (
               <DetailSection title="Description">
-                <p className="text-sm text-gray-700">{flow.description}</p>
+                <p className="text-sm text-gray-700">{liveFlow.description}</p>
               </DetailSection>
             )}
 
             <DetailSection title="Properties">
               <div className="space-y-2 text-sm">
-                {flow.owner && <DetailRow label="Owner" value={flow.owner} />}
+                {liveFlow.owner && <DetailRow label="Owner" value={liveFlow.owner} />}
                 {props.protocol && (
                   <DetailRow label="Protocol" value={labelFor(PROTOCOL_LABEL, props.protocol)} />
                 )}
@@ -253,56 +384,6 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
                 )}
               </div>
             </DetailSection>
-
-            <DetailSection title="Architecture">
-              <FlowDiagramPreview flow={flow} onExpand={() => setShowChart(true)} />
-              <p className="text-xs text-gray-400 mt-2">
-                {srcCount} source{srcCount !== 1 ? "s" : ""} · {dstCount} destination
-                {dstCount !== 1 ? "s" : ""}
-                {props.protocol && ` · ${labelFor(PROTOCOL_LABEL, props.protocol)}`}
-              </p>
-            </DetailSection>
-
-            {(srcSystems.length > 0 || dstSystems.length > 0) && (
-              <DetailSection title="Connections">
-                <div className="space-y-3 text-sm">
-                  {srcSystems.length > 0 && (
-                    <div>
-                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                        Sources
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {srcSystems.map((s) => (
-                          <span
-                            key={s.system_id}
-                            className="text-xs bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded-full"
-                          >
-                            {s.system_name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {dstSystems.length > 0 && (
-                    <div>
-                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                        Destinations
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {dstSystems.map((s) => (
-                          <span
-                            key={s.system_id}
-                            className="text-xs bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded-full"
-                          >
-                            {s.system_name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </DetailSection>
-            )}
           </>
         )}
       </DetailPanel>
@@ -310,7 +391,7 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
       {showDeleteConfirm && (
         <ConfirmDeleteDialog
           title="Delete flow"
-          message={`Are you sure you want to delete "${flow.name}"? This cannot be undone.`}
+          message={`Are you sure you want to delete "${liveFlow.name}"? This cannot be undone.`}
           onConfirm={() => deleteMutation.mutate()}
           onCancel={() => setShowDeleteConfirm(false)}
           isPending={deleteMutation.isPending}
@@ -319,17 +400,18 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
 
       {showChart && (
         <FlowDiagramModal
-          flow={flow}
+          flow={liveFlow}
           onClose={() => setShowChart(false)}
           onLayoutSave={handleLayoutSave}
           onResetLayout={handleResetLayout}
+          onArchitectureChange={handleArchitectureChange}
         />
       )}
 
       {showEditForm && (
         <ObjectForm
           objectType="integration_flow"
-          initialValues={flow}
+          initialValues={liveFlow}
           onClose={() => setShowEditForm(false)}
           onSuccess={() => {
             setShowEditForm(false);

@@ -1,9 +1,15 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Handle, MarkerType, Position, type Edge, type Node, type NodeProps, type NodeTypes } from "reactflow";
-import { Box, Braces, Layers, Server, X } from "lucide-react";
+import { Box, Braces, Layers, Plus, Server, X } from "lucide-react";
+import { AddConsumerDialog } from "@/components/integration/AddConsumerDialog";
+import { PickProviderDialog } from "@/components/integration/PickProviderDialog";
+import type { ApiArchitectureUpdate } from "@/lib/api-relationship-utils";
+import { toast } from "@/hooks/use-toast";
+import type { ApiConsumerRef, ApiProviderRef } from "@minea/types";
 import { EntityFlowCanvas, type NodeLayout } from "@/components/shared/EntityFlowCanvas";
+import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
 import {
   API_AUTH_LABEL,
   API_STYLE_LABEL,
@@ -14,6 +20,22 @@ import type { ApiProperties, MinEAObject } from "@minea/types";
 import { cn } from "@/lib/utils";
 
 export type { NodeLayout };
+
+function withEdgeLabel(
+  label: string,
+  compact?: boolean,
+  accent = "#64748b"
+): Pick<Edge, "label" | "labelStyle" | "labelBgStyle" | "labelBgPadding" | "labelBgBorderRadius"> {
+  const short =
+    label === "provides via" || label === "consumes via" ? "via" : label;
+  return {
+    label: compact ? short : label,
+    labelStyle: { fill: compact ? "#94a3b8" : accent, fontSize: compact ? 7 : 10, fontWeight: 500 },
+    labelBgStyle: { fill: "#f8fafc", fillOpacity: 0.92 },
+    labelBgPadding: compact ? ([2, 1] as [number, number]) : ([4, 2] as [number, number]),
+    labelBgBorderRadius: compact ? 2 : 4,
+  };
+}
 
 function ProviderNode({ data, compact }: { data: { name: string; kind: string }; compact?: boolean }) {
   if (compact) {
@@ -48,8 +70,9 @@ function ApiCenterNode({ data, compact }: { data: { api: MinEAObject; props: Api
   if (compact) {
     return (
       <div className="bg-white border-2 border-gray-800 rounded-md overflow-hidden min-w-[68px] max-w-[80px]">
-        <Handle type="target" position={Position.Left} className="!opacity-0 !w-1 !h-1" />
-        <Handle type="source" position={Position.Right} className="!opacity-0 !w-1 !h-1" />
+        <Handle type="target" position={Position.Left} id="left" className="!opacity-0 !w-1 !h-1" />
+        <Handle type="target" position={Position.Right} id="right" className="!opacity-0 !w-1 !h-1" />
+        <Handle type="target" position={Position.Top} id="top" className="!opacity-0 !w-1 !h-1" />
         <div className="h-1 bg-teal-500" />
         <p className="text-[8px] font-bold text-gray-900 px-1 py-1 truncate text-center">{style}</p>
       </div>
@@ -58,8 +81,9 @@ function ApiCenterNode({ data, compact }: { data: { api: MinEAObject; props: Api
 
   return (
     <div className="bg-white rounded-xl shadow-xl border-2 border-gray-800 overflow-hidden w-[220px]">
-      <Handle type="target" position={Position.Left} />
-      <Handle type="source" position={Position.Right} />
+      <Handle type="target" position={Position.Left} id="left" style={{ background: INTEGRATION_LAYER_COLOR }} />
+      <Handle type="target" position={Position.Right} id="right" style={{ background: INTEGRATION_LAYER_COLOR }} />
+      <Handle type="target" position={Position.Top} id="top" style={{ background: INTEGRATION_LAYER_COLOR }} />
       <div className="h-1 bg-teal-500" />
       <div className="px-4 py-3 space-y-2">
         <div className="flex items-center gap-2">
@@ -95,7 +119,7 @@ function ConsumerNode({ data, compact }: { data: { name: string; kind: string };
           isPartner ? "bg-amber-50 border-amber-200" : "bg-gray-50 border-gray-200"
         )}
       >
-        <Handle type="target" position={Position.Left} className="!opacity-0 !w-1 !h-1" />
+        <Handle type="source" position={Position.Left} id="left" className="!opacity-0 !w-1 !h-1" />
         <p className="text-[8px] font-medium text-gray-700 truncate">{data.name}</p>
       </div>
     );
@@ -107,7 +131,7 @@ function ConsumerNode({ data, compact }: { data: { name: string; kind: string };
         isPartner ? "bg-amber-50 border-amber-300" : "bg-white border-gray-300"
       )}
     >
-      <Handle type="target" position={Position.Left} style={{ background: "#94a3b8" }} />
+      <Handle type="source" position={Position.Left} id="left" style={{ background: "#94a3b8" }} />
       <div className="px-3 py-2">
         <p className="text-xs font-medium text-gray-800 truncate">{data.name}</p>
         <p className="text-[9px] text-gray-400 capitalize mt-0.5">Consumer</p>
@@ -120,15 +144,20 @@ function GatewayNode({ data, compact }: { data: { name: string }; compact?: bool
   if (compact) {
     return (
       <div className="bg-violet-50 border border-violet-200 rounded px-1.5 py-0.5 min-w-[56px]">
-        <Handle type="target" position={Position.Top} className="!opacity-0 !w-1 !h-1" />
-        <Handle type="source" position={Position.Bottom} className="!opacity-0 !w-1 !h-1" />
+        <Handle type="target" position={Position.Left} id="left" className="!opacity-0 !w-1 !h-1" />
+        <Handle type="target" position={Position.Right} id="right" className="!opacity-0 !w-1 !h-1" />
+        <Handle type="target" position={Position.Top} id="top" className="!opacity-0 !w-1 !h-1" />
+        <Handle type="source" position={Position.Bottom} id="bottom" className="!opacity-0 !w-1 !h-1" />
         <p className="text-[7px] text-violet-700 truncate text-center">{data.name}</p>
       </div>
     );
   }
   return (
     <div className="bg-violet-50 border-2 border-violet-300 rounded-lg shadow-sm min-w-[130px]">
-      <Handle type="source" position={Position.Bottom} style={{ background: "#8b5cf6" }} />
+      <Handle type="target" position={Position.Left} id="left" style={{ background: "#8b5cf6" }} />
+      <Handle type="target" position={Position.Right} id="right" style={{ background: "#8b5cf6" }} />
+      <Handle type="target" position={Position.Top} id="top" style={{ background: "#8b5cf6" }} />
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: "#8b5cf6" }} />
       <div className="px-3 py-2 flex items-center gap-2">
         <Server size={12} className="text-violet-600 flex-shrink-0" />
         <div className="min-w-0">
@@ -240,22 +269,27 @@ export function buildApiGraph(
     edges.push({
       id: "e-gateway-api",
       source: "gateway",
+      sourceHandle: "bottom",
       target: "api-center",
+      targetHandle: "top",
       type: "smoothstep",
       style: { stroke: "#8b5cf6", strokeWidth: compact ? 1 : 1.5, strokeDasharray: compact ? "3 2" : "4 3" },
       markerEnd: compact ? undefined : { type: MarkerType.ArrowClosed, color: "#8b5cf6", width: 12, height: 12 },
+      ...withEdgeLabel("hosts", compact, "#7c3aed"),
     });
   }
 
   if (provider) {
     edges.push({
-      id: "e-provider-api",
+      id: gateway ? "e-provider-gateway" : "e-provider-api",
       source: "provider",
       target: gateway ? "gateway" : "api-center",
+      targetHandle: "left",
       type: "smoothstep",
       animated: !compact,
       style: edgeStyle,
-      markerEnd: gateway ? undefined : marker,
+      markerEnd: marker,
+      ...withEdgeLabel(gateway ? "provides via" : "provides", compact, "#0d9488"),
     });
   }
 
@@ -278,13 +312,16 @@ export function buildApiGraph(
         data: { name: c.consumer_name, kind: c.consumer_kind },
       });
       edges.push({
-        id: `e-${id}`,
-        source: "api-center",
-        target: id,
+        id: gateway ? `e-${id}-gateway` : `e-${id}-api`,
+        source: id,
+        sourceHandle: "left",
+        target: gateway ? "gateway" : "api-center",
+        targetHandle: gateway ? "right" : "right",
         type: "smoothstep",
         animated: !compact,
         style: edgeStyle,
         markerEnd: marker,
+        ...withEdgeLabel(gateway ? "consumes via" : "consumes", compact, "#64748b"),
       });
     });
   }
@@ -298,6 +335,8 @@ interface ArchitectureProps {
   compact?: boolean;
   onLayoutSave?: (layout: NodeLayout) => void;
   onResetLayout?: () => void;
+  exportFilename?: string;
+  containerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 export function ApiArchitectureGraph({
@@ -306,6 +345,8 @@ export function ApiArchitectureGraph({
   compact,
   onLayoutSave,
   onResetLayout,
+  exportFilename,
+  containerRef,
 }: ArchitectureProps) {
   const props = (api.properties ?? {}) as ApiProperties;
   const savedLayout = props.node_layout;
@@ -328,6 +369,8 @@ export function ApiArchitectureGraph({
         onLayoutSave={compact ? undefined : onLayoutSave}
         onResetLayout={compact ? undefined : onResetLayout}
         hasCustomLayout={hasCustomLayout}
+        exportFilename={compact ? undefined : exportFilename}
+        containerRef={containerRef}
         emptyLabel="Select a provider to preview the API architecture"
         className={cn("h-full rounded-lg border border-gray-200", compact && "rounded-none border-0")}
       />
@@ -340,26 +383,79 @@ export function ApiDiagramModal({
   onClose,
   onLayoutSave,
   onResetLayout,
+  onArchitectureChange,
 }: {
   api: MinEAObject;
   onClose: () => void;
   onLayoutSave?: (layout: NodeLayout) => void;
   onResetLayout?: () => void;
+  onArchitectureChange?: (
+    updates: ApiArchitectureUpdate
+  ) => void | Promise<MinEAObject | void>;
 }) {
-  const props = (api.properties ?? {}) as ApiProperties;
+  const [liveApi, setLiveApi] = useState(api);
+  const [showProviderDialog, setShowProviderDialog] = useState(false);
+  const [showConsumerDialog, setShowConsumerDialog] = useState(false);
+  const [savingArch, setSavingArch] = useState(false);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLiveApi(api);
+  }, [api]);
+
+  const props = (liveApi.properties ?? {}) as ApiProperties;
   const styleLabel = API_STYLE_LABEL[props.protocol ?? ""] ?? props.protocol;
-  const consumerCount = props.consumers?.length ?? 0;
+  const consumers = props.consumers ?? [];
+  const editable = !!onArchitectureChange;
+  const hasCustomLayout = !!(props.node_layout && Object.keys(props.node_layout).length > 0);
+
+  const applyArchitecture = async (updates: ApiArchitectureUpdate) => {
+    if (!onArchitectureChange) return;
+    setSavingArch(true);
+    try {
+      const result = await onArchitectureChange(updates);
+      if (result) {
+        setLiveApi(result);
+      } else {
+        const currentProps = (liveApi.properties ?? {}) as ApiProperties;
+        setLiveApi({
+          ...liveApi,
+          properties: {
+            ...currentProps,
+            ...(updates.provider !== undefined ? { provider: updates.provider ?? undefined } : {}),
+            ...(updates.consumers !== undefined ? { consumers: updates.consumers } : {}),
+          },
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not save architecture changes.";
+      toast({ title: "Failed to save", description: message, variant: "destructive" });
+    } finally {
+      setSavingArch(false);
+    }
+  };
+
+  const handleProviderApply = (provider: ApiProviderRef | null) => {
+    setShowProviderDialog(false);
+    void applyArchitecture({ provider });
+  };
+
+  const handleConsumersApply = (nextConsumers: ApiConsumerRef[]) => {
+    setShowConsumerDialog(false);
+    void applyArchitecture({ consumers: nextConsumers });
+  };
 
   return (
     <>
       <div className="fixed inset-0 z-[200] bg-black/40" onClick={onClose} />
       <div className="fixed inset-6 z-[210] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <DiagramSavingBar active={savingArch} />
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
           <div>
             <p className="text-[10px] font-semibold text-teal-600 uppercase tracking-wider mb-0.5">
               API architecture
             </p>
-            <h2 className="text-base font-bold text-gray-900">{api.name}</h2>
+            <h2 className="text-base font-bold text-gray-900">{liveApi.name}</h2>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               {props.provider && (
                 <span className="text-xs text-gray-500">
@@ -367,7 +463,7 @@ export function ApiDiagramModal({
                 </span>
               )}
               <span className="text-xs text-gray-500">
-                {consumerCount} consumer{consumerCount !== 1 ? "s" : ""}
+                {consumers.length} consumer{consumers.length !== 1 ? "s" : ""}
               </span>
               {styleLabel && (
                 <span className="text-[10px] bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded-full font-medium">
@@ -376,16 +472,42 @@ export function ApiDiagramModal({
               )}
             </div>
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400" aria-label="Close">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            {editable && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowProviderDialog(true)}
+                  disabled={savingArch}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Plus size={12} />
+                  {props.provider ? "Change provider" : "Add provider"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowConsumerDialog(true)}
+                  disabled={savingArch}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  <Plus size={12} />
+                  {consumers.length > 0 ? "Edit consumers" : "Add consumers"}
+                </button>
+              </>
+            )}
+            <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400" aria-label="Close">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 relative min-h-0">
+        <div ref={canvasRef} className="flex-1 relative min-h-0">
           <ApiArchitectureGraph
-            api={api}
+            api={liveApi}
             onLayoutSave={onLayoutSave}
             onResetLayout={onResetLayout}
+            exportFilename={liveApi.name}
+            containerRef={canvasRef}
           />
         </div>
 
@@ -394,9 +516,26 @@ export function ApiDiagramModal({
             <span className="text-xs text-gray-500">Gateway: {props.gateway.gateway_name}</span>
           )}
           {props.base_url && <span className="text-xs text-gray-500 font-mono truncate">{props.base_url}</span>}
-          {api.owner && <span className="text-xs text-gray-500 ml-auto">Owner: {api.owner}</span>}
+          {hasCustomLayout && <span className="text-[10px] text-teal-600 font-medium">Layout saved ✓</span>}
+          {liveApi.owner && <span className="text-xs text-gray-500 ml-auto">Owner: {liveApi.owner}</span>}
         </div>
       </div>
+
+      {showProviderDialog && (
+        <PickProviderDialog
+          selected={props.provider ?? null}
+          onClose={() => setShowProviderDialog(false)}
+          onApply={handleProviderApply}
+        />
+      )}
+
+      {showConsumerDialog && (
+        <AddConsumerDialog
+          selected={consumers}
+          onClose={() => setShowConsumerDialog(false)}
+          onApply={handleConsumersApply}
+        />
+      )}
     </>
   );
 }

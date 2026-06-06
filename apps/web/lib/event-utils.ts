@@ -60,9 +60,24 @@ export function brokerKeyFromRef(broker: EventBrokerRef | null | undefined): str
   return "";
 }
 
+/** Ensure integration infra brokers default to tool kind for relationship sync. */
+export function normalizeEventBrokerRef(broker: EventBrokerRef | null | undefined): EventBrokerRef | null {
+  if (!broker) return null;
+  if (!broker.broker_id) return broker;
+  return {
+    ...broker,
+    broker_kind: broker.broker_kind ?? "tool",
+  };
+}
+
 export function brokerRefFromKey(
   key: string,
-  registeredBrokers: Array<{ id: string; name: string; transport?: string }>
+  registeredBrokers: Array<{
+    id: string;
+    name: string;
+    transport?: string;
+    object_type?: "tool" | "message_broker";
+  }>
 ): EventBrokerRef | null {
   if (!key) return null;
   if (key === "__register__") return null;
@@ -75,11 +90,12 @@ export function brokerRefFromKey(
     const id = key.slice(11);
     const broker = registeredBrokers.find((b) => b.id === id);
     if (!broker) return null;
-    return {
+    return normalizeEventBrokerRef({
       broker_id: broker.id,
       broker_name: broker.name,
+      broker_kind: broker.object_type ?? "tool",
       transport: broker.transport as EventBrokerRef["transport"],
-    };
+    });
   }
   return null;
 }

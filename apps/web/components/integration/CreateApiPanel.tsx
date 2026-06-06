@@ -3,21 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/lib/auth-context";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Info, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { objectsApi, peopleApi, relationshipsApi } from "@/lib/api-client";
+import { objectsApi, peopleApi } from "@/lib/api-client";
+import { syncApiRelationships } from "@/lib/api-relationship-utils";
+import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { AddConsumerDialog } from "@/components/integration/AddConsumerDialog";
 import { ApiDiagramModal, type NodeLayout } from "@/components/integration/ApiDiagram";
 import { ApiDiagramPreview } from "@/components/integration/ApiDiagramPreview";
 import { PickProviderDialog } from "@/components/integration/PickProviderDialog";
-import { RegisterGatewayDialog } from "@/components/integration/RegisterGatewayDialog";
 import {
   API_AUDIENCES,
   API_AUTH,
   API_CRITICALITY,
-  API_GATEWAY_PRESETS,
   API_STATUSES,
   API_STYLES,
   buildApiDraft,
@@ -25,6 +25,12 @@ import {
   gatewayKeyFromRef,
   gatewayRefFromKey,
 } from "@/lib/api-utils";
+import {
+  apiGatewayCarrierOptions,
+  formatCarrierOptionLabel,
+  infraCarrierFieldHint,
+  integrationInfraToolsQueryKey,
+} from "@/lib/integration-infra-carriers";
 import type {
   ApiConsumerRef,
   ApiGatewayRef,
@@ -118,60 +124,6 @@ function initFromApi(api?: MinEAObject) {
   };
 }
 
-async function syncApiRelationships(
-  orgSlug: string,
-  workspaceSlug: string,
-  apiId: string,
-  provider: ApiProviderRef | null,
-  consumers: ApiConsumerRef[],
-  token: string
-) {
-  const existing = await relationshipsApi.list(
-    orgSlug,
-    workspaceSlug,
-    { to_object_id: apiId },
-    token
-  );
-
-  for (const rel of existing) {
-    if (rel.to_type === "api" && (rel.type === "exposes" || rel.type === "consumes")) {
-      await relationshipsApi.delete(orgSlug, workspaceSlug, rel.id, token);
-    }
-  }
-
-  if (provider) {
-    await relationshipsApi.create(
-      orgSlug,
-      workspaceSlug,
-      {
-        type: "exposes",
-        from_object_id: provider.provider_id,
-        from_type: provider.provider_kind,
-        to_object_id: apiId,
-        to_type: "api",
-      },
-      token
-    );
-  }
-
-  for (const consumer of consumers) {
-    if (consumer.consumer_kind === "application" && consumer.consumer_id) {
-      await relationshipsApi.create(
-        orgSlug,
-        workspaceSlug,
-        {
-          type: "consumes",
-          from_object_id: consumer.consumer_id,
-          from_type: "application",
-          to_object_id: apiId,
-          to_type: "api",
-        },
-        token
-      );
-    }
-  }
-}
-
 function consumerChipClass(consumer: ApiConsumerRef) {
   if (consumer.consumer_kind === "custom") {
     const lower = consumer.consumer_name.toLowerCase();
@@ -189,6 +141,7 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
 
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
   const [mounted, setMounted] = useState(false);
 
@@ -209,7 +162,6 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showProviderDialog, setShowProviderDialog] = useState(false);
   const [showConsumerDialog, setShowConsumerDialog] = useState(false);
-  const [showRegisterGateway, setShowRegisterGateway] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [draftLayout, setDraftLayout] = useState<NodeLayout>(init.draftLayout);
 
@@ -224,29 +176,18 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
     enabled,
   });
 
-  const { data: gatewaysData } = useQuery({
-    queryKey: ["objects", orgSlug, workspaceSlug, "api_gateway"],
+  const { data: infraToolsData } = useQuery({
+    queryKey: integrationInfraToolsQueryKey(orgSlug, workspaceSlug),
     queryFn: async () => {
       const token = await getToken();
-      const result = await objectsApi.list(orgSlug, workspaceSlug, { type: "tool" }, token!);
-      return {
-        ...result,
-        items: result.items.filter(
-          (t) => (t.properties as Record<string, unknown>)?.gateway_platform != null
-        ),
-      };
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "tool" }, token!);
     },
     enabled,
   });
 
   const registeredGateways = useMemo(
-    () =>
-      (gatewaysData?.items ?? []).map((g) => ({
-        id: g.id,
-        name: g.name,
-        platform: (g.properties as Record<string, unknown>)?.gateway_platform as string | undefined,
-      })),
-    [gatewaysData]
+    () => apiGatewayCarrierOptions(infraToolsData?.items ?? []),
+    [infraToolsData]
   );
 
   const selectedGateway: ApiGatewayRef | null = useMemo(() => {
@@ -325,6 +266,10 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
         properties: properties as Record<string, unknown>,
       };
 
+      const previousGatewayId = isEdit
+        ? (((initialValues?.properties ?? {}) as ApiProperties).gateway?.gateway_id ?? null)
+        : null;
+
       if (isEdit && initialValues) {
         const api = await objectsApi.update(
           orgSlug,
@@ -339,9 +284,10 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
           initialValues.id,
           provider,
           consumers,
+          selectedGateway,
           token
         );
-        return api;
+        return { api, previousGatewayId };
       }
 
       const api = await objectsApi.create(
@@ -350,10 +296,39 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
         { type: "api", ...body },
         token
       );
-      await syncApiRelationships(orgSlug, workspaceSlug, api.id, provider, consumers, token);
-      return api;
+      await syncApiRelationships(
+        orgSlug,
+        workspaceSlug,
+        api.id,
+        provider,
+        consumers,
+        selectedGateway,
+        token
+      );
+      return { api, previousGatewayId: null };
     },
-    onSuccess: (api) => onSuccess(api.id),
+    onSuccess: async ({ api, previousGatewayId }) => {
+      const token = await getToken();
+      const nextGatewayId = ((api.properties ?? {}) as ApiProperties).gateway?.gateway_id ?? null;
+      const gatewayIds = new Set(
+        [previousGatewayId, nextGatewayId].filter(Boolean) as string[]
+      );
+      if (token) {
+        for (const gatewayId of gatewayIds) {
+          await refreshObjectRelationshipQueries(
+            queryClient,
+            orgSlug,
+            workspaceSlug,
+            gatewayId,
+            token
+          );
+        }
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ["objects", orgSlug, workspaceSlug, "api", "infra-refs"],
+      });
+      onSuccess(api.id);
+    },
     onError: (err) =>
       setError(err instanceof Error ? err.message : `Could not ${isEdit ? "save" : "create"} API`),
   });
@@ -555,39 +530,38 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
                 <div className="relative">
                   <select
                     value={gatewayKey}
-                    onChange={(e) => {
-                      if (e.target.value === "__register__") {
-                        setShowRegisterGateway(true);
-                        return;
-                      }
-                      setGatewayKey(e.target.value);
-                    }}
+                    onChange={(e) => setGatewayKey(e.target.value)}
                     className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 pr-8"
                   >
                     <option value="">— None / direct</option>
-                    <optgroup label="API gateway">
-                      {API_GATEWAY_PRESETS.map((g) => (
-                        <option key={g.value} value={`preset:${g.value}`}>
-                          {g.label}
-                        </option>
-                      ))}
-                    </optgroup>
                     {registeredGateways.length > 0 && (
-                      <optgroup label="Registered gateways">
+                      <optgroup label="Integration infrastructure">
                         {registeredGateways.map((g) => (
                           <option key={g.id} value={`registered:${g.id}`}>
-                            {g.name}
+                            {formatCarrierOptionLabel(g)}
                           </option>
                         ))}
                       </optgroup>
                     )}
-                    <option value="__register__">+ Register gateway</option>
                   </select>
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
                     ▾
                   </span>
                 </div>
-                <p className="text-[11px] text-gray-400 mt-1.5">
+                {(() => {
+                  const hint = infraCarrierFieldHint("apis", registeredGateways.length > 0);
+                  return (
+                    <p
+                      className={cn(
+                        "text-[11px] mt-1.5",
+                        hint.tone === "notice" ? "text-amber-700" : "text-gray-400"
+                      )}
+                    >
+                      {hint.text}
+                    </p>
+                  );
+                })()}
+                <p className="text-[11px] text-gray-400 mt-1">
                   Where rate limits, auth, and routing are governed
                 </p>
               </div>
@@ -710,18 +684,6 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
         />
       )}
 
-      {showRegisterGateway && (
-        <RegisterGatewayDialog
-          defaultPlatform={
-            gatewayKey.startsWith("preset:") ? gatewayKey.slice(7) : undefined
-          }
-          onClose={() => setShowRegisterGateway(false)}
-          onCreated={(gatewayId) => {
-            setGatewayKey(`registered:${gatewayId}`);
-            setShowRegisterGateway(false);
-          }}
-        />
-      )}
     </>,
     document.body
   );

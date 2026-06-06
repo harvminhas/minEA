@@ -1,11 +1,18 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Edit2, Trash2, Zap } from "lucide-react";
-import type { EventProperties, MinEAObject, ObjectListResponse } from "@minea/types";
-import { objectsApi } from "@/lib/api-client";
+import type { EventProperties, MinEAObject, ObjectListResponse, Relationship } from "@minea/types";
+import { objectsApi, relationshipsApi } from "@/lib/api-client";
+import {
+  architectureRelationshipsFromEvent,
+  mergeArchitectureRelationships,
+  persistEventArchitecture,
+} from "@/lib/event-relationship-utils";
+import { excludeTechDebtRelationships } from "@/lib/relationship-display";
+import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useTenancy } from "@/lib/tenancy";
 import {
   DetailPanel,
@@ -15,7 +22,7 @@ import {
 } from "@/components/ui/DetailPanel";
 import { CreateEventPanel } from "@/components/integration/CreateEventPanel";
 import { EventDiagramModal, type NodeLayout } from "@/components/integration/EventDiagram";
-import { EventDiagramPreview } from "@/components/integration/EventDiagramPreview";
+import { EventRelationshipsTab } from "@/components/integration/EventRelationshipsTab";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
 import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
@@ -27,7 +34,6 @@ import {
   EVENT_CRITICALITY,
   EVENT_DELIVERY_LABEL,
   formatEventSubtitle,
-  formatProducerLabel,
 } from "@/lib/event-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import { cn, getStatusColor, getStatusLabel } from "@/lib/utils";
@@ -52,11 +58,46 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [liveEvent, setLiveEvent] = useState(event);
+  const [relationshipsSnapshot, setRelationshipsSnapshot] = useState<Relationship[] | null>(null);
+  const liveEventRef = useRef(event);
 
-  const props = (event.properties ?? {}) as EventProperties;
-  const subscribers = props.subscribers ?? [];
+  useEffect(() => {
+    setLiveEvent(event);
+    liveEventRef.current = event;
+  }, [event.id, event.updated_at]);
+
+  useEffect(() => {
+    setRelationshipsSnapshot(null);
+  }, [event.id]);
+
+  const props = (liveEvent.properties ?? {}) as EventProperties;
 
   const eventsQueryKey = ["objects", orgSlug, workspaceSlug, "event"] as const;
+
+  const { data: outRels } = useQuery({
+    queryKey: ["relationships", "from", event.id],
+    queryFn: async () => {
+      const token = await getToken();
+      return relationshipsApi.list(orgSlug, workspaceSlug, { from_object_id: event.id }, token!);
+    },
+    staleTime: 0,
+  });
+
+  const { data: inRels } = useQuery({
+    queryKey: ["relationships", "to", event.id],
+    queryFn: async () => {
+      const token = await getToken();
+      return relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: event.id }, token!);
+    },
+    staleTime: 0,
+  });
+
+  const drawerRels = useMemo(() => {
+    const eventRels = relationshipsSnapshot ?? [...(outRels ?? []), ...(inRels ?? [])];
+    return excludeTechDebtRelationships(mergeArchitectureRelationships(eventRels, liveEvent));
+  }, [relationshipsSnapshot, outRels, inRels, liveEvent]);
+
   const historyQueryKey = ["object-history", orgSlug, workspaceSlug, event.id] as const;
 
   const historyQuery = useQuery({
@@ -81,6 +122,59 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
     queryClient.invalidateQueries({ queryKey: historyQueryKey });
   };
 
+  const syncRelationshipsFromServer = useCallback(async () => {
+    const token = await getToken();
+    if (!token) return;
+    const { outbound, inbound } = await refreshObjectRelationshipQueries(
+      queryClient,
+      orgSlug,
+      workspaceSlug,
+      event.id,
+      token
+    );
+    setRelationshipsSnapshot(excludeTechDebtRelationships([...outbound, ...inbound]));
+  }, [getToken, queryClient, orgSlug, workspaceSlug, event.id]);
+
+  const handleArchitectureChange = useCallback(
+    async (updates: Parameters<typeof persistEventArchitecture>[3]) => {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const updated = await persistEventArchitecture(
+        orgSlug,
+        workspaceSlug,
+        liveEventRef.current,
+        updates,
+        token
+      );
+      setLiveEvent(updated);
+      liveEventRef.current = updated;
+      setRelationshipsSnapshot(
+        excludeTechDebtRelationships(architectureRelationshipsFromEvent(updated))
+      );
+      await syncRelationshipsFromServer();
+      queryClient.setQueryData<ObjectListResponse>(eventsQueryKey, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          items: old.items.map((o) => (o.id === updated.id ? updated : o)),
+        };
+      });
+      refreshEvent();
+      onUpdate();
+      return updated;
+    },
+    [
+      getToken,
+      orgSlug,
+      workspaceSlug,
+      event.id,
+      queryClient,
+      eventsQueryKey,
+      onUpdate,
+      syncRelationshipsFromServer,
+    ]
+  );
+
   const deleteMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
@@ -97,8 +191,7 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
       const token = await getToken();
       if (!token) return;
 
-      const cached = queryClient.getQueryData<ObjectListResponse>(eventsQueryKey);
-      const current = cached?.items.find((o) => o.id === event.id) ?? event;
+      const current = liveEventRef.current;
       const currentProps = (current.properties ?? {}) as EventProperties;
 
       await objectsApi.update(
@@ -111,19 +204,23 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
         token
       );
 
+      const withLayout = {
+        ...current,
+        properties: { ...currentProps, node_layout: layout },
+      };
+
       queryClient.setQueryData<ObjectListResponse>(eventsQueryKey, (old) => {
         if (!old) return old;
         return {
           ...old,
-          items: old.items.map((o) =>
-            o.id === event.id
-              ? { ...o, properties: { ...currentProps, node_layout: layout } }
-              : o
-          ),
+          items: old.items.map((o) => (o.id === event.id ? withLayout : o)),
         };
       });
+
+      setLiveEvent(withLayout);
+      liveEventRef.current = withLayout;
     },
-    [getToken, orgSlug, workspaceSlug, event, queryClient, eventsQueryKey]
+    [getToken, orgSlug, workspaceSlug, event.id, queryClient, eventsQueryKey]
   );
 
   const handleResetLayout = useCallback(() => {
@@ -142,21 +239,21 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
                   <Zap size={16} strokeWidth={2.25} />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="font-semibold text-gray-900 truncate">{event.name}</h2>
+                  <h2 className="font-semibold text-gray-900 truncate">{liveEvent.name}</h2>
                   <p className="text-sm text-gray-400">
                     {formatEventSubtitle(props.topic, props.delivery)}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {event.status && (
+                {liveEvent.status && (
                   <span
                     className={cn(
                       "rounded-full px-2.5 py-1 text-xs font-medium capitalize",
-                      getStatusColor(event.status)
+                      getStatusColor(liveEvent.status)
                     )}
                   >
-                    {getStatusLabel(event.status)}
+                    {getStatusLabel(liveEvent.status)}
                   </span>
                 )}
                 <button
@@ -181,7 +278,12 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
 
             <ObjectDrawerTabs
               activeTab={activeTab}
-              onTabChange={setActiveTab}
+              onTabChange={(tab) => {
+                setActiveTab(tab);
+                if (tab === "relationships") void syncRelationshipsFromServer();
+              }}
+              showRelationships
+              relationshipCount={drawerRels.length}
               openDebtCount={techDebtSummary?.open_count ?? 0}
               className="mt-4"
             />
@@ -190,20 +292,26 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
         footer={
           <div className="border-t border-gray-100 px-6 py-3">
             <p className="text-xs text-gray-400">
-              Updated{event.updated_by_name ? ` by ${event.updated_by_name}` : ""}{" "}
-              {formatUpdatedAgo(event.updated_at)}
+              Updated{liveEvent.updated_by_name ? ` by ${liveEvent.updated_by_name}` : ""}{" "}
+              {formatUpdatedAgo(liveEvent.updated_at)}
             </p>
           </div>
         }
       >
-        {activeTab === "tech_debt" ? (
+        {activeTab === "relationships" ? (
+          <EventRelationshipsTab
+            event={liveEvent}
+            relationships={drawerRels}
+            onExpandDiagram={() => setShowChart(true)}
+          />
+        ) : activeTab === "tech_debt" ? (
           <ObjectTechDebtTab
-            objectId={event.id}
-            objectName={event.name}
+            objectId={liveEvent.id}
+            objectName={liveEvent.name}
             objectKind="event"
             summary={techDebtSummary}
             isLoading={techDebtLoading}
-            defaultOwner={event.owner}
+            defaultOwner={liveEvent.owner}
             onRefresh={refreshEvent}
           />
         ) : activeTab === "history" ? (
@@ -214,52 +322,11 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
           />
         ) : (
           <>
-            {event.description && (
+            {liveEvent.description && (
               <DetailSection title="Description">
-                <p className="text-sm text-gray-700">{event.description}</p>
+                <p className="text-sm text-gray-700">{liveEvent.description}</p>
               </DetailSection>
             )}
-
-            <DetailSection title="Architecture">
-              <EventDiagramPreview event={event} onExpand={() => setShowChart(true)} />
-              <p className="text-xs text-gray-400 mt-2">
-                {props.producer ? formatProducerLabel(props.producer) : "No producer"}
-                {subscribers.length > 0 && ` · ${subscribers.length} subscriber${subscribers.length !== 1 ? "s" : ""}`}
-                {props.topic && ` · ${props.topic}`}
-              </p>
-            </DetailSection>
-
-            <DetailSection title="Producer & subscribers">
-              <div className="space-y-2 text-sm">
-                {props.producer && (
-                  <DetailRow label="Producer" value={formatProducerLabel(props.producer)} />
-                )}
-                {subscribers.length > 0 ? (
-                  <div>
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                      Subscribers
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {subscribers.map((s) => (
-                        <span
-                          key={s.subscriber_id ?? s.subscriber_name}
-                          className={cn(
-                            "text-xs px-2 py-0.5 rounded-full border",
-                            s.subscriber_kind === "custom"
-                              ? "bg-amber-50 text-amber-800 border-amber-200"
-                              : "bg-teal-50 text-teal-700 border-teal-100"
-                          )}
-                        >
-                          {s.subscriber_name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 italic">No subscribers yet</p>
-                )}
-              </div>
-            </DetailSection>
 
             <DetailSection title="Contract">
               <div className="space-y-2 text-sm">
@@ -282,7 +349,7 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
             <DetailSection title="Governance">
               <div className="space-y-2 text-sm">
                 {props.broker && <DetailRow label="Broker" value={props.broker.broker_name} />}
-                {event.owner && <DetailRow label="Owner" value={event.owner} />}
+                {liveEvent.owner && <DetailRow label="Owner" value={liveEvent.owner} />}
                 {props.audience && (
                   <DetailRow label="Audience" value={AUDIENCE_LABEL[props.audience] ?? props.audience} />
                 )}
@@ -292,7 +359,7 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
                     value={CRITICALITY_LABEL[props.criticality] ?? props.criticality}
                   />
                 )}
-                {event.tags.length > 0 && <DetailRow label="Tags" value={event.tags.join(", ")} />}
+                {liveEvent.tags.length > 0 && <DetailRow label="Tags" value={liveEvent.tags.join(", ")} />}
               </div>
             </DetailSection>
           </>
@@ -302,7 +369,7 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
       {showDeleteConfirm && (
         <ConfirmDeleteDialog
           title="Delete event"
-          message={`Are you sure you want to delete "${event.name}"? This cannot be undone.`}
+          message={`Are you sure you want to delete "${liveEvent.name}"? This cannot be undone.`}
           onConfirm={() => deleteMutation.mutate()}
           onCancel={() => setShowDeleteConfirm(false)}
           isPending={deleteMutation.isPending}
@@ -311,19 +378,22 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
 
       {showChart && (
         <EventDiagramModal
-          event={event}
+          event={liveEvent}
           onClose={() => setShowChart(false)}
           onLayoutSave={handleLayoutSave}
           onResetLayout={handleResetLayout}
+          onArchitectureChange={handleArchitectureChange}
         />
       )}
 
       {showEditForm && (
         <CreateEventPanel
-          initialValues={event}
+          initialValues={liveEvent}
           onClose={() => setShowEditForm(false)}
-          onSuccess={() => {
+          onSuccess={(updated) => {
             setShowEditForm(false);
+            setLiveEvent(updated);
+            liveEventRef.current = updated;
             refreshEvent();
             onUpdate();
           }}
