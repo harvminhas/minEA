@@ -22,6 +22,8 @@ export type RepositoryNavItem = {
   /** Path segment after workspace basePath (no leading slash). */
   segment: string;
   badge?: NavBadge;
+  /** Omit from sidebar navigation; route and data model remain available. */
+  hidden?: boolean;
   /** Omit for upcoming items; used to fetch sidebar totals. */
   countSource?: NavCountSource;
 };
@@ -35,8 +37,16 @@ export type RepositoryLayer = {
   items: RepositoryNavItem[];
 };
 
+export function isNavItemHidden(item: RepositoryNavItem): boolean {
+  return item.hidden === true;
+}
+
 export function isNavItemDisabled(item: RepositoryNavItem): boolean {
   return item.badge === "upcoming";
+}
+
+export function visibleNavItems(layer: RepositoryLayer): RepositoryNavItem[] {
+  return layer.items.filter((item) => !isNavItemHidden(item));
 }
 
 /** Sum of enabled subnav item counts for a layer header. */
@@ -44,7 +54,7 @@ export function layerNavCountTotal(
   layer: RepositoryLayer,
   countsBySegment: Record<string, number>
 ): number {
-  return layer.items
+  return visibleNavItems(layer)
     .filter((item) => !isNavItemDisabled(item))
     .reduce((sum, item) => sum + (countsBySegment[item.segment] ?? 0), 0);
 }
@@ -108,6 +118,7 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
       {
         label: "Flows",
         segment: "integration/flows",
+        hidden: true,
         countSource: { kind: "objects", type: "integration_flow" },
       },
     ],
@@ -168,4 +179,6 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
   },
 ];
 
-export const REPOSITORY_NAV_ITEMS: RepositoryNavItem[] = REPOSITORY_LAYERS.flatMap((l) => l.items);
+export const REPOSITORY_NAV_ITEMS: RepositoryNavItem[] = REPOSITORY_LAYERS.flatMap((l) =>
+  visibleNavItems(l)
+);

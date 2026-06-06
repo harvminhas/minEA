@@ -75,7 +75,9 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
 
   const componentsQueryKey = ["objects", orgSlug, workspaceSlug, "component"] as const;
 
-  const { data: outRels } = useQuery({
+  const [architectureUpdating, setArchitectureUpdating] = useState(false);
+
+  const { data: outRels, isFetching: outRelsFetching } = useQuery({
     queryKey: ["relationships", "from", component.id],
     queryFn: async () => {
       const token = await getToken();
@@ -84,7 +86,7 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
     staleTime: 0,
   });
 
-  const { data: inRels } = useQuery({
+  const { data: inRels, isFetching: inRelsFetching } = useQuery({
     queryKey: ["relationships", "to", component.id],
     queryFn: async () => {
       const token = await getToken();
@@ -92,6 +94,9 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
     },
     staleTime: 0,
   });
+
+  const diagramRefreshing =
+    architectureUpdating || outRelsFetching || inRelsFetching;
 
   const drawerRels = useMemo(() => {
     const apiRels = relationshipsSnapshot ?? [...(outRels ?? []), ...(inRels ?? [])];
@@ -138,29 +143,34 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
     async (updates: Parameters<typeof persistComponentArchitecture>[3]) => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
-      const updated = await persistComponentArchitecture(
-        orgSlug,
-        workspaceSlug,
-        liveComponentRef.current,
-        updates,
-        token
-      );
-      setLiveComponent(updated);
-      liveComponentRef.current = updated;
-      setRelationshipsSnapshot(
-        excludeTechDebtRelationships(architectureRelationshipsFromComponent(updated))
-      );
-      await syncRelationshipsFromServer();
-      queryClient.setQueryData<ObjectListResponse>(componentsQueryKey, (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          items: old.items.map((o) => (o.id === updated.id ? updated : o)),
-        };
-      });
-      refreshComponent();
-      onUpdate();
-      return updated;
+      setArchitectureUpdating(true);
+      try {
+        const updated = await persistComponentArchitecture(
+          orgSlug,
+          workspaceSlug,
+          liveComponentRef.current,
+          updates,
+          token
+        );
+        setLiveComponent(updated);
+        liveComponentRef.current = updated;
+        setRelationshipsSnapshot(
+          excludeTechDebtRelationships(architectureRelationshipsFromComponent(updated))
+        );
+        await syncRelationshipsFromServer({ manageSpinner: false });
+        queryClient.setQueryData<ObjectListResponse>(componentsQueryKey, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            items: old.items.map((o) => (o.id === updated.id ? updated : o)),
+          };
+        });
+        refreshComponent();
+        onUpdate();
+        return updated;
+      } finally {
+        setArchitectureUpdating(false);
+      }
     },
     [
       getToken,
@@ -304,6 +314,7 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
           <ComponentRelationshipsTab
             component={liveComponent}
             relationships={drawerRels}
+            diagramRefreshing={diagramRefreshing}
             onExpandDiagram={() => setShowChart(true)}
           />
         ) : activeTab === "tech_debt" ? (

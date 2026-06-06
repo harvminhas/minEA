@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { MinEAObject, Relationship, ToolProperties } from "@minea/types";
 import { EntityArchitectureRelationshipsTab } from "@/components/integration/EntityArchitectureRelationshipsTab";
 import { IntegrationInfraDiagramPreview } from "@/components/integration/IntegrationInfraDiagramPreview";
+import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
 import { extractInfraDiagramLinks } from "@/lib/integration-infra-relationship-utils";
 import { formatInfraHandles, formatInfraSubtitle, resolvedInfraHandles } from "@/lib/integration-infra-utils";
 
@@ -11,6 +12,7 @@ interface Props {
   infra: MinEAObject;
   relationships: Relationship[];
   nameById: Record<string, string>;
+  diagramRefreshing?: boolean;
   onExpandDiagram: () => void;
 }
 
@@ -18,6 +20,7 @@ export function IntegrationInfraRelationshipsTab({
   infra,
   relationships,
   nameById,
+  diagramRefreshing = false,
   onExpandDiagram,
 }: Props) {
   const props = (infra.properties ?? {}) as ToolProperties;
@@ -59,12 +62,16 @@ export function IntegrationInfraRelationshipsTab({
       relationships={relationships}
       relatedNameOverrides={nameById}
       diagramPreview={
-        <IntegrationInfraDiagramPreview
-          infra={infra}
-          relationships={relationships}
-          nameById={nameById}
-          onExpand={onExpandDiagram}
-        />
+        <div className="rounded-lg overflow-hidden border border-transparent">
+          <DiagramSavingBar active={diagramRefreshing} label="Updating diagram…" />
+          <IntegrationInfraDiagramPreview
+            infra={infra}
+            relationships={relationships}
+            nameById={nameById}
+            onExpand={onExpandDiagram}
+            disabled={diagramRefreshing}
+          />
+        </div>
       }
       architectureSummary={summary}
       chips={chips.length > 0 ? chips : undefined}

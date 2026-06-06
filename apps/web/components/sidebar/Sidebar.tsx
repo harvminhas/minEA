@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/lib/store";
 import { useTenancy } from "@/lib/tenancy";
 import { NAV_VIEWS } from "@/lib/views";
-import { REPOSITORY_LAYERS, isNavItemDisabled } from "@/lib/repository-nav";
+import { REPOSITORY_LAYERS, isNavItemDisabled, visibleNavItems } from "@/lib/repository-nav";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -75,8 +75,9 @@ export function Sidebar() {
             </div>
 
             {REPOSITORY_LAYERS.map((layer) => {
+              const items = visibleNavItems(layer);
               const isCollapsed = collapsedLayers[layer.id] ?? true;
-              const isLayerActive = layer.items.some((item) => {
+              const isLayerActive = items.some((item) => {
                 if (isNavItemDisabled(item)) return false;
                 const href = `${basePath}/${item.segment}`;
                 return pathname === href || pathname.startsWith(`${href}/`);
@@ -103,13 +104,13 @@ export function Sidebar() {
                     />
                     <span className="truncate flex-1 text-left">{layer.label}</span>
                     <span className="text-[10px] text-white/25 tabular-nums">
-                      {layer.items.length}
+                      {items.length}
                     </span>
                   </button>
 
                   {!isCollapsed && (
                     <div className="mb-0.5">
-                      {layer.items.map((item) => {
+                      {items.map((item) => {
                         const href = `${basePath}/${item.segment}`;
 
                         if (isNavItemDisabled(item)) {

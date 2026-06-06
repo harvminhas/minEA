@@ -26,6 +26,7 @@ import {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { DiagramExportButton } from "@/components/shared/DiagramExportButton";
+import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
 import { Box, Cpu, Monitor, Plus, RotateCcw, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -601,7 +602,9 @@ export function ComponentDiagramModal({
   const [showSystemDialog, setShowSystemDialog] = useState(false);
   const [showRuntimeDialog, setShowRuntimeDialog] = useState(false);
   const [savingArch, setSavingArch] = useState(false);
+  const [savingLayout, setSavingLayout] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const saving = savingArch || savingLayout;
 
   useEffect(() => {
     setLiveComponent(component);
@@ -660,10 +663,34 @@ export function ComponentDiagramModal({
     void applyArchitecture({ runtime });
   };
 
+  const handleLayoutSave = async (layout: NodeLayout) => {
+    if (!onLayoutSave) return;
+    setSavingLayout(true);
+    try {
+      await onLayoutSave(layout);
+    } finally {
+      setSavingLayout(false);
+    }
+  };
+
+  const handleResetLayout = async () => {
+    if (!onResetLayout) return;
+    setSavingLayout(true);
+    try {
+      await onResetLayout();
+    } finally {
+      setSavingLayout(false);
+    }
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-[200] bg-black/40" onClick={onClose} />
       <div className="fixed inset-6 z-[210] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <DiagramSavingBar
+          active={saving}
+          label={savingArch ? "Saving changes…" : "Saving layout…"}
+        />
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
           <div>
             <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider mb-0.5">
@@ -680,9 +707,6 @@ export function ComponentDiagramModal({
                   {typeLabel}
                 </span>
               )}
-              {savingArch && (
-                <span className="text-[10px] text-gray-400">Saving…</span>
-              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -691,7 +715,8 @@ export function ComponentDiagramModal({
                 <button
                   type="button"
                   onClick={() => setShowSystemDialog(true)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors"
+                  disabled={saving}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <Plus size={12} />
                   {sysCount > 0 ? "Edit systems" : "Add systems"}
@@ -699,7 +724,8 @@ export function ComponentDiagramModal({
                 <button
                   type="button"
                   onClick={() => setShowRuntimeDialog(true)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 transition-colors"
+                  disabled={saving}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-violet-700 bg-violet-50 hover:bg-violet-100 transition-colors disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <Plus size={12} />
                   {props.runtime ? "Change runtime" : "Add runtime"}
@@ -717,8 +743,8 @@ export function ComponentDiagramModal({
             <ComponentCanvasInner
               initialNodes={initialNodes}
               initialEdges={initialEdges}
-              onLayoutSave={onLayoutSave}
-              onResetLayout={onResetLayout}
+              onLayoutSave={onLayoutSave ? handleLayoutSave : undefined}
+              onResetLayout={onResetLayout ? handleResetLayout : undefined}
               hasCustomLayout={hasCustomLayout}
             />
             <DiagramExportButton

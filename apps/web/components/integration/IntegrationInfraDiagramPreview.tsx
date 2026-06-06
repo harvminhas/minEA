@@ -11,6 +11,7 @@ interface Props {
   relationships: Relationship[];
   nameById: Record<string, string>;
   onExpand: () => void;
+  disabled?: boolean;
 }
 
 export function IntegrationInfraDiagramPreview({
@@ -18,6 +19,7 @@ export function IntegrationInfraDiagramPreview({
   relationships,
   nameById,
   onExpand,
+  disabled,
 }: Props) {
   const hasLinks = extractInfraDiagramLinks(infra.id, relationships, nameById).length > 0;
 
@@ -25,9 +27,11 @@ export function IntegrationInfraDiagramPreview({
     <button
       type="button"
       onClick={onExpand}
+      disabled={disabled}
       className={cn(
         "group relative w-full text-left rounded-lg border border-gray-200 overflow-hidden",
-        "hover:border-teal-300 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-teal-500"
+        "hover:border-teal-300 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-teal-500",
+        disabled && "pointer-events-none opacity-80"
       )}
       aria-label="Expand integration infrastructure relationship chart"
     >

@@ -91,7 +91,7 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
     enabled: activeTab === "history",
   });
 
-  const { data: outRels } = useQuery({
+  const { data: outRels, isFetching: outRelsFetching } = useQuery({
     queryKey: ["relationships", "from", infra.id],
     queryFn: async () => {
       const token = await getToken();
@@ -101,7 +101,7 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
     staleTime: 0,
   });
 
-  const { data: inRels } = useQuery({
+  const { data: inRels, isFetching: inRelsFetching } = useQuery({
     queryKey: ["relationships", "to", infra.id],
     queryFn: async () => {
       const token = await getToken();
@@ -110,6 +110,8 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
     enabled,
     staleTime: 0,
   });
+
+  const diagramRefreshing = outRelsFetching || inRelsFetching;
 
   const { data: linkedApis } = useQuery({
     queryKey: ["objects", orgSlug, workspaceSlug, "api", "infra-refs"],
@@ -330,6 +332,7 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
             infra={liveInfra}
             relationships={drawerRels}
             nameById={relationshipNameById}
+            diagramRefreshing={diagramRefreshing}
             onExpandDiagram={() => setShowChart(true)}
           />
         ) : activeTab === "tech_debt" ? (

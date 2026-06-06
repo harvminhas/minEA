@@ -11,6 +11,7 @@ import {
   type NodeTypes,
 } from "reactflow";
 import { ArrowLeftRight, ArrowRight, Braces, Box, Layers, Link2, X, Zap } from "lucide-react";
+import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
 import { EntityFlowCanvas, type NodeLayout } from "@/components/shared/EntityFlowCanvas";
 
 export type { NodeLayout };
@@ -397,6 +398,7 @@ export function IntegrationInfraDiagramModal({
 }) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [liveInfra, setLiveInfra] = useState(infra);
+  const [savingLayout, setSavingLayout] = useState(false);
 
   useEffect(() => {
     setLiveInfra(infra);
@@ -406,28 +408,41 @@ export function IntegrationInfraDiagramModal({
   const linkCount = extractInfraDiagramLinks(liveInfra.id, relationships, nameById).length;
   const hasCustomLayout = !!(props.node_layout && Object.keys(props.node_layout).length > 0);
 
-  const handleLayoutSave = (layout: NodeLayout) => {
+  const handleLayoutSave = async (layout: NodeLayout) => {
     const currentProps = (liveInfra.properties ?? {}) as ToolProperties;
     setLiveInfra({
       ...liveInfra,
       properties: { ...currentProps, node_layout: layout },
     });
-    onLayoutSave?.(layout);
+    if (!onLayoutSave) return;
+    setSavingLayout(true);
+    try {
+      await onLayoutSave(layout);
+    } finally {
+      setSavingLayout(false);
+    }
   };
 
-  const handleResetLayout = () => {
+  const handleResetLayout = async () => {
     const currentProps = (liveInfra.properties ?? {}) as ToolProperties;
     setLiveInfra({
       ...liveInfra,
       properties: { ...currentProps, node_layout: undefined },
     });
-    onResetLayout?.();
+    if (!onResetLayout) return;
+    setSavingLayout(true);
+    try {
+      await Promise.resolve(onResetLayout());
+    } finally {
+      setSavingLayout(false);
+    }
   };
 
   return (
     <>
       <div className="fixed inset-0 z-[200] bg-black/40" onClick={onClose} />
       <div className="fixed inset-6 z-[210] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <DiagramSavingBar active={savingLayout} label="Saving layout…" />
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
           <div>
             <p className="text-[10px] font-semibold text-teal-600 uppercase tracking-wider mb-0.5">

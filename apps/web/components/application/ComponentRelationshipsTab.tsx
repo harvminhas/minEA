@@ -3,17 +3,20 @@
 import { useMemo } from "react";
 import type { ComponentProperties, MinEAObject, Relationship } from "@minea/types";
 import { ComponentDiagramPreview } from "@/components/application/ComponentDiagramPreview";
+import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
 import { ObjectRelationshipsTab } from "@/components/objects/ObjectRelationshipsTab";
 
 interface Props {
   component: MinEAObject;
   relationships: Relationship[];
+  diagramRefreshing?: boolean;
   onExpandDiagram: () => void;
 }
 
 export function ComponentRelationshipsTab({
   component,
   relationships,
+  diagramRefreshing = false,
   onExpandDiagram,
 }: Props) {
   const props = (component.properties ?? {}) as ComponentProperties;
@@ -32,7 +35,14 @@ export function ComponentRelationshipsTab({
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
           Architecture
         </h3>
-        <ComponentDiagramPreview component={component} onExpand={onExpandDiagram} />
+        <div className="rounded-lg overflow-hidden border border-transparent">
+          <DiagramSavingBar active={diagramRefreshing} label="Updating diagram…" />
+          <ComponentDiagramPreview
+            component={component}
+            onExpand={onExpandDiagram}
+            disabled={diagramRefreshing}
+          />
+        </div>
         <p className="text-xs text-gray-400 mt-2">
           {systems.length} system{systems.length !== 1 ? "s" : ""}
           {props.platform ? ` · ${props.platform.platform_name}` : ""}

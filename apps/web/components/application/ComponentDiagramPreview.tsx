@@ -8,9 +8,10 @@ import { cn } from "@/lib/utils";
 interface Props {
   component: MinEAObject;
   onExpand: () => void;
+  disabled?: boolean;
 }
 
-export function ComponentDiagramPreview({ component, onExpand }: Props) {
+export function ComponentDiagramPreview({ component, onExpand, disabled }: Props) {
   const props = (component.properties ?? {}) as ComponentProperties;
   const sysCount = props.systems?.length ?? 0;
   const hasContent = sysCount > 0 || !!props.runtime;
@@ -19,9 +20,11 @@ export function ComponentDiagramPreview({ component, onExpand }: Props) {
     <button
       type="button"
       onClick={onExpand}
+      disabled={disabled}
       className={cn(
         "group relative w-full text-left rounded-lg border border-gray-200 overflow-hidden",
-        "hover:border-indigo-300 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        "hover:border-indigo-300 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500",
+        disabled && "pointer-events-none opacity-80"
       )}
       aria-label="Expand architecture chart"
     >

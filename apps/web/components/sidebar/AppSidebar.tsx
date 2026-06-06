@@ -27,6 +27,7 @@ import {
   REPOSITORY_LAYERS,
   isNavItemDisabled,
   layerNavCountTotal,
+  visibleNavItems,
   type NavBadge,
   type RepositoryLayer,
   type RepositoryNavItem,
@@ -274,7 +275,8 @@ function CollapsedLayerFlyout({
   const anchorRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const LayerIcon = LAYER_ICONS[layer.id] ?? Briefcase;
-  const isLayerActive = layer.items.some((item) => {
+  const items = visibleNavItems(layer);
+  const isLayerActive = items.some((item) => {
     if (isNavItemDisabled(item)) return false;
     const href = `${basePath}/${item.segment}`;
     return pathname === href || pathname.startsWith(`${href}/`);
@@ -330,7 +332,7 @@ function CollapsedLayerFlyout({
               show={showCounts}
             />
           </div>
-          {layer.items.map((item) => (
+          {items.map((item) => (
             <RepoNavItemRow
               key={item.segment}
               item={item}
@@ -391,8 +393,9 @@ function CollapsedRepoNav({
   return (
     <div ref={navRef} className="flex flex-col items-center gap-1">
       {REPOSITORY_LAYERS.map((layer) => {
-        const availableItems = layer.items.filter((item) => !isNavItemDisabled(item));
-        const hasSubnav = layer.items.length > 1;
+        const items = visibleNavItems(layer);
+        const availableItems = items.filter((item) => !isNavItemDisabled(item));
+        const hasSubnav = items.length > 1;
 
         if (!hasSubnav && availableItems.length === 1) {
           const item = availableItems[0];
@@ -521,9 +524,10 @@ function ExpandedRepoNav({
       </div>
 
       {REPOSITORY_LAYERS.map((layer) => {
+        const items = visibleNavItems(layer);
         const isCollapsed = collapsedLayers[layer.id] ?? true;
         const LayerIcon = LAYER_ICONS[layer.id] ?? Briefcase;
-        const isLayerActive = layer.items.some((item) => {
+        const isLayerActive = items.some((item) => {
           if (isNavItemDisabled(item)) return false;
           const href = `${basePath}/${item.segment}`;
           return pathname === href || pathname.startsWith(`${href}/`);
@@ -564,7 +568,7 @@ function ExpandedRepoNav({
 
             {!isCollapsed && (
               <div className="mb-0.5">
-                {layer.items.map((item) => (
+                {items.map((item) => (
                   <RepoNavItemRow
                     key={item.segment}
                     item={item}

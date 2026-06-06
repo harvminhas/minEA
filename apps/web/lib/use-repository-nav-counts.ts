@@ -13,6 +13,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import {
   isNavItemDisabled,
+  isNavItemHidden,
   REPOSITORY_LAYERS,
   type NavCountSource,
   type RepositoryNavItem,
@@ -151,7 +152,7 @@ async function fetchNavCounts(
   const items: RepositoryNavItem[] = [];
   for (const layer of REPOSITORY_LAYERS) {
     for (const item of layer.items) {
-      if (isNavItemDisabled(item) || !item.countSource) {
+      if (isNavItemHidden(item) || isNavItemDisabled(item) || !item.countSource) {
         counts[item.segment] = 0;
         continue;
       }
