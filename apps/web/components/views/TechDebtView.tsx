@@ -18,6 +18,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi, productsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { usePermissions } from "@/lib/use-permissions";
 import { CreateTechDebtPanel } from "@/components/risk/CreateTechDebtPanel";
 import { TechDebtDetail } from "@/components/risk/TechDebtDetail";
 import { LinkTechDebtDialog } from "@/components/risk/LinkTechDebtDialog";
@@ -268,6 +269,7 @@ export function TechDebtView(props: TechDebtViewProps = {}) {
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
+  const { canCreate, canEdit } = usePermissions();
 
   const [showCreateInternal, setShowCreateInternal] = useState(false);
   const showCreate = createOpen ?? showCreateInternal;
@@ -483,7 +485,7 @@ export function TechDebtView(props: TechDebtViewProps = {}) {
                 ? "No tech debt items yet."
                 : "No items match the current filters."}
             </p>
-            {rows.length === 0 && (
+            {rows.length === 0 && canCreate && (
               <button
                 type="button"
                 onClick={() => setShowCreate(true)}
@@ -505,7 +507,7 @@ export function TechDebtView(props: TechDebtViewProps = {}) {
               attached={attached}
               unattached={unattached}
               onOpen={setSelectedId}
-              onLink={setLinkingId}
+              onLink={canEdit ? setLinkingId : undefined}
             />
           </>
         ) : (
@@ -546,7 +548,7 @@ export function TechDebtView(props: TechDebtViewProps = {}) {
                       orgSlug={orgSlug}
                       workspaceSlug={workspaceSlug}
                       onOpen={() => setSelectedId(row.item.id)}
-                      onLink={() => setLinkingId(row.item.id)}
+                      onLink={canEdit ? () => setLinkingId(row.item.id) : undefined}
                     />
                   ))}
                 </div>
@@ -556,7 +558,7 @@ export function TechDebtView(props: TechDebtViewProps = {}) {
         )}
       </div>
 
-      {showCreate && (
+      {canCreate && showCreate && (
         <CreateTechDebtPanel
           allowUnattached
           onClose={() => setShowCreate(false)}
@@ -580,7 +582,7 @@ export function TechDebtView(props: TechDebtViewProps = {}) {
         />
       )}
 
-      {linking && (
+      {canEdit && linking && (
         <LinkTechDebtDialog
           techDebt={linking}
           onClose={() => setLinkingId(null)}

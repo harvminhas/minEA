@@ -26,6 +26,7 @@ import {
   capabilityDeleteMessage,
   domainDeleteMessage,
 } from "@/lib/capability-delete-messages";
+import { usePermissions } from "@/lib/use-permissions";
 
 interface Props {
   map: CapabilityMap;
@@ -34,6 +35,7 @@ interface Props {
 
 export function CapabilityMapView({ map, onRefresh }: Props) {
   const { getToken } = useAuth();
+  const { canCreate, canEdit, canDelete } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const [showDomainPicker, setShowDomainPicker] = useState(false);
@@ -202,14 +204,16 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
               <p className="text-gray-500 text-sm mb-4">
                 Start building your map by adding a level-1 domain — pick from industry suggestions or create your own.
               </p>
-              <button
-                type="button"
-                onClick={() => setShowDomainPicker(true)}
-                className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md px-4 py-2 text-sm font-medium"
-              >
-                <Plus size={14} />
-                Add domain
-              </button>
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={() => setShowDomainPicker(true)}
+                  className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md px-4 py-2 text-sm font-medium"
+                >
+                  <Plus size={14} />
+                  Add domain
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -217,21 +221,30 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
                 <DomainCard
                   key={domain.id}
                   domain={domain}
-                  onAddCapability={() => setCapPickerDomain(domain)}
-                  onEditCapability={(capability) =>
-                    setEditCapability({
-                      capability,
-                      domainId: domain.id,
-                      domainName: domain.name,
-                    })
+                  readOnly={!canEdit}
+                  onAddCapability={
+                    canEdit ? () => setCapPickerDomain(domain) : undefined
                   }
-                  onDeleteDomain={() => setDeleteDomain(domain)}
-                  onDeleteCapability={(capability) =>
-                    setDeleteCapability({
-                      capability,
-                      domainId: domain.id,
-                      domainName: domain.name,
-                    })
+                  onEditCapability={
+                    canEdit
+                      ? (capability) =>
+                          setEditCapability({
+                            capability,
+                            domainId: domain.id,
+                            domainName: domain.name,
+                          })
+                      : undefined
+                  }
+                  onDeleteDomain={canDelete ? () => setDeleteDomain(domain) : undefined}
+                  onDeleteCapability={
+                    canDelete
+                      ? (capability) =>
+                          setDeleteCapability({
+                            capability,
+                            domainId: domain.id,
+                            domainName: domain.name,
+                          })
+                      : undefined
                   }
                 />
               ))}
@@ -240,7 +253,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
         </div>
       </div>
 
-      {showDomainPicker && (
+      {canCreate && showDomainPicker && (
         <AddDomainPickerDialog
           existingDomainNames={existingDomainNames}
           isSubmitting={createDomainMutation.isPending}
@@ -252,7 +265,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
         />
       )}
 
-      {capPickerDomain && (
+      {canEdit && capPickerDomain && (
         <AddCapabilityPickerDialog
           domain={capPickerDomain}
           isSubmitting={createCapabilityMutation.isPending}
@@ -263,7 +276,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
         />
       )}
 
-      {editCapability && (
+      {canEdit && editCapability && (
         <EditCapabilityDialog
           capability={editCapability.capability}
           domainName={editCapability.domainName}
@@ -288,7 +301,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
         />
       )}
 
-      {deleteCapability && (
+      {canDelete && deleteCapability && (
         <ConfirmDeleteDialog
           title={`Delete ${deleteCapability.capability.name}?`}
           message={capabilityDeleteMessage(deleteCapability.capability)}
@@ -319,16 +332,18 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
 
 function DomainCard({
   domain,
+  readOnly = false,
   onAddCapability,
   onEditCapability,
   onDeleteDomain,
   onDeleteCapability,
 }: {
   domain: CapabilityMapDomain;
-  onAddCapability: () => void;
-  onEditCapability: (capability: CapabilityMapCapability) => void;
-  onDeleteDomain: () => void;
-  onDeleteCapability: (capability: CapabilityMapCapability) => void;
+  readOnly?: boolean;
+  onAddCapability?: () => void;
+  onEditCapability?: (capability: CapabilityMapCapability) => void;
+  onDeleteDomain?: () => void;
+  onDeleteCapability?: (capability: CapabilityMapCapability) => void;
 }) {
   const { orgSlug, workspaceSlug } = useTenancy();
   const Icon = domainIcon(domain.icon);
@@ -353,24 +368,26 @@ function DomainCard({
             <p className="text-xs text-gray-400 mt-0.5">Domain · Level 1</p>
           </div>
         </Link>
-        <HoverActionMenu
-          className="group-hover:opacity-100"
-          buttonClassName="opacity-0 group-hover/card:opacity-100"
-          ariaLabel={`Actions for ${domain.name}`}
-          items={[
-            {
-              label: "Add capability",
-              icon: <Plus size={14} />,
-              onClick: onAddCapability,
-            },
-            {
-              label: "Delete domain",
-              icon: <Trash2 size={14} />,
-              variant: "danger",
-              onClick: onDeleteDomain,
-            },
-          ]}
-        />
+        {!readOnly && onAddCapability && onDeleteDomain && (
+          <HoverActionMenu
+            className="group-hover:opacity-100"
+            buttonClassName="opacity-0 group-hover/card:opacity-100"
+            ariaLabel={`Actions for ${domain.name}`}
+            items={[
+              {
+                label: "Add capability",
+                icon: <Plus size={14} />,
+                onClick: onAddCapability,
+              },
+              {
+                label: "Delete domain",
+                icon: <Trash2 size={14} />,
+                variant: "danger",
+                onClick: onDeleteDomain,
+              },
+            ]}
+          />
+        )}
       </div>
 
       {capTotal > 0 && (
@@ -388,35 +405,40 @@ function DomainCard({
             <CapabilityL2Row
               key={cap.id}
               capability={cap}
-              onEdit={() => onEditCapability(cap)}
-              onDelete={() => onDeleteCapability(cap)}
+              readOnly={readOnly}
+              onEdit={onEditCapability ? () => onEditCapability(cap) : undefined}
+              onDelete={onDeleteCapability ? () => onDeleteCapability(cap) : undefined}
             />
           ))}
         </ul>
       )}
 
-      <button
-        type="button"
-        onClick={onAddCapability}
-        className={cn(
-          "inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-indigo-600"
-        )}
-      >
-        <Plus size={12} />
-        Add capability
-      </button>
+      {!readOnly && onAddCapability && (
+        <button
+          type="button"
+          onClick={onAddCapability}
+          className={cn(
+            "inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-indigo-600"
+          )}
+        >
+          <Plus size={12} />
+          Add capability
+        </button>
+      )}
     </div>
   );
 }
 
 function CapabilityL2Row({
   capability,
+  readOnly = false,
   onEdit,
   onDelete,
 }: {
   capability: CapabilityMapCapability;
-  onEdit: () => void;
-  onDelete: () => void;
+  readOnly?: boolean;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   const coverage = capabilityCoverageDisplay(capability);
   const unowned = !capability.owner?.trim();
@@ -445,23 +467,25 @@ function CapabilityL2Row({
             {coverage.label}
           </span>
         </div>
-        <HoverActionMenu
-          buttonClassName="opacity-0 group-hover/row:opacity-100"
-          ariaLabel={`Actions for ${capability.name}`}
-          items={[
-            {
-              label: "Edit capability",
-              icon: <Pencil size={14} />,
-              onClick: onEdit,
-            },
-            {
-              label: "Delete capability",
-              icon: <Trash2 size={14} />,
-              variant: "danger",
-              onClick: onDelete,
-            },
-          ]}
-        />
+        {!readOnly && onEdit && onDelete && (
+          <HoverActionMenu
+            buttonClassName="opacity-0 group-hover/row:opacity-100"
+            ariaLabel={`Actions for ${capability.name}`}
+            items={[
+              {
+                label: "Edit capability",
+                icon: <Pencil size={14} />,
+                onClick: onEdit,
+              },
+              {
+                label: "Delete capability",
+                icon: <Trash2 size={14} />,
+                variant: "danger",
+                onClick: onDelete,
+              },
+            ]}
+          />
+        )}
       </div>
     </li>
   );

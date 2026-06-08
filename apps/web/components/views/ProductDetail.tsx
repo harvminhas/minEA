@@ -19,6 +19,8 @@ import {
   DetailSection,
 } from "@/components/ui/DetailPanel";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
+import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
+import { usePermissions } from "@/lib/use-permissions";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
 import { invalidateProductQueries } from "@/lib/product-queries";
 import { ProductForm } from "@/components/views/ProductForm";
@@ -240,6 +242,7 @@ interface Props {
 
 export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onUpdate }: Props) {
   const router = useRouter();
+  const { canEdit, canDelete, canCreate } = usePermissions();
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
@@ -363,25 +366,14 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowEditForm(true)}
-                  className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                  aria-label="Edit product"
-                >
-                  <Edit2 size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                  aria-label="Delete product"
-                >
-                  <Trash2 size={14} />
-                </button>
-                <DetailPanelCloseButton onClose={onClose} />
-              </div>
+              <DetailObjectActions
+                onClose={onClose}
+                onEdit={() => setShowEditForm(true)}
+                onDelete={() => setShowDeleteConfirm(true)}
+                deletePending={deleteMutation.isPending}
+                editLabel="Edit product"
+                deleteLabel="Delete product"
+              />
             </div>
             {/* Tab bar */}
             <div className="flex px-6 gap-4 overflow-x-auto">
@@ -454,13 +446,17 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-gray-500">Owner</span>
                   {unowned ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowEditForm(true)}
-                      className="font-semibold text-indigo-600 hover:text-indigo-700"
-                    >
-                      Assign a team →
-                    </button>
+                    canEdit ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowEditForm(true)}
+                        className="font-semibold text-indigo-600 hover:text-indigo-700"
+                      >
+                        Assign a team →
+                      </button>
+                    ) : (
+                      <span className="text-gray-400">Unassigned</span>
+                    )
                   ) : (
                     <span className="text-gray-900 font-medium">{product.owner}</span>
                   )}
@@ -541,13 +537,15 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
             <DetailSection
               title={`Tech debt · ${debtItems.length}`}
               action={
-                <button
-                  type="button"
-                  onClick={() => setShowCreateDebt(true)}
-                  className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700"
-                >
-                  + Add
-                </button>
+                canCreate ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateDebt(true)}
+                    className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700"
+                  >
+                    + Add
+                  </button>
+                ) : undefined
               }
             >
               <div className="space-y-2">
@@ -573,7 +571,7 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
         )}
       </DetailPanel>
 
-      {showDeleteConfirm && (
+      {canDelete && showDeleteConfirm && (
         <ConfirmDeleteDialog
           title="Delete product?"
           message={
@@ -589,7 +587,7 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
         />
       )}
 
-      {showEditForm && (
+      {canEdit && showEditForm && (
         <ProductForm
           initialValues={product}
           onClose={() => setShowEditForm(false)}
@@ -600,7 +598,7 @@ export function ProductDetail({ productId, accentColor = "#6366f1", onClose, onU
         />
       )}
 
-      {showCreateDebt && productRef && (
+      {canCreate && showCreateDebt && productRef && (
         <CreateTechDebtPanel
           scopedProduct={productRef}
           defaultOwner={unowned ? undefined : product.owner ?? undefined}

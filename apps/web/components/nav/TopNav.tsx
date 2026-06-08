@@ -3,13 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Bell, HelpCircle, Search, LogOut, Settings, BookOpen, LayoutTemplate, Columns2 } from "lucide-react";
+import { ChevronDown, Bell, HelpCircle, Search, LogOut, Settings, BookOpen, LayoutTemplate, Columns2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useAppStore, type ViewMode } from "@/lib/store";
 import { useTenancy, primaryViewPath } from "@/lib/tenancy";
 import { useQuery } from "@tanstack/react-query";
-import { workspacesApi } from "@/lib/api-client";
+import { orgsApi, workspacesApi } from "@/lib/api-client";
 import { BuboMapWordmark } from "@/components/brand/BuboMapLogo";
 import { ArchitectureInsightsPanel } from "@/components/insights/ArchitectureInsightsPanel";
 import { useArchitectureInsights } from "@/lib/use-architecture-insights";
@@ -38,7 +38,16 @@ export function TopNav() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const { data: workspaces } = useQuery({
+  const { data: org } = useQuery({
+    queryKey: ["org", orgSlug],
+    queryFn: async () => {
+      const token = await getToken();
+      return orgsApi.get(orgSlug, token!);
+    },
+    enabled: !!orgSlug,
+  });
+
+  const { data: workspaces, isLoading: workspacesLoading } = useQuery({
     queryKey: ["workspaces", orgSlug],
     queryFn: async () => {
       const token = await getToken();
@@ -47,7 +56,7 @@ export function TopNav() {
     enabled: !!orgSlug,
   });
 
-  const orgName = activeOrg?.name ?? orgSlug;
+  const orgName = org?.name ?? activeOrg?.name ?? orgSlug;
   const wsName =
     activeWorkspace?.name ??
     workspaces?.find((w) => w.slug === workspaceSlug)?.name ??
@@ -79,12 +88,15 @@ export function TopNav() {
             />
           </button>
 
-          {wsOpen && workspaces && (
+          {wsOpen && (
             <div className="absolute left-0 top-full mt-1.5 min-w-[200px] bg-[#1e293b] border border-white/10 rounded-lg shadow-2xl z-50 py-1.5 overflow-hidden">
               <p className="px-3 pb-1 pt-0.5 text-[10px] text-white/30 uppercase tracking-wider font-medium">
                 {orgName}
               </p>
-              {workspaces.map((ws) => (
+              {workspacesLoading && (
+                <p className="px-3 py-2 text-xs text-white/40">Loading workspaces…</p>
+              )}
+              {(workspaces ?? []).map((ws) => (
                 <button
                   key={ws.id}
                   type="button"
@@ -108,6 +120,21 @@ export function TopNav() {
                   )}
                 </button>
               ))}
+              <>
+                {(workspaces ?? []).length > 0 && (
+                  <div className="my-1.5 border-t border-white/10" />
+                )}
+                <Link
+                  href={`/orgs/${orgSlug}/workspaces/new`}
+                  onClick={() => setWsOpen(false)}
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-indigo-300 hover:text-indigo-200 hover:bg-white/5 transition-colors"
+                >
+                  <span className="h-5 w-5 rounded border border-indigo-500/40 flex items-center justify-center flex-shrink-0">
+                    <Plus size={12} />
+                  </span>
+                  <span>Create New</span>
+                </Link>
+              </>
             </div>
           )}
         </div>

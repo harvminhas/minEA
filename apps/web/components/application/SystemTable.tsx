@@ -51,12 +51,14 @@ export function SystemTable({
   onOpen,
   onCreated,
   defaultQuickAddOpen = false,
+  readOnly = false,
 }: {
   items: MinEAObject[];
   categoryOptions: string[];
   onOpen: (id: string) => void;
   onCreated: (item: MinEAObject) => void;
   defaultQuickAddOpen?: boolean;
+  readOnly?: boolean;
 }) {
   const [sortKey, setSortKey] = useState<SystemSortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -189,29 +191,30 @@ export function SystemTable({
                 </tr>
               );
             })}
-            {quickAddOpen ? (
-              <SystemQuickAddRow
-                categoryOptions={categoryOptions}
-                onCancel={() => setQuickAddOpen(false)}
-                onCreated={(item) => {
-                  setQuickAddOpen(false);
-                  onCreated(item);
-                }}
-              />
-            ) : (
-              <tr className="border-t border-gray-200 bg-stone-50/40 hover:bg-stone-50 transition-colors">
-                <td colSpan={COL_COUNT} className="px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => setQuickAddOpen(true)}
-                    className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-800"
-                  >
-                    <Plus size={16} />
-                    Quick Add
-                  </button>
-                </td>
-              </tr>
-            )}
+            {!readOnly &&
+              (quickAddOpen ? (
+                <SystemQuickAddRow
+                  categoryOptions={categoryOptions}
+                  onCancel={() => setQuickAddOpen(false)}
+                  onCreated={(item) => {
+                    setQuickAddOpen(false);
+                    onCreated(item);
+                  }}
+                />
+              ) : (
+                <tr className="border-t border-gray-200 bg-stone-50/40 hover:bg-stone-50 transition-colors">
+                  <td colSpan={COL_COUNT} className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => setQuickAddOpen(true)}
+                      className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      <Plus size={16} />
+                      Quick Add
+                    </button>
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>

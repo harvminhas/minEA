@@ -46,6 +46,7 @@ import {
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import type { EventProperties, MinEAObject } from "@minea/types";
 import { cn, getStatusLabel } from "@/lib/utils";
+import { usePermissions } from "@/lib/use-permissions";
 
 type EventViewLayout = "cards" | "table";
 
@@ -189,6 +190,7 @@ function EventCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: ()
 
 export function EventList() {
   const { getToken } = useAuth();
+  const { canCreate } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
@@ -349,7 +351,7 @@ export function EventList() {
             ]}
           />
           <div className="ml-auto flex items-center gap-2">
-            {viewLayout === "cards" && (
+            {viewLayout === "cards" && canCreate && (
               <button
                 type="button"
                 onClick={() => setShowCreate(true)}
@@ -388,13 +390,15 @@ export function EventList() {
               <p className="text-gray-500 text-sm mb-3">
                 {items.length === 0 ? "No events yet." : "No events match your filters."}
               </p>
-              <button
-                type="button"
-                onClick={() => setShowCreate(true)}
-                className="text-teal-600 hover:underline text-sm font-medium"
-              >
-                Create your first event →
-              </button>
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(true)}
+                  className="text-teal-600 hover:underline text-sm font-medium"
+                >
+                  Create your first event →
+                </button>
+              )}
             </div>
           ) : (
             <EventTable items={filtered} onOpen={setSelectedId} />
@@ -404,13 +408,15 @@ export function EventList() {
             <p className="text-gray-500 text-sm mb-3">
               {items.length === 0 ? "No events yet." : "No events match your filters."}
             </p>
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              className="text-teal-600 hover:underline text-sm font-medium"
-            >
-              Create your first event →
-            </button>
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => setShowCreate(true)}
+                className="text-teal-600 hover:underline text-sm font-medium"
+              >
+                Create your first event →
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -421,7 +427,7 @@ export function EventList() {
         )}
       </div>
 
-      {showCreate && (
+      {canCreate && showCreate && (
         <CreateEventPanel
           onClose={() => setShowCreate(false)}
           onSuccess={(event) => {

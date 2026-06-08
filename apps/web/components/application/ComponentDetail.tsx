@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Box, Edit2, Trash2 } from "lucide-react";
+import { Box } from "lucide-react";
 import type { ComponentProperties, MinEAObject, ObjectListResponse, Relationship } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import {
@@ -16,10 +16,11 @@ import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils
 import { useTenancy } from "@/lib/tenancy";
 import {
   DetailPanel,
-  DetailPanelCloseButton,
   DetailRow,
   DetailSection,
 } from "@/components/ui/DetailPanel";
+import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
+import { usePermissions } from "@/lib/use-permissions";
 import { CreateComponentPanel } from "@/components/application/CreateComponentPanel";
 import {
   ComponentDiagramModal,
@@ -51,6 +52,7 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
+  const { canEdit, canDelete } = usePermissions();
 
   const [activeTab, setActiveTab] = useState<ObjectDrawerTabId>("details");
   const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(component.id);
@@ -277,23 +279,14 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
                     {getStatusLabel(liveComponent.status)}
                   </span>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setShowEditForm(true)}
-                  className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                  aria-label="Edit component"
-                >
-                  <Edit2 size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                  aria-label="Delete component"
-                >
-                  <Trash2 size={14} />
-                </button>
-                <DetailPanelCloseButton onClose={onClose} />
+                <DetailObjectActions
+                  onClose={onClose}
+                  onEdit={() => setShowEditForm(true)}
+                  onDelete={() => setShowDeleteConfirm(true)}
+                  deletePending={deleteMutation.isPending}
+                  editLabel="Edit component"
+                  deleteLabel="Delete component"
+                />
               </div>
             </div>
 
@@ -365,7 +358,7 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
         )}
       </DetailPanel>
 
-      {showDeleteConfirm && (
+      {canDelete && showDeleteConfirm && (
         <ConfirmDeleteDialog
           title="Delete component"
           message={`Are you sure you want to delete "${component.name}"? This cannot be undone.`}
@@ -382,13 +375,13 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
             setShowChart(false);
             void syncRelationshipsFromServer();
           }}
-          onLayoutSave={handleLayoutSave}
-          onResetLayout={handleResetLayout}
-          onArchitectureChange={handleArchitectureChange}
+          onLayoutSave={canEdit ? handleLayoutSave : undefined}
+          onResetLayout={canEdit ? handleResetLayout : undefined}
+          onArchitectureChange={canEdit ? handleArchitectureChange : undefined}
         />
       )}
 
-      {showEditForm && (
+      {canEdit && showEditForm && (
         <CreateComponentPanel
           initialValues={component}
           onClose={() => setShowEditForm(false)}

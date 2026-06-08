@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class WorkspaceCreate(BaseModel):
@@ -11,8 +11,35 @@ class WorkspaceCreate(BaseModel):
     biz_layer_term: str = "Capability"
     app_layer_term: str = "Application"
     constraint_mode: str = "guided"
+    source_workspace_slug: str | None = Field(
+        default=None,
+        description="When set with copy_layers, deep-clone content from this workspace into the new one.",
+    )
+    copy_layers: list[str] | None = Field(
+        default=None,
+        description="Repository layer ids to copy (strategy, business, application, integration, data, technology, people).",
+    )
 
     model_config = ConfigDict(str_strip_whitespace=True)
+
+    @model_validator(mode="after")
+    def validate_copy_options(self) -> "WorkspaceCreate":
+        if self.copy_layers and not self.source_workspace_slug:
+            raise ValueError("source_workspace_slug is required when copy_layers is set")
+        if self.source_workspace_slug and not self.copy_layers:
+            raise ValueError("copy_layers is required when source_workspace_slug is set")
+        return self
+
+
+class WorkspaceCopyPreviewLayer(BaseModel):
+    id: str
+    label: str
+    subtitle: str
+    count: int
+
+
+class WorkspaceCopyPreview(BaseModel):
+    layers: list[WorkspaceCopyPreviewLayer]
 
 
 class WorkspaceUpdate(BaseModel):

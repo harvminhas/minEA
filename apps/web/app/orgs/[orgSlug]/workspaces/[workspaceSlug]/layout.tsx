@@ -11,13 +11,17 @@ import { useTenancy } from "@/lib/tenancy";
 import { useAppStore } from "@/lib/store";
 import { workspacesApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { AccessProvider } from "@/lib/access-context";
+import { ReadOnlyBanner } from "@/components/ui/ReadOnlyBanner";
+import { effectiveWorkspaceRole } from "@/lib/permissions";
+import type { OrgRole, WorkspaceRole } from "@minea/types";
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isEmbed = pathname.includes("/embed/");
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
-  const { setActiveWorkspace } = useAppStore();
+  const { activeOrg, setActiveWorkspace } = useAppStore();
   const queryClient = useQueryClient();
   const queryEnabled = useAuthQueryEnabled(orgSlug, workspaceSlug);
 
@@ -46,10 +50,18 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     });
   }, [queryEnabled, orgSlug, workspaceSlug, queryClient, getToken]);
 
+  const viewerByRole =
+    effectiveWorkspaceRole(
+      activeOrg?.role as OrgRole | undefined,
+      workspace?.role as WorkspaceRole | undefined
+    ) === "viewer";
+  const accessMode = viewerByRole ? "read" : "full";
+
   return (
-    <>
+    <AccessProvider mode={accessMode}>
+      {!isEmbed && viewerByRole && <ReadOnlyBanner />}
       {children}
       {!isEmbed && <ChatPanel />}
-    </>
+    </AccessProvider>
   );
 }

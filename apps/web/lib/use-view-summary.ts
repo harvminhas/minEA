@@ -5,6 +5,7 @@ import type { WorkspaceMetrics } from "@/lib/workspace-dashboard";
 import { viewReadiness } from "@/lib/workspace-dashboard";
 import { useWorkspaceDashboard } from "@/lib/use-workspace-dashboard";
 import { useTenancy } from "@/lib/tenancy";
+import { useShareSession } from "@/lib/share-context";
 
 /** Workspace summary — same cache as the landing dashboard. */
 export function useWorkspaceSummary(orgSlug: string, workspaceSlug: string) {
@@ -48,8 +49,25 @@ export function viewHasRepositoryData(
  */
 export function useViewDataGate(viewId: ViewId | "processes") {
   const { orgSlug, workspaceSlug } = useTenancy();
+  const shareSession = useShareSession();
   const { data: metrics, isPending: summaryPending, isFetching: summaryFetching } =
     useWorkspaceSummary(orgSlug, workspaceSlug);
+
+  // Share links have no auth/summary — fetch view data directly via the share API.
+  if (shareSession) {
+    return {
+      orgSlug,
+      workspaceSlug,
+      metrics: undefined,
+      summaryPending: false,
+      summaryFetching: false,
+      hasData: true as const,
+      readiness: null,
+      skipHeavyFetch: false,
+      showEmptyFromSummary: false,
+      loading: false,
+    };
+  }
 
   const hasData = metrics ? viewHasRepositoryData(viewId, metrics) : undefined;
   const readiness = metrics ? viewReadiness(viewId, metrics) : null;

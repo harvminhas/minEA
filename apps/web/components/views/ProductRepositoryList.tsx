@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
+import { usePermissions } from "@/lib/use-permissions";
 import { productsApi } from "@/lib/api-client";
 import { invalidateProductQueries } from "@/lib/product-queries";
 import { ProductCard } from "@/components/views/ProductCard";
@@ -18,6 +19,7 @@ const CARD_COLORS = ["#6366f1", "#22c55e", "#f59e0b", "#ec4899", "#0ea5e9", "#8b
 /** Repository list — edit and manage individual products. */
 export function ProductRepositoryList() {
   const { getToken } = useAuth();
+  const { canCreate } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -67,14 +69,16 @@ export function ProductRepositoryList() {
               </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => setShowCreateForm(true)}
-            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
-          >
-            <Plus size={14} />
-            Add
-          </button>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => setShowCreateForm(true)}
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+            >
+              <Plus size={14} />
+              Add
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-8">
@@ -83,13 +87,15 @@ export function ProductRepositoryList() {
           ) : products.length === 0 ? (
             <div className="text-center py-16">
               <p className="text-gray-400 text-sm mb-3">No products yet.</p>
-              <button
-                type="button"
-                onClick={() => setShowCreateForm(true)}
-                className="text-indigo-600 hover:underline text-sm"
-              >
-                Add your first product →
-              </button>
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={() => setShowCreateForm(true)}
+                  className="text-indigo-600 hover:underline text-sm"
+                >
+                  Add your first product →
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-8 max-w-5xl">
@@ -136,7 +142,7 @@ export function ProductRepositoryList() {
         </div>
       </div>
 
-      {showCreateForm && (
+      {canCreate && showCreateForm && (
         <ProductForm
           onClose={() => setShowCreateForm(false)}
           onSuccess={() => {

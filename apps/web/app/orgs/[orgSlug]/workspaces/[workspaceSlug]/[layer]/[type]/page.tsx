@@ -23,6 +23,7 @@ import { IntegrationInfraList } from "@/components/integration/IntegrationInfraL
 import { OBJECT_TYPE_LABELS, type ObjectType, type MinEAObject } from "@minea/types";
 import { getLayerColor } from "@/lib/utils";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
+import { usePermissions } from "@/lib/use-permissions";
 
 const PATH_TO_TYPE: Record<string, ObjectType> = {
   capabilities: "capability",
@@ -140,6 +141,7 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const { canCreate } = usePermissions();
 
   const [search, setSearch] = useState("");
   const [selectedObject, setSelectedObject] = useState<MinEAObject | null>(null);
@@ -189,13 +191,15 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
               className="pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 w-56"
             />
           </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
-          >
-            <Plus size={14} />
-            Add
-          </button>
+          {canCreate && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+            >
+              <Plus size={14} />
+              Add
+            </button>
+          )}
         </div>
       </div>
 
@@ -215,9 +219,11 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
         ) : filtered.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-gray-400 text-sm mb-3">No {typeLabel.toLowerCase()}s found.</p>
-            <button onClick={() => setShowForm(true)} className="text-indigo-600 hover:underline text-sm">
-              Add the first one →
-            </button>
+            {canCreate && (
+              <button onClick={() => setShowForm(true)} className="text-indigo-600 hover:underline text-sm">
+                Add the first one →
+              </button>
+            )}
           </div>
         ) : (
           <div
@@ -251,7 +257,7 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
         />
       )}
 
-      {showForm && (
+      {canCreate && showForm && (
         <ObjectForm
           objectType={objectType}
           onClose={() => setShowForm(false)}

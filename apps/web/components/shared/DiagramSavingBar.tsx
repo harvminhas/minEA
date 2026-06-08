@@ -23,10 +23,10 @@ export function DiagramSavingBar({
       aria-live="polite"
       aria-label={label}
     >
-      <div className="flex items-center justify-center bg-teal-600 px-4 py-2.5">
-        <p className="text-xs font-bold tracking-wider text-white uppercase">{label}</p>
+      <div className="flex items-center justify-center bg-teal-600 px-4 py-3">
+        <p className="text-sm font-bold tracking-wide text-white uppercase">{label}</p>
       </div>
-      <div className="h-1.5 w-full overflow-hidden bg-teal-200">
+      <div className="h-2 w-full overflow-hidden bg-teal-200">
         <div className="diagram-saving-bar-indeterminate h-full w-2/5 rounded-full bg-teal-500" />
       </div>
     </div>

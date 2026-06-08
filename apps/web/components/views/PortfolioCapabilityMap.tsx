@@ -175,11 +175,7 @@ export function PortfolioCapabilityMap({
       : "None detected";
 
   return (
-    <div className="space-y-4">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-        Portfolio · Capability map · {totalCaps} capabilit{totalCaps === 1 ? "y" : "ies"}
-      </p>
-
+    <div className="space-y-2">
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px] border-collapse text-sm">

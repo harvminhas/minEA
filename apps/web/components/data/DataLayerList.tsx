@@ -8,6 +8,7 @@ import type { MinEAObject, ObjectType } from "@minea/types";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { usePermissions } from "@/lib/use-permissions";
 import { CreateDataPanel } from "@/components/data/CreateDataPanel";
 import { EntityDetailPanel } from "@/components/data/EntityDetailPanel";
 import { StoreDetailPanel } from "@/components/data/StoreDetailPanel";
@@ -256,6 +257,7 @@ function DomainCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: (
 export function DataLayerList({ typePath }: { typePath: string }) {
   const config = CONFIGS[typePath]!;
   const { getToken } = useAuth();
+  const { canCreate } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
@@ -307,14 +309,16 @@ export function DataLayerList({ typePath }: { typePath: string }) {
               </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-md text-sm font-medium"
-          >
-            <Plus size={14} />
-            Add
-          </button>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-md text-sm font-medium"
+            >
+              <Plus size={14} />
+              Add
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-8">
@@ -327,13 +331,15 @@ export function DataLayerList({ typePath }: { typePath: string }) {
           ) : items.length === 0 ? (
             <div className="text-center py-16">
               <p className="text-gray-400 text-sm mb-3">No {config.titlePlural} yet.</p>
-              <button
-                type="button"
-                onClick={() => setShowCreate(true)}
-                className="text-amber-600 hover:underline text-sm"
-              >
-                Add your first {config.titlePlural.slice(0, -1)} →
-              </button>
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(true)}
+                  className="text-amber-600 hover:underline text-sm"
+                >
+                  Add your first {config.titlePlural.slice(0, -1)} →
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -343,7 +349,7 @@ export function DataLayerList({ typePath }: { typePath: string }) {
         </div>
       </div>
 
-      {showCreate && (
+      {canCreate && showCreate && (
         <CreateDataPanel
           kind={config.createKind}
           onClose={() => setShowCreate(false)}

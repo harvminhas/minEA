@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, Edit2, Trash2 } from "lucide-react";
+import { ArrowLeftRight } from "lucide-react";
 import type { MinEAObject, ObjectListResponse, ToolProperties } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
@@ -15,10 +15,11 @@ import {
 } from "@/lib/integration-infra-relationship-utils";
 import {
   DetailPanel,
-  DetailPanelCloseButton,
   DetailRow,
   DetailSection,
 } from "@/components/ui/DetailPanel";
+import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
+import { usePermissions } from "@/lib/use-permissions";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
 import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
@@ -56,6 +57,7 @@ interface Props {
 }
 
 export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: Props) {
+  const { canEdit, canDelete } = usePermissions();
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
@@ -288,23 +290,14 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowEditForm(true)}
-                  className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                  aria-label="Edit infrastructure"
-                >
-                  <Edit2 size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                  aria-label="Delete infrastructure"
-                >
-                  <Trash2 size={14} />
-                </button>
-                <DetailPanelCloseButton onClose={onClose} />
+                <DetailObjectActions
+                  onClose={onClose}
+                  onEdit={() => setShowEditForm(true)}
+                  onDelete={() => setShowDeleteConfirm(true)}
+                  deletePending={deleteMutation.isPending}
+                  editLabel="Edit infrastructure"
+                  deleteLabel="Delete infrastructure"
+                />
               </div>
             </div>
 
@@ -434,7 +427,7 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
         )}
       </DetailPanel>
 
-      {showDeleteConfirm && (
+      {canDelete && showDeleteConfirm && (
         <ConfirmDeleteDialog
           title="Delete integration infrastructure"
           message={`Are you sure you want to delete "${infra.name}"? This cannot be undone.`}
@@ -449,13 +442,13 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
           infra={liveInfra}
           relationships={drawerRels}
           nameById={relationshipNameById}
-          onLayoutSave={handleLayoutSave}
-          onResetLayout={handleResetLayout}
+          onLayoutSave={canEdit ? handleLayoutSave : undefined}
+          onResetLayout={canEdit ? handleResetLayout : undefined}
           onClose={() => setShowChart(false)}
         />
       )}
 
-      {showEditForm && (
+      {canEdit && showEditForm && (
         <CreateIntegrationInfraPanel
           initialValues={liveInfra}
           onClose={() => setShowEditForm(false)}

@@ -11,6 +11,7 @@ DEFAULT_ORG_LIMITS: dict[str, int | None] = {
     "max_scenarios_per_workspace": 10,
     "max_sandboxes_per_workspace": 5,
     "ai_extractions_per_month": 100,
+    "max_active_share_links": 5,
 }
 
 # Maps invite/membership role to the quota key enforced on assignment

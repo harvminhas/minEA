@@ -37,6 +37,10 @@ MIGRATION_FILES = [
     "019_product_history.sql",
     "020_objects_updated_by.sql",
     "021_backfill_updated_by.sql",
+    "022_role_descriptions.sql",
+    "023_share_links.sql",
+    "024_share_free_testing.sql",
+    "025_share_all_roles.sql",
 ]
 
 

@@ -179,7 +179,7 @@ export function TechDebtTable({
   attached: TechDebtViewRow[];
   unattached: TechDebtViewRow[];
   onOpen: (id: string) => void;
-  onLink: (id: string) => void;
+  onLink?: (id: string) => void;
 }) {
   const [sortKey, setSortKey] = useState<TechDebtTableSortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -273,7 +273,7 @@ export function TechDebtTable({
                     selected={selectedIds.has(row.item.id)}
                     onToggleSelect={() => toggleSelect(row.item.id)}
                     onOpen={() => onOpen(row.item.id)}
-                    onLink={() => onLink(row.item.id)}
+                    onLink={onLink ? () => onLink(row.item.id) : undefined}
                   />
                 ))}
               </>

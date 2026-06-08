@@ -628,6 +628,49 @@ export interface RelationshipCreate {
 export type OrgRole = "owner" | "admin" | "member";
 export type WorkspaceRole = "admin" | "member" | "viewer";
 export type InviteRole = "admin" | "member" | "viewer";
+
+/** User-facing role definitions (org + workspace scopes). */
+export const ROLE_DEFINITIONS = {
+  owner: {
+    scope: "org" as const,
+    label: "Owner",
+    description: "Full control, billing, delete org",
+  },
+  admin: {
+    scope: "org" as const,
+    label: "Admin",
+    description: "Manage workspace, users, settings — no billing",
+  },
+  member: {
+    scope: "workspace" as const,
+    label: "Member",
+    description: "Create and edit repository objects",
+  },
+  viewer: {
+    scope: "workspace" as const,
+    label: "Viewer",
+    description: "Read-only access to repository and views",
+  },
+} as const;
+
+export type PermissionSlug =
+  | "org.settings.edit"
+  | "org.member.invite"
+  | "org.member.remove"
+  | "org.role.assign"
+  | "org.delete"
+  | "org.billing.manage"
+  | "org.transfer"
+  | "workspace.create"
+  | "workspace.settings.edit"
+  | "workspace.member.invite"
+  | "workspace.member.remove"
+  | "workspace.delete"
+  | "workspace.share.create"
+  | "object.create"
+  | "object.edit"
+  | "object.delete"
+  | "object.view";
 export type InviteStatus = "pending" | "accepted" | "revoked" | "expired";
 
 export interface LimitExceededError {
@@ -651,6 +694,62 @@ export interface OrgMember {
   email: string;
   full_name?: string | null;
   role: OrgRole;
+  joined_at: string;
+}
+
+export type ShareResourceType =
+  | "view"
+  | "roadmap"
+  | "object"
+  | "capability_map"
+  | "capability_domain";
+
+export interface SharePreview {
+  org_name: string;
+  org_slug: string;
+  workspace_name: string;
+  workspace_slug: string;
+  resource_type: ShareResourceType;
+  resource_key: string | null;
+  resource_id: string | null;
+  title: string;
+  status: string;
+  expired: boolean;
+  revoked: boolean;
+  shared_by_name: string | null;
+  expires_at: string | null;
+}
+
+export interface ShareLink {
+  id: string;
+  resource_type: ShareResourceType;
+  resource_key: string | null;
+  resource_id: string | null;
+  title: string;
+  status: string;
+  expires_at: string;
+  created_at: string;
+  share_url?: string | null;
+}
+
+export interface ShareCreated extends ShareLink {
+  token: string;
+  share_url: string;
+}
+
+export interface ShareCreate {
+  resource_type: ShareResourceType;
+  resource_key?: string | null;
+  resource_id?: string | null;
+  title: string;
+  expires_in_days?: number;
+}
+
+export interface WorkspaceMember {
+  user_id: string;
+  email: string;
+  full_name?: string | null;
+  role: WorkspaceRole;
   joined_at: string;
 }
 
@@ -710,6 +809,20 @@ export interface WorkspaceCreate {
   biz_layer_term?: string;
   app_layer_term?: string;
   constraint_mode?: "guided" | "strict" | "freeflow";
+  /** Deep-clone content from this workspace (new IDs — no cross-workspace links). */
+  source_workspace_slug?: string;
+  copy_layers?: string[];
+}
+
+export interface WorkspaceCopyPreviewLayer {
+  id: string;
+  label: string;
+  subtitle: string;
+  count: number;
+}
+
+export interface WorkspaceCopyPreview {
+  layers: WorkspaceCopyPreviewLayer[];
 }
 
 /** @deprecated Use Org */

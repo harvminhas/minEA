@@ -8,6 +8,7 @@ import type {
   Relationship,
   RelationshipCreate,
   Workspace,
+  WorkspaceCopyPreview,
   WorkspaceCreate,
   WorkspaceSnapshot,
   WorkspaceSummary,
@@ -17,6 +18,7 @@ import type {
   Org,
   OrgCreate,
   OrgMember,
+  WorkspaceMember,
   InvitePreview,
   Invite,
   InviteCreated,
@@ -73,8 +75,13 @@ import type {
   DataDomainUpdate,
   DataLinkCreate,
   FlowEndpointCatalog,
+  ShareCreate,
+  ShareCreated,
+  ShareLink,
+  SharePreview,
 } from "@minea/types";
 import { apiV1Url } from "@/lib/api-base";
+import { getShareApiPath } from "@/lib/share-context";
 
 function wsBase(orgSlug: string, workspaceSlug: string) {
   return `/orgs/${orgSlug}/workspaces/${workspaceSlug}`;
@@ -82,11 +89,13 @@ function wsBase(orgSlug: string, workspaceSlug: string) {
 
 async function apiFetch<T>(path: string, init?: RequestInit & { token?: string }): Promise<T> {
   const { token, ...fetchInit } = init ?? {};
-  const res = await fetch(apiV1Url(path), {
+  const sharePath = getShareApiPath(path);
+  const resolvedPath = sharePath ?? path;
+  const res = await fetch(apiV1Url(resolvedPath), {
     ...fetchInit,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(!sharePath && token ? { Authorization: `Bearer ${token}` } : {}),
       ...(fetchInit.headers ?? {}),
     },
   });
@@ -96,7 +105,7 @@ async function apiFetch<T>(path: string, init?: RequestInit & { token?: string }
       typeof err.detail === "string"
         ? err.detail
         : JSON.stringify(err.detail) ?? "API error";
-    throw new Error(`${res.status} ${detail} (${path})`);
+    throw new Error(`${res.status} ${detail} (${resolvedPath})`);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -141,6 +150,8 @@ export const orgsApi = {
     }),
   revokeInvite: (orgSlug: string, inviteId: string, token: string) =>
     apiFetch<void>(`/orgs/${orgSlug}/invites/${inviteId}`, { method: "DELETE", token }),
+  deleteOrg: (orgSlug: string, token: string) =>
+    apiFetch<void>(`/orgs/${orgSlug}`, { method: "DELETE", token }),
 };
 
 export const invitesApi = {
@@ -170,8 +181,50 @@ export const workspacesApi = {
       body: JSON.stringify(body),
       token,
     }),
+  copyPreview: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<WorkspaceCopyPreview>(
+      `/orgs/${orgSlug}/workspaces/${workspaceSlug}/copy-preview`,
+      { token }
+    ),
   context: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<object>(`${wsBase(orgSlug, workspaceSlug)}/context`, { token }),
+  listMembers: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<WorkspaceMember[]>(`${wsBase(orgSlug, workspaceSlug)}/members`, { token }),
+  listInvites: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<Invite[]>(`${wsBase(orgSlug, workspaceSlug)}/invites`, { token }),
+  createInvite: (
+    orgSlug: string,
+    workspaceSlug: string,
+    body: { email: string; role: string },
+    token: string
+  ) =>
+    apiFetch<InviteCreated>(`${wsBase(orgSlug, workspaceSlug)}/invites`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+  revokeInvite: (orgSlug: string, workspaceSlug: string, inviteId: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/invites/${inviteId}`, {
+      method: "DELETE",
+      token,
+    }),
+  listShares: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<ShareLink[]>(`${wsBase(orgSlug, workspaceSlug)}/shares`, { token }),
+  createShare: (orgSlug: string, workspaceSlug: string, body: ShareCreate, token: string) =>
+    apiFetch<ShareCreated>(`${wsBase(orgSlug, workspaceSlug)}/shares`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+  revokeShare: (orgSlug: string, workspaceSlug: string, shareId: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/shares/${shareId}`, {
+      method: "DELETE",
+      token,
+    }),
+};
+
+export const sharesApi = {
+  preview: (token: string) => apiFetch<SharePreview>(`/shares/${token}`),
 };
 
 // ─── Objects ─────────────────────────────────────────────────────────────────

@@ -46,6 +46,7 @@ import {
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import type { ApiProperties, MinEAObject } from "@minea/types";
 import { cn, getStatusLabel } from "@/lib/utils";
+import { usePermissions } from "@/lib/use-permissions";
 
 type ApiViewLayout = "cards" | "table";
 
@@ -185,6 +186,7 @@ function ApiCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: () =
 
 export function ApiList() {
   const { getToken } = useAuth();
+  const { canCreate } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
@@ -345,7 +347,7 @@ export function ApiList() {
             ]}
           />
           <div className="ml-auto flex items-center gap-2">
-            {viewLayout === "cards" && (
+            {viewLayout === "cards" && canCreate && (
               <button
                 type="button"
                 onClick={() => setShowCreate(true)}
@@ -384,13 +386,15 @@ export function ApiList() {
               <p className="text-gray-500 text-sm mb-3">
                 {items.length === 0 ? "No APIs yet." : "No APIs match your filters."}
               </p>
-              <button
-                type="button"
-                onClick={() => setShowCreate(true)}
-                className="text-teal-600 hover:underline text-sm font-medium"
-              >
-                Create your first API →
-              </button>
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(true)}
+                  className="text-teal-600 hover:underline text-sm font-medium"
+                >
+                  Create your first API →
+                </button>
+              )}
             </div>
           ) : (
             <ApiTable items={filtered} onOpen={setSelectedId} />
@@ -400,13 +404,15 @@ export function ApiList() {
             <p className="text-gray-500 text-sm mb-3">
               {items.length === 0 ? "No APIs yet." : "No APIs match your filters."}
             </p>
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              className="text-teal-600 hover:underline text-sm font-medium"
-            >
-              Create your first API →
-            </button>
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => setShowCreate(true)}
+                className="text-teal-600 hover:underline text-sm font-medium"
+              >
+                Create your first API →
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -417,7 +423,7 @@ export function ApiList() {
         )}
       </div>
 
-      {showCreate && (
+      {canCreate && showCreate && (
         <CreateApiPanel
           onClose={() => setShowCreate(false)}
           onSuccess={(id) => {

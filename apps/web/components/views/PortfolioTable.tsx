@@ -153,12 +153,7 @@ export function PortfolioTable({
   const defaultOrder = sortForCockpit(products);
 
   return (
-    <div className="space-y-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-        Portfolio · Table view · {sorted.length} of {products.length} product
-        {products.length === 1 ? "" : "s"}
-      </p>
-
+    <div className="space-y-2">
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] border-collapse text-sm">

@@ -29,6 +29,7 @@ import { resolveRoadmapSpend } from "@/lib/investment-pipeline";
 import { aiRoleLabel } from "@/lib/ai-role-utils";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/lib/use-permissions";
 
 interface Props {
   roadmapId: string;
@@ -38,6 +39,7 @@ interface Props {
 
 export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Props) {
   const router = useRouter();
+  const { canEdit, canDelete } = usePermissions();
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
@@ -190,44 +192,48 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
               Open full page
             </Link>
           )}
-          <button
-            type="button"
-            onClick={() => setShowEditForm(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 rounded-md border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            <Edit2 size={14} />
-            Edit
-          </button>
-
-          <div className="relative">
+          {canEdit && (
             <button
               type="button"
-              onClick={() => setShowMenu((v) => !v)}
-              className="p-2 rounded-md hover:bg-gray-100 text-gray-500"
-              aria-label="More actions"
+              onClick={() => setShowEditForm(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 rounded-md border border-gray-200 hover:bg-gray-50 transition-colors"
             >
-              <MoreHorizontal size={16} />
+              <Edit2 size={14} />
+              Edit
             </button>
-            {showMenu && (
-              <>
-                <div className="fixed inset-0 z-[110]" onClick={() => setShowMenu(false)} />
-                <div className="absolute right-0 top-full mt-1 z-[120] w-40 bg-white rounded-lg border border-gray-200 shadow-lg py-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMenu(false);
-                      deleteMutation.mutate();
-                    }}
-                    disabled={deleteMutation.isPending}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 size={14} />
-                    Delete
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          )}
+
+          {canDelete && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowMenu((v) => !v)}
+                className="p-2 rounded-md hover:bg-gray-100 text-gray-500"
+                aria-label="More actions"
+              >
+                <MoreHorizontal size={16} />
+              </button>
+              {showMenu && (
+                <>
+                  <div className="fixed inset-0 z-[110]" onClick={() => setShowMenu(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-[120] w-40 bg-white rounded-lg border border-gray-200 shadow-lg py-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMenu(false);
+                        deleteMutation.mutate();
+                      }}
+                      disabled={deleteMutation.isPending}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 size={14} />
+                      Delete
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {layout === "modal" && onClose && (
             <button
@@ -305,8 +311,16 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
         properties={props}
         milestones={milestones}
         onExpand={() => setTimelineFullscreen(true)}
-        onAddAtQuarter={(quarter) => setMilestoneDialog({ mode: "add", defaultTarget: quarter })}
-        onEditMilestone={(milestone) => setMilestoneDialog({ mode: "edit", milestone })}
+        onAddAtQuarter={
+          canEdit
+            ? (quarter) => setMilestoneDialog({ mode: "add", defaultTarget: quarter })
+            : undefined
+        }
+        onEditMilestone={
+          canEdit
+            ? (milestone) => setMilestoneDialog({ mode: "edit", milestone })
+            : undefined
+        }
       />
     </div>
   );
@@ -320,12 +334,20 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
           properties={props}
           milestones={milestones}
           onClose={() => setTimelineFullscreen(false)}
-          onAddAtQuarter={(quarter) => setMilestoneDialog({ mode: "add", defaultTarget: quarter })}
-          onEditMilestone={(milestone) => setMilestoneDialog({ mode: "edit", milestone })}
+          onAddAtQuarter={
+            canEdit
+              ? (quarter) => setMilestoneDialog({ mode: "add", defaultTarget: quarter })
+              : undefined
+          }
+          onEditMilestone={
+            canEdit
+              ? (milestone) => setMilestoneDialog({ mode: "edit", milestone })
+              : undefined
+          }
         />
       )}
 
-      {showEditForm && (
+      {canEdit && showEditForm && (
         <CreateRoadmapPanel
           initialValues={roadmap}
           onClose={() => setShowEditForm(false)}
@@ -336,7 +358,7 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
         />
       )}
 
-      {milestoneDialog && (
+      {canEdit && milestoneDialog && (
         <AddMilestoneDialog
           initial={milestoneDialog.milestone}
           defaultTarget={milestoneDialog.defaultTarget}

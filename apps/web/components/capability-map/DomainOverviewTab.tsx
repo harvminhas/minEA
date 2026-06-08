@@ -23,6 +23,7 @@ import {
 } from "@/lib/roadmap-utils";
 import type { RoadmapItemProperties } from "@minea/types";
 import { useTenancy } from "@/lib/tenancy";
+import { usePermissions } from "@/lib/use-permissions";
 import { cn } from "@/lib/utils";
 
 type DomainTab = "overview" | "mapping" | "processes" | "products" | "history";
@@ -30,7 +31,7 @@ type DomainTab = "overview" | "mapping" | "processes" | "products" | "history";
 interface Props {
   domain: DomainDetail;
   onSwitchTab: (tab: DomainTab) => void;
-  onEditCapability: (capability: CapabilityMapCapability) => void;
+  onEditCapability?: (capability: CapabilityMapCapability) => void;
   onRefresh: () => void;
 }
 
@@ -92,17 +93,14 @@ function CapabilityRow({
   onEdit,
 }: {
   capability: CapabilityMapCapability;
-  onEdit: () => void;
+  onEdit?: () => void;
 }) {
   const coverage = capabilityCoverageDisplay(capability);
   const unowned = !capability.owner?.trim();
-
-  return (
-    <button
-      type="button"
-      onClick={onEdit}
-      className="w-full flex items-center justify-between gap-3 py-2.5 text-left hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors"
-    >
+  const className =
+    "w-full flex items-center justify-between gap-3 py-2.5 text-left -mx-2 px-2 rounded-lg transition-colors";
+  const content = (
+    <>
       <div className="min-w-0 flex items-start gap-2.5">
         <span className={cn("mt-1.5 h-2 w-2 rounded-full flex-shrink-0", coverage.dot)} />
         <div className="min-w-0">
@@ -115,6 +113,16 @@ function CapabilityRow({
       <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium flex-shrink-0", coverage.badge)}>
         {coverage.label}
       </span>
+    </>
+  );
+
+  if (!onEdit) {
+    return <div className={className}>{content}</div>;
+  }
+
+  return (
+    <button type="button" onClick={onEdit} className={cn(className, "hover:bg-gray-50")}>
+      {content}
     </button>
   );
 }
@@ -165,6 +173,7 @@ function RoadmapPreview({ item, onOpen }: { item: MinEAObject; onOpen: () => voi
 }
 
 export function DomainOverviewTab({ domain, onSwitchTab, onEditCapability, onRefresh }: Props) {
+  const { canEdit } = usePermissions();
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const [showDescriptionEdit, setShowDescriptionEdit] = useState(false);
@@ -243,7 +252,7 @@ export function DomainOverviewTab({ domain, onSwitchTab, onEditCapability, onRef
           severity: "error",
           message: `${cap.name} has no owner assigned`,
           fixLabel: "Fix",
-          onFix: () => onEditCapability(cap),
+          onFix: onEditCapability ? () => onEditCapability(cap) : undefined,
         });
       }
     }
@@ -253,10 +262,12 @@ export function DomainOverviewTab({ domain, onSwitchTab, onEditCapability, onRef
         severity: "warning",
         message: "Domain has no description",
         fixLabel: "Fix",
-        onFix: () => {
-          setDescriptionDraft("");
-          setShowDescriptionEdit(true);
-        },
+        onFix: canEdit
+          ? () => {
+              setDescriptionDraft("");
+              setShowDescriptionEdit(true);
+            }
+          : undefined,
       });
     }
     return items;
@@ -308,7 +319,7 @@ export function DomainOverviewTab({ domain, onSwitchTab, onEditCapability, onRef
                     <CapabilityRow
                       key={cap.id}
                       capability={cap}
-                      onEdit={() => onEditCapability(cap)}
+                      onEdit={onEditCapability ? () => onEditCapability(cap) : undefined}
                     />
                   ))
                 )}
@@ -320,16 +331,18 @@ export function DomainOverviewTab({ domain, onSwitchTab, onEditCapability, onRef
             <SectionCard
               title="Description"
               action={
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDescriptionDraft(domain.description ?? "");
-                    setShowDescriptionEdit(true);
-                  }}
-                  className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
-                >
-                  Edit
-                </button>
+                canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDescriptionDraft(domain.description ?? "");
+                      setShowDescriptionEdit(true);
+                    }}
+                    className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                  >
+                    Edit
+                  </button>
+                ) : undefined
               }
             >
               <p className="text-sm text-gray-600 leading-relaxed">
@@ -419,13 +432,15 @@ export function DomainOverviewTab({ domain, onSwitchTab, onEditCapability, onRef
                     />
                     <p className="text-sm text-gray-700">{gap.message}</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={gap.onFix}
-                    className="text-sm font-medium text-indigo-600 hover:text-indigo-700 flex-shrink-0"
-                  >
-                    {gap.fixLabel} →
-                  </button>
+                  {gap.onFix && (
+                    <button
+                      type="button"
+                      onClick={gap.onFix}
+                      className="text-sm font-medium text-indigo-600 hover:text-indigo-700 flex-shrink-0"
+                    >
+                      {gap.fixLabel} →
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -433,7 +448,7 @@ export function DomainOverviewTab({ domain, onSwitchTab, onEditCapability, onRef
         )}
       </div>
 
-      {showDescriptionEdit && (
+      {canEdit && showDescriptionEdit && (
         <FormDrawer
           title="Edit domain description"
           onClose={() => setShowDescriptionEdit(false)}

@@ -12,8 +12,8 @@ interface Props {
   properties: RoadmapItemProperties;
   milestones: RoadmapMilestone[];
   onClose: () => void;
-  onAddAtQuarter: (quarter: string) => void;
-  onEditMilestone: (milestone: RoadmapMilestone) => void;
+  onAddAtQuarter?: (quarter: string) => void;
+  onEditMilestone?: (milestone: RoadmapMilestone) => void;
 }
 
 export function RoadmapTimelineFullscreen({

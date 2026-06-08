@@ -8,14 +8,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.objects import Workspace
-from app.models.tenancy import Invite, WorkspaceMembership
-from app.schemas.tenancy import InviteCreate, InviteCreated, InviteRead
+from app.models.shares import ShareLink
+from app.models.tenancy import Invite, User, WorkspaceMembership
+from app.schemas.shares import ShareCreate, ShareCreated, ShareRead
+from app.schemas.tenancy import InviteCreate, InviteCreated, InviteRead, WorkspaceMemberRead
 from app.schemas.workspace_summary import WorkspaceSnapshotResponse
-from app.schemas.workspaces import WorkspaceCreate, WorkspaceRead, WorkspaceUpdate
+from app.schemas.workspaces import (
+    WorkspaceCopyPreview,
+    WorkspaceCopyPreviewLayer,
+    WorkspaceCreate,
+    WorkspaceRead,
+    WorkspaceUpdate,
+)
+from app.services.workspace_copy import copy_workspace_layers, get_workspace_copy_preview
 from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.workspace_snapshot_store import get_workspace_snapshot_response
 from app.services.audit import log_audit
-from app.services.authorization import generate_invite_token, require_limit, require_role_capacity
+from app.services.authorization import (
+    check_limit,
+    generate_invite_token,
+    require_limit,
+    require_role_capacity,
+)
+from app.services.share_access import validate_share_create
 from app.services.roles import ORG_ADMIN_ROLES, effective_workspace_role
 from app.services.tenancy import TenancyContext, get_org_context, get_workspace_context
 
@@ -98,6 +113,23 @@ async def create_workspace(
 
     db.add(WorkspaceMembership(user_id=ctx.user_id, workspace_id=ws.id, role="admin"))
 
+    if body.source_workspace_slug and body.copy_layers:
+        source_result = await db.execute(
+            select(Workspace).where(
+                Workspace.org_id == ctx.org_id,
+                Workspace.slug == body.source_workspace_slug,
+            )
+        )
+        source_ws = source_result.scalar_one_or_none()
+        if not source_ws:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source workspace not found")
+        if source_ws.id == ws.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot copy from the workspace being created",
+            )
+        await copy_workspace_layers(db, source_ws, ws, body.copy_layers, ctx.user_id)
+
     await log_audit(
         db,
         org_id=ctx.org_id,
@@ -123,6 +155,20 @@ async def create_workspace(
         constraint_mode=ws.constraint_mode,
         role="admin",
         created_at=ws.created_at,
+    )
+
+
+@router.get("/{workspace_slug}/copy-preview", response_model=WorkspaceCopyPreview)
+async def get_workspace_copy_preview_endpoint(
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspaceCopyPreview:
+    """Layer item counts for the workspace copy UI."""
+    await ctx.require_permission(db, "workspace.create")
+    assert ctx.workspace
+    layers = await get_workspace_copy_preview(db, ctx.workspace.id)
+    return WorkspaceCopyPreview(
+        layers=[WorkspaceCopyPreviewLayer(**layer) for layer in layers]
     )
 
 
@@ -203,6 +249,32 @@ async def delete_workspace(
 
     await db.delete(ctx.workspace)
     await db.commit()
+
+
+@router.get("/{workspace_slug}/members", response_model=list[WorkspaceMemberRead])
+async def list_workspace_members(
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> list[WorkspaceMemberRead]:
+    await ctx.require_permission(db, "workspace.settings.edit")
+    assert ctx.workspace
+
+    result = await db.execute(
+        select(User, WorkspaceMembership.role, WorkspaceMembership.created_at)
+        .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
+        .where(WorkspaceMembership.workspace_id == ctx.workspace.id)
+        .order_by(WorkspaceMembership.created_at)
+    )
+    return [
+        WorkspaceMemberRead(
+            user_id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            role=role,
+            joined_at=joined_at,
+        )
+        for user, role, joined_at in result.all()
+    ]
 
 
 @router.get("/{workspace_slug}/invites", response_model=list[InviteRead])
@@ -320,6 +392,142 @@ async def revoke_workspace_invite(
         target_type="invite",
         target_id=invite.id,
         metadata={"email": invite.email},
+    )
+    await db.commit()
+
+
+def _share_url(token: str) -> str:
+    return f"/share/{token}"
+
+
+@router.get("/{workspace_slug}/shares", response_model=list[ShareRead])
+async def list_share_links(
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> list[ShareRead]:
+    await ctx.require_permission(db, "workspace.share.create")
+    assert ctx.workspace
+
+    result = await db.execute(
+        select(ShareLink)
+        .where(ShareLink.workspace_id == ctx.workspace.id, ShareLink.org_id == ctx.org_id)
+        .order_by(ShareLink.created_at.desc())
+    )
+    return [
+        ShareRead(
+            id=link.id,
+            resource_type=link.resource_type,
+            resource_key=link.resource_key,
+            resource_id=link.resource_id,
+            title=link.title,
+            status=link.status,
+            expires_at=link.expires_at,
+            created_at=link.created_at,
+            share_url=_share_url("…"),
+        )
+        for link in result.scalars().all()
+    ]
+
+
+@router.post("/{workspace_slug}/shares", response_model=ShareCreated, status_code=status.HTTP_201_CREATED)
+async def create_share_link(
+    body: ShareCreate,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> ShareCreated:
+    await ctx.require_permission(db, "workspace.share.create")
+    assert ctx.workspace
+
+    validate_share_create(ctx.org.plan, body.resource_type, body.resource_key)
+
+    ok, detail = await check_limit(db, ctx.org_id, "max_active_share_links")
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+    if body.resource_type in ("roadmap", "object", "capability_domain") and not body.resource_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="resource_id required")
+    if body.resource_type == "view" and not body.resource_key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="resource_key required")
+
+    raw_token, token_hash = generate_invite_token()
+    link = ShareLink(
+        token_hash=token_hash,
+        org_id=ctx.org_id,
+        workspace_id=ctx.workspace.id,
+        resource_type=body.resource_type,
+        resource_key=body.resource_key,
+        resource_id=body.resource_id,
+        title=body.title,
+        status="active",
+        expires_at=utc_now_plus(days=body.expires_in_days),
+        created_by=ctx.user_id,
+    )
+    db.add(link)
+    await db.flush()
+
+    await log_audit(
+        db,
+        org_id=ctx.org_id,
+        actor_user_id=ctx.user_id,
+        action="share.created",
+        target_type="share_link",
+        target_id=link.id,
+        metadata={
+            "resource_type": link.resource_type,
+            "resource_key": link.resource_key,
+            "title": link.title,
+        },
+    )
+    await db.commit()
+    await db.refresh(link)
+
+    return ShareCreated(
+        id=link.id,
+        resource_type=link.resource_type,
+        resource_key=link.resource_key,
+        resource_id=link.resource_id,
+        title=link.title,
+        status=link.status,
+        expires_at=link.expires_at,
+        created_at=link.created_at,
+        share_url=_share_url(raw_token),
+        token=raw_token,
+    )
+
+
+@router.delete("/{workspace_slug}/shares/{share_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_share_link(
+    share_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await ctx.require_permission(db, "workspace.share.create")
+    assert ctx.workspace
+
+    result = await db.execute(
+        select(ShareLink).where(
+            ShareLink.id == share_id,
+            ShareLink.workspace_id == ctx.workspace.id,
+            ShareLink.org_id == ctx.org_id,
+        )
+    )
+    link = result.scalar_one_or_none()
+    if not link:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share link not found")
+    if link.status != "active":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Share link is not active")
+
+    link.status = "revoked"
+    link.revoked_at = utc_now()
+
+    await log_audit(
+        db,
+        org_id=ctx.org_id,
+        actor_user_id=ctx.user_id,
+        action="share.revoked",
+        target_type="share_link",
+        target_id=link.id,
+        metadata={"title": link.title},
     )
     await db.commit()
 

@@ -30,6 +30,9 @@ import {
 } from "@/lib/portfolio-utils";
 import { cn } from "@/lib/utils";
 import { useViewEmbedded, useViewsTheme } from "@/lib/view-embed-context";
+import { useShareSession } from "@/lib/share-context";
+import { ShareButton } from "@/components/share/ShareButton";
+import { usePermissions } from "@/lib/use-permissions";
 import type { Product, ProductHealthStatus } from "@minea/types";
 
 const HEALTH_DOT_CLASS: Record<ProductHealthStatus, string> = {
@@ -59,19 +62,22 @@ const LAYOUT_OPTIONS: {
 // ─── Main component ────────────────────────────────────────────────────────
 
 export function PortfolioView() {
+  const { canCreate, canShare } = usePermissions();
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug, summaryPending, showEmptyFromSummary, skipHeavyFetch } =
     useViewDataGate("products");
   const queryClient = useQueryClient();
   const embedded = useViewEmbedded();
+  const shareSession = useShareSession();
   const isViewsMode = useViewsTheme();
+  const showPageHeader = !embedded || !!shareSession;
 
   const shellClass = cn(
     "mx-auto w-full",
     embedded ? "px-4 pt-4" : "max-w-6xl px-8 pt-8"
   );
 
-  const [layout, setLayout] = useState<PortfolioLayout>("grid");
+  const [layout, setLayout] = useState<PortfolioLayout>("table");
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState(TEAM_COLORS[0]!);
@@ -191,15 +197,17 @@ export function PortfolioView() {
           <p className="text-sm text-gray-500 mb-6">
             Add products and map them to capabilities to see the portfolio landscape — health, shared risks, and ownership gaps.
           </p>
-          <button
-            type="button"
-            onClick={() => setShowCreateForm(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md"
-          >
-            Add your first product
-          </button>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => setShowCreateForm(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md"
+            >
+              Add your first product
+            </button>
+          )}
         </div>
-        {showCreateForm && (
+        {canCreate && showCreateForm && (
           <ProductForm
             onClose={() => setShowCreateForm(false)}
             onSuccess={() => { setShowCreateForm(false); refreshProducts(); }}
@@ -213,32 +221,80 @@ export function PortfolioView() {
     <div className="flex flex-col min-h-full">
       {/* ── Page header ── */}
       <div className={cn(shellClass, "pb-0 flex-shrink-0")}>
-        <div className="flex items-start justify-between gap-4 mb-5">
-          <div>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="min-w-0">
+            {showPageHeader && (
+              <>
+                <p
+                  className={cn(
+                    "text-xs mb-1 uppercase tracking-wider",
+                    isViewsMode ? "text-violet-400" : "text-gray-400"
+                  )}
+                >
+                  Views · Portfolio
+                </p>
+                <h1 className="text-2xl font-bold text-gray-900">Products portfolio</h1>
+              </>
+            )}
             <p
               className={cn(
-                "text-xs mb-1 uppercase tracking-wider",
-                isViewsMode ? "text-violet-400" : "text-gray-400"
+                showPageHeader ? "text-sm mt-1" : "text-sm",
+                isViewsMode ? "text-violet-500" : "text-gray-500"
               )}
             >
-              Views · Portfolio
-            </p>
-            <h1 className="text-2xl font-bold text-gray-900">Products portfolio</h1>
-            <p className={cn("text-sm mt-1", isViewsMode ? "text-violet-500" : "text-gray-500")}>
-              {products.length} product{products.length === 1 ? "" : "s"} · cockpit view
-              {unownedCount > 0 && ` · ${unownedCount} unowned`}
-              {lastUpdated && ` · updated ${lastUpdated}`}
+              {shareSession ? (
+                <>
+                  {shareSession.orgName ?? shareSession.orgSlug}
+                  {" · "}
+                  {shareSession.workspaceName ?? shareSession.workspaceSlug}
+                  {shareSession.sharedByName && ` · Shared by ${shareSession.sharedByName}`}
+                  {lastUpdated && ` · Updated ${lastUpdated}`}
+                </>
+              ) : (
+                <>
+                  {products.length} product{products.length === 1 ? "" : "s"} · cockpit view
+                  {unownedCount > 0 && ` · ${unownedCount} unowned`}
+                  {lastUpdated && ` · updated ${lastUpdated}`}
+                </>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowCreateForm(true)}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
-            >
-              <Plus size={14} />
-              Add
-            </button>
+            <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+              {LAYOUT_OPTIONS.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setLayout(id)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                    layout === id
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  <Icon size={12} />
+                  {label}
+                </button>
+              ))}
+            </div>
+            {canShare && (
+              <ShareButton
+                resourceType="view"
+                resourceKey="views/products"
+                title="Product portfolio"
+              />
+            )}
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => setShowCreateForm(true)}
+                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+              >
+                <Plus size={14} />
+                Add
+              </button>
+            )}
             <button
               type="button"
               onClick={exportCSV}
@@ -249,38 +305,10 @@ export function PortfolioView() {
             </button>
           </div>
         </div>
-
-        {/* Toggle row */}
-        <div
-          className={cn(
-            "flex items-center gap-3 flex-wrap pb-5 border-b",
-            isViewsMode ? "border-violet-200/60" : "border-gray-200"
-          )}
-        >
-          {/* Grid / Table / Matrix toggle */}
-          <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
-            {LAYOUT_OPTIONS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setLayout(id)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                  layout === id
-                    ? "bg-white text-gray-900 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                )}
-              >
-                <Icon size={12} />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* ── Content ── */}
-      <div className={cn(shellClass, "flex-1 py-6")}>
+      <div className={cn(shellClass, "flex-1 pt-2 pb-6")}>
         {layout === "grid" ? (
           <div className="space-y-8 max-w-3xl">
             {gridGroups.map((group) => (
@@ -335,7 +363,7 @@ export function PortfolioView() {
       </div>
 
       {/* ── Drawers ── */}
-      {showCreateForm && (
+      {canCreate && showCreateForm && (
         <ProductForm
           onClose={() => setShowCreateForm(false)}
           onSuccess={() => {

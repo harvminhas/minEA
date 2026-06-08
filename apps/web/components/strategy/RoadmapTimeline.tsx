@@ -20,8 +20,8 @@ type ViewMode = "quarter" | "month";
 interface Props {
   properties: RoadmapItemProperties;
   milestones: RoadmapMilestone[];
-  onAddAtQuarter: (quarter: string) => void;
-  onEditMilestone: (milestone: RoadmapMilestone) => void;
+  onAddAtQuarter?: (quarter: string) => void;
+  onEditMilestone?: (milestone: RoadmapMilestone) => void;
   /** When true, timeline uses full width (e.g. fullscreen overlay). */
   fullWidth?: boolean;
   /** Shows expand control in the milestones header. */
@@ -172,13 +172,15 @@ export function RoadmapTimeline({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => onAddAtQuarter(quarters[Math.min(1, quarters.length - 1)] ?? quarters[0]!)}
-            className="text-xs font-medium text-violet-600 hover:text-violet-700 px-2 py-1 rounded-md hover:bg-violet-50"
-          >
-            + Add milestone
-          </button>
+          {onAddAtQuarter && (
+            <button
+              type="button"
+              onClick={() => onAddAtQuarter(quarters[Math.min(1, quarters.length - 1)] ?? quarters[0]!)}
+              className="text-xs font-medium text-violet-600 hover:text-violet-700 px-2 py-1 rounded-md hover:bg-violet-50"
+            >
+              + Add milestone
+            </button>
+          )}
         </div>
       </div>
 
@@ -193,17 +195,27 @@ export function RoadmapTimeline({
         >
           <div className="relative h-8 mb-2">
             {viewMode === "quarter"
-              ? quarters.map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => onAddAtQuarter(q)}
-                    className="absolute -translate-x-1/2 text-[11px] text-gray-400 hover:text-violet-600 transition-colors whitespace-nowrap"
-                    style={{ left: `${milestonePosition(q, quarters)}%` }}
-                  >
-                    {targetResolutionLabel(q)}
-                  </button>
-                ))
+              ? quarters.map((q) =>
+                  onAddAtQuarter ? (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => onAddAtQuarter(q)}
+                      className="absolute -translate-x-1/2 text-[11px] text-gray-400 hover:text-violet-600 transition-colors whitespace-nowrap"
+                      style={{ left: `${milestonePosition(q, quarters)}%` }}
+                    >
+                      {targetResolutionLabel(q)}
+                    </button>
+                  ) : (
+                    <span
+                      key={q}
+                      className="absolute -translate-x-1/2 text-[11px] text-gray-400 whitespace-nowrap"
+                      style={{ left: `${milestonePosition(q, quarters)}%` }}
+                    >
+                      {targetResolutionLabel(q)}
+                    </span>
+                  )
+                )
               : monthLabels.map((m) => (
                   <span
                     key={m.key}
@@ -216,12 +228,16 @@ export function RoadmapTimeline({
           </div>
 
           <div
-            className="relative h-0.5 bg-gray-200 cursor-pointer"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const pct = ((e.clientX - rect.left) / rect.width) * 100;
-              onAddAtQuarter(closestQuarterFromClick(pct));
-            }}
+            className={cn("relative h-0.5 bg-gray-200", onAddAtQuarter && "cursor-pointer")}
+            onClick={
+              onAddAtQuarter
+                ? (e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const pct = ((e.clientX - rect.left) / rect.width) * 100;
+                    onAddAtQuarter(closestQuarterFromClick(pct));
+                  }
+                : undefined
+            }
           >
             {quarters.map((q) => (
               <span
@@ -253,23 +269,41 @@ export function RoadmapTimeline({
                 />
                 <span className={cn("h-2.5 w-2.5 rounded-full border-2 -mt-0.5", style.dot)} />
 
-                <button
-                  type="button"
-                  onClick={() => onEditMilestone(milestone)}
-                  className={cn(
-                    "mt-2 w-36 rounded-lg border px-2.5 py-2 text-left shadow-sm hover:shadow transition-shadow pointer-events-auto",
-                    style.card
-                  )}
-                >
-                  <span className="text-[10px] font-semibold text-gray-400 block">M{idx + 1}</span>
-                  <span className="text-xs font-medium text-gray-900 block leading-snug mt-0.5 line-clamp-2">
-                    {milestone.title}
-                  </span>
-                  <span className={cn("inline-flex items-center gap-1 text-[10px] mt-1.5", style.label)}>
-                    <StatusIcon status={milestone.status} />
-                    {ROADMAP_MILESTONE_STATUS_LABEL[milestone.status]}
-                  </span>
-                </button>
+                {onEditMilestone ? (
+                  <button
+                    type="button"
+                    onClick={() => onEditMilestone(milestone)}
+                    className={cn(
+                      "mt-2 w-36 rounded-lg border px-2.5 py-2 text-left shadow-sm hover:shadow transition-shadow pointer-events-auto",
+                      style.card
+                    )}
+                  >
+                    <span className="text-[10px] font-semibold text-gray-400 block">M{idx + 1}</span>
+                    <span className="text-xs font-medium text-gray-900 block leading-snug mt-0.5 line-clamp-2">
+                      {milestone.title}
+                    </span>
+                    <span className={cn("inline-flex items-center gap-1 text-[10px] mt-1.5", style.label)}>
+                      <StatusIcon status={milestone.status} />
+                      {ROADMAP_MILESTONE_STATUS_LABEL[milestone.status]}
+                    </span>
+                  </button>
+                ) : (
+                  <div
+                    className={cn(
+                      "mt-2 w-36 rounded-lg border px-2.5 py-2 text-left shadow-sm pointer-events-auto",
+                      style.card
+                    )}
+                  >
+                    <span className="text-[10px] font-semibold text-gray-400 block">M{idx + 1}</span>
+                    <span className="text-xs font-medium text-gray-900 block leading-snug mt-0.5 line-clamp-2">
+                      {milestone.title}
+                    </span>
+                    <span className={cn("inline-flex items-center gap-1 text-[10px] mt-1.5", style.label)}>
+                      <StatusIcon status={milestone.status} />
+                      {ROADMAP_MILESTONE_STATUS_LABEL[milestone.status]}
+                    </span>
+                  </div>
+                )}
               </div>
             );
           })}

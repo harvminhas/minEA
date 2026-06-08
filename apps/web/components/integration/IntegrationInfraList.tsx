@@ -51,6 +51,7 @@ import {
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import type { MinEAObject, ToolProperties } from "@minea/types";
 import { cn, getStatusLabel } from "@/lib/utils";
+import { usePermissions } from "@/lib/use-permissions";
 
 type InfraViewLayout = "cards" | "table";
 
@@ -202,6 +203,7 @@ function InfraCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: ()
 
 export function IntegrationInfraList() {
   const { getToken } = useAuth();
+  const { canCreate } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
@@ -365,7 +367,7 @@ export function IntegrationInfraList() {
             ]}
           />
           <div className="ml-auto flex items-center gap-2">
-            {viewLayout === "cards" && (
+            {viewLayout === "cards" && canCreate && (
               <button
                 type="button"
                 onClick={() => setShowCreate(true)}
@@ -406,13 +408,15 @@ export function IntegrationInfraList() {
                   ? "No integration infrastructure yet."
                   : "No records match your filters."}
               </p>
-              <button
-                type="button"
-                onClick={() => setShowCreate(true)}
-                className="text-slate-600 hover:underline text-sm font-medium"
-              >
-                Create your first infrastructure →
-              </button>
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(true)}
+                  className="text-slate-600 hover:underline text-sm font-medium"
+                >
+                  Create your first infrastructure →
+                </button>
+              )}
             </div>
           ) : (
             <IntegrationInfraTable items={filtered} onOpen={setSelectedId} />
@@ -424,13 +428,15 @@ export function IntegrationInfraList() {
                 ? "No integration infrastructure yet."
                 : "No records match your filters."}
             </p>
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              className="text-slate-600 hover:underline text-sm font-medium"
-            >
-              Create your first infrastructure →
-            </button>
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => setShowCreate(true)}
+                className="text-slate-600 hover:underline text-sm font-medium"
+              >
+                Create your first infrastructure →
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -441,7 +447,7 @@ export function IntegrationInfraList() {
         )}
       </div>
 
-      {showCreate && (
+      {canCreate && showCreate && (
         <CreateIntegrationInfraPanel
           onClose={() => setShowCreate(false)}
           onSuccess={(id) => {

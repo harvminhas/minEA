@@ -203,6 +203,22 @@ async def check_limit(
         current = await _count_pending_invites(db, org_id)
         if pending_delta:
             current += pending_delta
+    elif limit_key == "max_active_share_links":
+        from app.models.shares import ShareLink
+
+        now = utc_now()
+        result = await db.execute(
+            select(func.count())
+            .select_from(ShareLink)
+            .where(
+                ShareLink.org_id == org_id,
+                ShareLink.status == "active",
+                ShareLink.expires_at > now,
+            )
+        )
+        current = result.scalar_one()
+        if pending_delta:
+            current += pending_delta
     elif limit_key == "ai_extractions_per_month":
         month_start = utc_now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         result = await db.execute(

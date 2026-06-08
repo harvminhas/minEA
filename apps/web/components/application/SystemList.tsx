@@ -24,6 +24,7 @@ import { ObjectDetail } from "@/components/objects/ObjectDetail";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { SystemTable } from "@/components/application/SystemTable";
 import { APPLICATION_LAYER_COLOR } from "@/lib/component-utils";
+import { usePermissions } from "@/lib/use-permissions";
 import {
   filterSystems,
   systemAnnualCost,
@@ -82,6 +83,7 @@ export function SystemList() {
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
+  const { canCreate } = usePermissions();
 
   const [viewLayout, setViewLayout] = useState<SystemViewLayout>("table");
   const [search, setSearch] = useState("");
@@ -240,7 +242,7 @@ export function SystemList() {
             ]}
           />
           <div className="ml-auto flex items-center gap-2">
-            {viewLayout === "cards" && (
+            {viewLayout === "cards" && canCreate && (
               <button
                 type="button"
                 onClick={() => setShowForm(true)}
@@ -286,13 +288,15 @@ export function SystemList() {
             <p className="text-gray-500 text-sm mb-3">
               {items.length === 0 ? "No systems yet." : "No systems match your filters."}
             </p>
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              className="text-indigo-600 hover:underline text-sm font-medium"
-            >
-              Add your first system →
-            </button>
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => setShowForm(true)}
+                className="text-indigo-600 hover:underline text-sm font-medium"
+              >
+                Add your first system →
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl">

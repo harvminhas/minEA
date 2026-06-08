@@ -138,6 +138,7 @@ async def accept_invite(
         redirect_workspace = await enroll_org_member_in_workspaces(
             db, org_id=invite.org_id, user_id=user.id, org_role=invite.role
         )
+        # Org-level invites do not auto-join workspaces — assign per-workspace roles via workspace invites.
 
     invite.status = "accepted"
     invite.consumed_at = now

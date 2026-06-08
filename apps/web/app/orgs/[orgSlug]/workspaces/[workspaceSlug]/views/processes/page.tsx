@@ -10,6 +10,7 @@ import { useViewDataGate } from "@/lib/use-view-summary";
 import { ViewShell } from "@/components/views/ViewShell";
 import { ProcessBuilder } from "@/components/views/ProcessBuilder";
 import { getView } from "@/lib/views";
+import { usePermissions } from "@/lib/use-permissions";
 import type { Process } from "@minea/types";
 
 const view = getView("processes");
@@ -35,6 +36,7 @@ function ProcessCard({ process, onClick }: { process: Process; onClick: () => vo
 }
 
 export default function ProcessesViewPage() {
+  const { canCreate, canEdit } = usePermissions();
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const { orgSlug, workspaceSlug, summaryPending, showEmptyFromSummary, skipHeavyFetch } =
@@ -98,6 +100,7 @@ export default function ProcessesViewPage() {
                 key={process.id}
                 process={process}
                 onClick={() => {
+                  if (!canEdit) return;
                   setEditProcess(process);
                   setShowBuilder(true);
                 }}
@@ -107,7 +110,7 @@ export default function ProcessesViewPage() {
         )}
       </ViewShell>
 
-      {showBuilder && (
+      {showBuilder && (editProcess ? canEdit : canCreate) && (
         <ProcessBuilder
           initialValues={editProcess}
           onClose={() => {

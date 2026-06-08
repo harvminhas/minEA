@@ -43,33 +43,13 @@ async def enroll_org_member_in_workspaces(
         )
         return preferred_workspace_slug(list(result.scalars().all()))
 
-    existing = await db.execute(
-        select(WorkspaceMembership.workspace_id)
-        .join(Workspace, Workspace.id == WorkspaceMembership.workspace_id)
+    accessible = await db.execute(
+        select(Workspace)
+        .join(WorkspaceMembership, WorkspaceMembership.workspace_id == Workspace.id)
         .where(WorkspaceMembership.user_id == user_id, Workspace.org_id == org_id)
-        .limit(1)
+        .order_by(Workspace.created_at)
     )
-    if existing.scalar_one_or_none():
-        accessible = await db.execute(
-            select(Workspace)
-            .join(WorkspaceMembership, WorkspaceMembership.workspace_id == Workspace.id)
-            .where(WorkspaceMembership.user_id == user_id, Workspace.org_id == org_id)
-            .order_by(Workspace.created_at)
-        )
-        return preferred_workspace_slug(list(accessible.scalars().all()))
-
-    result = await db.execute(
-        select(Workspace).where(Workspace.org_id == org_id).order_by(Workspace.created_at)
-    )
-    workspaces = list(result.scalars().all())
-    if not workspaces:
-        return None
-
-    ws_role = workspace_role_for_org_member(org_role)
-    for ws in workspaces:
-        db.add(WorkspaceMembership(user_id=user_id, workspace_id=ws.id, role=ws_role))
-    await db.flush()
-    return preferred_workspace_slug(workspaces)
+    return preferred_workspace_slug(list(accessible.scalars().all()))
 
 
 class TenancyContext:

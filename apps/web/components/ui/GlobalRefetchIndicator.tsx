@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useIsFetching, useIsMutating } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
 
 const SHOW_DELAY_MS = 250;
 
@@ -36,18 +36,9 @@ export function GlobalRefetchIndicator({ topClassName = "top-12" }: Props) {
 
   return (
     <div
-      role="status"
-      aria-live="polite"
-      aria-label="Updating data"
-      className={`fixed left-0 right-0 z-[70] pointer-events-none flex flex-col items-center ${topClassName}`}
+      className={`fixed left-0 right-0 z-[70] pointer-events-none shadow-md ${topClassName}`}
     >
-      <div className="w-full h-0.5 bg-indigo-100 overflow-hidden">
-        <div className="h-full w-1/3 bg-indigo-500 animate-pulse" />
-      </div>
-      <span className="mt-2 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/95 px-3 py-1 text-xs font-medium text-gray-600 shadow-sm backdrop-blur-sm">
-        <Loader2 size={12} className="animate-spin text-indigo-600" aria-hidden />
-        Updating…
-      </span>
+      <DiagramSavingBar active label="Updating…" />
     </div>
   );
 }

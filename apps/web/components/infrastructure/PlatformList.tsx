@@ -7,6 +7,7 @@ import { Clock, Layers, Plus } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { usePermissions } from "@/lib/use-permissions";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { PlatformDetail } from "@/components/infrastructure/PlatformDetail";
 import {
@@ -139,6 +140,7 @@ function PlatformCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail:
 
 export function PlatformList() {
   const { getToken } = useAuth();
+  const { canCreate } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
@@ -185,13 +187,15 @@ export function PlatformList() {
             </span>
           )}
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
-        >
-          <Plus size={14} />
-          New platform
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+          >
+            <Plus size={14} />
+            New platform
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-8">
@@ -204,9 +208,11 @@ export function PlatformList() {
         ) : items.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-gray-400 text-sm mb-3">No platforms yet.</p>
-            <button onClick={() => setShowCreate(true)} className="text-slate-600 hover:underline text-sm">
-              Create the first platform →
-            </button>
+            {canCreate && (
+              <button onClick={() => setShowCreate(true)} className="text-slate-600 hover:underline text-sm">
+                Create the first platform →
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -217,7 +223,7 @@ export function PlatformList() {
         )}
       </div>
 
-      {showCreate && (
+      {canCreate && showCreate && (
         <CreatePlatformPanel
           onClose={() => setShowCreate(false)}
           onSuccess={(id) => {

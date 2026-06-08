@@ -3,16 +3,18 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, Edit2, Trash2 } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import type { MinEAObject, TechDebtProperties } from "@minea/types";
 import { objectsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import {
   DetailPanel,
-  DetailPanelCloseButton,
   DetailRow,
   DetailSection,
 } from "@/components/ui/DetailPanel";
+import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
+import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
+import { usePermissions } from "@/lib/use-permissions";
 import { CreateTechDebtPanel } from "@/components/risk/CreateTechDebtPanel";
 import {
   RISK_LAYER_COLOR,
@@ -39,8 +41,10 @@ function affectsKindLabel(kind: string): string {
 export function TechDebtDetail({ techDebt, onClose, onDelete, onUpdate }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const { canEdit, canDelete } = usePermissions();
 
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const props = (techDebt.properties ?? {}) as TechDebtProperties;
   const typeLabel = techDebtTypeLabel(props);
@@ -50,7 +54,10 @@ export function TechDebtDetail({ techDebt, onClose, onDelete, onUpdate }: Props)
       const token = await getToken();
       return objectsApi.delete(orgSlug, workspaceSlug, techDebt.id, token!);
     },
-    onSuccess: onDelete,
+    onSuccess: () => {
+      setShowDeleteConfirm(false);
+      onDelete();
+    },
   });
 
   return (
@@ -71,26 +78,14 @@ export function TechDebtDetail({ techDebt, onClose, onDelete, onUpdate }: Props)
                 <p className="text-sm text-gray-400">Tech debt</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setShowEditForm(true)}
-                className="p-2 rounded-md hover:bg-gray-100 text-gray-500"
-                aria-label="Edit tech debt"
-              >
-                <Edit2 size={15} />
-              </button>
-              <button
-                type="button"
-                onClick={() => deleteMutation.mutate()}
-                disabled={deleteMutation.isPending}
-                className="p-2 rounded-md hover:bg-red-50 text-gray-500 hover:text-red-600"
-                aria-label="Delete tech debt"
-              >
-                <Trash2 size={15} />
-              </button>
-              <DetailPanelCloseButton onClose={onClose} />
-            </div>
+            <DetailObjectActions
+              onClose={onClose}
+              onEdit={() => setShowEditForm(true)}
+              onDelete={() => setShowDeleteConfirm(true)}
+              deletePending={deleteMutation.isPending}
+              editLabel="Edit tech debt"
+              deleteLabel="Delete tech debt"
+            />
           </div>
         }
       >
@@ -136,7 +131,17 @@ export function TechDebtDetail({ techDebt, onClose, onDelete, onUpdate }: Props)
         </DetailSection>
       </DetailPanel>
 
-      {showEditForm && (
+      {canDelete && showDeleteConfirm && (
+        <ConfirmDeleteDialog
+          title="Delete tech debt"
+          message={`Are you sure you want to delete "${techDebt.name}"? This cannot be undone.`}
+          onConfirm={() => deleteMutation.mutate()}
+          onCancel={() => setShowDeleteConfirm(false)}
+          isPending={deleteMutation.isPending}
+        />
+      )}
+
+      {canEdit && showEditForm && (
         <CreateTechDebtPanel
           initialValues={techDebt}
           onClose={() => setShowEditForm(false)}

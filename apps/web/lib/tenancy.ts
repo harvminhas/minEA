@@ -1,14 +1,17 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import type { Org, Workspace } from "@minea/types";
+import { useTenancyOverride } from "@/lib/share-context";
 
 export function useTenancy() {
+  const override = useTenancyOverride();
   const params = useParams<{ orgSlug: string; workspaceSlug: string }>();
+  const orgSlug = override?.orgSlug ?? params.orgSlug;
+  const workspaceSlug = override?.workspaceSlug ?? params.workspaceSlug;
   return {
-    orgSlug: params.orgSlug,
-    workspaceSlug: params.workspaceSlug,
-    basePath: `/orgs/${params.orgSlug}/workspaces/${params.workspaceSlug}`,
+    orgSlug,
+    workspaceSlug,
+    basePath: `/orgs/${orgSlug}/workspaces/${workspaceSlug}`,
   };
 }
 

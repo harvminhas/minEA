@@ -76,5 +76,5 @@ export interface DomainGapItem {
   severity: "error" | "warning";
   message: string;
   fixLabel: string;
-  onFix: () => void;
+  onFix?: () => void;
 }

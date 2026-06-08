@@ -8,6 +8,8 @@ import type { ViewConfig } from "@/lib/views";
 import { glossary } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { useViewEmbedded, useViewsTheme } from "@/lib/view-embed-context";
+import { ShareButton } from "@/components/share/ShareButton";
+import { usePermissions } from "@/lib/use-permissions";
 
 interface ViewShellProps {
   view: ViewConfig;
@@ -30,11 +32,12 @@ export function ViewShell({
   const pathname = usePathname();
   const embedded = useViewEmbedded() || pathname.includes("/embed/");
   const isViewsMode = useViewsTheme();
+  const { canCreate, canShare } = usePermissions();
 
   return (
     <div className={cn("w-full", embedded ? "p-4" : "p-8 max-w-6xl")}>
       {embedded ? (
-        headerAction ? (
+        canCreate && headerAction ? (
           <div className="flex items-center justify-end gap-2 mb-4">{headerAction}</div>
         ) : null
       ) : (
@@ -49,7 +52,14 @@ export function ViewShell({
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {headerAction}
+            {canCreate && headerAction}
+            {canShare && (
+              <ShareButton
+                resourceType="view"
+                resourceKey={view.segment}
+                title={view.label}
+              />
+            )}
             <button
               type="button"
               onClick={() => setShowHelp(true)}
@@ -85,7 +95,7 @@ export function ViewShell({
           </div>
           <h2 className="font-semibold text-gray-900 mb-2">{view.emptyTitle}</h2>
           <p className="text-sm text-gray-500 mb-6">{view.emptyDescription}</p>
-          {view.emptyCta && onEmptyAction && (
+          {view.emptyCta && onEmptyAction && canCreate && (
             <button
               type="button"
               onClick={onEmptyAction}

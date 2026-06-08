@@ -12,7 +12,7 @@ import {
   DetailPanelCloseButton,
   DetailSection,
 } from "@/components/ui/DetailPanel";
-import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
+import { DeleteSystemConfirmDialog } from "@/components/application/DeleteSystemConfirmDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
 import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
 import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
@@ -28,6 +28,7 @@ import { invalidateSystemCaches } from "@/lib/system-capability-utils";
 import { systemStatusLabel, SYSTEM_STATUS_STYLE } from "@/lib/system-utils";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/lib/use-permissions";
 import { type ApplicationProperties, type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
 
 interface Props {
@@ -41,6 +42,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
+  const { canEdit, canDelete } = usePermissions();
   const [activeTab, setActiveTab] = useState<ObjectDrawerTabId>("details");
   const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(objectId);
   const [showEditForm, setShowEditForm] = useState(false);
@@ -238,22 +240,26 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowEditForm(true)}
-                  className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                  aria-label="Edit system"
-                >
-                  <Edit2 size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                  aria-label="Delete system"
-                >
-                  <Trash2 size={14} />
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setShowEditForm(true)}
+                    className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                    aria-label="Edit system"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                    aria-label="Delete system"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
                 <DetailPanelCloseButton onClose={onClose} />
               </div>
             </div>
@@ -281,8 +287,8 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
             relationships={drawerRels}
             diagramRefreshing={diagramRefreshing}
             onExpandDiagram={() => setShowChart(true)}
-            onAdd={() => setShowRelForm(true)}
-            onRemove={(id) => deleteRelMutation.mutate(id)}
+            onAdd={canEdit ? () => setShowRelForm(true) : undefined}
+            onRemove={canEdit ? (id) => deleteRelMutation.mutate(id) : undefined}
             isRemoving={deleteRelMutation.isPending}
           />
         )}
@@ -386,15 +392,10 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
       </DetailPanel>
 
       {showDeleteConfirm && (
-        <ConfirmDeleteDialog
-          title="Delete system?"
-          message={
-            <>
-              <span className="font-medium text-gray-700">{object.name}</span> will be permanently
-              removed from this workspace, including its relationships and history.
-            </>
-          }
-          confirmLabel="Delete system"
+        <DeleteSystemConfirmDialog
+          system={object}
+          relationships={allRels}
+          accentColor={accentColor}
           isPending={deleteMutation.isPending}
           onCancel={() => setShowDeleteConfirm(false)}
           onConfirm={() => deleteMutation.mutate()}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit2, Trash2, Zap } from "lucide-react";
+import { Zap } from "lucide-react";
 import type { EventProperties, MinEAObject, ObjectListResponse, Relationship } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import {
@@ -16,10 +16,11 @@ import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils
 import { useTenancy } from "@/lib/tenancy";
 import {
   DetailPanel,
-  DetailPanelCloseButton,
   DetailRow,
   DetailSection,
 } from "@/components/ui/DetailPanel";
+import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
+import { usePermissions } from "@/lib/use-permissions";
 import { CreateEventPanel } from "@/components/integration/CreateEventPanel";
 import { EventDiagramModal, type NodeLayout } from "@/components/integration/EventDiagram";
 import { EventRelationshipsTab } from "@/components/integration/EventRelationshipsTab";
@@ -49,6 +50,7 @@ interface Props {
 }
 
 export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
+  const { canEdit, canDelete } = usePermissions();
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
@@ -256,23 +258,14 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
                     {getStatusLabel(liveEvent.status)}
                   </span>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setShowEditForm(true)}
-                  className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                  aria-label="Edit event"
-                >
-                  <Edit2 size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                  aria-label="Delete event"
-                >
-                  <Trash2 size={14} />
-                </button>
-                <DetailPanelCloseButton onClose={onClose} />
+                <DetailObjectActions
+                  onClose={onClose}
+                  onEdit={() => setShowEditForm(true)}
+                  onDelete={() => setShowDeleteConfirm(true)}
+                  deletePending={deleteMutation.isPending}
+                  editLabel="Edit event"
+                  deleteLabel="Delete event"
+                />
               </div>
             </div>
 
@@ -366,7 +359,7 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
         )}
       </DetailPanel>
 
-      {showDeleteConfirm && (
+      {canDelete && showDeleteConfirm && (
         <ConfirmDeleteDialog
           title="Delete event"
           message={`Are you sure you want to delete "${liveEvent.name}"? This cannot be undone.`}
@@ -380,13 +373,13 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
         <EventDiagramModal
           event={liveEvent}
           onClose={() => setShowChart(false)}
-          onLayoutSave={handleLayoutSave}
-          onResetLayout={handleResetLayout}
-          onArchitectureChange={handleArchitectureChange}
+          onLayoutSave={canEdit ? handleLayoutSave : undefined}
+          onResetLayout={canEdit ? handleResetLayout : undefined}
+          onArchitectureChange={canEdit ? handleArchitectureChange : undefined}
         />
       )}
 
-      {showEditForm && (
+      {canEdit && showEditForm && (
         <CreateEventPanel
           initialValues={liveEvent}
           onClose={() => setShowEditForm(false)}

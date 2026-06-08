@@ -7,6 +7,7 @@ import { MessageSquare, X, Send, Sparkles, Bot, User } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/lib/use-permissions";
 
 interface Message {
   id: string;
@@ -16,6 +17,7 @@ interface Message {
 
 export function ChatPanel() {
   const { getToken } = useAuth();
+  const { isReadOnly } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
   const { chatOpen, setChatOpen, activeWorkspace } = useAppStore();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -114,6 +116,8 @@ export function ChatPanel() {
       setIsStreaming(false);
     }
   };
+
+  if (isReadOnly) return null;
 
   return (
     <>

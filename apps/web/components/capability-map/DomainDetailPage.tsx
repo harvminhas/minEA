@@ -21,6 +21,7 @@ import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { cn } from "@/lib/utils";
 import { RefreshingOverlay } from "@/components/ui/RefreshingOverlay";
 import { useQueryRefreshing } from "@/lib/use-query-refreshing";
+import { usePermissions } from "@/lib/use-permissions";
 
 type TabId = "overview" | "mapping" | "processes" | "products" | "history";
 
@@ -29,6 +30,7 @@ interface Props {
 }
 
 export function DomainDetailPage({ domainId }: Props) {
+  const { canEdit } = usePermissions();
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
@@ -203,7 +205,7 @@ export function DomainDetailPage({ domainId }: Props) {
           <DomainOverviewTab
             domain={domain}
             onSwitchTab={setActiveTab}
-            onEditCapability={setEditCapability}
+            onEditCapability={canEdit ? setEditCapability : undefined}
             onRefresh={refreshDomain}
           />
         )}
@@ -212,7 +214,7 @@ export function DomainDetailPage({ domainId }: Props) {
           <DomainMappingTab
             domain={domain}
             pickerDomain={pickerDomain}
-            onEditCapability={setEditCapability}
+            onEditCapability={canEdit ? setEditCapability : undefined}
             onRefresh={refreshDomain}
           />
         )}
@@ -224,7 +226,7 @@ export function DomainDetailPage({ domainId }: Props) {
         {activeTab === "history" && <DomainHistoryTab domainId={domain.id} />}
       </div>
 
-      {editCapability && (
+      {canEdit && editCapability && (
         <EditCapabilityDialog
           capability={editCapability}
           domainName={domain.name}

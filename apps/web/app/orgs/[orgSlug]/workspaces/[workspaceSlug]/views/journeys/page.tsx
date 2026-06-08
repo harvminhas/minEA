@@ -10,6 +10,7 @@ import { useViewDataGate } from "@/lib/use-view-summary";
 import { ViewShell } from "@/components/views/ViewShell";
 import { JourneyBuilder } from "@/components/views/JourneyBuilder";
 import { getView } from "@/lib/views";
+import { usePermissions } from "@/lib/use-permissions";
 import type { Journey } from "@minea/types";
 
 const view = getView("journeys");
@@ -38,6 +39,7 @@ function JourneyCard({ journey, onClick }: { journey: Journey; onClick: () => vo
 }
 
 export default function JourneysViewPage() {
+  const { canCreate, canEdit } = usePermissions();
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const { orgSlug, workspaceSlug, summaryPending, showEmptyFromSummary, skipHeavyFetch } =
@@ -101,6 +103,7 @@ export default function JourneysViewPage() {
                 key={journey.id}
                 journey={journey}
                 onClick={() => {
+                  if (!canEdit) return;
                   setEditJourney(journey);
                   setShowBuilder(true);
                 }}
@@ -110,7 +113,7 @@ export default function JourneysViewPage() {
         )}
       </ViewShell>
 
-      {showBuilder && (
+      {showBuilder && (editJourney ? canEdit : canCreate) && (
         <JourneyBuilder
           initialValues={editJourney}
           onClose={() => {

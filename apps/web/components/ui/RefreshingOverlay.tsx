@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -19,22 +19,17 @@ export function RefreshingOverlay({
 }: Props) {
   return (
     <div className={cn("relative flex flex-col flex-1 min-h-0", className)}>
+      {active && (
+        <div className="absolute inset-x-0 top-0 z-30 shadow-md">
+          <DiagramSavingBar active label={label} />
+        </div>
+      )}
       {children}
       {active && (
-        <>
-          <div
-            className="absolute inset-0 z-20 bg-white/60 backdrop-blur-[1px]"
-            aria-hidden
-          />
-          <div
-            role="status"
-            aria-live="polite"
-            className="absolute top-3 right-3 z-30 flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm"
-          >
-            <Loader2 size={14} className="animate-spin text-indigo-600" aria-hidden />
-            {label}
-          </div>
-        </>
+        <div
+          className="absolute inset-0 z-20 bg-white/50 backdrop-blur-[1px] pointer-events-none"
+          aria-hidden
+        />
       )}
     </div>
   );

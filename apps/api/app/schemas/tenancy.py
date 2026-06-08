@@ -34,6 +34,16 @@ class OrgMemberRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class WorkspaceMemberRead(BaseModel):
+    user_id: UUID
+    email: str
+    full_name: str | None
+    role: str
+    joined_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class InviteCreate(BaseModel):
     email: str = Field(..., min_length=3)
     role: str = Field(..., pattern=r"^(admin|member|viewer)$")

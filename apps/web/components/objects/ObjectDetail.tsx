@@ -11,6 +11,7 @@ import { useTenancy } from "@/lib/tenancy";
 import { buildDetailPropertyRows } from "@/lib/object-property-display";
 import { getStatusColor, getStatusLabel, getObjectInitial } from "@/lib/utils";
 import { isSystemObject } from "@/lib/system-utils";
+import { usePermissions } from "@/lib/use-permissions";
 import { SystemObjectDetail } from "@/components/objects/SystemObjectDetail";
 import { RelationshipForm } from "./RelationshipForm";
 import { ObjectForm } from "./ObjectForm";
@@ -51,6 +52,7 @@ function LegacyObjectDetail({
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const { canEdit } = usePermissions();
   const [showRelForm, setShowRelForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
 
@@ -109,12 +111,14 @@ function LegacyObjectDetail({
                 {getStatusLabel(object.status)}
               </span>
             )}
-            <button
-              onClick={() => setShowEditForm(true)}
-              className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              <Edit2 size={14} />
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => setShowEditForm(true)}
+                className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <Edit2 size={14} />
+              </button>
+            )}
             <button
               onClick={onClose}
               className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
@@ -180,8 +184,8 @@ function LegacyObjectDetail({
               objectName={object.name}
               objectType={object.type}
               relationships={allRels}
-              onAdd={() => setShowRelForm(true)}
-              onRemove={(id) => deleteRelMutation.mutate(id)}
+              onAdd={canEdit ? () => setShowRelForm(true) : undefined}
+              onRemove={canEdit ? (id) => deleteRelMutation.mutate(id) : undefined}
               isRemoving={deleteRelMutation.isPending}
             />
           </div>

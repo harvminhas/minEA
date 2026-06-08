@@ -158,6 +158,27 @@ async def get_org(ctx: TenancyContext = Depends(get_org_context)) -> OrgRead:
     )
 
 
+@router.delete("/{org_slug}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_org(
+    ctx: TenancyContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Owner-only: permanently delete the org and all workspaces."""
+    await ctx.require_permission(db, "org.delete")
+
+    await log_audit(
+        db,
+        org_id=ctx.org_id,
+        actor_user_id=ctx.user_id,
+        action="org.deleted",
+        target_type="org",
+        target_id=ctx.org_id,
+        metadata={"slug": ctx.org.slug},
+    )
+    await db.delete(ctx.org)
+    await db.commit()
+
+
 @router.get("/{org_slug}/members", response_model=list[OrgMemberRead])
 async def list_members(
     ctx: TenancyContext = Depends(get_org_context),

@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { HoverActionMenu } from "@/components/ui/HoverActionMenu";
 import { capabilityDeleteMessage } from "@/lib/capability-delete-messages";
+import { usePermissions } from "@/lib/use-permissions";
 
 // Solid saturated colours matching the wireframe
 const FITNESS_CELL: Record<MappingFitness, { cell: string; hover: string; text: string }> = {
@@ -44,7 +45,7 @@ const FITNESS_LABEL: Record<MappingFitness, string> = {
 interface Props {
   domain: DomainDetail;
   pickerDomain: CapabilityMapDomain;
-  onEditCapability: (capability: CapabilityMapCapability) => void;
+  onEditCapability?: (capability: CapabilityMapCapability) => void;
   onRefresh: () => void;
 }
 
@@ -76,6 +77,7 @@ function capabilityRowMeta(
 }
 
 export function DomainMappingTab({ domain, pickerDomain, onEditCapability, onRefresh }: Props) {
+  const { canCreate, canEdit, canDelete } = usePermissions();
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const [filter, setFilter] = useState("");
@@ -276,17 +278,18 @@ export function DomainMappingTab({ domain, pickerDomain, onEditCapability, onRef
                   );
                 })}
 
-                {/* + Add column header */}
-                <th className="border-b border-gray-200 bg-gray-50 px-3 py-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddSystem(true)}
-                    className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-indigo-600 transition-colors"
-                  >
-                    <Plus size={13} />
-                    Add
-                  </button>
-                </th>
+                {canCreate && (
+                  <th className="border-b border-gray-200 bg-gray-50 px-3 py-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddSystem(true)}
+                      className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-indigo-600 transition-colors"
+                    >
+                      <Plus size={13} />
+                      Add
+                    </button>
+                  </th>
+                )}
               </tr>
             </thead>
 
@@ -312,23 +315,25 @@ export function DomainMappingTab({ domain, pickerDomain, onEditCapability, onRef
                             {rowMeta.label}
                           </p>
                         </div>
-                        <HoverActionMenu
-                          buttonClassName="opacity-0 group-hover:opacity-100"
-                          ariaLabel={`Actions for ${capability.name}`}
-                          items={[
-                            {
-                              label: "Edit capability",
-                              icon: <Pencil size={14} />,
-                              onClick: () => onEditCapability(capability),
-                            },
-                            {
-                              label: "Delete capability",
-                              icon: <Trash2 size={14} />,
-                              variant: "danger",
-                              onClick: () => setDeleteCapability(capability),
-                            },
-                          ]}
-                        />
+                        {canEdit && onEditCapability && canDelete && (
+                          <HoverActionMenu
+                            buttonClassName="opacity-0 group-hover:opacity-100"
+                            ariaLabel={`Actions for ${capability.name}`}
+                            items={[
+                              {
+                                label: "Edit capability",
+                                icon: <Pencil size={14} />,
+                                onClick: () => onEditCapability(capability),
+                              },
+                              {
+                                label: "Delete capability",
+                                icon: <Trash2 size={14} />,
+                                variant: "danger",
+                                onClick: () => setDeleteCapability(capability),
+                              },
+                            ]}
+                          />
+                        )}
                       </div>
                     </td>
 
@@ -340,43 +345,65 @@ export function DomainMappingTab({ domain, pickerDomain, onEditCapability, onRef
                       const { cell, hover, text } = FITNESS_CELL[fitness];
                       return (
                         <td key={system.id} className="border-b border-r border-gray-200 p-0">
-                          <button
-                            type="button"
-                            onClick={() => setCellSelection({ capability, system, fitness: fitness === "none" ? null : fitness })}
-                            className={cn(
-                              "w-full min-h-[72px] h-full flex items-center justify-center text-xs font-semibold tracking-wide transition-colors",
-                              cell, hover, text
-                            )}
-                          >
-                            {FITNESS_LABEL[fitness]}
-                          </button>
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCellSelection({
+                                  capability,
+                                  system,
+                                  fitness: fitness === "none" ? null : fitness,
+                                })
+                              }
+                              className={cn(
+                                "w-full min-h-[72px] h-full flex items-center justify-center text-xs font-semibold tracking-wide transition-colors",
+                                cell,
+                                hover,
+                                text
+                              )}
+                            >
+                              {FITNESS_LABEL[fitness]}
+                            </button>
+                          ) : (
+                            <div
+                              className={cn(
+                                "w-full min-h-[72px] h-full flex items-center justify-center text-xs font-semibold tracking-wide",
+                                cell,
+                                text
+                              )}
+                            >
+                              {FITNESS_LABEL[fitness]}
+                            </div>
+                          )}
                         </td>
                       );
                     })}
 
-                    {/* Empty trailing cell */}
-                    <td className="border-b border-gray-200 bg-white group-hover:bg-gray-50 transition-colors" />
+                    {canCreate && (
+                      <td className="border-b border-gray-200 bg-white group-hover:bg-gray-50 transition-colors" />
+                    )}
                   </tr>
                 );
               })}
 
-              {/* Add capability row */}
-              <tr>
-                <td className="sticky left-0 z-10 border-b border-r border-gray-200 bg-white px-5 py-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddCapability(true)}
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-indigo-600 transition-colors"
-                  >
-                    <Plus size={13} />
-                    Add capability to this domain
-                  </button>
-                </td>
-                {filteredSystems.map((system) => (
-                  <td key={system.id} className="border-b border-r border-gray-200 bg-white" />
-                ))}
-                <td className="border-b border-gray-200 bg-white" />
-              </tr>
+              {canCreate && (
+                <tr>
+                  <td className="sticky left-0 z-10 border-b border-r border-gray-200 bg-white px-5 py-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCapability(true)}
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-indigo-600 transition-colors"
+                    >
+                      <Plus size={13} />
+                      Add capability to this domain
+                    </button>
+                  </td>
+                  {filteredSystems.map((system) => (
+                    <td key={system.id} className="border-b border-r border-gray-200 bg-white" />
+                  ))}
+                  <td className="border-b border-gray-200 bg-white" />
+                </tr>
+              )}
             </tbody>
           </table>
           </div>
@@ -394,7 +421,7 @@ export function DomainMappingTab({ domain, pickerDomain, onEditCapability, onRef
         </div>
       </div>
 
-      {showAddSystem && (
+      {canCreate && showAddSystem && (
         <AddMappingSystemDialog
           existingSystemIds={domain.systems.map((system) => system.id)}
           isSubmitting={addSystemMutation.isPending}
@@ -404,7 +431,7 @@ export function DomainMappingTab({ domain, pickerDomain, onEditCapability, onRef
         />
       )}
 
-      {showAddCapability && (
+      {canCreate && showAddCapability && (
         <AddCapabilityPickerDialog
           domain={pickerDomain}
           isSubmitting={createCapabilityMutation.isPending}
@@ -413,7 +440,7 @@ export function DomainMappingTab({ domain, pickerDomain, onEditCapability, onRef
         />
       )}
 
-      {deleteCapability && (
+      {canDelete && deleteCapability && (
         <ConfirmDeleteDialog
           title={`Delete ${deleteCapability.name}?`}
           message={capabilityDeleteMessage(deleteCapability)}
@@ -425,7 +452,7 @@ export function DomainMappingTab({ domain, pickerDomain, onEditCapability, onRef
         />
       )}
 
-      {cellSelection && (
+      {canEdit && cellSelection && (
         <MapCapabilitySystemDialog
           capability={cellSelection.capability}
           system={cellSelection.system}

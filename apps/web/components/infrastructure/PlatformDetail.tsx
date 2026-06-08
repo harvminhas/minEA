@@ -3,17 +3,18 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit2, Layers, Plus, Trash2 } from "lucide-react";
+import { Layers, Plus } from "lucide-react";
 import type { CloudServiceProperties, MinEAObject } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import {
   DetailPanel,
-  DetailPanelCloseButton,
   DetailRow,
   DetailSection,
 } from "@/components/ui/DetailPanel";
+import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
+import { usePermissions } from "@/lib/use-permissions";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
 import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
@@ -49,6 +50,7 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
+  const { canEdit, canDelete } = usePermissions();
 
   const [activeTab, setActiveTab] = useState<ObjectDrawerTabId>("details");
   const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(platform.id);
@@ -147,23 +149,14 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowEditForm(true)}
-                  className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                  aria-label="Edit platform"
-                >
-                  <Edit2 size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                  aria-label="Delete platform"
-                >
-                  <Trash2 size={14} />
-                </button>
-                <DetailPanelCloseButton onClose={onClose} />
+                <DetailObjectActions
+                  onClose={onClose}
+                  onEdit={() => setShowEditForm(true)}
+                  onDelete={() => setShowDeleteConfirm(true)}
+                  deletePending={deleteMutation.isPending}
+                  editLabel="Edit platform"
+                  deleteLabel="Delete platform"
+                />
               </div>
             </div>
 
@@ -257,14 +250,16 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
             <DetailSection
               title={`Built on this platform (${systems.length + components.length})`}
               action={
-                <button
-                  type="button"
-                  onClick={() => setShowLinkDialog(true)}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 hover:text-slate-800"
-                >
-                  <Plus size={12} />
-                  Link
-                </button>
+                canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowLinkDialog(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 hover:text-slate-800"
+                  >
+                    <Plus size={12} />
+                    Link
+                  </button>
+                ) : undefined
               }
             >
               {systems.length === 0 && components.length === 0 ? (
@@ -308,7 +303,7 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
         )}
       </DetailPanel>
 
-      {showDeleteConfirm && (
+      {canDelete && showDeleteConfirm && (
         <ConfirmDeleteDialog
           title="Delete platform"
           message={`Are you sure you want to delete "${platform.name}"? This cannot be undone.`}
@@ -318,7 +313,7 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
         />
       )}
 
-      {showEditForm && (
+      {canEdit && showEditForm && (
         <CreatePlatformPanel
           initialValues={platform}
           onClose={() => setShowEditForm(false)}
@@ -329,7 +324,7 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
         />
       )}
 
-      {showLinkDialog && (
+      {canEdit && showLinkDialog && (
         <PlatformLinkDialog
           platform={platform}
           onClose={() => setShowLinkDialog(false)}

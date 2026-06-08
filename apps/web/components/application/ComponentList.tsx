@@ -40,6 +40,7 @@ import { aiRoleLabel } from "@/lib/ai-role-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import type { AiRole, ComponentProperties, MinEAObject } from "@minea/types";
 import { cn, getStatusLabel } from "@/lib/utils";
+import { usePermissions } from "@/lib/use-permissions";
 
 type ComponentViewLayout = "cards" | "table";
 
@@ -200,6 +201,7 @@ function ComponentCard({
 
 export function ComponentList() {
   const { getToken } = useAuth();
+  const { canCreate } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
@@ -361,7 +363,7 @@ export function ComponentList() {
             ]}
           />
           <div className="ml-auto flex items-center gap-2">
-            {viewLayout === "cards" && (
+            {viewLayout === "cards" && canCreate && (
               <button
                 type="button"
                 onClick={() => setShowCreate(true)}
@@ -406,13 +408,15 @@ export function ComponentList() {
             <p className="text-gray-500 text-sm mb-3">
               {items.length === 0 ? "No components yet." : "No components match your filters."}
             </p>
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              className="text-indigo-600 hover:underline text-sm font-medium"
-            >
-              Create your first component →
-            </button>
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => setShowCreate(true)}
+                className="text-indigo-600 hover:underline text-sm font-medium"
+              >
+                Create your first component →
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -423,7 +427,7 @@ export function ComponentList() {
         )}
       </div>
 
-      {showCreate && (
+      {canCreate && showCreate && (
         <CreateComponentPanel
           onClose={() => setShowCreate(false)}
           onSuccess={(id) => {

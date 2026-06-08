@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
+import { usePermissions } from "@/lib/use-permissions";
 import { journeysApi, objectsApi, processesApi } from "@/lib/api-client";
 import {
   JourneyFlowCanvas,
@@ -46,6 +47,7 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
+  const { isReadOnly } = usePermissions();
 
   const initialDrafts = stepsFromJourney(initialValues);
   const initialEdges = edgesFromJourney(initialValues, initialDrafts);
@@ -258,6 +260,7 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
   };
 
   useEffect(() => {
+    if (isReadOnly) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (
         e.key === "Tab" &&
@@ -272,7 +275,7 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [addStep]);
+  }, [addStep, isReadOnly]);
 
   const handleLayoutChange = useCallback(
     (nextNodeLayout: NodeLayoutMap, nextEdgeLabelLayout: EdgeLabelLayoutMap) => {
@@ -354,6 +357,7 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
   });
 
   useEffect(() => {
+    if (isReadOnly) return;
     if (!canAutosave(name, steps)) return;
     if (savedSnapshot !== "" && currentSnapshot === savedSnapshot) return;
 
@@ -388,6 +392,7 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
     edgeLabelLayout,
     currentSnapshot,
     savedSnapshot,
+    isReadOnly,
   ]);
 
   const handlePublish = async () => {
@@ -414,6 +419,7 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
+              readOnly={isReadOnly}
               placeholder="Journey name, e.g. Customer onboarding"
               className="text-xl font-semibold text-gray-900 w-full border border-transparent hover:border-gray-200 focus:border-indigo-300 rounded-md px-2 -mx-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-gray-300"
             />
@@ -424,12 +430,14 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
               <input
                 value={owner}
                 onChange={(e) => setOwner(e.target.value)}
+                readOnly={isReadOnly}
                 placeholder="Owner: CX team"
                 className="text-xs border border-gray-200 rounded-full px-3 py-1 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-auto min-w-[160px]"
               />
               <input
                 value={customerSegment}
                 onChange={(e) => setCustomerSegment(e.target.value)}
+                readOnly={isReadOnly}
                 placeholder="Segment: SMB merchants"
                 className="text-xs border border-gray-200 rounded-full px-3 py-1 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-auto min-w-[180px]"
               />
@@ -468,25 +476,27 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
             >
               <X size={18} />
             </button>
-            <button
-              type="button"
-              onClick={handlePublish}
-              disabled={!publishReady || saveMutation.isPending}
-              className="bg-gray-900 hover:bg-gray-800 disabled:opacity-40 text-white rounded-md px-4 py-2 text-sm font-medium"
-              title={
-                !journeyId
-                  ? "Wait for draft to save"
-                  : hasUnsavedChanges
-                    ? "Wait for unsaved changes to sync"
-                    : !differsFromPublished
-                      ? "No changes since last publish"
-                      : !canPublish(name, steps)
-                        ? "Add a name and at least one titled step"
-                        : undefined
-              }
-            >
-              {saveMutation.isPending ? "Publishing…" : "Publish"}
-            </button>
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={handlePublish}
+                disabled={!publishReady || saveMutation.isPending}
+                className="bg-gray-900 hover:bg-gray-800 disabled:opacity-40 text-white rounded-md px-4 py-2 text-sm font-medium"
+                title={
+                  !journeyId
+                    ? "Wait for draft to save"
+                    : hasUnsavedChanges
+                      ? "Wait for unsaved changes to sync"
+                      : !differsFromPublished
+                        ? "No changes since last publish"
+                        : !canPublish(name, steps)
+                          ? "Add a name and at least one titled step"
+                          : undefined
+                }
+              >
+                {saveMutation.isPending ? "Publishing…" : "Publish"}
+              </button>
+            )}
           </div>
         </div>
 
@@ -498,17 +508,21 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
           <div className="flex-1 min-w-0 relative">
             {steps.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center bg-[#fafafa]">
-                <button
-                  type="button"
-                  onClick={addStep}
-                  className={cn(
-                    "rounded-xl border-2 border-dashed border-gray-300 px-10 py-8",
-                    "hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors text-center"
-                  )}
-                >
-                  <p className="text-sm font-medium text-gray-600 mb-1">Add your first step</p>
-                  <p className="text-xs text-gray-400">Click here or press Tab</p>
-                </button>
+                {isReadOnly ? (
+                  <p className="text-sm text-gray-500">No steps in this journey.</p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={addStep}
+                    className={cn(
+                      "rounded-xl border-2 border-dashed border-gray-300 px-10 py-8",
+                      "hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors text-center"
+                    )}
+                  >
+                    <p className="text-sm font-medium text-gray-600 mb-1">Add your first step</p>
+                    <p className="text-xs text-gray-400">Click here or press Tab</p>
+                  </button>
+                )}
               </div>
             ) : (
               <JourneyFlowCanvas
@@ -520,12 +534,12 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
                 selectedEdge={selectedEdge}
                 onSelectStep={selectStep}
                 onSelectEdge={selectEdge}
-                onUpdateEdgeTransition={updateEdgeTransition}
-                onLayoutChange={handleLayoutChange}
-                onResetLayout={resetLayout}
-                onAddStep={addStep}
-                onRequestAddPath={requestAddPath}
-                onRequestDeleteStep={requestDeleteStep}
+                onUpdateEdgeTransition={isReadOnly ? () => {} : updateEdgeTransition}
+                onLayoutChange={isReadOnly ? () => {} : handleLayoutChange}
+                onResetLayout={isReadOnly ? () => {} : resetLayout}
+                onAddStep={isReadOnly ? () => {} : addStep}
+                onRequestAddPath={isReadOnly ? () => {} : requestAddPath}
+                onRequestDeleteStep={isReadOnly ? () => {} : requestDeleteStep}
               />
             )}
           </div>
@@ -544,7 +558,7 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
         </div>
       </div>
 
-      {pendingDelete && (
+      {!isReadOnly && pendingDelete && (
         <DeleteStageConfirmDialog
           stageName={pendingDelete.name}
           onConfirm={confirmDeleteStep}
@@ -552,7 +566,7 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
         />
       )}
 
-      {addPathSourceStep && addPathSourceIndex >= 0 && (
+      {!isReadOnly && addPathSourceStep && addPathSourceIndex >= 0 && (
         <AddJourneyPathDialog
           sourceStep={addPathSourceStep}
           sourceIndex={addPathSourceIndex}
