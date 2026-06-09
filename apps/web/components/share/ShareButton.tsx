@@ -2,10 +2,14 @@
 
 import { useState } from "react";
 import { Link2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import type { ShareResourceType } from "@minea/types";
+import { useAuth } from "@/lib/auth-context";
 import { useAppStore } from "@/lib/store";
+import { billingApi } from "@/lib/api-client";
 import { planAllowsShareResource, shareUnavailableReason } from "@/lib/share-plan";
 import { usePermissions } from "@/lib/use-permissions";
+import { useTenancy } from "@/lib/tenancy";
 import { ShareDialog } from "@/components/share/ShareDialog";
 
 interface Props {
@@ -17,15 +21,33 @@ interface Props {
 }
 
 export function ShareButton({ resourceType, resourceKey, resourceId, title, className }: Props) {
+  const { getToken } = useAuth();
+  const { orgSlug } = useTenancy();
   const { canShare } = usePermissions();
   const { activeOrg } = useAppStore();
   const [open, setOpen] = useState(false);
 
+  const { data: billingStatus } = useQuery({
+    queryKey: ["billing-status", orgSlug],
+    queryFn: async () => {
+      const token = await getToken();
+      return billingApi.status(orgSlug, token!);
+    },
+    enabled: !!orgSlug && canShare,
+  });
+
   if (!canShare) return null;
 
   const plan = activeOrg?.plan;
-  const allowed = planAllowsShareResource(plan, resourceType, resourceKey);
-  const disabledReason = shareUnavailableReason(plan, resourceType, resourceKey);
+  const atShareQuota = billingStatus?.can_create_share_link === false;
+  const allowed =
+    planAllowsShareResource(plan, resourceType, resourceKey) && !atShareQuota;
+  const disabledReason = shareUnavailableReason(
+    plan,
+    resourceType,
+    resourceKey,
+    atShareQuota
+  );
 
   const buttonClass =
     className ??

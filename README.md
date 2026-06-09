@@ -87,10 +87,20 @@ Both apps deploy to **Vercel** as two projects from this repo. See **[docs/deplo
 
 | Project | Root | URL example |
 |---------|------|-------------|
-| Web | `apps/web` | `https://minea-web.vercel.app` |
-| API | `apps/api` | `https://minea-api.vercel.app` |
+| Web | `apps/web` | `https://min-ea-web.vercel.app` (your web project URL) |
+| API | `apps/api` | `https://min-ea-api.vercel.app` |
 
 Set `API_URL` on the web project to the API URL. Set `FIREBASE_SERVICE_ACCOUNT_JSON` on the API project (paste JSON, not a file).
+
+## Operations
+
+| Task | Doc |
+|------|-----|
+| Assign Free / Solo / Team, contributor licenses | **[docs/how-to-manage-plans.md](docs/how-to-manage-plans.md)** |
+| Stripe Solo checkout setup | **[docs/stripe-billing.md](docs/stripe-billing.md)** |
+| Deploy web + API to Vercel | [docs/deploy-vercel.md](docs/deploy-vercel.md) |
+
+Quick plan change (PowerShell): `.\scripts\set-org-plan.ps1 -Org <slug> -Show`
 
 ## Architecture
 

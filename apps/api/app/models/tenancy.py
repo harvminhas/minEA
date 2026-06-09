@@ -16,6 +16,8 @@ class Org(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     slug: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     plan: Mapped[str] = mapped_column(Text, default="free")
+    stripe_customer_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     workspaces: Mapped[list["Workspace"]] = relationship(back_populates="org")

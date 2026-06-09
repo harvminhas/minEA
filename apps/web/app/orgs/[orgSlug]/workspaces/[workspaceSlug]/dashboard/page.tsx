@@ -10,6 +10,7 @@ export default function DashboardRedirectPage() {
   const { orgSlug, workspaceSlug } = useTenancy();
 
   useEffect(() => {
+    if (!orgSlug || !workspaceSlug) return;
     router.replace(workspaceHomePath(orgSlug, workspaceSlug));
   }, [router, orgSlug, workspaceSlug]);
 

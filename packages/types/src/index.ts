@@ -684,9 +684,27 @@ export interface Org {
   id: string;
   name: string;
   slug: string;
-  plan: "free" | "starter" | "growth" | "business";
+  plan: "free" | "solo" | "team";
   role: OrgRole;
   created_at: string;
+}
+
+export interface BillingStatus {
+  plan: string;
+  stripe_configured: boolean;
+  can_upgrade_solo: boolean;
+  has_subscription: boolean;
+  own_workspace_count: number;
+  own_workspace_limit: number | null;
+  can_create_own_workspace: boolean;
+  active_share_link_count: number;
+  active_share_link_limit: number | null;
+  can_create_share_link: boolean;
+}
+
+export interface SoloCheckoutResponse {
+  checkout_url: string;
+  session_id: string;
 }
 
 export interface OrgMember {

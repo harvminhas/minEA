@@ -25,7 +25,6 @@ from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.workspace_snapshot_store import get_workspace_snapshot_response
 from app.services.audit import log_audit
 from app.services.authorization import (
-    check_limit,
     generate_invite_token,
     require_limit,
     require_role_capacity,
@@ -90,7 +89,16 @@ async def create_workspace(
     ctx: TenancyContext = Depends(get_org_context),
     db: AsyncSession = Depends(get_db),
 ) -> WorkspaceRead:
+    from sqlalchemy import func
+
+    from app.services.plan_features import assert_can_create_own_workspace
+
     await ctx.require_permission(db, "workspace.create")
+    count_result = await db.execute(
+        select(func.count()).select_from(Workspace).where(Workspace.org_id == ctx.org_id)
+    )
+    owned_count = count_result.scalar_one()
+    assert_can_create_own_workspace(ctx.org.plan, owned_count)
     await require_limit(db, ctx.org_id, "max_workspaces")
 
     existing = await db.execute(
@@ -311,8 +319,11 @@ async def create_workspace_invite(
     ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
 ) -> InviteCreated:
+    from app.services.plan_features import assert_plan_allows_invites
+
     await ctx.require_permission(db, "workspace.member.invite")
     assert ctx.workspace
+    assert_plan_allows_invites(ctx.org.plan)
 
     await require_limit(db, ctx.org_id, "max_pending_invites", pending_delta=1)
     await require_role_capacity(db, ctx.org_id, body.role)
@@ -440,9 +451,7 @@ async def create_share_link(
 
     validate_share_create(ctx.org.plan, body.resource_type, body.resource_key)
 
-    ok, detail = await check_limit(db, ctx.org_id, "max_active_share_links")
-    if not ok:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+    await require_limit(db, ctx.org_id, "max_active_share_links", pending_delta=1)
 
     if body.resource_type in ("roadmap", "object", "capability_domain") and not body.resource_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="resource_id required")

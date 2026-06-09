@@ -133,7 +133,7 @@ export function isViewId(id: string): id is ViewId {
 }
 
 /** Coerce persisted or legacy view ids to a valid v1 view. */
-export function resolveViewId(id: string | undefined, fallback: ViewId = "capability-heatmap"): ViewId {
+export function resolveViewId(id: string | undefined, fallback: ViewId = "products"): ViewId {
   return id && isViewId(id) ? id : fallback;
 }
 

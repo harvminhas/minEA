@@ -10,6 +10,9 @@ import { cn } from "@/lib/utils";
 import { useViewEmbedded, useViewsTheme } from "@/lib/view-embed-context";
 import { ShareButton } from "@/components/share/ShareButton";
 import { usePermissions } from "@/lib/use-permissions";
+import { usePlanFeatures } from "@/lib/use-plan-features";
+import { PlanUpgradePanel } from "@/components/ui/PlanUpgradePanel";
+import { viewUpgradeMessage } from "@/lib/plan-features";
 
 interface ViewShellProps {
   view: ViewConfig;
@@ -33,6 +36,17 @@ export function ViewShell({
   const embedded = useViewEmbedded() || pathname.includes("/embed/");
   const isViewsMode = useViewsTheme();
   const { canCreate, canShare } = usePermissions();
+  const { allowsView } = usePlanFeatures();
+  const viewAllowed = allowsView(view.id);
+
+  if (!viewAllowed) {
+    return (
+      <PlanUpgradePanel
+        title={`${view.label} — Solo plan`}
+        message={viewUpgradeMessage(view.label)}
+      />
+    );
+  }
 
   return (
     <div className={cn("w-full", embedded ? "p-4" : "p-8 max-w-6xl")}>

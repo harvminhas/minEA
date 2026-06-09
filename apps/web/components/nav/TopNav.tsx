@@ -9,7 +9,9 @@ import { useAuth } from "@/lib/auth-context";
 import { useAppStore, type ViewMode } from "@/lib/store";
 import { useTenancy, primaryViewPath } from "@/lib/tenancy";
 import { useQuery } from "@tanstack/react-query";
-import { orgsApi, workspacesApi } from "@/lib/api-client";
+import { billingApi, orgsApi, workspacesApi } from "@/lib/api-client";
+import { usePermissions } from "@/lib/use-permissions";
+import { workspaceCreateBlockedMessage } from "@/lib/plan-features";
 import { BuboMapWordmark } from "@/components/brand/BuboMapLogo";
 import { ArchitectureInsightsPanel } from "@/components/insights/ArchitectureInsightsPanel";
 import { useArchitectureInsights } from "@/lib/use-architecture-insights";
@@ -27,6 +29,7 @@ export function TopNav() {
   const userRef = useRef<HTMLDivElement>(null);
 
   const insights = useArchitectureInsights(orgSlug ?? "", workspaceSlug ?? "");
+  const { canCreateWorkspace } = usePermissions();
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -55,6 +58,18 @@ export function TopNav() {
     },
     enabled: !!orgSlug,
   });
+
+  const { data: billingStatus } = useQuery({
+    queryKey: ["billing-status", orgSlug],
+    queryFn: async () => {
+      const token = await getToken();
+      return billingApi.status(orgSlug, token!);
+    },
+    enabled: !!orgSlug && canCreateWorkspace,
+  });
+
+  const canCreateOwnWorkspace =
+    canCreateWorkspace && (billingStatus?.can_create_own_workspace ?? true);
 
   const orgName = org?.name ?? activeOrg?.name ?? orgSlug;
   const wsName =
@@ -120,21 +135,41 @@ export function TopNav() {
                   )}
                 </button>
               ))}
-              <>
-                {(workspaces ?? []).length > 0 && (
-                  <div className="my-1.5 border-t border-white/10" />
-                )}
-                <Link
-                  href={`/orgs/${orgSlug}/workspaces/new`}
-                  onClick={() => setWsOpen(false)}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-indigo-300 hover:text-indigo-200 hover:bg-white/5 transition-colors"
-                >
-                  <span className="h-5 w-5 rounded border border-indigo-500/40 flex items-center justify-center flex-shrink-0">
-                    <Plus size={12} />
-                  </span>
-                  <span>Create New</span>
-                </Link>
-              </>
+              {canCreateWorkspace && (
+                <>
+                  {(workspaces ?? []).length > 0 && (
+                    <div className="my-1.5 border-t border-white/10" />
+                  )}
+                  {canCreateOwnWorkspace ? (
+                    <Link
+                      href={`/orgs/${orgSlug}/workspaces/new`}
+                      onClick={() => setWsOpen(false)}
+                      className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-indigo-300 hover:text-indigo-200 hover:bg-white/5 transition-colors"
+                    >
+                      <span className="h-5 w-5 rounded border border-indigo-500/40 flex items-center justify-center flex-shrink-0">
+                        <Plus size={12} />
+                      </span>
+                      <span>Create New</span>
+                    </Link>
+                  ) : (
+                    <div className="px-3 py-2">
+                      <p className="text-[11px] text-white/35 leading-snug">
+                        {workspaceCreateBlockedMessage(
+                          billingStatus?.plan,
+                          billingStatus?.own_workspace_limit
+                        )}
+                      </p>
+                      <Link
+                        href={`/orgs/${orgSlug}/settings`}
+                        onClick={() => setWsOpen(false)}
+                        className="mt-1.5 inline-block text-[11px] text-indigo-300 hover:text-indigo-200"
+                      >
+                        View plan →
+                      </Link>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>

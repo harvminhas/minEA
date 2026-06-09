@@ -83,7 +83,7 @@ async def create_org(
     db.add(org)
     await db.flush()
 
-    await seed_org_limits(db, org.id)
+    await seed_org_limits(db, org.id, plan="free")
     db.add(OrgMembership(user_id=user.id, org_id=org.id, role=ORG_OWNER))
 
     ws_slug = body.workspace_slug
@@ -237,7 +237,10 @@ async def create_invite(
     ctx: TenancyContext = Depends(get_org_context),
     db: AsyncSession = Depends(get_db),
 ) -> InviteCreated:
+    from app.services.plan_features import assert_plan_allows_invites
+
     await ctx.require_permission(db, "org.member.invite")
+    assert_plan_allows_invites(ctx.org.plan)
     await require_limit(db, ctx.org_id, "max_pending_invites", pending_delta=1)
     await require_role_capacity(db, ctx.org_id, body.role)
 

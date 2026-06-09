@@ -41,6 +41,11 @@ MIGRATION_FILES = [
     "023_share_links.sql",
     "024_share_free_testing.sql",
     "025_share_all_roles.sql",
+    "026_plans_free_solo_team.sql",
+    "027_free_plan_single_user.sql",
+    "028_stripe_billing.sql",
+    "029_workspace_plan_limits.sql",
+    "030_free_share_limit.sql",
 ]
 
 

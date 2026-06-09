@@ -2,17 +2,34 @@
 
 import { useParams } from "next/navigation";
 import { useTenancyOverride } from "@/lib/share-context";
+import { useAppStore } from "@/lib/store";
 
 export function useTenancy() {
   const override = useTenancyOverride();
-  const params = useParams<{ orgSlug: string; workspaceSlug: string }>();
-  const orgSlug = override?.orgSlug ?? params.orgSlug;
-  const workspaceSlug = override?.workspaceSlug ?? params.workspaceSlug;
+  const params = useParams<{ orgSlug: string; workspaceSlug?: string }>();
+  const { activeOrg, activeWorkspace } = useAppStore();
+  const orgSlug = override?.orgSlug ?? params.orgSlug ?? "";
+  const workspaceSlug =
+    override?.workspaceSlug ??
+    params.workspaceSlug ??
+    (activeOrg?.slug === orgSlug ? activeWorkspace?.slug : undefined) ??
+    "";
+  const basePath = workspaceSlug
+    ? `/orgs/${orgSlug}/workspaces/${workspaceSlug}`
+    : orgSlug
+      ? `/orgs/${orgSlug}`
+      : "";
   return {
     orgSlug,
     workspaceSlug,
-    basePath: `/orgs/${orgSlug}/workspaces/${workspaceSlug}`,
+    basePath,
   };
+}
+
+/** Workspace-scoped routes — non-empty org and workspace slugs. */
+export function useWorkspaceTenancy() {
+  const tenancy = useTenancy();
+  return tenancy;
 }
 
 export function workspacePath(orgSlug: string, workspaceSlug: string, segment = "views/products") {

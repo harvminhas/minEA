@@ -7,8 +7,9 @@ import { buildDashboardViewCards } from "@/lib/workspace-dashboard";
 import { useWorkspaceDashboard } from "@/lib/use-workspace-dashboard";
 import { WorkspaceSnapshotRefreshBar } from "@/components/dashboard/WorkspaceSnapshotRefreshBar";
 import { PROCESSES_VIEW, NAV_VIEWS } from "@/lib/views";
-import type { ViewConfig } from "@/lib/views";
+import type { ViewConfig, ViewId } from "@/lib/views";
 import { cn } from "@/lib/utils";
+import { usePlanFeatures } from "@/lib/use-plan-features";
 
 // ─── Miniature illustrations per view ────────────────────────────────────
 
@@ -110,19 +111,24 @@ function GalleryCard({
   href,
   statusLabel,
   statusTone,
+  locked,
 }: {
   view: ViewConfig;
   href: string;
   statusLabel?: string;
   statusTone?: "ready" | "action" | "needs";
+  locked?: boolean;
 }) {
   const Illustration = ILLUSTRATIONS[view.id];
+  const cardClass = cn(
+    "group flex flex-col border rounded-2xl overflow-hidden transition-all duration-200",
+    locked
+      ? "bg-white/40 border-white/40 opacity-75 cursor-not-allowed"
+      : "bg-white/70 hover:bg-white border-white/60 hover:border-violet-200 hover:shadow-lg"
+  );
 
-  return (
-    <Link
-      href={href}
-      className="group flex flex-col bg-white/70 hover:bg-white border border-white/60 hover:border-violet-200 hover:shadow-lg rounded-2xl overflow-hidden transition-all duration-200"
-    >
+  const inner = (
+    <>
       {/* Illustration area */}
       <div
         className="h-[110px] flex items-center justify-center bg-gradient-to-br from-violet-50 to-indigo-50 border-b border-violet-100/60"
@@ -156,6 +162,16 @@ function GalleryCard({
         </div>
         <p className="text-[11px] text-gray-500 mt-0.5">{view.description}</p>
       </div>
+    </>
+  );
+
+  if (locked) {
+    return <div className={cardClass}>{inner}</div>;
+  }
+
+  return (
+    <Link href={href} className={cardClass}>
+      {inner}
     </Link>
   );
 }
@@ -178,8 +194,14 @@ function NewViewCard() {
 
 // ─── Main gallery ────────────────────────────────────────────────────────
 
+function isGalleryViewLocked(viewId: ViewId, allowsView: (id: ViewId) => boolean): boolean {
+  if (viewId === "processes") return false;
+  return !allowsView(viewId);
+}
+
 export function ViewsGallery() {
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
+  const { allowsView } = usePlanFeatures();
   const { data: dashboardState, isPending } = useWorkspaceDashboard(orgSlug, workspaceSlug);
   const metrics = dashboardState?.metrics;
   const viewCards =
@@ -217,6 +239,7 @@ export function ViewsGallery() {
               href={`${basePath}/${view.segment}`}
               statusLabel={card?.statusLabel}
               statusTone={card?.statusTone}
+              locked={isGalleryViewLocked(view.id, allowsView)}
             />
           );
         })}

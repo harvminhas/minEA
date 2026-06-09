@@ -12,6 +12,7 @@
     "type-check": "turbo run type-check",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "db:migrate": "cd apps/api && npm run db:migrate",
+    "db:set-plan": "cd apps/api && npm run db:set-plan",
     "db:proxy": "cd apps/api && npm run db:proxy"
   },
   "devDependencies": {

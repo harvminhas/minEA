@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { useTenancy } from "@/lib/tenancy";
+import { useWorkspaceTenancy } from "@/lib/tenancy";
 import { peopleApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { RoleDetailPanel } from "@/components/people/RoleDetailPanel";
@@ -52,9 +52,9 @@ function RoleCard({
 
 export default function RolesPage() {
   const { getToken } = useAuth();
-  const { orgSlug, workspaceSlug } = useTenancy();
+  const { orgSlug, workspaceSlug } = useWorkspaceTenancy();
   const queryClient = useQueryClient();
-  const enabled = useAuthQueryEnabled();
+  const enabled = useAuthQueryEnabled(orgSlug, workspaceSlug);
 
   const [showCreate, setShowCreate] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);

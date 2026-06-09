@@ -128,7 +128,8 @@ vercel --prod
 |---------|-----|
 | `FUNCTION_INVOCATION_FAILED` / 500 on all routes | Set `FIREBASE_SERVICE_ACCOUNT_JSON`; redeploy. Check `/health` for `firebase_error`. |
 | `No module named 'fastapi'` | API project **Root Directory** must be `apps/api` (not repo root). Redeploy after fix. |
-| Web API calls 502 / 404 | Set `API_URL=https://min-ea-api.vercel.app` on the **web** project (not API), then redeploy web |
+| Web API calls 502 / 503 / 404 | Set `API_URL=https://min-ea-api.vercel.app` on the **web** project (not API), then redeploy web. Open `https://your-web.vercel.app/api/health` — `api_reachable` should be `true`. |
+| 503 mentions `localhost:8000` on production | `API_URL` is missing or still set to localhost on the **web** Vercel project — fix env and redeploy |
 | `/health` shows DB disconnected | `DATABASE_URL` / `DATABASE_SSL`; Cloud SQL may block Vercel IPs |
 | `CERTIFICATE_VERIFY_FAILED` on `/health` | Deploy latest API code first. Then set `DATABASE_SSL_VERIFY=false`, **or** paste server CA as multiline `DATABASE_SSL_CA`. Check `/health` for `database_ssl_mode` (`system` = old code / CA not loaded). |
 | Firebase auth fails on Vercel | Add web domain to Firebase authorized domains |

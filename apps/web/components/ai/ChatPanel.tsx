@@ -8,6 +8,7 @@ import { useTenancy } from "@/lib/tenancy";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/lib/use-permissions";
+import { usePlanFeatures } from "@/lib/use-plan-features";
 
 interface Message {
   id: string;
@@ -18,6 +19,7 @@ interface Message {
 export function ChatPanel() {
   const { getToken } = useAuth();
   const { isReadOnly } = usePermissions();
+  const { allowsAiChat } = usePlanFeatures();
   const { orgSlug, workspaceSlug } = useTenancy();
   const { chatOpen, setChatOpen, activeWorkspace } = useAppStore();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -117,7 +119,7 @@ export function ChatPanel() {
     }
   };
 
-  if (isReadOnly) return null;
+  if (isReadOnly || !allowsAiChat) return null;
 
   return (
     <>

@@ -151,8 +151,9 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
     queryKey: ["objects", orgSlug, workspaceSlug, objectType],
     queryFn: async () => {
       const token = await getToken();
-      return objectsApi.list(orgSlug, workspaceSlug, { type: objectType }, token!);
+      return objectsApi.list(orgSlug!, workspaceSlug!, { type: objectType }, token!);
     },
+    enabled: !!orgSlug && !!workspaceSlug,
   });
 
   const objects: MinEAObject[] = data?.items ?? [];
@@ -252,7 +253,7 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
           onClose={() => setSelectedObject(null)}
           onUpdate={() => {
             queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, objectType] });
-            void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
+            void invalidateWorkspaceSummary(queryClient, orgSlug!, workspaceSlug!);
           }}
         />
       )}
@@ -264,7 +265,7 @@ function RepositoryObjectList({ layer, typePath }: { layer: string; typePath: st
           onSuccess={() => {
             setShowForm(false);
             queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, objectType] });
-            void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
+            void invalidateWorkspaceSummary(queryClient, orgSlug!, workspaceSlug!);
           }}
         />
       )}

@@ -6,7 +6,12 @@ import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { orgsApi, workspacesApi } from "@/lib/api-client";
+import { billingApi, orgsApi, workspacesApi } from "@/lib/api-client";
+import {
+  workspaceCreateBlockedMessage,
+  workspaceQuotaLabel,
+  normalizePlan,
+} from "@/lib/plan-features";
 import { usePermissions } from "@/lib/use-permissions";
 import { primaryViewPath } from "@/lib/tenancy";
 import { workspaceSlugFromName } from "@/lib/workspace-slug";
@@ -45,6 +50,18 @@ export default function NewWorkspacePage() {
   });
 
   const { canCreateWorkspace } = usePermissions();
+
+  const { data: billingStatus, isLoading: billingLoading } = useQuery({
+    queryKey: ["billing-status", orgSlug],
+    queryFn: async () => {
+      const token = await getToken();
+      return billingApi.status(orgSlug, token!);
+    },
+    enabled: !!orgSlug && canCreateWorkspace,
+  });
+
+  const canCreateOwnWorkspace =
+    canCreateWorkspace && (billingStatus?.can_create_own_workspace ?? true);
 
   useEffect(() => {
     if (!workspaces?.length) return;
@@ -125,6 +142,29 @@ export default function NewWorkspacePage() {
         <p className="text-sm text-gray-600">Only org owners and admins can create workspaces.</p>
         <Link href={`/orgs/${orgSlug}/settings`} className="text-sm text-indigo-600 mt-4 inline-block">
           Back to settings
+        </Link>
+      </div>
+    );
+  }
+
+  if (!billingLoading && billingStatus && !canCreateOwnWorkspace) {
+    return (
+      <div className="p-8 max-w-lg mx-auto">
+        <h1 className="text-lg font-semibold text-gray-900">Workspace limit reached</h1>
+        <p className="text-sm text-gray-600 mt-2">
+          {workspaceCreateBlockedMessage(
+            normalizePlan(billingStatus.plan),
+            billingStatus.own_workspace_limit
+          )}
+        </p>
+        <p className="text-xs text-gray-400 mt-3">
+          {workspaceQuotaLabel(
+            billingStatus.own_workspace_count,
+            billingStatus.own_workspace_limit
+          )}
+        </p>
+        <Link href={`/orgs/${orgSlug}/settings`} className="text-sm text-indigo-600 mt-4 inline-block">
+          View plan in settings
         </Link>
       </div>
     );

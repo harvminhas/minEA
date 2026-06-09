@@ -59,9 +59,10 @@ class Settings(BaseSettings):
     # Web app URL (verification links, invites)
     web_app_url: str = "http://localhost:3001"
 
-    # Stripe
+    # Stripe (Solo self-serve checkout)
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
+    stripe_solo_price_id: str = ""
 
     # CORS — override in production via env, e.g.
     # CORS_ORIGINS=["https://your-web.vercel.app","http://localhost:3000"]

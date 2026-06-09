@@ -31,7 +31,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     queryFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
-      return workspacesApi.get(orgSlug, workspaceSlug, token);
+      return workspacesApi.get(orgSlug!, workspaceSlug!, token);
     },
   });
 
@@ -43,8 +43,8 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (!queryEnabled) return;
     void queryClient.prefetchQuery({
-      queryKey: workspaceDashboardQueryKey(orgSlug, workspaceSlug),
-      queryFn: () => fetchWorkspaceDashboardState(orgSlug, workspaceSlug, getToken),
+      queryKey: workspaceDashboardQueryKey(orgSlug!, workspaceSlug!),
+      queryFn: () => fetchWorkspaceDashboardState(orgSlug!, workspaceSlug!, getToken),
       // Do not treat prefetch as fresh for 5m — background rebuild may complete after prefetch.
       staleTime: 0,
     });

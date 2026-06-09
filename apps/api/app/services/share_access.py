@@ -15,13 +15,7 @@ from app.services.authorization import hash_token
 from app.services.tenancy import _set_rls_org
 from app.utils.time import as_utc_naive, utc_now
 
-# Resource types allowed per billing plan (free includes views while we test sharing)
-PLAN_SHARE_RESOURCE_TYPES: dict[str, set[str]] = {
-    "free": {"view"},
-    "starter": {"view"},
-    "growth": {"view", "roadmap", "object", "capability_map", "capability_domain"},
-    "business": {"view", "roadmap", "object", "capability_map", "capability_domain"},
-}
+from app.services.plan_features import plan_allows_share as _plan_allows_share
 
 # View keys shareable on starter+
 SHAREABLE_VIEW_KEYS = {
@@ -92,7 +86,7 @@ class ShareContext:
 
 
 def plan_allows_share(org_plan: str, resource_type: str) -> bool:
-    return resource_type in PLAN_SHARE_RESOURCE_TYPES.get(org_plan, set())
+    return _plan_allows_share(org_plan, resource_type)
 
 
 def validate_share_create(org_plan: str, resource_type: str, resource_key: str | None) -> None:
@@ -101,7 +95,7 @@ def validate_share_create(org_plan: str, resource_type: str, resource_key: str |
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "plan_feature_unavailable",
-                "message": f"Sharing {resource_type} is not available on the {org_plan} plan",
+                "message": f"Sharing {resource_type} is not available on the {org_plan} plan. Upgrade to Solo or Team.",
             },
         )
     if resource_type == "view":

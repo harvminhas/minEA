@@ -2,10 +2,18 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams, useRouter } from "next/navigation";
-import { orgsApi, workspacesApi } from "@/lib/api-client";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { billingApi, orgsApi, workspacesApi } from "@/lib/api-client";
 import { primaryViewPath } from "@/lib/tenancy";
 import { usePermissions } from "@/lib/use-permissions";
+import { usePlanFeatures } from "@/lib/use-plan-features";
+import {
+  TEAM_CONTACT_EMAIL,
+  inviteUpgradeMessage,
+  workspaceCreateBlockedMessage,
+  workspaceQuotaLabel,
+} from "@/lib/plan-features";
+import { PlanSection } from "@/components/billing/PlanSection";
 import { ROLE_DEFINITIONS } from "@minea/types";
 import Link from "next/link";
 import { useState, useEffect } from "react";
@@ -13,6 +21,7 @@ import { useState, useEffect } from "react";
 export default function OrgSettingsPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { getToken, user, resendVerificationEmail, getDevVerificationLink, reloadUser } = useAuth();
   const queryClient = useQueryClient();
   const {
@@ -20,7 +29,9 @@ export default function OrgSettingsPage() {
     canCreateWorkspace,
     canManageBilling,
     canDeleteOrg,
+    canInviteOrgMembers,
   } = usePermissions();
+  const { plan, isSolo } = usePlanFeatures();
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
@@ -28,8 +39,24 @@ export default function OrgSettingsPage() {
   const [verifyMessage, setVerifyMessage] = useState<string | null>(null);
   const [verifyLink, setVerifyLink] = useState<string | null>(null);
   const [verifyLoading, setVerifyLoading] = useState(false);
+  const [billingMessage, setBillingMessage] = useState<string | null>(null);
 
   const emailVerified = user?.emailVerified ?? false;
+
+  useEffect(() => {
+    const billing = searchParams.get("billing");
+    if (billing === "success") {
+      setBillingMessage(
+        "Payment received — welcome to Solo! Your plan updates in a few seconds after Stripe confirms."
+      );
+      void queryClient.invalidateQueries({ queryKey: ["org", orgSlug] });
+      void queryClient.invalidateQueries({ queryKey: ["billing-status", orgSlug] });
+      router.replace(`/orgs/${orgSlug}/settings`, { scroll: false });
+    } else if (billing === "cancelled") {
+      setBillingMessage("Checkout cancelled — no charge was made.");
+      router.replace(`/orgs/${orgSlug}/settings`, { scroll: false });
+    }
+  }, [searchParams, orgSlug, queryClient, router]);
 
   const { data: org } = useQuery({
     queryKey: ["org", orgSlug],
@@ -64,6 +91,18 @@ export default function OrgSettingsPage() {
       return workspacesApi.list(orgSlug, token!);
     },
   });
+
+  const { data: billingStatus } = useQuery({
+    queryKey: ["billing-status", orgSlug],
+    queryFn: async () => {
+      const token = await getToken();
+      return billingApi.status(orgSlug, token!);
+    },
+    enabled: !!orgSlug,
+  });
+
+  const canCreateOwnWorkspace =
+    canCreateWorkspace && (billingStatus?.can_create_own_workspace ?? true);
 
   // Non-admin members have no actions here — send them straight to their workspace
   useEffect(() => {
@@ -189,9 +228,9 @@ export default function OrgSettingsPage() {
       </section>
 
       <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-1">
           <h2 className="font-semibold text-gray-900">Workspaces</h2>
-          {canCreateWorkspace && (
+          {canCreateOwnWorkspace && (
             <Link
               href={`/orgs/${orgSlug}/workspaces/new`}
               className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
@@ -200,6 +239,19 @@ export default function OrgSettingsPage() {
             </Link>
           )}
         </div>
+        {billingStatus && (
+          <p className="text-xs text-gray-400 mb-4">
+            {workspaceQuotaLabel(
+              billingStatus.own_workspace_count,
+              billingStatus.own_workspace_limit
+            )}
+            {!billingStatus.can_create_own_workspace && canCreateWorkspace && (
+              <span className="block text-gray-500 mt-1">
+                {workspaceCreateBlockedMessage(plan, billingStatus.own_workspace_limit)}
+              </span>
+            )}
+          </p>
+        )}
         {(workspaces ?? []).length > 0 ? (
           <div className="space-y-2">
             {(workspaces ?? []).map((ws) => (
@@ -306,56 +358,73 @@ export default function OrgSettingsPage() {
 
         <div className="border-t border-gray-100 pt-4">
             <h3 className="text-sm font-medium text-gray-700 mb-2">Invite to org</h3>
-            {!emailVerified && (
-              <p className="text-sm text-amber-700 mb-3">
-                Verify your email above before inviting others.
-              </p>
+            {!canInviteOrgMembers ? (
+              <div className="rounded-md bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
+                <p>{inviteUpgradeMessage(plan)}</p>
+                {isSolo && (
+                  <Link
+                    href={`mailto:${TEAM_CONTACT_EMAIL}?subject=BuboMap%20Team%20plan`}
+                    className="inline-block mt-2 text-indigo-600 font-medium hover:text-indigo-700"
+                  >
+                    Contact us for Team →
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <>
+                {!emailVerified && (
+                  <p className="text-sm text-amber-700 mb-3">
+                    Verify your email above before inviting others.
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="email@company.com"
+                    className="flex-1 border border-gray-200 rounded-md px-3 py-2 text-sm"
+                  />
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value)}
+                    className="border border-gray-200 rounded-md px-2 py-2 text-sm"
+                  >
+                    <option value="member">Member — contributor license</option>
+                    <option value="admin">Admin — contributor license</option>
+                  </select>
+                  <button
+                    onClick={() => inviteMutation.mutate()}
+                    disabled={!inviteEmail || !emailVerified || inviteMutation.isPending}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+                  >
+                    Invite
+                  </button>
+                </div>
+                {inviteError && <p className="text-sm text-red-600 mt-2">{inviteError}</p>}
+                {lastInviteUrl && (
+                  <p className="text-xs text-gray-600 mt-2 break-all">
+                    Invite link:{" "}
+                    <a href={lastInviteUrl} className="text-indigo-600 underline">
+                      {lastInviteUrl}
+                    </a>
+                  </p>
+                )}
+                <p className="text-xs text-gray-400 mt-2">
+                  Team plan: contributor licenses are capped; viewers are unlimited.
+                </p>
+              </>
             )}
-            <div className="flex gap-2">
-              <input
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="email@company.com"
-                className="flex-1 border border-gray-200 rounded-md px-3 py-2 text-sm"
-              />
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value)}
-                className="border border-gray-200 rounded-md px-2 py-2 text-sm"
-              >
-                <option value="member">Member — content access via workspace invite</option>
-                <option value="admin">Admin — manage workspaces and users</option>
-              </select>
-              <button
-                onClick={() => inviteMutation.mutate()}
-                disabled={!inviteEmail || !emailVerified || inviteMutation.isPending}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
-              >
-                Invite
-              </button>
-            </div>
-            {inviteError && <p className="text-sm text-red-600 mt-2">{inviteError}</p>}
-            {lastInviteUrl && (
-              <p className="text-xs text-gray-600 mt-2 break-all">
-                Invite link:{" "}
-                <a href={lastInviteUrl} className="text-indigo-600 underline">
-                  {lastInviteUrl}
-                </a>
-              </p>
-            )}
-            <p className="text-xs text-gray-400 mt-2">Invite-only after signup. Expires in 7 days.</p>
         </div>
       </section>
       )}
 
       {canManageBilling && (
-        <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h2 className="font-semibold text-gray-900 mb-2">Billing</h2>
-          <p className="text-sm text-gray-500">
-            Plan: <span className="font-medium text-gray-700 capitalize">{org?.plan ?? "free"}</span>
-          </p>
-          <p className="text-xs text-gray-400 mt-2">Billing management is owner-only. Coming soon.</p>
-        </section>
+        <PlanSection
+          orgSlug={orgSlug}
+          org={org}
+          billingMessage={billingMessage}
+          onClearBillingMessage={() => setBillingMessage(null)}
+        />
       )}
 
       {canDeleteOrg && (

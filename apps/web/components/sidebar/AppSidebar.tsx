@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/lib/store";
 import { useTenancy } from "@/lib/tenancy";
 import { NAV_VIEWS } from "@/lib/views";
+import { usePlanFeatures } from "@/lib/use-plan-features";
 import {
   REPOSITORY_LAYERS,
   isNavItemDisabled,
@@ -442,6 +443,7 @@ function ExpandedViewsNav({
   basePath: string;
   pathname: string;
 }) {
+  const { allowsView } = usePlanFeatures();
   const galleryHref = `${basePath}/views`;
   const isOnGallery = pathname === galleryHref;
 
@@ -475,24 +477,38 @@ function ExpandedViewsNav({
         const href = `${basePath}/${view.segment}`;
         const isActive = pathname === href || pathname.startsWith(`${href}/`);
         const Icon = view.icon;
-        return (
-          <Link
-            key={view.id}
-            href={href}
-            className={cn(
-              "flex items-center gap-2.5 px-4 py-1.5 text-sm transition-colors",
-              isActive
-                ? "bg-violet-500/30 text-violet-100"
-                : "text-violet-300/60 hover:text-violet-100 hover:bg-violet-800/40"
-            )}
-          >
+        const locked = !allowsView(view.id);
+        const rowClass = cn(
+          "flex items-center gap-2.5 px-4 py-1.5 text-sm transition-colors",
+          locked
+            ? "text-violet-300/30 cursor-not-allowed"
+            : isActive
+              ? "bg-violet-500/30 text-violet-100"
+              : "text-violet-300/60 hover:text-violet-100 hover:bg-violet-800/40"
+        );
+        const content = (
+          <>
             <span
               className="h-5 w-5 rounded flex items-center justify-center flex-shrink-0"
               style={{ backgroundColor: `${view.color}22` }}
             >
-              <Icon size={11} style={{ color: view.color }} />
+              <Icon size={11} style={{ color: view.color, opacity: locked ? 0.45 : 1 }} />
             </span>
-            <span className="truncate">{view.label}</span>
+            <span className="truncate flex-1">{view.label}</span>
+            {locked && (
+              <span className="text-[8px] font-semibold uppercase tracking-wide text-violet-300/40 flex-shrink-0">
+                Solo
+              </span>
+            )}
+          </>
+        );
+        return locked ? (
+          <div key={view.id} title="Available on Solo and Team plans" className={rowClass}>
+            {content}
+          </div>
+        ) : (
+          <Link key={view.id} href={href} className={rowClass}>
+            {content}
           </Link>
         );
       })}

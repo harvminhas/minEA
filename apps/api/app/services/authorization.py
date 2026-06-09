@@ -57,8 +57,10 @@ async def load_permission_cache(db: AsyncSession) -> None:
     _permission_meta = meta
 
 
-async def seed_org_limits(db: AsyncSession, org_id: uuid.UUID) -> None:
-    for key, value in DEFAULT_ORG_LIMITS.items():
+async def seed_org_limits(db: AsyncSession, org_id: uuid.UUID, plan: str = "free") -> None:
+    from app.services.plan_features import limits_for_plan
+
+    for key, value in limits_for_plan(plan).items():
         existing = await db.execute(
             select(OrgLimit).where(OrgLimit.org_id == org_id, OrgLimit.limit_key == key)
         )

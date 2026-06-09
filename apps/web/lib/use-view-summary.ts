@@ -51,13 +51,13 @@ export function useViewDataGate(viewId: ViewId | "processes") {
   const { orgSlug, workspaceSlug } = useTenancy();
   const shareSession = useShareSession();
   const { data: metrics, isPending: summaryPending, isFetching: summaryFetching } =
-    useWorkspaceSummary(orgSlug, workspaceSlug);
+    useWorkspaceSummary(orgSlug!, workspaceSlug!);
 
   // Share links have no auth/summary — fetch view data directly via the share API.
   if (shareSession) {
     return {
-      orgSlug,
-      workspaceSlug,
+      orgSlug: orgSlug!,
+      workspaceSlug: workspaceSlug!,
       metrics: undefined,
       summaryPending: false,
       summaryFetching: false,

@@ -18,6 +18,7 @@ from app.routers.workspaces import build_workspace_context_graph
 from app.schemas.relationships import ALLOWED_TRIPLES
 from app.services.audit import log_audit
 from app.services.authorization import require_limit
+from app.services.plan_features import assert_plan_allows_ai_chat
 from app.services.tenancy import TenancyContext, get_workspace_context
 
 router = APIRouter(
@@ -46,6 +47,7 @@ async def chat(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     await ctx.require_read(db)
+    assert_plan_allows_ai_chat(ctx.org.plan)
     context = await build_workspace_context_graph(ctx, db)
 
     return StreamingResponse(

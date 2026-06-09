@@ -18,6 +18,8 @@ import type {
   Org,
   OrgCreate,
   OrgMember,
+  BillingStatus,
+  SoloCheckoutResponse,
   WorkspaceMember,
   InvitePreview,
   Invite,
@@ -132,6 +134,16 @@ export const authApi = {
 };
 
 // ─── Orgs ────────────────────────────────────────────────────────────────────
+
+export const billingApi = {
+  status: (orgSlug: string, token: string) =>
+    apiFetch<BillingStatus>(`/orgs/${orgSlug}/billing/status`, { token }),
+  startSoloCheckout: (orgSlug: string, token: string) =>
+    apiFetch<SoloCheckoutResponse>(`/orgs/${orgSlug}/billing/solo/checkout`, {
+      method: "POST",
+      token,
+    }),
+};
 
 export const orgsApi = {
   list: (token: string) => apiFetch<Org[]>("/orgs", { token }),

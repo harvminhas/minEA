@@ -17,6 +17,7 @@ from app.services.authorization import load_permission_cache
 from app.routers import (
     ai,
     auth,
+    billing,
     capability_map,
     data_layer,
     invites,
@@ -82,6 +83,7 @@ app.add_middleware(
 # Routers
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(orgs.router, prefix="/api/v1")
+app.include_router(billing.router, prefix="/api/v1")
 app.include_router(invites.router, prefix="/api/v1")
 app.include_router(share_data.router, prefix="/api/v1")
 app.include_router(workspaces.router, prefix="/api/v1")

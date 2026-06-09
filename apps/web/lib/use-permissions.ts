@@ -15,6 +15,7 @@ import {
   isReadOnlyViewer,
 } from "@/lib/permissions";
 import type { OrgRole, PermissionSlug, WorkspaceRole } from "@minea/types";
+import { planAllowsInvites } from "@/lib/plan-features";
 
 export function usePermissions() {
   const { user } = useAuth();
@@ -55,8 +56,10 @@ export function usePermissions() {
     canDelete: canWrite && hasPermission("object.delete", ctx),
     canManageOrg: canWrite && canManageOrg(ctx),
     canManageWorkspace: canWrite && canManageWorkspace(ctx),
-    canInviteOrgMembers: canWrite && hasPermission("org.member.invite", ctx),
-    canInviteWorkspaceMembers: canWrite && hasPermission("workspace.member.invite", ctx),
+    canInviteOrgMembers:
+      canWrite && planAllowsInvites(activeOrg?.plan) && hasPermission("org.member.invite", ctx),
+    canInviteWorkspaceMembers:
+      canWrite && planAllowsInvites(activeOrg?.plan) && hasPermission("workspace.member.invite", ctx),
     canManageBilling: hasPermission("org.billing.manage", ctx),
     canDeleteOrg: hasPermission("org.delete", ctx),
     canTransferOwnership: hasPermission("org.transfer", ctx),
