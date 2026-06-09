@@ -9,11 +9,14 @@ export function useTenancy() {
   const params = useParams<{ orgSlug: string; workspaceSlug?: string }>();
   const { activeOrg, activeWorkspace } = useAppStore();
   const orgSlug = override?.orgSlug ?? params.orgSlug ?? "";
+  // Org-level routes (e.g. /orgs/acme/settings) have no workspace in the URL — keep the
+  // last active workspace so sidebar and top nav stay usable.
+  const workspaceFromStore =
+    activeWorkspace?.slug && (!activeOrg || activeOrg.slug === orgSlug)
+      ? activeWorkspace.slug
+      : undefined;
   const workspaceSlug =
-    override?.workspaceSlug ??
-    params.workspaceSlug ??
-    (activeOrg?.slug === orgSlug ? activeWorkspace?.slug : undefined) ??
-    "";
+    override?.workspaceSlug ?? params.workspaceSlug ?? workspaceFromStore ?? "";
   const basePath = workspaceSlug
     ? `/orgs/${orgSlug}/workspaces/${workspaceSlug}`
     : orgSlug

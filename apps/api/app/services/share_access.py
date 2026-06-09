@@ -95,7 +95,7 @@ def validate_share_create(org_plan: str, resource_type: str, resource_key: str |
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "plan_feature_unavailable",
-                "message": f"Sharing {resource_type} is not available on the {org_plan} plan. Upgrade to Solo or Team.",
+                "message": f"Sharing {resource_type} is not available on the {org_plan} plan. Contact us for Business.",
             },
         )
     if resource_type == "view":

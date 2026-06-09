@@ -684,7 +684,7 @@ export interface Org {
   id: string;
   name: string;
   slug: string;
-  plan: "free" | "solo" | "team";
+  plan: "free" | "business";
   role: OrgRole;
   created_at: string;
 }

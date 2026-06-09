@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Assign or inspect an org billing plan (Free / Solo / Team).
+"""Assign or inspect an org billing plan (Free / Business).
 
 Usage (from apps/api, with DATABASE_URL in .env):
 
   # Show current plan and limits
   python scripts/set_org_plan.py --org edomains-inc --show
 
-  # Upgrade to Solo (single user, all features)
-  python scripts/set_org_plan.py --org edomains-inc --plan solo
+  # Upgrade to Business with 15 contributor licenses (viewers unlimited)
+  python scripts/set_org_plan.py --org edomains-inc --plan business --contributors 15
 
-  # Team with 15 contributor licenses (viewers unlimited)
-  python scripts/set_org_plan.py --org edomains-inc --plan team --contributors 15
+  # Downgrade to Free
+  python scripts/set_org_plan.py --org edomains-inc --plan free
 
   # Preview changes without writing
-  python scripts/set_org_plan.py --org edomains-inc --plan team --contributors 15 --dry-run
+  python scripts/set_org_plan.py --org edomains-inc --plan business --contributors 15 --dry-run
 
 See docs/how-to-manage-plans.md for the full playbook.
 """
@@ -35,6 +35,8 @@ LIMIT_KEYS = (
     "max_admins",
     "max_members",
     "max_viewers",
+    "max_workspaces",
+    "max_objects_per_workspace",
     "max_pending_invites",
     "max_active_share_links",
 )
@@ -95,14 +97,14 @@ def _upsert_limits(cur, org_id, limits: dict[str, int | None]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Assign Free / Solo / Team plan for an org")
+    parser = argparse.ArgumentParser(description="Assign Free / Business plan for an org")
     parser.add_argument("--org", required=True, help="Org slug (e.g. edomains-inc)")
-    parser.add_argument("--plan", choices=PLANS, help="Target plan: free, solo, or team")
+    parser.add_argument("--plan", choices=PLANS, help="Target plan: free or business")
     parser.add_argument(
         "--contributors",
         type=int,
         metavar="N",
-        help="Team only: number of contributor licenses (maps to max_members)",
+        help="Business only: number of contributor licenses (maps to max_members)",
     )
     parser.add_argument("--show", action="store_true", help="Print current plan and limits")
     parser.add_argument("--dry-run", action="store_true", help="Print changes without committing")
@@ -111,10 +113,10 @@ def main() -> None:
     if not args.show and not args.plan:
         parser.error("Pass --show or --plan")
 
-    if args.plan != "team" and args.contributors is not None:
-        parser.error("--contributors is only valid with --plan team")
+    if args.plan != "business" and args.contributors is not None:
+        parser.error("--contributors is only valid with --plan business")
 
-    if args.plan == "team" and args.contributors is not None and args.contributors < 1:
+    if args.plan == "business" and args.contributors is not None and args.contributors < 1:
         parser.error("--contributors must be at least 1")
 
     try:
@@ -144,7 +146,7 @@ def main() -> None:
 
             assert args.plan
             target_limits = limits_for_plan(args.plan)
-            if args.plan == "team" and args.contributors is not None:
+            if args.plan == "business" and args.contributors is not None:
                 target_limits["max_members"] = args.contributors
 
             print(f"{'[dry-run] ' if args.dry_run else ''}Updating {args.org} to plan={args.plan}")

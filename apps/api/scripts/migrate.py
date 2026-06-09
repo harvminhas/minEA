@@ -46,6 +46,8 @@ MIGRATION_FILES = [
     "028_stripe_billing.sql",
     "029_workspace_plan_limits.sql",
     "030_free_share_limit.sql",
+    "031_plans_free_business.sql",
+    "032_contact_inquiries.sql",
 ]
 
 

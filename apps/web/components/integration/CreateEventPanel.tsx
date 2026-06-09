@@ -370,7 +370,7 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
       )}>
         <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-gray-200 flex-shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">{isEdit ? "Edit event" : "New event"}</h2>
+            <h2 className="text-base font-semibold text-gray-900">{isEdit ? "Edit event" : "Document event"}</h2>
             <p className="text-xs text-gray-400 mt-0.5">A message one producer emits for others to react to</p>
           </div>
           <button type="button" onClick={onClose} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 -mt-0.5">
@@ -653,7 +653,7 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
             disabled={!canSubmit || saveMutation.isPending}
             className="px-4 py-2 text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-md disabled:opacity-40"
           >
-            {saveMutation.isPending ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save" : "Create event"}
+            {saveMutation.isPending ? "Saving…" : isEdit ? "Save" : "Save documentation"}
           </button>
         </div>
       </div>

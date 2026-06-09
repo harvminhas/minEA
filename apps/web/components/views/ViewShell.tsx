@@ -42,7 +42,7 @@ export function ViewShell({
   if (!viewAllowed) {
     return (
       <PlanUpgradePanel
-        title={`${view.label} — Solo plan`}
+        title={`${view.label} — upgrade required`}
         message={viewUpgradeMessage(view.label)}
       />
     );

@@ -358,7 +358,7 @@ export function EventList() {
                 className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
               >
                 <Plus size={14} />
-                New event
+                Document event
               </button>
             )}
             <button
@@ -388,7 +388,7 @@ export function EventList() {
           filtered.length === 0 ? (
             <div className="text-center py-16 rounded-xl border border-dashed border-gray-200 bg-white/60">
               <p className="text-gray-500 text-sm mb-3">
-                {items.length === 0 ? "No events yet." : "No events match your filters."}
+                {items.length === 0 ? "No events documented yet." : "No events match your filters."}
               </p>
               {canCreate && (
                 <button
@@ -396,7 +396,7 @@ export function EventList() {
                   onClick={() => setShowCreate(true)}
                   className="text-teal-600 hover:underline text-sm font-medium"
                 >
-                  Create your first event →
+                  Document your first event →
                 </button>
               )}
             </div>
@@ -406,7 +406,7 @@ export function EventList() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 rounded-xl border border-dashed border-gray-200 bg-white/60">
             <p className="text-gray-500 text-sm mb-3">
-              {items.length === 0 ? "No events yet." : "No events match your filters."}
+              {items.length === 0 ? "No events documented yet." : "No events match your filters."}
             </p>
             {canCreate && (
               <button
@@ -414,7 +414,7 @@ export function EventList() {
                 onClick={() => setShowCreate(true)}
                 className="text-teal-600 hover:underline text-sm font-medium"
               >
-                Create your first event →
+                Document your first event →
               </button>
             )}
           </div>

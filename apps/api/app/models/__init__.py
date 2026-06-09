@@ -1,4 +1,5 @@
 from app.models.authz import OrgLimit, Permission, Role, RolePermission
+from app.models.contact import ContactInquiry
 from app.models.objects import ChangeLog, MinEAObject, Workspace
 from app.models.workspace_snapshot import WorkspaceSnapshot
 from app.models.relationships import Relationship
@@ -27,6 +28,7 @@ __all__ = [
     "Permission",
     "RolePermission",
     "OrgLimit",
+    "ContactInquiry",
     "Product",
     "Realization",
     "Process",

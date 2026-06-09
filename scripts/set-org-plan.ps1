@@ -1,12 +1,12 @@
 # Assign or inspect org plan. Run from repo root:
 #   .\scripts\set-org-plan.ps1 -Org edomains-inc -Show
-#   .\scripts\set-org-plan.ps1 -Org acme-corp -Plan team -Contributors 15
+#   .\scripts\set-org-plan.ps1 -Org acme-corp -Plan business -Contributors 15
 
 param(
     [Parameter(Mandatory = $true)]
     [string]$Org,
 
-    [ValidateSet("free", "solo", "team")]
+    [ValidateSet("free", "business")]
     [string]$Plan,
 
     [int]$Contributors,

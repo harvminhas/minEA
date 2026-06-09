@@ -15,6 +15,8 @@ LIMIT_KEYS = (
     "max_admins",
     "max_members",
     "max_viewers",
+    "max_workspaces",
+    "max_objects_per_workspace",
     "max_pending_invites",
     "max_active_share_links",
 )
@@ -32,7 +34,7 @@ async def apply_plan_to_org(
 ) -> Org:
     normalized = normalize_plan(plan)
     target_limits = limits_for_plan(normalized)
-    if normalized == "team" and contributors is not None:
+    if normalized == "business" and contributors is not None:
         target_limits["max_members"] = contributors
 
     result = await db.execute(select(Org).where(Org.id == org_id))

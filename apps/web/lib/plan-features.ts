@@ -4,21 +4,18 @@ import type { ViewId } from "@/lib/views";
 export type OrgPlan = Org["plan"];
 
 const LEGACY_PLAN_MAP: Record<string, OrgPlan> = {
-  starter: "solo",
-  growth: "solo",
-  business: "team",
+  starter: "business",
+  growth: "business",
+  solo: "business",
+  team: "business",
 };
 
 export function normalizePlan(plan: string | undefined | null): OrgPlan {
   if (!plan) return "free";
   const mapped = LEGACY_PLAN_MAP[plan] ?? plan;
-  if (mapped === "free" || mapped === "solo" || mapped === "team") return mapped;
+  if (mapped === "free" || mapped === "business") return mapped;
   return "free";
 }
-
-/** Analytical views in the Views gallery/sidebar (not repository editing). */
-/** Product portfolio + process builder (repository); analytical lenses require Solo+. */
-const FREE_VIEW_IDS = new Set<ViewId>(["products", "processes"]);
 
 const ALL_SHARE_TYPES: ShareResourceType[] = [
   "view",
@@ -30,35 +27,34 @@ const ALL_SHARE_TYPES: ShareResourceType[] = [
 
 const PLAN_SHARE: Record<OrgPlan, Set<ShareResourceType>> = {
   free: new Set(["view"]),
-  solo: new Set(ALL_SHARE_TYPES),
-  team: new Set(ALL_SHARE_TYPES),
+  business: new Set(ALL_SHARE_TYPES),
 };
 
 export const PLAN_LABELS: Record<OrgPlan, string> = {
   free: "Free",
-  solo: "Solo",
-  team: "Team",
+  business: "Business",
 };
 
 export const PLAN_OWN_WORKSPACE_LIMITS: Record<OrgPlan, number | null> = {
   free: 1,
-  solo: 5,
-  team: 10,
+  business: null,
+};
+
+export const PLAN_OBJECT_LIMITS: Record<OrgPlan, number | null> = {
+  free: 50,
+  business: null,
 };
 
 export const PLAN_SHARE_LINK_LIMITS: Record<OrgPlan, number | null> = {
   free: 1,
-  solo: 20,
-  team: 50,
+  business: 50,
 };
 
 export const PLAN_DESCRIPTIONS: Record<OrgPlan, string> = {
   free:
-    "Full repository and Product portfolio view. One workspace and one share link; join unlimited workspaces others share with you.",
-  solo:
-    "Everything for one person — all views, AI chat, sharing. Up to 5 owned workspaces; unlimited guest access elsewhere.",
-  team:
-    "Custom contributor licenses. Unlimited viewers. Up to 10 owned workspaces; unlimited guest access elsewhere.",
+    "One user, one workspace, up to 50 repository objects, all views. Join unlimited workspaces others share with you.",
+  business:
+    "Unlimited workspaces, AI chat, team collaboration, and guided onboarding. Contact us for pricing.",
 };
 
 export function workspaceQuotaLabel(count: number, limit: number | null | undefined): string {
@@ -81,7 +77,7 @@ export function shareCreateBlockedMessage(
 ): string {
   const p = normalizePlan(plan ?? "free");
   if (p === "free") {
-    return "Free includes one active share link. Upgrade to Solo for more, or revoke an existing link first.";
+    return "Free includes one active share link. Contact us for Business for more, or revoke an existing link first.";
   }
   const cap = limit ?? PLAN_SHARE_LINK_LIMITS[p];
   return `Your ${PLAN_LABELS[p]} plan allows up to ${cap} active share links. Revoke an existing link to create a new one.`;
@@ -94,7 +90,7 @@ export function workspaceCreateBlockedMessage(
   const p = normalizePlan(plan ?? "free");
   if (p === "free") {
     return (
-      "Free includes one workspace for sharing your portfolio. Upgrade to Solo to create more workspaces, " +
+      "Free includes one workspace. Contact us for Business to create more workspaces, " +
       "or join unlimited workspaces shared with you by others."
     );
   }
@@ -105,22 +101,31 @@ export function workspaceCreateBlockedMessage(
   );
 }
 
-export function planAllowsAiChat(plan: OrgPlan | string | undefined | null): boolean {
+export function objectCreateBlockedMessage(
+  plan: OrgPlan | string | undefined | null,
+  limit?: number | null
+): string {
   const p = normalizePlan(plan ?? "free");
-  return p === "solo" || p === "team";
+  if (p === "free") {
+    const cap = limit ?? PLAN_OBJECT_LIMITS.free;
+    return `Free includes up to ${cap} repository objects. Contact us for Business to add more.`;
+  }
+  return "Repository object limit reached. Contact us to adjust your plan.";
+}
+
+export function planAllowsAiChat(plan: OrgPlan | string | undefined | null): boolean {
+  return normalizePlan(plan ?? "free") === "business";
 }
 
 export function planAllowsInvites(plan: OrgPlan | string | undefined | null): boolean {
-  return normalizePlan(plan ?? "free") === "team";
+  return normalizePlan(plan ?? "free") === "business";
 }
 
 export function planAllowsView(
-  plan: OrgPlan | string | undefined | null,
-  viewId: ViewId
+  _plan: OrgPlan | string | undefined | null,
+  _viewId: ViewId
 ): boolean {
-  const p = normalizePlan(plan ?? "free");
-  if (p !== "free") return true;
-  return FREE_VIEW_IDS.has(viewId);
+  return true;
 }
 
 export function planAllowsShareResource(
@@ -132,27 +137,28 @@ export function planAllowsShareResource(
   const allowed = PLAN_SHARE[p] ?? new Set();
   if (!allowed.has(resourceType)) return false;
   if (resourceType === "view") {
-    const shareable = new Set(["views/products"]);
-    if (p !== "free") {
-      shareable.add("views/capability-heatmap");
-      shareable.add("views/tech-debt");
-      shareable.add("views/journeys");
-      shareable.add("views/investments");
-    }
+    const shareable = new Set([
+      "views/products",
+      "views/capability-heatmap",
+      "views/tech-debt",
+      "views/journeys",
+      "views/investments",
+      "views/processes",
+    ]);
     return !!resourceKey && shareable.has(resourceKey);
   }
-  return p !== "free";
+  return p === "business";
 }
 
 export function viewUpgradeMessage(viewLabel: string): string {
-  return `${viewLabel} is available on Solo and Team plans.`;
+  return `${viewLabel} is available on all plans.`;
 }
 
-export function inviteUpgradeMessage(plan: OrgPlan): string {
-  if (plan === "solo") {
-    return "Solo is for one person. Upgrade to Team to invite contributors — viewers are always unlimited.";
-  }
-  return "Collaboration requires a Team plan. Contact us for a quote based on contributor licenses.";
+export function inviteUpgradeMessage(_plan: OrgPlan): string {
+  return "Inviting teammates requires a Business plan. Contact us for a quote based on contributor licenses.";
 }
 
-export const TEAM_CONTACT_EMAIL = "hello@bubomap.com";
+export const BUSINESS_CONTACT_EMAIL = "hello@bubomap.com";
+
+/** @deprecated Use BUSINESS_CONTACT_EMAIL */
+export const TEAM_CONTACT_EMAIL = BUSINESS_CONTACT_EMAIL;

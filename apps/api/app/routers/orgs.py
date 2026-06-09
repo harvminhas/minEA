@@ -164,19 +164,10 @@ async def delete_org(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Owner-only: permanently delete the org and all workspaces."""
-    await ctx.require_permission(db, "org.delete")
+    from app.services.org_delete import delete_org_permanently
 
-    await log_audit(
-        db,
-        org_id=ctx.org_id,
-        actor_user_id=ctx.user_id,
-        action="org.deleted",
-        target_type="org",
-        target_id=ctx.org_id,
-        metadata={"slug": ctx.org.slug},
-    )
-    await db.delete(ctx.org)
-    await db.commit()
+    await ctx.require_permission(db, "org.delete")
+    await delete_org_permanently(db, org=ctx.org, actor_user_id=ctx.user_id)
 
 
 @router.get("/{org_slug}/members", response_model=list[OrgMemberRead])

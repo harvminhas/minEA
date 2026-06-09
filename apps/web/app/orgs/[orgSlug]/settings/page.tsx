@@ -14,7 +14,7 @@ import {
   workspaceQuotaLabel,
 } from "@/lib/plan-features";
 import { PlanSection } from "@/components/billing/PlanSection";
-import { ROLE_DEFINITIONS } from "@minea/types";
+import { useAppStore } from "@/lib/store";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 
@@ -31,7 +31,8 @@ export default function OrgSettingsPage() {
     canDeleteOrg,
     canInviteOrgMembers,
   } = usePermissions();
-  const { plan, isSolo } = usePlanFeatures();
+  const { plan } = usePlanFeatures();
+  const { setActiveOrg, setActiveWorkspace } = useAppStore();
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
@@ -47,7 +48,7 @@ export default function OrgSettingsPage() {
     const billing = searchParams.get("billing");
     if (billing === "success") {
       setBillingMessage(
-        "Payment received — welcome to Solo! Your plan updates in a few seconds after Stripe confirms."
+        "Welcome to Business! Your plan updates in a few seconds."
       );
       void queryClient.invalidateQueries({ queryKey: ["org", orgSlug] });
       void queryClient.invalidateQueries({ queryKey: ["billing-status", orgSlug] });
@@ -136,6 +137,7 @@ export default function OrgSettingsPage() {
   });
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteOrgError, setDeleteOrgError] = useState<string | null>(null);
 
   const deleteOrgMutation = useMutation({
     mutationFn: async () => {
@@ -143,8 +145,14 @@ export default function OrgSettingsPage() {
       return orgsApi.deleteOrg(orgSlug, token!);
     },
     onSuccess: () => {
+      setActiveOrg(null);
+      setActiveWorkspace(null);
       queryClient.clear();
-      router.replace("/home");
+      router.replace("/onboarding");
+    },
+    onError: (err: Error) => {
+      setDeleteOrgError(err.message);
+      setShowDeleteConfirm(false);
     },
   });
 
@@ -200,32 +208,6 @@ export default function OrgSettingsPage() {
           Your role: <span className="font-medium text-gray-700">{org.role}</span>
         </p>
       )}
-
-      <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <h2 className="font-semibold text-gray-900 mb-3">Roles</h2>
-        <div className="space-y-3 text-sm mb-2">
-          <div className="flex gap-3">
-            <span className="font-medium text-gray-800 w-16">{ROLE_DEFINITIONS.owner.label}</span>
-            <span className="text-gray-500">{ROLE_DEFINITIONS.owner.description}</span>
-          </div>
-          <div className="flex gap-3">
-            <span className="font-medium text-gray-800 w-16">{ROLE_DEFINITIONS.admin.label}</span>
-            <span className="text-gray-500">{ROLE_DEFINITIONS.admin.description}</span>
-          </div>
-          <div className="flex gap-3">
-            <span className="font-medium text-gray-800 w-16">{ROLE_DEFINITIONS.member.label}</span>
-            <span className="text-gray-500">{ROLE_DEFINITIONS.member.description}</span>
-          </div>
-          <div className="flex gap-3">
-            <span className="font-medium text-gray-800 w-16">{ROLE_DEFINITIONS.viewer.label}</span>
-            <span className="text-gray-500">{ROLE_DEFINITIONS.viewer.description}</span>
-          </div>
-        </div>
-        <p className="text-xs text-gray-400">
-          Org invites grant org access. Assign workspace roles (member or viewer) per workspace in
-          workspace settings.
-        </p>
-      </section>
 
       <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <div className="flex items-center justify-between mb-1">
@@ -361,14 +343,12 @@ export default function OrgSettingsPage() {
             {!canInviteOrgMembers ? (
               <div className="rounded-md bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
                 <p>{inviteUpgradeMessage(plan)}</p>
-                {isSolo && (
-                  <Link
-                    href={`mailto:${TEAM_CONTACT_EMAIL}?subject=BuboMap%20Team%20plan`}
-                    className="inline-block mt-2 text-indigo-600 font-medium hover:text-indigo-700"
-                  >
-                    Contact us for Team →
-                  </Link>
-                )}
+                <Link
+                  href={`mailto:${TEAM_CONTACT_EMAIL}?subject=BuboMap%20Business%20plan`}
+                  className="inline-block mt-2 text-indigo-600 font-medium hover:text-indigo-700"
+                >
+                  Contact us for Business →
+                </Link>
               </div>
             ) : (
               <>
@@ -410,7 +390,7 @@ export default function OrgSettingsPage() {
                   </p>
                 )}
                 <p className="text-xs text-gray-400 mt-2">
-                  Team plan: contributor licenses are capped; viewers are unlimited.
+                  Business plan: contributor licenses are capped; viewers are unlimited.
                 </p>
               </>
             )}
@@ -431,8 +411,12 @@ export default function OrgSettingsPage() {
         <section className="bg-white rounded-lg border border-red-100 p-6 mb-6">
           <h2 className="font-semibold text-red-900 mb-2">Danger zone</h2>
           <p className="text-sm text-gray-600 mb-4">
-            Permanently delete this organization, all workspaces, and all repository data.
+            Permanently delete this organization, all workspaces, and all repository data. You will
+            be asked to create a new organization, like when you first signed up.
           </p>
+          {deleteOrgError && (
+            <p className="text-sm text-red-600 mb-3">{deleteOrgError}</p>
+          )}
           {!showDeleteConfirm ? (
             <button
               type="button"

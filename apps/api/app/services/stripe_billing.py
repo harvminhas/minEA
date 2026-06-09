@@ -1,4 +1,4 @@
-"""Stripe Checkout + webhooks for Solo self-serve upgrades."""
+"""Stripe webhooks for legacy subscriptions (self-serve checkout disabled)."""
 from __future__ import annotations
 
 import logging
@@ -35,72 +35,17 @@ async def create_solo_checkout_session(
     user_email: str,
     user_id: uuid.UUID,
 ) -> tuple[str, str]:
-    if not stripe_configured():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Stripe billing is not configured. Set STRIPE_SECRET_KEY and STRIPE_SOLO_PRICE_ID on the API.",
-        )
-
+    del db, user_email, user_id  # legacy endpoint — self-serve checkout disabled
     current = normalize_plan(org.plan)
-    if current == "solo":
+    if current == "business":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This org is already on the Solo plan.",
+            detail="This org is already on the Business plan.",
         )
-    if current == "team":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Team plans are arranged manually. Contact us to change your plan.",
-        )
-
-    stripe = _stripe()
-    base = settings.web_app_url.rstrip("/")
-    success_url = f"{base}/orgs/{org.slug}/settings?billing=success"
-    cancel_url = f"{base}/orgs/{org.slug}/settings?billing=cancelled"
-
-    session_kwargs: dict = {
-        "mode": "subscription",
-        "line_items": [{"price": settings.stripe_solo_price_id, "quantity": 1}],
-        "success_url": success_url,
-        "cancel_url": cancel_url,
-        "client_reference_id": str(org.id),
-        "metadata": {
-            "org_id": str(org.id),
-            "org_slug": org.slug,
-            "plan": "solo",
-        },
-        "subscription_data": {
-            "metadata": {
-                "org_id": str(org.id),
-                "org_slug": org.slug,
-                "plan": "solo",
-            },
-        },
-    }
-
-    if org.stripe_customer_id:
-        session_kwargs["customer"] = org.stripe_customer_id
-    else:
-        session_kwargs["customer_email"] = user_email
-
-    session = stripe.checkout.Session.create(**session_kwargs)
-    if not session.url:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Stripe did not return a checkout URL.",
-        )
-
-    await log_audit(
-        db,
-        org_id=org.id,
-        actor_user_id=user_id,
-        action="billing.checkout_started",
-        target_type="org",
-        target_id=org.id,
-        metadata={"plan": "solo", "session_id": session.id},
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Self-serve checkout is no longer available. Contact us for Business.",
     )
-
-    return session.url, session.id
 
 
 async def handle_stripe_event(db: AsyncSession, event: dict) -> None:
@@ -151,7 +96,7 @@ async def _on_checkout_completed(db: AsyncSession, session: dict) -> None:
     org_id = metadata.get("org_id") or session.get("client_reference_id")
     customer_id = session.get("customer")
     subscription_id = session.get("subscription")
-    plan = metadata.get("plan", "solo")
+    plan = normalize_plan(metadata.get("plan", "business"))
 
     if session.get("mode") != "subscription" or not subscription_id:
         logger.warning("checkout.session.completed ignored: not a subscription checkout")
@@ -202,8 +147,8 @@ async def _on_subscription_deleted(db: AsyncSession, subscription: dict) -> None
         logger.warning("subscription.deleted: org not found sub=%s", subscription_id)
         return
 
-    if normalize_plan(org.plan) == "team":
-        logger.info("subscription.deleted ignored for team org %s", org.slug)
+    if normalize_plan(org.plan) == "business":
+        logger.info("subscription.deleted ignored for business org %s", org.slug)
         return
 
     await apply_plan_to_org(db, org.id, "free", clear_stripe=True)

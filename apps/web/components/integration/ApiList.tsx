@@ -354,7 +354,7 @@ export function ApiList() {
                 className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
               >
                 <Plus size={14} />
-                New API
+                Document API
               </button>
             )}
             <button
@@ -384,7 +384,7 @@ export function ApiList() {
           filtered.length === 0 ? (
             <div className="text-center py-16 rounded-xl border border-dashed border-gray-200 bg-white/60">
               <p className="text-gray-500 text-sm mb-3">
-                {items.length === 0 ? "No APIs yet." : "No APIs match your filters."}
+                {items.length === 0 ? "No APIs documented yet." : "No APIs match your filters."}
               </p>
               {canCreate && (
                 <button
@@ -392,7 +392,7 @@ export function ApiList() {
                   onClick={() => setShowCreate(true)}
                   className="text-teal-600 hover:underline text-sm font-medium"
                 >
-                  Create your first API →
+                  Document your first API →
                 </button>
               )}
             </div>
@@ -402,7 +402,7 @@ export function ApiList() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 rounded-xl border border-dashed border-gray-200 bg-white/60">
             <p className="text-gray-500 text-sm mb-3">
-              {items.length === 0 ? "No APIs yet." : "No APIs match your filters."}
+              {items.length === 0 ? "No APIs documented yet." : "No APIs match your filters."}
             </p>
             {canCreate && (
               <button
@@ -410,7 +410,7 @@ export function ApiList() {
                 onClick={() => setShowCreate(true)}
                 className="text-teal-600 hover:underline text-sm font-medium"
               >
-                Create your first API →
+                Document your first API →
               </button>
             )}
           </div>

@@ -96,8 +96,7 @@ Set `API_URL` on the web project to the API URL. Set `FIREBASE_SERVICE_ACCOUNT_J
 
 | Task | Doc |
 |------|-----|
-| Assign Free / Solo / Team, contributor licenses | **[docs/how-to-manage-plans.md](docs/how-to-manage-plans.md)** |
-| Stripe Solo checkout setup | **[docs/stripe-billing.md](docs/stripe-billing.md)** |
+| Assign Free / Business, contributor licenses | **[docs/how-to-manage-plans.md](docs/how-to-manage-plans.md)** |
 | Deploy web + API to Vercel | [docs/deploy-vercel.md](docs/deploy-vercel.md) |
 
 Quick plan change (PowerShell): `.\scripts\set-org-plan.ps1 -Org <slug> -Show`

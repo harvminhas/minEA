@@ -7,9 +7,8 @@ import { buildDashboardViewCards } from "@/lib/workspace-dashboard";
 import { useWorkspaceDashboard } from "@/lib/use-workspace-dashboard";
 import { WorkspaceSnapshotRefreshBar } from "@/components/dashboard/WorkspaceSnapshotRefreshBar";
 import { PROCESSES_VIEW, NAV_VIEWS } from "@/lib/views";
-import type { ViewConfig, ViewId } from "@/lib/views";
+import type { ViewConfig } from "@/lib/views";
 import { cn } from "@/lib/utils";
-import { usePlanFeatures } from "@/lib/use-plan-features";
 
 // ─── Miniature illustrations per view ────────────────────────────────────
 
@@ -194,14 +193,8 @@ function NewViewCard() {
 
 // ─── Main gallery ────────────────────────────────────────────────────────
 
-function isGalleryViewLocked(viewId: ViewId, allowsView: (id: ViewId) => boolean): boolean {
-  if (viewId === "processes") return false;
-  return !allowsView(viewId);
-}
-
 export function ViewsGallery() {
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
-  const { allowsView } = usePlanFeatures();
   const { data: dashboardState, isPending } = useWorkspaceDashboard(orgSlug, workspaceSlug);
   const metrics = dashboardState?.metrics;
   const viewCards =
@@ -239,7 +232,7 @@ export function ViewsGallery() {
               href={`${basePath}/${view.segment}`}
               statusLabel={card?.statusLabel}
               statusTone={card?.statusTone}
-              locked={isGalleryViewLocked(view.id, allowsView)}
+              locked={false}
             />
           );
         })}

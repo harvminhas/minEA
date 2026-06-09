@@ -18,6 +18,7 @@ from app.routers import (
     ai,
     auth,
     billing,
+    contact,
     capability_map,
     data_layer,
     invites,
@@ -84,6 +85,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(orgs.router, prefix="/api/v1")
 app.include_router(billing.router, prefix="/api/v1")
+app.include_router(contact.router, prefix="/api/v1")
 app.include_router(invites.router, prefix="/api/v1")
 app.include_router(share_data.router, prefix="/api/v1")
 app.include_router(workspaces.router, prefix="/api/v1")

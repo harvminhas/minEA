@@ -19,8 +19,7 @@ export function usePlanFeatures() {
     allowsAiChat: planAllowsAiChat(plan),
     allowsInvites: planAllowsInvites(plan),
     allowsView: (viewId: ViewId) => planAllowsView(plan, viewId),
-    isTeam: plan === "team",
-    isSolo: plan === "solo",
+    isBusiness: plan === "business",
     isFree: plan === "free",
   };
 }

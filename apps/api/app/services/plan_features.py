@@ -1,4 +1,4 @@
-"""Billing plan capabilities — single source of truth for Free / Solo / Team."""
+"""Billing plan capabilities — single source of truth for Free / Business."""
 
 from __future__ import annotations
 
@@ -6,10 +6,8 @@ from fastapi import HTTPException, status
 
 from app.services.defaults import DEFAULT_ORG_LIMITS
 
-PLANS = ("free", "solo", "team")
+PLANS = ("free", "business")
 
-# View resource keys (views/* segments) included per plan
-FREE_VIEW_KEYS = frozenset({"views/products"})
 ALL_VIEW_KEYS = frozenset(
     {
         "views/products",
@@ -22,62 +20,50 @@ ALL_VIEW_KEYS = frozenset(
 )
 
 PLAN_VIEW_KEYS: dict[str, frozenset[str]] = {
-    "free": FREE_VIEW_KEYS,
-    "solo": ALL_VIEW_KEYS,
-    "team": ALL_VIEW_KEYS,
+    "free": ALL_VIEW_KEYS,
+    "business": ALL_VIEW_KEYS,
 }
 
 PLAN_SHARE_RESOURCE_TYPES: dict[str, set[str]] = {
     "free": {"view"},
-    "solo": {"view", "roadmap", "object", "capability_map", "capability_domain"},
-    "team": {"view", "roadmap", "object", "capability_map", "capability_domain"},
+    "business": {"view", "roadmap", "object", "capability_map", "capability_domain"},
 }
 
 PLAN_AI_CHAT: dict[str, bool] = {
     "free": False,
-    "solo": True,
-    "team": True,
+    "business": True,
 }
 
 PLAN_INVITES: dict[str, bool] = {
     "free": False,
-    "solo": False,
-    "team": True,
+    "business": True,
 }
 
-# Owned workspaces in this org (not guest workspaces in other orgs — those are unlimited).
+# Owned workspaces in this org (guest workspaces elsewhere are unlimited).
 PLAN_MAX_OWN_WORKSPACES: dict[str, int | None] = {
     "free": 1,
-    "solo": 5,
-    "team": 10,
+    "business": None,
 }
 
 PLAN_MAX_ACTIVE_SHARE_LINKS: dict[str, int | None] = {
     "free": 1,
-    "solo": 20,
-    "team": 50,
+    "business": 50,
 }
 
 # Per-plan org limit overrides (None = unlimited)
 PLAN_LIMIT_OVERRIDES: dict[str, dict[str, int | None]] = {
     "free": {
         "max_workspaces": 1,
+        "max_objects_per_workspace": 50,
         "max_pending_invites": 0,
         "max_admins": 0,
         "max_members": 0,
         "max_viewers": 0,
         "max_active_share_links": 1,
     },
-    "solo": {
-        "max_workspaces": 5,
-        "max_pending_invites": 0,
-        "max_admins": 0,
-        "max_members": 0,
-        "max_viewers": 0,
-        "max_active_share_links": 20,
-    },
-    "team": {
-        "max_workspaces": 10,
+    "business": {
+        "max_workspaces": None,
+        "max_objects_per_workspace": None,
         "max_viewers": None,
         "max_members": 10,
         "max_active_share_links": 50,
@@ -91,9 +77,10 @@ def normalize_plan(plan: str | None) -> str:
     if not plan:
         return "free"
     legacy = {
-        "starter": "solo",
-        "growth": "solo",
-        "business": "team",
+        "starter": "business",
+        "growth": "business",
+        "solo": "business",
+        "team": "business",
     }
     normalized = legacy.get(plan, plan)
     if normalized not in PLANS:
@@ -116,7 +103,7 @@ def plan_allows_invites(plan: str) -> bool:
 
 
 def plan_allows_view(plan: str, resource_key: str) -> bool:
-    allowed = PLAN_VIEW_KEYS.get(normalize_plan(plan), FREE_VIEW_KEYS)
+    allowed = PLAN_VIEW_KEYS.get(normalize_plan(plan), ALL_VIEW_KEYS)
     return resource_key in allowed
 
 
@@ -130,7 +117,7 @@ def assert_plan_allows_ai_chat(plan: str) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "plan_feature_unavailable",
-                "message": "AI chat is available on Solo and Team plans. Upgrade to unlock.",
+                "message": "AI chat is available on the Business plan. Contact us to upgrade.",
                 "feature": "ai_chat",
                 "plan": normalize_plan(plan),
             },
@@ -166,8 +153,8 @@ def assert_can_create_own_workspace(plan: str, current_count: int) -> None:
     cap = plan_max_own_workspaces(normalized)
     if normalized == "free":
         message = (
-            "Free includes one workspace for sharing your portfolio. "
-            "Upgrade to Solo to create more workspaces, or join unlimited workspaces "
+            "Free includes one workspace. "
+            "Contact us for Business to create more workspaces, or join unlimited workspaces "
             "shared with you by others."
         )
     else:
@@ -194,7 +181,7 @@ def assert_plan_allows_invites(plan: str) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "code": "plan_feature_unavailable",
-                "message": "Inviting teammates requires a Team plan. Solo is single-user; contact us for Team.",
+                "message": "Inviting teammates requires a Business plan. Contact us to upgrade.",
                 "feature": "invites",
                 "plan": normalize_plan(plan),
             },

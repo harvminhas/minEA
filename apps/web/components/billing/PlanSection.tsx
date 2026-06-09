@@ -1,15 +1,14 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Check, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { billingApi } from "@/lib/api-client";
 import {
+  BUSINESS_CONTACT_EMAIL,
   PLAN_DESCRIPTIONS,
   PLAN_LABELS,
-  TEAM_CONTACT_EMAIL,
   normalizePlan,
   shareCreateBlockedMessage,
   shareQuotaLabel,
@@ -18,15 +17,12 @@ import {
 } from "@/lib/plan-features";
 import type { Org } from "@minea/types";
 
-const SOLO_PRICE_LABEL = process.env.NEXT_PUBLIC_SOLO_PRICE_LABEL ?? "Solo plan";
-
-const SOLO_FEATURES = [
-  "Up to 5 owned workspaces",
-  "All views (heatmap, journeys, investments, tech debt)",
+const BUSINESS_FEATURES = [
+  "Unlimited workspaces",
   "AI architecture chat",
-  "Share links for views and objects",
-  "Unlimited guest access to workspaces others share with you",
-  "Single user — no team invites",
+  "Team collaboration with contributor licenses",
+  "Share links for views, roadmaps, and objects",
+  "Guided onboarding — expert setup to get you started right",
 ];
 
 interface Props {
@@ -38,7 +34,6 @@ interface Props {
 
 export function PlanSection({ orgSlug, org, billingMessage, onClearBillingMessage }: Props) {
   const { getToken } = useAuth();
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const plan = normalizePlan(org?.plan);
 
@@ -50,20 +45,6 @@ export function PlanSection({ orgSlug, org, billingMessage, onClearBillingMessag
     },
     enabled: !!orgSlug,
   });
-
-  const checkoutMutation = useMutation({
-    mutationFn: async () => {
-      const token = await getToken();
-      return billingApi.startSoloCheckout(orgSlug, token!);
-    },
-    onSuccess: (data) => {
-      setCheckoutError(null);
-      window.location.href = data.checkout_url;
-    },
-    onError: (err: Error) => setCheckoutError(err.message),
-  });
-
-  const showSoloUpgrade = plan === "free" && billingStatus?.can_upgrade_solo;
 
   return (
     <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
@@ -117,71 +98,53 @@ export function PlanSection({ orgSlug, org, billingMessage, onClearBillingMessag
         </p>
       )}
 
-      {plan === "solo" && (
+      {plan === "business" && (
         <p className="text-xs text-emerald-700 mt-2 flex items-center gap-1">
           <Check size={12} />
-          Active subscription
+          Business plan active
         </p>
       )}
 
-      {showSoloUpgrade && (
+      {plan === "free" && (
         <div className="mt-5 rounded-lg border border-indigo-100 bg-indigo-50/50 p-4">
           <div className="flex items-start gap-3">
             <div className="h-9 w-9 rounded-lg bg-indigo-600 flex items-center justify-center flex-shrink-0">
               <Sparkles size={16} className="text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-gray-900 text-sm">Upgrade to Solo</p>
+              <p className="font-semibold text-gray-900 text-sm">Upgrade to Business</p>
               <p className="text-xs text-gray-600 mt-0.5">
-                {SOLO_PRICE_LABEL} — pay securely with Stripe. Cancel anytime.
+                Contact us for pricing — we&apos;ll tailor a plan for your team.
               </p>
               <ul className="mt-3 space-y-1">
-                {SOLO_FEATURES.map((f) => (
+                {BUSINESS_FEATURES.map((f) => (
                   <li key={f} className="text-xs text-gray-600 flex items-start gap-1.5">
                     <Check size={12} className="text-indigo-600 mt-0.5 flex-shrink-0" />
                     {f}
                   </li>
                 ))}
               </ul>
-              {checkoutError && (
-                <p className="text-xs text-red-600 mt-2">{checkoutError}</p>
-              )}
-              <button
-                type="button"
-                onClick={() => checkoutMutation.mutate()}
-                disabled={checkoutMutation.isPending}
-                className="mt-4 inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              <Link
+                href={`mailto:${BUSINESS_CONTACT_EMAIL}?subject=BuboMap%20Business%20plan`}
+                className="mt-4 inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
               >
-                {checkoutMutation.isPending ? "Redirecting to Stripe…" : "Upgrade with Stripe"}
-              </button>
+                Contact us
+              </Link>
             </div>
           </div>
         </div>
       )}
 
-      {plan === "free" && billingStatus && !billingStatus.stripe_configured && (
-        <p className="text-xs text-amber-700 mt-3">
-          Online Solo checkout is not configured yet. Contact support to upgrade.
-        </p>
-      )}
-
-      {plan !== "team" && (
-        <p className="text-xs text-gray-400 mt-4">
-          Need collaborators?{" "}
+      {plan === "business" && (
+        <p className="text-xs text-gray-400 mt-3">
+          Need to adjust contributor licenses or add workspaces?{" "}
           <Link
-            href={`mailto:${TEAM_CONTACT_EMAIL}?subject=BuboMap%20Team%20plan`}
+            href={`mailto:${BUSINESS_CONTACT_EMAIL}?subject=BuboMap%20Business%20plan`}
             className="text-indigo-600 hover:text-indigo-700"
           >
-            Contact us for Team
+            Contact us
           </Link>
-          {" "}
-          — custom contributor licenses, unlimited viewers.
-        </p>
-      )}
-
-      {plan === "team" && (
-        <p className="text-xs text-gray-400 mt-3">
-          Your Team plan is managed by BuboMap. Contact us to adjust contributor licenses.
+          .
         </p>
       )}
     </section>

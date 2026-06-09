@@ -346,7 +346,7 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
         <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-gray-200 flex-shrink-0">
           <div>
             <h2 className="text-base font-semibold text-gray-900">
-              {isEdit ? "Edit API" : "New API"}
+              {isEdit ? "Edit API" : "Document API"}
             </h2>
             <p className="text-xs text-gray-400 mt-0.5">
               A capability one provider exposes for others to call
@@ -643,12 +643,10 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
             className="px-4 py-2 text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-md disabled:opacity-40 transition-colors"
           >
             {saveMutation.isPending
-              ? isEdit
-                ? "Saving…"
-                : "Creating…"
+              ? "Saving…"
               : isEdit
                 ? "Save"
-                : "Create API"}
+                : "Save documentation"}
           </button>
         </div>
       </div>

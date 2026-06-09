@@ -1,4 +1,4 @@
-"""Org billing — Stripe Checkout for Solo upgrades."""
+"""Org billing — plan status and quotas."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,7 +54,7 @@ async def billing_status(
     return BillingStatusResponse(
         plan=plan,
         stripe_configured=stripe_configured(),
-        can_upgrade_solo=plan == "free" and stripe_configured(),
+        can_upgrade_solo=False,
         has_subscription=bool(ctx.org.stripe_subscription_id),
         own_workspace_count=owned_count,
         own_workspace_limit=workspace_limit,

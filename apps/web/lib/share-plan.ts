@@ -25,12 +25,12 @@ export function shareUnavailableReason(
   if (checkPlanShare(plan, resourceType, resourceKey)) return null;
   const p = normalizePlan(plan);
   if (p === "free" && resourceType !== "view") {
-    return "Sharing this resource requires a Solo or Team plan.";
+    return "Sharing this resource requires a Business plan.";
   }
   if (resourceType === "view") {
     return "This view cannot be shared on your current plan.";
   }
-  return `Sharing ${resourceType.replace("_", " ")} requires Solo or Team.`;
+  return `Sharing ${resourceType.replace("_", " ")} requires Business.`;
 }
 
 export { shareCreateBlockedMessage, shareQuotaLabel } from "@/lib/plan-features";

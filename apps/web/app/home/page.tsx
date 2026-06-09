@@ -16,6 +16,7 @@ export default function HomePage() {
   const { data: orgs, isLoading, isError, error } = useQuery({
     queryKey: ["orgs"],
     enabled: isLoaded,
+    staleTime: 0,
     queryFn: async () => {
       const token = await getToken();
       return orgsApi.list(token!);
