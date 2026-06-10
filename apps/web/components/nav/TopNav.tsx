@@ -194,7 +194,7 @@ export function TopNav() {
                 if (mode === "views") {
                   router.push(`${basePath}/views`);
                 } else if (mode === "repository") {
-                  router.push(`${basePath}/repository`);
+                  router.push(basePath);
                 }
               }}
               title={label}

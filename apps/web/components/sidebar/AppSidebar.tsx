@@ -362,8 +362,8 @@ function CollapsedRepoNav({
   countsBySegment: Record<string, number>;
   showCounts: boolean;
 }) {
-  const overviewHref = `${basePath}/repository`;
-  const isOnOverview = pathname === overviewHref;
+  const overviewHref = basePath;
+  const isOnOverview = pathname === basePath;
   const [openLayerId, setOpenLayerId] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
 
@@ -520,8 +520,8 @@ function ExpandedRepoNav({
   showCounts: boolean;
 }) {
   const { collapsedLayers, toggleLayer } = useAppStore();
-  const overviewHref = `${basePath}/repository`;
-  const isOnOverview = pathname === overviewHref;
+  const overviewHref = basePath;
+  const isOnOverview = pathname === basePath;
 
   return (
     <div>
