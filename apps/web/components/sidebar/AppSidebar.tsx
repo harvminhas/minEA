@@ -362,6 +362,8 @@ function CollapsedRepoNav({
   countsBySegment: Record<string, number>;
   showCounts: boolean;
 }) {
+  const overviewHref = `${basePath}/repository`;
+  const isOnOverview = pathname === overviewHref;
   const [openLayerId, setOpenLayerId] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
 
@@ -392,6 +394,13 @@ function CollapsedRepoNav({
 
   return (
     <div ref={navRef} className="flex flex-col items-center gap-1">
+      <IconBtn
+        href={overviewHref}
+        active={isOnOverview}
+        icon={LayoutGrid}
+        tooltip="Overview"
+      />
+      <div className="w-6 h-px bg-white/10 my-0.5" />
       {REPOSITORY_LAYERS.map((layer) => {
         const items = visibleNavItems(layer);
         const availableItems = items.filter((item) => !isNavItemDisabled(item));
@@ -511,6 +520,8 @@ function ExpandedRepoNav({
   showCounts: boolean;
 }) {
   const { collapsedLayers, toggleLayer } = useAppStore();
+  const overviewHref = `${basePath}/repository`;
+  const isOnOverview = pathname === overviewHref;
 
   return (
     <div>
@@ -519,6 +530,21 @@ function ExpandedRepoNav({
           Repository
         </p>
       </div>
+
+      <Link
+        href={overviewHref}
+        className={cn(
+          "flex items-center gap-2.5 px-4 py-1.5 text-sm transition-colors",
+          isOnOverview
+            ? "bg-white/10 text-white"
+            : "text-white/45 hover:text-white hover:bg-white/5"
+        )}
+      >
+        <LayoutGrid size={14} className="text-white/40 flex-shrink-0" />
+        <span className="truncate flex-1">Overview</span>
+      </Link>
+
+      <div className="mx-4 my-1.5 h-px bg-white/8" />
 
       {REPOSITORY_LAYERS.map((layer) => {
         const items = visibleNavItems(layer);

@@ -190,8 +190,11 @@ export function TopNav() {
               type="button"
               onClick={() => {
                 setViewMode(mode);
-                if (mode === "views" && basePath) {
+                if (!basePath) return;
+                if (mode === "views") {
                   router.push(`${basePath}/views`);
+                } else if (mode === "repository") {
+                  router.push(`${basePath}/repository`);
                 }
               }}
               title={label}
