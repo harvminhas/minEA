@@ -299,22 +299,77 @@ def _effort_label(props: dict) -> str:
     return EFFORT_DISPLAY.get(effort, "—")
 
 
-def _milestone_strip(milestones: list[dict]) -> list[dict]:
-    ordered = sorted(milestones, key=lambda m: m.get("target_resolution") or "")
-    return [{"status": m.get("status", "not_started")} for m in ordered]
+_MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
-def _next_milestone(milestones: list[dict]) -> dict | None:
+def _segment_date_label(iso: str) -> str:
+    # "2026-03-15" -> "Mar 15, 2026"
+    try:
+        y, m, d = iso.split("-")
+        return f"{_MONTH_SHORT[int(m) - 1]} {int(d)}, {y}"
+    except (ValueError, IndexError):
+        return iso
+
+
+def _flatten_segments(props: dict) -> list[dict]:
+    """All segments across tracks sorted by start date.
+
+    Falls back to converting legacy milestones (point-in-time, quarter-keyed)
+    into segment-shaped dicts so card strips keep working pre-migration.
+    """
+    tracks = props.get("tracks")
+    if tracks is not None:
+        segments = [s for t in tracks for s in (t.get("segments") or [])]
+        return sorted(segments, key=lambda s: s.get("start_date") or "")
+
+    milestones = props.get("milestones") or []
     ordered = sorted(milestones, key=lambda m: m.get("target_resolution") or "")
+    converted = []
     for m in ordered:
-        if m.get("status") != "done":
-            target = m.get("target_resolution") or ""
-            label = target
-            if target and "_q" in target:
-                parts = target.split("_q")
-                if len(parts) == 2:
-                    label = f"Q{parts[1]} {parts[0]}"
-            return {"title": m.get("title", ""), "target_label": label}
+        target = m.get("target_resolution") or ""
+        label = target
+        if "_q" in target:
+            parts = target.split("_q")
+            if len(parts) == 2:
+                label = f"Q{parts[1]} {parts[0]}"
+        converted.append(
+            {
+                "label": m.get("title", ""),
+                "status": m.get("status", "not_started"),
+                "_target_label": label,
+            }
+        )
+    return converted
+
+
+def _milestone_strip(segments: list[dict]) -> list[dict]:
+    return [{"status": s.get("status") or "not_started"} for s in segments]
+
+
+def _roadmap_timeline_label(props: dict) -> str:
+    mode = props.get("timeline_mode")
+    if mode == "relative" or (props.get("timeline_duration") and props.get("timeline_unit")):
+        n = props.get("timeline_duration") or 12
+        unit = props.get("timeline_unit") or "weeks"
+        return f"{n} {unit}"
+    start = props.get("timeline_start_date") or ""
+    end = props.get("timeline_end_date") or ""
+    if start and end:
+        return f"{_segment_date_label(start)} – {_segment_date_label(end)}"
+    target = props.get("target_resolution") or ""
+    if target and "_q" in target:
+        y, q = target.split("_q", 1)
+        return f"Q{q} {y}"
+    if target and target != "no_target":
+        return target
+    return "—"
+
+
+def _next_milestone(segments: list[dict]) -> dict | None:
+    for s in segments:
+        if s.get("status") != "done":
+            label = s.get("_target_label") or _segment_date_label(s.get("end_date") or "")
+            return {"title": s.get("label", ""), "target_label": label}
     return None
 
 
@@ -356,15 +411,9 @@ async def _roadmap_items_for_product(
         product_ref = props.get("product") or {}
         if product_ref.get("product_id") != pid:
             continue
-        milestones = props.get("milestones") or []
-        done = sum(1 for m in milestones if m.get("status") == "done")
-        target = props.get("target_resolution") or ""
-        target_label = target
-        if target and "_q" in target:
-            y, q = target.split("_q", 1)
-            target_label = f"Q{q} {y}"
-        elif target == "no_target" or not target:
-            target_label = "No target"
+        segments = _flatten_segments(props)
+        done = sum(1 for s in segments if s.get("status") == "done")
+        target_label = _roadmap_timeline_label(props)
 
         resolves_debt = props.get("resolves_debt") or []
         items.append(
@@ -383,10 +432,10 @@ async def _roadmap_items_for_product(
                 "spend_label": _format_spend_label(props),
                 "effort_label": _effort_label(props),
                 "resolves_debt_count": len(resolves_debt),
-                "milestone_strip": _milestone_strip(milestones),
+                "milestone_strip": _milestone_strip(segments),
                 "milestones_done": done,
-                "milestones_total": len(milestones),
-                "next_milestone": _next_milestone(milestones),
+                "milestones_total": len(segments),
+                "next_milestone": _next_milestone(segments),
                 "updated_at": updated_at,
                 "updated_by_name": updater_names.get(updated_by) if updated_by else None,
             }

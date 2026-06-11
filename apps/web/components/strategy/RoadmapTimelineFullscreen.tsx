@@ -2,28 +2,38 @@
 
 import { useEffect } from "react";
 import { X } from "lucide-react";
-import type { RoadmapItemProperties, RoadmapMilestone } from "@minea/types";
+import type { RoadmapSegment, RoadmapTimelineView, RoadmapTrack } from "@minea/types";
 import { RoadmapTimeline } from "@/components/strategy/RoadmapTimeline";
-import { STRATEGY_LAYER_COLOR } from "@/lib/roadmap-utils";
+import { STRATEGY_LAYER_COLOR, type RoadmapTimelineBinding } from "@/lib/roadmap-utils";
 
 interface Props {
   title: string;
   subtitle?: string;
-  properties: RoadmapItemProperties;
-  milestones: RoadmapMilestone[];
+  tracks: RoadmapTrack[];
+  timelineBinding: RoadmapTimelineBinding;
+  timelineView?: RoadmapTimelineView;
   onClose: () => void;
-  onAddAtQuarter?: (quarter: string) => void;
-  onEditMilestone?: (milestone: RoadmapMilestone) => void;
+  onTimelineViewChange?: (view: RoadmapTimelineView) => void;
+  onAddTrack?: () => void;
+  onEditTrack?: (track: RoadmapTrack) => void;
+  onAddSegment?: (trackId: string, defaults: { startDate: string }) => void;
+  onEditSegment?: (trackId: string, segment: RoadmapSegment) => void;
+  saving?: boolean;
 }
 
 export function RoadmapTimelineFullscreen({
   title,
   subtitle,
-  properties,
-  milestones,
+  tracks,
+  timelineBinding,
+  timelineView,
   onClose,
-  onAddAtQuarter,
-  onEditMilestone,
+  onTimelineViewChange,
+  onAddTrack,
+  onEditTrack,
+  onAddSegment,
+  onEditSegment,
+  saving,
 }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -61,12 +71,17 @@ export function RoadmapTimelineFullscreen({
         </button>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 md:p-8">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-6 md:p-8 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <RoadmapTimeline
-          properties={properties}
-          milestones={milestones}
-          onAddAtQuarter={onAddAtQuarter}
-          onEditMilestone={onEditMilestone}
+          tracks={tracks}
+          timelineBinding={timelineBinding}
+          timelineView={timelineView}
+          onTimelineViewChange={onTimelineViewChange}
+          onAddTrack={onAddTrack}
+          onEditTrack={onEditTrack}
+          onAddSegment={onAddSegment}
+          onEditSegment={onEditSegment}
+          saving={saving}
           fullWidth
         />
       </div>

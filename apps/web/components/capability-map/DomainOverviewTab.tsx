@@ -18,10 +18,7 @@ import { RoadmapDetailModal } from "@/components/strategy/RoadmapDetailModal";
 import {
   roadmapCardFromObject,
   ROADMAP_MILESTONE_SEGMENT,
-  sortedMilestones,
-  targetResolutionLabel,
 } from "@/lib/roadmap-utils";
-import type { RoadmapItemProperties } from "@minea/types";
 import { useTenancy } from "@/lib/tenancy";
 import { usePermissions } from "@/lib/use-permissions";
 import { cn } from "@/lib/utils";
@@ -129,10 +126,7 @@ function CapabilityRow({
 
 function RoadmapPreview({ item, onOpen }: { item: MinEAObject; onOpen: () => void }) {
   const model = roadmapCardFromObject(item);
-  const props = (item.properties ?? {}) as RoadmapItemProperties;
-  const milestones = sortedMilestones(props.milestones ?? []);
-  const next = milestones.find((m) => m.status !== "done");
-  const nextTarget = next ? targetResolutionLabel(next.target_resolution) : "";
+  const nextTarget = model.nextMilestone?.target_label ?? "";
 
   return (
     <button
@@ -163,7 +157,7 @@ function RoadmapPreview({ item, onOpen }: { item: MinEAObject; onOpen: () => voi
             ))}
           </div>
           <p className="text-xs text-gray-500">
-            {model.milestonesDone} of {model.milestonesTotal} milestones
+            {model.milestonesDone} of {model.milestonesTotal} segments
             {nextTarget ? ` · ${nextTarget}` : ""}
           </p>
         </div>

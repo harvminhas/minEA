@@ -539,12 +539,36 @@ export interface RoadmapDebtRef {
 
 export type RoadmapMilestoneStatus = "not_started" | "in_flight" | "done";
 
+/** @deprecated Legacy point-in-time milestones — replaced by tracks/segments. */
 export interface RoadmapMilestone {
   id: string;
   title: string;
   target_resolution: string;
   status: RoadmapMilestoneStatus;
   sort_order?: number;
+}
+
+/** A labeled span on a roadmap track (e.g. "RFI", "Evaluate", "MSA"). */
+export interface RoadmapSegment {
+  id: string;
+  label: string;
+  /** ISO date (YYYY-MM-DD), inclusive. */
+  start_date: string;
+  /** ISO date (YYYY-MM-DD), inclusive. */
+  end_date: string;
+  status?: RoadmapMilestoneStatus;
+  /** Hex override; defaults to the track color. */
+  color?: string;
+}
+
+/** A user-named swimlane on a roadmap item (e.g. "Partner Sourcing"). */
+export interface RoadmapTrack {
+  id: string;
+  label: string;
+  /** Hex; assigned from palette when omitted. */
+  color?: string;
+  sort_order?: number;
+  segments: RoadmapSegment[];
 }
 
 export interface RoadmapItemProperties {
@@ -560,6 +584,15 @@ export interface RoadmapItemProperties {
     | "deferred"
     | "cancelled";
   target_resolution?: string;
+  /** How the roadmap item is scoped on the timeline. */
+  timeline_mode?: "date_bound" | "relative";
+  /** ISO start date (date-bound mode). */
+  timeline_start_date?: string;
+  /** ISO end date (date-bound mode). */
+  timeline_end_date?: string;
+  /** Span length (relative mode). */
+  timeline_duration?: number;
+  timeline_unit?: "weeks" | "months" | "quarters";
   effort_estimate?: "" | "s" | "m" | "l" | "xl";
   /** Optional override; when absent, spend is estimated from effort × rate card. */
   cost?: number | null;
@@ -567,7 +600,17 @@ export interface RoadmapItemProperties {
   blocked_reason?: string | null;
   /** How this initiative relates to AI. Omitted or "none" = not AI-related. */
   ai_role?: AiRole;
+  /** @deprecated Converted to tracks on first edit. */
   milestones?: RoadmapMilestone[];
+  tracks?: RoadmapTrack[];
+  /** Optional bounds that extend the auto-computed timeline range. */
+  timeline_view?: RoadmapTimelineView;
+}
+
+/** Persisted extension of the visible timeline (beyond segment-derived bounds). */
+export interface RoadmapTimelineView {
+  start_date?: string;
+  end_date?: string;
 }
 
 // ─── Relationship Types ───────────────────────────────────────────────────────

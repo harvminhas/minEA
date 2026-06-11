@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Edit2, ExternalLink, MoreHorizontal, Trash2, X } from "lucide-react";
-import type { RoadmapItemProperties, RoadmapMilestone } from "@minea/types";
+import type { RoadmapItemProperties, RoadmapSegment, RoadmapTimelineView, RoadmapTrack } from "@minea/types";
 import { objectsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
-import { AddMilestoneDialog } from "@/components/strategy/AddMilestoneDialog";
+import {
+  RoadmapTrackSegmentDrawer,
+  type RoadmapTimelineDrawer,
+} from "@/components/strategy/RoadmapTrackSegmentDrawer";
 import { CreateRoadmapPanel } from "@/components/strategy/CreateRoadmapPanel";
 import { RoadmapTimeline } from "@/components/strategy/RoadmapTimeline";
 import { RoadmapTimelineFullscreen } from "@/components/strategy/RoadmapTimelineFullscreen";
@@ -23,7 +26,9 @@ import {
   defaultInvestmentCategory,
   STRATEGY_LAYER_COLOR,
   TECH_DEBT_EFFORT_LABEL,
-  targetResolutionLabel,
+  formatRoadmapTimelineLabel,
+  resolveTimelineBinding,
+  tracksFromProperties,
 } from "@/lib/roadmap-utils";
 import { resolveRoadmapSpend } from "@/lib/investment-pipeline";
 import { aiRoleLabel } from "@/lib/ai-role-utils";
@@ -48,11 +53,7 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
   const [showEditForm, setShowEditForm] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [timelineFullscreen, setTimelineFullscreen] = useState(false);
-  const [milestoneDialog, setMilestoneDialog] = useState<{
-    mode: "add" | "edit";
-    defaultTarget?: string;
-    milestone?: RoadmapMilestone;
-  } | null>(null);
+  const [timelineDrawer, setTimelineDrawer] = useState<RoadmapTimelineDrawer | null>(null);
 
   const queryKey = ["object", orgSlug, workspaceSlug, roadmapId] as const;
   const listPath = roadmapListPath(orgSlug, workspaceSlug);
@@ -68,7 +69,8 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
   });
 
   const props = (roadmap?.properties ?? {}) as RoadmapItemProperties;
-  const milestones = props.milestones ?? [];
+  const tracks = tracksFromProperties(props);
+  const timelineBinding = useMemo(() => resolveTimelineBinding(props, tracks), [props, tracks]);
   const kindLabel = roadmapKindLabel(props);
   const subtitleParts = [kindLabel, props.product?.product_name, roadmap?.owner].filter(Boolean);
   const spend = roadmap ? resolveRoadmapSpend(props) : null;
@@ -80,11 +82,12 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
     queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, "roadmap_item"] });
   };
 
-  const saveMilestones = useMutation({
-    mutationFn: async (nextMilestones: RoadmapMilestone[]) => {
+  const saveTracks = useMutation({
+    mutationFn: async (nextTracks: RoadmapTrack[]) => {
       if (!roadmap) throw new Error("Roadmap not loaded");
       const token = await getToken();
-      const nextProps: RoadmapItemProperties = { ...props, milestones: nextMilestones };
+      // Tracks replace legacy milestones; clear them on first write.
+      const nextProps: RoadmapItemProperties = { ...props, tracks: nextTracks, milestones: [] };
       return objectsApi.update(
         orgSlug,
         workspaceSlug,
@@ -94,9 +97,25 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
       );
     },
     onSuccess: () => {
-      setMilestoneDialog(null);
+      setTimelineDrawer(null);
       refresh();
     },
+  });
+
+  const saveTimelineView = useMutation({
+    mutationFn: async (view: RoadmapTimelineView) => {
+      if (!roadmap) throw new Error("Roadmap not loaded");
+      const token = await getToken();
+      const nextProps: RoadmapItemProperties = { ...props, timeline_view: view };
+      return objectsApi.update(
+        orgSlug,
+        workspaceSlug,
+        roadmap.id,
+        { properties: nextProps as Record<string, unknown> },
+        token!
+      );
+    },
+    onSuccess: refresh,
   });
 
   const deleteMutation = useMutation({
@@ -254,7 +273,9 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
     <div
       className={cn(
         "space-y-6",
-        layout === "page" ? "flex-1 overflow-y-auto p-8" : "overflow-y-auto p-5"
+        layout === "page"
+          ? "p-8"
+          : "flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       )}
     >
       <div className="rounded-xl border border-gray-200 bg-white p-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -265,9 +286,9 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
           </p>
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Target</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Timeline</p>
           <p className="text-sm font-medium text-gray-900 mt-1">
-            {props.target_resolution ? targetResolutionLabel(props.target_resolution) : "—"}
+            {formatRoadmapTimelineLabel(props)}
           </p>
         </div>
         <div>
@@ -308,19 +329,25 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
       </div>
 
       <RoadmapTimeline
-        properties={props}
-        milestones={milestones}
+        tracks={tracks}
+        timelineBinding={timelineBinding}
+        timelineView={props.timeline_view}
+        onTimelineViewChange={canEdit ? (view) => saveTimelineView.mutate(view) : undefined}
+        onAddTrack={canEdit ? () => setTimelineDrawer({ mode: "add-track" }) : undefined}
+        onEditTrack={canEdit ? (track) => setTimelineDrawer({ mode: "edit-track", track }) : undefined}
+        onAddSegment={
+          canEdit
+            ? (trackId, defaults) =>
+                setTimelineDrawer({ mode: "add-segment", trackId, startDate: defaults.startDate })
+            : undefined
+        }
+        onEditSegment={
+          canEdit
+            ? (trackId, segment) => setTimelineDrawer({ mode: "edit-segment", trackId, segment })
+            : undefined
+        }
         onExpand={() => setTimelineFullscreen(true)}
-        onAddAtQuarter={
-          canEdit
-            ? (quarter) => setMilestoneDialog({ mode: "add", defaultTarget: quarter })
-            : undefined
-        }
-        onEditMilestone={
-          canEdit
-            ? (milestone) => setMilestoneDialog({ mode: "edit", milestone })
-            : undefined
-        }
+        saving={saveTracks.isPending || saveTimelineView.isPending}
       />
     </div>
   );
@@ -331,19 +358,25 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
         <RoadmapTimelineFullscreen
           title={roadmap.name}
           subtitle={subtitleParts.join(" · ")}
-          properties={props}
-          milestones={milestones}
+          tracks={tracks}
+          timelineBinding={timelineBinding}
+          timelineView={props.timeline_view}
           onClose={() => setTimelineFullscreen(false)}
-          onAddAtQuarter={
+          onTimelineViewChange={canEdit ? (view) => saveTimelineView.mutate(view) : undefined}
+          onAddTrack={canEdit ? () => setTimelineDrawer({ mode: "add-track" }) : undefined}
+          onEditTrack={canEdit ? (track) => setTimelineDrawer({ mode: "edit-track", track }) : undefined}
+          onAddSegment={
             canEdit
-              ? (quarter) => setMilestoneDialog({ mode: "add", defaultTarget: quarter })
+              ? (trackId, defaults) =>
+                  setTimelineDrawer({ mode: "add-segment", trackId, startDate: defaults.startDate })
               : undefined
           }
-          onEditMilestone={
+          onEditSegment={
             canEdit
-              ? (milestone) => setMilestoneDialog({ mode: "edit", milestone })
+              ? (trackId, segment) => setTimelineDrawer({ mode: "edit-segment", trackId, segment })
               : undefined
           }
+          saving={saveTracks.isPending || saveTimelineView.isPending}
         />
       )}
 
@@ -358,18 +391,14 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
         />
       )}
 
-      {canEdit && milestoneDialog && (
-        <AddMilestoneDialog
-          initial={milestoneDialog.milestone}
-          defaultTarget={milestoneDialog.defaultTarget}
-          onClose={() => setMilestoneDialog(null)}
-          onSave={(milestone) => {
-            const next =
-              milestoneDialog.mode === "edit"
-                ? milestones.map((m) => (m.id === milestone.id ? milestone : m))
-                : [...milestones, milestone];
-            saveMilestones.mutate(next);
-          }}
+      {canEdit && timelineDrawer && (
+        <RoadmapTrackSegmentDrawer
+          state={timelineDrawer}
+          tracks={tracks}
+          timelineBinding={timelineBinding}
+          onClose={() => setTimelineDrawer(null)}
+          onSave={(next) => saveTracks.mutate(next)}
+          saving={saveTracks.isPending}
         />
       )}
     </>
@@ -389,7 +418,7 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
 
   return (
     <>
-      <div className="flex flex-col h-full min-h-0 bg-gray-50">
+      <div className="flex flex-col min-h-0 bg-gray-50">
         {header}
         {body}
       </div>

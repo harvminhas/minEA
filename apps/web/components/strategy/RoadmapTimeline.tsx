@@ -1,127 +1,76 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check, Circle, Loader2, Maximize2 } from "lucide-react";
-import type { RoadmapItemProperties, RoadmapMilestone } from "@minea/types";
+import { useMemo } from "react";
+import { Check, ChevronLeft, ChevronRight, Maximize2, Pencil, Plus } from "lucide-react";
+import type { RoadmapSegment, RoadmapTimelineView, RoadmapTrack } from "@minea/types";
 import {
-  buildTimelineQuarters,
-  milestoneDoneCount,
-  milestonePosition,
-  ROADMAP_MILESTONE_STATUS_LABEL,
-  sortedMilestones,
-  targetResolutionLabel,
-  TIMELINE_SCROLL_QUARTER_THRESHOLD,
-  timelinePositionPercent,
+  autoTimelineRange,
+  buildTimelineTicks,
+  extendTimelineView,
+  formatTimelineBindingLabel,
+  segmentAddAnchor,
+  segmentBarStyle,
+  segmentDoneCount,
+  segmentTotalCount,
+  sortedSegments,
+  sortedTracks,
+  trackColor,
+  type RoadmapTimelineBinding,
 } from "@/lib/roadmap-utils";
 import { cn } from "@/lib/utils";
 
-type ViewMode = "quarter" | "month";
+const LABEL_COL_WIDTH = 220;
+const ADD_COL_WIDTH = 36;
 
 interface Props {
-  properties: RoadmapItemProperties;
-  milestones: RoadmapMilestone[];
-  onAddAtQuarter?: (quarter: string) => void;
-  onEditMilestone?: (milestone: RoadmapMilestone) => void;
-  /** When true, timeline uses full width (e.g. fullscreen overlay). */
+  tracks: RoadmapTrack[];
+  timelineBinding: RoadmapTimelineBinding;
+  timelineView?: RoadmapTimelineView;
+  onTimelineViewChange?: (view: RoadmapTimelineView) => void;
+  onAddTrack?: () => void;
+  onEditTrack?: (track: RoadmapTrack) => void;
+  onAddSegment?: (trackId: string, defaults: { startDate: string }) => void;
+  onEditSegment?: (trackId: string, segment: RoadmapSegment) => void;
   fullWidth?: boolean;
-  /** Shows expand control in the milestones header. */
   onExpand?: () => void;
-}
-
-const MILESTONE_CARD_WIDTH = 144;
-const MILESTONE_STYLE: Record<
-  RoadmapMilestone["status"],
-  { card: string; dot: string; label: string }
-> = {
-  done: {
-    card: "bg-emerald-50 border-emerald-300",
-    dot: "bg-emerald-500 border-emerald-500",
-    label: "text-emerald-700",
-  },
-  in_flight: {
-    card: "bg-blue-50 border-blue-300",
-    dot: "bg-blue-500 border-blue-500",
-    label: "text-blue-700",
-  },
-  not_started: {
-    card: "bg-white border-gray-200",
-    dot: "bg-white border-gray-300",
-    label: "text-gray-500",
-  },
-};
-
-function StatusIcon({ status }: { status: RoadmapMilestone["status"] }) {
-  if (status === "done") return <Check size={12} className="text-emerald-600" />;
-  if (status === "in_flight") return <Loader2 size={12} className="text-blue-600 animate-spin" />;
-  return <Circle size={12} className="text-gray-300" />;
-}
-
-function monthLabelsForQuarters(quarters: string[]): { key: string; label: string; position: number }[] {
-  const months: { key: string; label: string; position: number }[] = [];
-  quarters.forEach((q, qIdx) => {
-    const match = q.match(/^(\d{4})_q(\d)$/);
-    if (!match) return;
-    const year = Number(match[1]);
-    const startMonth = (Number(match[2]) - 1) * 3;
-    const qStart = timelinePositionPercent(qIdx, quarters.length);
-    const qEnd =
-      qIdx < quarters.length - 1
-        ? timelinePositionPercent(qIdx + 1, quarters.length)
-        : qStart;
-    for (let i = 0; i < 3; i++) {
-      const monthIdx = startMonth + i;
-      const date = new Date(year, monthIdx, 1);
-      const t = quarters.length > 1 && qIdx < quarters.length - 1 ? (i + 0.5) / 3 : 0.5;
-      months.push({
-        key: `${year}_m${monthIdx + 1}`,
-        label: date.toLocaleString("en-US", { month: "short" }),
-        position: qStart + t * (qEnd - qStart),
-      });
-    }
-  });
-  return months;
-}
-
-function groupMilestonesByQuarter(milestones: RoadmapMilestone[]) {
-  const groups = new Map<string, RoadmapMilestone[]>();
-  for (const m of milestones) {
-    const key = m.target_resolution || "unknown";
-    const list = groups.get(key) ?? [];
-    list.push(m);
-    groups.set(key, list);
-  }
-  return groups;
+  saving?: boolean;
 }
 
 export function RoadmapTimeline({
-  properties,
-  milestones,
-  onAddAtQuarter,
-  onEditMilestone,
+  tracks,
+  timelineBinding,
+  timelineView,
+  onTimelineViewChange,
+  onAddTrack,
+  onEditTrack,
+  onAddSegment,
+  onEditSegment,
   fullWidth = false,
   onExpand,
+  saving = false,
 }: Props) {
-  const [viewMode, setViewMode] = useState<ViewMode>("quarter");
-  const ordered = sortedMilestones(milestones);
-  const doneCount = milestoneDoneCount(milestones);
-  const quarters = useMemo(() => buildTimelineQuarters(milestones), [milestones]);
-  const monthLabels = useMemo(() => monthLabelsForQuarters(quarters), [quarters]);
-  const milestoneGroups = useMemo(() => groupMilestonesByQuarter(ordered), [ordered]);
+  const ordered = useMemo(() => sortedTracks(tracks), [tracks]);
+  const autoRange = useMemo(() => autoTimelineRange(tracks), [tracks]);
+  const { range, axis: axisMode, mode: timelineMode } = timelineBinding;
+  const ticks = useMemo(
+    () =>
+      buildTimelineTicks(range, axisMode, {
+        relative: timelineMode === "relative",
+        maxPeriod: timelineBinding.maxPeriod,
+        periodPrefix: timelineBinding.periodPrefix,
+      }),
+    [range, axisMode, timelineMode, timelineBinding.maxPeriod, timelineBinding.periodPrefix]
+  );
+  const total = segmentTotalCount(tracks);
+  const done = segmentDoneCount(tracks);
+  const canEdit = Boolean(onAddTrack || onAddSegment);
+  const canExtend = Boolean(onTimelineViewChange && timelineMode === "date_bound");
+  const isEmpty = ordered.length === 0;
 
-  const needsHorizontalScroll = quarters.length >= TIMELINE_SCROLL_QUARTER_THRESHOLD;
-
-  const closestQuarterFromClick = (pct: number) => {
-    let closest = quarters[0]!;
-    let minDist = Infinity;
-    for (const q of quarters) {
-      const dist = Math.abs(milestonePosition(q, quarters) - pct);
-      if (dist < minDist) {
-        minDist = dist;
-        closest = q;
-      }
-    }
-    return closest;
-  };
+  function extendRange(direction: "start" | "end") {
+    if (!onTimelineViewChange) return;
+    onTimelineViewChange(extendTimelineView(timelineView, autoRange, direction));
+  }
 
   return (
     <div
@@ -130,189 +79,210 @@ export function RoadmapTimeline({
         !fullWidth && "max-w-5xl mx-auto"
       )}
     >
-      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+      <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-          Milestones · {doneCount} of {milestones.length} done
+          Timeline{total > 0 && ` · ${done} of ${total} segments done`}
         </p>
-
         <div className="flex items-center gap-2 ml-auto">
           {onExpand && (
             <button
               type="button"
               onClick={onExpand}
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 rounded-md border border-gray-200 hover:bg-gray-50 hover:text-violet-700 hover:border-violet-200 transition-colors"
-              aria-label="Expand timeline fullscreen"
-              title="Expand timeline"
             >
-              <Maximize2 size={14} />
-              Expand
-            </button>
-          )}
-
-          <div className="inline-flex rounded-full border border-gray-200 p-0.5 bg-gray-50 text-xs">
-            <button
-              type="button"
-              onClick={() => setViewMode("quarter")}
-              className={cn(
-                "px-3 py-1 rounded-full transition-colors",
-                viewMode === "quarter" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
-              )}
-            >
-              Quarter
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("month")}
-              className={cn(
-                "px-3 py-1 rounded-full transition-colors",
-                viewMode === "month" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
-              )}
-            >
-              Month
-            </button>
-          </div>
-
-          {onAddAtQuarter && (
-            <button
-              type="button"
-              onClick={() => onAddAtQuarter(quarters[Math.min(1, quarters.length - 1)] ?? quarters[0]!)}
-              className="text-xs font-medium text-violet-600 hover:text-violet-700 px-2 py-1 rounded-md hover:bg-violet-50"
-            >
-              + Add milestone
+              <Maximize2 size={14} /> Expand
             </button>
           )}
         </div>
       </div>
 
-      <div className={cn(needsHorizontalScroll && "overflow-x-auto -mx-2 px-2")}>
-        <div
-          className={cn("relative pt-8 pb-32 w-full", fullWidth ? "min-h-[360px]" : "min-h-[240px]")}
-          style={{
-            ...(needsHorizontalScroll ? { minWidth: quarters.length * 120 } : undefined),
-            paddingLeft: MILESTONE_CARD_WIDTH / 2,
-            paddingRight: MILESTONE_CARD_WIDTH / 2,
-          }}
-        >
-          <div className="relative h-8 mb-2">
-            {viewMode === "quarter"
-              ? quarters.map((q) =>
-                  onAddAtQuarter ? (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => onAddAtQuarter(q)}
-                      className="absolute -translate-x-1/2 text-[11px] text-gray-400 hover:text-violet-600 transition-colors whitespace-nowrap"
-                      style={{ left: `${milestonePosition(q, quarters)}%` }}
-                    >
-                      {targetResolutionLabel(q)}
-                    </button>
-                  ) : (
-                    <span
-                      key={q}
-                      className="absolute -translate-x-1/2 text-[11px] text-gray-400 whitespace-nowrap"
-                      style={{ left: `${milestonePosition(q, quarters)}%` }}
-                    >
-                      {targetResolutionLabel(q)}
-                    </span>
-                  )
-                )
-              : monthLabels.map((m) => (
-                  <span
-                    key={m.key}
-                    className="absolute -translate-x-1/2 text-[10px] text-gray-400 whitespace-nowrap"
-                    style={{ left: `${m.position}%` }}
-                  >
-                    {m.label}
-                  </span>
-                ))}
-          </div>
-
-          <div
-            className={cn("relative h-0.5 bg-gray-200", onAddAtQuarter && "cursor-pointer")}
-            onClick={
-              onAddAtQuarter
-                ? (e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const pct = ((e.clientX - rect.left) / rect.width) * 100;
-                    onAddAtQuarter(closestQuarterFromClick(pct));
-                  }
-                : undefined
-            }
-          >
-            {quarters.map((q) => (
-              <span
-                key={`tick-${q}`}
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-2 w-2 rounded-full bg-gray-300"
-                style={{ left: `${milestonePosition(q, quarters)}%` }}
-              />
-            ))}
-          </div>
-
-          {ordered.map((milestone, idx) => {
-            const style = MILESTONE_STYLE[milestone.status];
-            const left = milestonePosition(milestone.target_resolution, quarters);
-            const sameQuarter = milestoneGroups.get(milestone.target_resolution) ?? [milestone];
-            const stackIndex = sameQuarter.findIndex((m) => m.id === milestone.id);
-            const stackOffset = stackIndex * 88;
-
-            return (
-              <div
-                key={milestone.id}
-                className="absolute top-[52px] -translate-x-1/2 flex flex-col items-center pointer-events-none"
-                style={{ left: `${left}%`, marginTop: stackOffset }}
-              >
-                <div
-                  className={cn(
-                    "h-8 w-px pointer-events-none",
-                    milestone.status === "done" ? "bg-emerald-400" : "bg-gray-300"
-                  )}
-                />
-                <span className={cn("h-2.5 w-2.5 rounded-full border-2 -mt-0.5", style.dot)} />
-
-                {onEditMilestone ? (
+      {isEmpty ? (
+        <div className="py-16 text-center border-2 border-dashed border-gray-200 rounded-xl">
+          <p className="text-sm text-gray-400 mb-4">
+            No tracks yet — tracks are named lanes like &ldquo;Partner Sourcing&rdquo; that hold
+            labeled date spans.
+          </p>
+          {onAddTrack && (
+            <button
+              type="button"
+              onClick={onAddTrack}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white rounded-md transition-colors"
+            >
+              + Add first track
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="w-full overflow-hidden">
+          <div className="w-full">
+            {/* Axis */}
+            <div className="flex items-center mb-1">
+              <div style={{ width: LABEL_COL_WIDTH }} className="flex-shrink-0 pr-2">
+                <p
+                  className="text-[10px] text-gray-400 text-right leading-tight truncate"
+                  title={formatTimelineBindingLabel(timelineBinding)}
+                >
+                  {formatTimelineBindingLabel(timelineBinding)}
+                </p>
+              </div>
+              <div className="flex-1 flex items-center gap-1 min-w-0">
+                {canExtend && (
                   <button
                     type="button"
-                    onClick={() => onEditMilestone(milestone)}
-                    className={cn(
-                      "mt-2 w-36 rounded-lg border px-2.5 py-2 text-left shadow-sm hover:shadow transition-shadow pointer-events-auto",
-                      style.card
-                    )}
+                    onClick={() => extendRange("start")}
+                    disabled={saving}
+                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 hover:text-violet-700 hover:bg-violet-50 rounded border border-transparent hover:border-violet-200 transition-colors disabled:opacity-50"
+                    title="Show 4 more weeks earlier"
                   >
-                    <span className="text-[10px] font-semibold text-gray-400 block">M{idx + 1}</span>
-                    <span className="text-xs font-medium text-gray-900 block leading-snug mt-0.5 line-clamp-2">
-                      {milestone.title}
-                    </span>
-                    <span className={cn("inline-flex items-center gap-1 text-[10px] mt-1.5", style.label)}>
-                      <StatusIcon status={milestone.status} />
-                      {ROADMAP_MILESTONE_STATUS_LABEL[milestone.status]}
-                    </span>
+                    <ChevronLeft size={12} />
+                    4 wk
                   </button>
-                ) : (
-                  <div
-                    className={cn(
-                      "mt-2 w-36 rounded-lg border px-2.5 py-2 text-left shadow-sm pointer-events-auto",
-                      style.card
-                    )}
+                )}
+                <div className="relative flex-1 h-6 min-w-0">
+                  {ticks.map((tick) => (
+                    <span
+                      key={tick.key}
+                      className="absolute top-0 -translate-x-1/2 text-[11px] text-gray-400 whitespace-nowrap"
+                      style={{ left: `${tick.position}%` }}
+                    >
+                      {tick.label}
+                    </span>
+                  ))}
+                </div>
+                {canExtend && (
+                  <button
+                    type="button"
+                    onClick={() => extendRange("end")}
+                    disabled={saving}
+                    className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 hover:text-violet-700 hover:bg-violet-50 rounded border border-transparent hover:border-violet-200 transition-colors disabled:opacity-50"
+                    title="Show 4 more weeks later"
                   >
-                    <span className="text-[10px] font-semibold text-gray-400 block">M{idx + 1}</span>
-                    <span className="text-xs font-medium text-gray-900 block leading-snug mt-0.5 line-clamp-2">
-                      {milestone.title}
-                    </span>
-                    <span className={cn("inline-flex items-center gap-1 text-[10px] mt-1.5", style.label)}>
-                      <StatusIcon status={milestone.status} />
-                      {ROADMAP_MILESTONE_STATUS_LABEL[milestone.status]}
-                    </span>
-                  </div>
+                    4 wk
+                    <ChevronRight size={12} />
+                  </button>
                 )}
               </div>
-            );
-          })}
-        </div>
-      </div>
+              {onAddSegment && <div style={{ width: ADD_COL_WIDTH }} className="flex-shrink-0" />}
+            </div>
 
-      <p className="text-center text-[11px] text-gray-400 mt-2">
-        Click anywhere on the timeline to add a milestone at that date
-      </p>
+            {/* Track rows */}
+            <div className="relative">
+              <div
+                className="absolute inset-y-0 pointer-events-none"
+                style={{ left: LABEL_COL_WIDTH, right: onAddSegment ? ADD_COL_WIDTH : 0 }}
+              >
+                {ticks.map((tick) => (
+                  <span
+                    key={tick.key}
+                    className="absolute inset-y-0 w-px bg-gray-100"
+                    style={{ left: `${tick.position}%` }}
+                  />
+                ))}
+              </div>
+
+              {ordered.map((track, trackIdx) => {
+                const color = trackColor(track, trackIdx);
+                const anchor = segmentAddAnchor(track, timelineBinding);
+
+                return (
+                  <div key={track.id} className="flex items-stretch group/row">
+                    <div
+                      style={{ width: LABEL_COL_WIDTH }}
+                      className="flex-shrink-0 pr-3 py-2 flex items-start gap-2 min-w-0 justify-end"
+                    >
+                      {onEditTrack && (
+                        <button
+                          type="button"
+                          onClick={() => onEditTrack(track)}
+                          className="opacity-0 group-hover/row:opacity-100 p-0.5 rounded text-gray-300 hover:text-violet-600 transition-opacity flex-shrink-0"
+                          title="Edit track"
+                        >
+                          <Pencil size={11} />
+                        </button>
+                      )}
+                      <span
+                        className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span className="text-xs font-medium text-gray-700 text-right whitespace-normal break-words leading-snug">
+                        {track.label}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-1 min-w-0 items-center self-center">
+                      {/* Segment canvas — bars only, no overlap with add control */}
+                      <div className="relative flex-1 min-h-12 h-12 min-w-0">
+                        {sortedSegments(track.segments).map((segment) => {
+                          const bar = segmentBarStyle(segment, range);
+                          return (
+                            <button
+                              key={segment.id}
+                              type="button"
+                              disabled={!onEditSegment}
+                              onClick={() => onEditSegment?.(track.id, segment)}
+                              className={cn(
+                                "absolute top-1/2 -translate-y-1/2 h-8 rounded-md px-2 flex items-center gap-1 text-left shadow-sm ring-1 ring-black/5",
+                                onEditSegment &&
+                                  "hover:shadow-md hover:brightness-105 transition-shadow cursor-pointer"
+                              )}
+                              style={{
+                                left: `${bar.left}%`,
+                                width: `${bar.width}%`,
+                                backgroundColor: color,
+                              }}
+                              title={segment.label}
+                            >
+                              {segment.status === "done" && (
+                                <Check size={11} className="text-white/80 flex-shrink-0" />
+                              )}
+                              <span className="text-[11px] font-medium text-white truncate">
+                                {segment.label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Trailing add column — always at row end */}
+                      {onAddSegment && (
+                        <div
+                          style={{ width: ADD_COL_WIDTH }}
+                          className="flex-shrink-0 flex items-center justify-center h-12"
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onAddSegment(track.id, { startDate: anchor.startDate })
+                            }
+                            className="opacity-0 group-hover/row:opacity-100 h-7 w-7 rounded-full border border-dashed border-violet-300 bg-white text-violet-600 hover:bg-violet-50 hover:border-violet-400 flex items-center justify-center shadow-sm transition-opacity"
+                            title="Add segment"
+                          >
+                            <Plus size={14} strokeWidth={2.5} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {onAddTrack && (
+              <div className="flex items-center mt-2">
+                <div style={{ width: LABEL_COL_WIDTH }} className="flex-shrink-0" />
+                <button
+                  type="button"
+                  onClick={onAddTrack}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-medium text-gray-500 hover:text-violet-700 border border-dashed border-gray-300 hover:border-violet-300 hover:bg-violet-50/50 rounded-md py-2 transition-colors"
+                  style={{ marginRight: ADD_COL_WIDTH }}
+                >
+                  + Add track
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

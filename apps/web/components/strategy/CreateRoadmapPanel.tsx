@@ -12,14 +12,18 @@ import { LinkDebtDialog } from "@/components/strategy/LinkDebtDialog";
 import { PickProductDialog } from "@/components/strategy/PickProductDialog";
 import {
   buildRoadmapProperties,
-  buildTargetResolutionOptions,
+  isoToMonthInput,
+  monthInputToEndDate,
+  monthInputToStartDate,
+  RELATIVE_DURATION_OPTIONS,
   roadmapStatusToObjectStatus,
   ROADMAP_KINDS,
   ROADMAP_STATUS,
   INVESTMENT_CATEGORIES,
   defaultInvestmentCategory,
-  targetResolutionLabel,
   TECH_DEBT_EFFORT,
+  TIMELINE_UNITS,
+  type TimelineUnit,
 } from "@/lib/roadmap-utils";
 import { aiRoleFromProperties } from "@/lib/ai-role-utils";
 import { AiRoleField } from "@/components/ui/AiRoleField";
@@ -82,20 +86,43 @@ function SelectField({
   );
 }
 
+function defaultDateBoundMonths(): { start: string; end: string } {
+  const now = new Date();
+  const start = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  const endD = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 6, 1));
+  const end = `${endD.getUTCFullYear()}-${String(endD.getUTCMonth() + 1).padStart(2, "0")}`;
+  return { start, end };
+}
+
 function initFromRoadmap(item?: MinEAObject) {
   const props = (item?.properties ?? {}) as RoadmapItemProperties;
-  const resolutionOptions = buildTargetResolutionOptions();
-  const defaultTarget = resolutionOptions[0]?.value ?? "no_target";
+  const defaults = defaultDateBoundMonths();
+  const timelineMode =
+    props.timeline_mode ??
+    (props.timeline_duration && props.timeline_unit
+      ? "relative"
+      : props.timeline_start_date
+        ? "date_bound"
+        : "relative");
+
   return {
     title: item?.name ?? "",
     description: item?.description ?? "",
     tags: (item?.tags ?? []).join(", "),
-    kind: props.roadmap_kind ?? "epic",
+    kind: props.roadmap_kind ?? "initiative",
     product: props.product ?? null,
     resolvesDebt: props.resolves_debt ?? [],
     owner: item?.owner ?? "",
     roadmapStatus: props.roadmap_status ?? "discovery",
-    targetResolution: props.target_resolution ?? defaultTarget,
+    timelineMode: timelineMode as "date_bound" | "relative",
+    timelineStartMonth: props.timeline_start_date
+      ? isoToMonthInput(props.timeline_start_date)
+      : defaults.start,
+    timelineEndMonth: props.timeline_end_date
+      ? isoToMonthInput(props.timeline_end_date)
+      : defaults.end,
+    timelineDuration: props.timeline_duration ?? 12,
+    timelineUnit: (props.timeline_unit ?? "weeks") as TimelineUnit,
     effortEstimate: props.effort_estimate ?? "",
     cost: props.cost != null ? String(props.cost) : "",
     investmentCategory: props.investment_category ?? defaultInvestmentCategory(props.roadmap_kind ?? "epic"),
@@ -165,7 +192,11 @@ export function CreateRoadmapPanel({
   const [resolvesDebt, setResolvesDebt] = useState<RoadmapDebtRef[]>(init.resolvesDebt);
   const [owner, setOwner] = useState(init.owner || defaultOwner || "");
   const [roadmapStatus, setRoadmapStatus] = useState<string>(init.roadmapStatus);
-  const [targetResolution, setTargetResolution] = useState(init.targetResolution);
+  const [timelineMode, setTimelineMode] = useState<"date_bound" | "relative">(init.timelineMode);
+  const [timelineStartMonth, setTimelineStartMonth] = useState(init.timelineStartMonth);
+  const [timelineEndMonth, setTimelineEndMonth] = useState(init.timelineEndMonth);
+  const [timelineDuration, setTimelineDuration] = useState(init.timelineDuration);
+  const [timelineUnit, setTimelineUnit] = useState<TimelineUnit>(init.timelineUnit);
   const [effortEstimate, setEffortEstimate] = useState<string>(init.effortEstimate);
   const [cost, setCost] = useState(init.cost);
   const [investmentCategory, setInvestmentCategory] = useState(init.investmentCategory);
@@ -177,16 +208,10 @@ export function CreateRoadmapPanel({
 
   useEffect(() => setMounted(true), []);
 
-  const targetResolutionOptions = useMemo(() => {
-    const options = buildTargetResolutionOptions();
-    if (init.targetResolution && !options.some((o) => o.value === init.targetResolution)) {
-      options.unshift({
-        value: init.targetResolution,
-        label: targetResolutionLabel(init.targetResolution),
-      });
-    }
-    return options;
-  }, [init.targetResolution]);
+  const durationOptions = useMemo(
+    () => RELATIVE_DURATION_OPTIONS[timelineUnit].map((n) => ({ value: String(n), label: String(n) })),
+    [timelineUnit]
+  );
 
   const { data: teamsData } = useQuery({
     queryKey: ["teams", orgSlug, workspaceSlug],
@@ -204,7 +229,13 @@ export function CreateRoadmapPanel({
       product,
       resolvesDebt,
       roadmapStatus,
-      targetResolution,
+      timelineMode,
+      timelineStartDate:
+        timelineMode === "date_bound" ? monthInputToStartDate(timelineStartMonth) : undefined,
+      timelineEndDate:
+        timelineMode === "date_bound" ? monthInputToEndDate(timelineEndMonth) : undefined,
+      timelineDuration: timelineMode === "relative" ? timelineDuration : undefined,
+      timelineUnit: timelineMode === "relative" ? timelineUnit : undefined,
       effortEstimate,
       cost: parsedCost != null && !Number.isNaN(parsedCost) ? parsedCost : null,
       investmentCategory,
@@ -216,7 +247,11 @@ export function CreateRoadmapPanel({
     product,
     resolvesDebt,
     roadmapStatus,
-    targetResolution,
+    timelineMode,
+    timelineStartMonth,
+    timelineEndMonth,
+    timelineDuration,
+    timelineUnit,
     effortEstimate,
     cost,
     investmentCategory,
@@ -293,33 +328,19 @@ export function CreateRoadmapPanel({
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="px-6 py-5 pb-8 space-y-7">
             <section>
-              <FieldLabel required>Type</FieldLabel>
-              <div className="grid grid-cols-2 gap-2">
-                {ROADMAP_KINDS.map((k) => (
-                  <button
-                    key={k.value}
-                    type="button"
-                    onClick={() => {
-                      setKind(k.value);
-                      if (!isEdit) setInvestmentCategory(defaultInvestmentCategory(k.value));
-                    }}
-                    className={cn(
-                      "text-left rounded-lg border px-3 py-2.5 transition-colors",
-                      kind === k.value
-                        ? "border-violet-500 bg-violet-50 ring-1 ring-violet-500"
-                        : "border-gray-200 hover:border-violet-300"
-                    )}
-                  >
-                    <span className="text-sm font-medium text-gray-900 block">{k.label}</span>
-                    <span className="text-[11px] text-gray-400 mt-0.5 block">{k.hint}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <section>
               <SectionHeader>Identity</SectionHeader>
               <div className="space-y-3">
+                <div>
+                  <FieldLabel required>Type</FieldLabel>
+                  <SelectField
+                    value={kind}
+                    onChange={(v) => {
+                      setKind(v);
+                      if (!isEdit) setInvestmentCategory(defaultInvestmentCategory(v));
+                    }}
+                    options={ROADMAP_KINDS.map((k) => ({ value: k.value, label: k.label }))}
+                  />
+                </div>
                 <div>
                   <FieldLabel required>Title</FieldLabel>
                   <input
@@ -447,20 +468,24 @@ export function CreateRoadmapPanel({
                   />
                 </div>
                 <div>
-                  <FieldLabel>Cost (USD)</FieldLabel>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={cost}
-                    onChange={(e) => setCost(e.target.value)}
-                    placeholder="Optional — estimates from effort"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  />
+                  <FieldLabel>Effort</FieldLabel>
+                  <SelectField value={effortEstimate} onChange={setEffortEstimate} options={TECH_DEBT_EFFORT} />
                 </div>
               </div>
-              <p className="text-[11px] text-gray-400 mt-1.5">
-                Leave cost blank to estimate from effort × team rate (S $50K · M $200K · L $500K · XL $1M)
-              </p>
+              <div className="mt-3">
+                <FieldLabel>Cost (USD)</FieldLabel>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={cost}
+                  onChange={(e) => setCost(e.target.value)}
+                  placeholder="Optional — estimates from effort"
+                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
+                <p className="text-[11px] text-gray-400 mt-1.5">
+                  Leave blank to estimate from effort × team rate (S $50K · M $200K · L $500K · XL $1M)
+                </p>
+              </div>
               <div className="mt-3">
                 <AiRoleField value={aiRole} onChange={setAiRole} />
               </div>
@@ -468,23 +493,100 @@ export function CreateRoadmapPanel({
 
             <section>
               <SectionHeader>Timeline</SectionHeader>
-              <div className="grid grid-cols-3 gap-x-3 gap-y-3">
-                <div>
-                  <FieldLabel>Status</FieldLabel>
-                  <SelectField value={roadmapStatus} onChange={setRoadmapStatus} options={ROADMAP_STATUS} />
+              <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50 text-xs mb-4">
+                <button
+                  type="button"
+                  onClick={() => setTimelineMode("date_bound")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-md transition-colors",
+                    timelineMode === "date_bound"
+                      ? "bg-white text-gray-900 shadow-sm font-medium"
+                      : "text-gray-500"
+                  )}
+                >
+                  Date-bound
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTimelineMode("relative")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-md transition-colors",
+                    timelineMode === "relative"
+                      ? "bg-white text-gray-900 shadow-sm font-medium"
+                      : "text-gray-500"
+                  )}
+                >
+                  Relative
+                </button>
+              </div>
+
+              {timelineMode === "date_bound" ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <FieldLabel>Start</FieldLabel>
+                      <input
+                        type="month"
+                        value={timelineStartMonth}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setTimelineStartMonth(v);
+                          if (v && timelineEndMonth < v) setTimelineEndMonth(v);
+                        }}
+                        className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>End</FieldLabel>
+                      <input
+                        type="month"
+                        value={timelineEndMonth}
+                        min={timelineStartMonth}
+                        onChange={(e) => setTimelineEndMonth(e.target.value)}
+                        className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    Timeline anchored to calendar dates. Segments snap to real months.
+                  </p>
                 </div>
-                <div>
-                  <FieldLabel>Target</FieldLabel>
-                  <SelectField
-                    value={targetResolution}
-                    onChange={setTargetResolution}
-                    options={targetResolutionOptions}
-                  />
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <FieldLabel>Duration</FieldLabel>
+                      <SelectField
+                        value={String(timelineDuration)}
+                        onChange={(v) => setTimelineDuration(Number(v))}
+                        options={durationOptions}
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>Unit</FieldLabel>
+                      <SelectField
+                        value={timelineUnit}
+                        onChange={(v) => {
+                          const unit = v as TimelineUnit;
+                          setTimelineUnit(unit);
+                          const opts = RELATIVE_DURATION_OPTIONS[unit];
+                          if (!opts.includes(timelineDuration)) {
+                            setTimelineDuration(opts[1] ?? opts[0]!);
+                          }
+                        }}
+                        options={TIMELINE_UNITS.map((u) => ({ value: u.value, label: u.label }))}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    No dates committed yet. Timeline shows relative weeks/months/quarters from start.
+                  </p>
                 </div>
-                <div>
-                  <FieldLabel>Effort</FieldLabel>
-                  <SelectField value={effortEstimate} onChange={setEffortEstimate} options={TECH_DEBT_EFFORT} />
-                </div>
+              )}
+
+              <div className="mt-4">
+                <FieldLabel>Status</FieldLabel>
+                <SelectField value={roadmapStatus} onChange={setRoadmapStatus} options={ROADMAP_STATUS} />
               </div>
               {roadmapStatus === "blocked" && (
                 <div className="mt-3">
