@@ -20,8 +20,10 @@ import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { TechDebtHostKind } from "@minea/types";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { SystemDiagramModal, type NodeLayout } from "@/components/application/SystemDiagram";
+import { LinkProductDialog } from "@/components/application/LinkProductDialog";
 import { SystemRelationshipsTab } from "@/components/application/SystemRelationshipsTab";
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
+import { invalidateProductQueries } from "@/lib/product-queries";
 import { buildDetailPropertyRows } from "@/lib/object-property-display";
 import { excludeTechDebtRelationships } from "@/lib/relationship-display";
 import { invalidateSystemCaches } from "@/lib/system-capability-utils";
@@ -48,6 +50,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRelForm, setShowRelForm] = useState(false);
+  const [showLinkProduct, setShowLinkProduct] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [liveSystem, setLiveSystem] = useState<MinEAObject | null>(null);
   const liveSystemRef = useRef<MinEAObject | null>(null);
@@ -90,6 +93,44 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   });
 
   const diagramRefreshing = outRelsFetching || inRelsFetching;
+
+  const { data: productLinksData, isLoading: productLinksLoading } = useQuery({
+    queryKey: ["object-products", orgSlug, workspaceSlug, objectId],
+    enabled: !!object,
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.productLinks(orgSlug, workspaceSlug, objectId, token!);
+    },
+    staleTime: 0,
+  });
+
+  const productLinks = productLinksData?.items ?? [];
+
+  const invalidateProductLinkQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["object-products", orgSlug, workspaceSlug, objectId] });
+    void invalidateProductQueries(queryClient, orgSlug, workspaceSlug);
+  };
+
+  const linkProductMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+      return objectsApi.linkProduct(orgSlug, workspaceSlug, objectId, productId, token);
+    },
+    onSuccess: () => {
+      setShowLinkProduct(false);
+      invalidateProductLinkQueries();
+    },
+  });
+
+  const unlinkProductMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+      return objectsApi.unlinkProduct(orgSlug, workspaceSlug, objectId, productId, token);
+    },
+    onSuccess: invalidateProductLinkQueries,
+  });
 
   const deleteRelMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -267,7 +308,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
               activeTab={activeTab}
               onTabChange={setActiveTab}
               showRelationships
-              relationshipCount={drawerRels.length}
+              relationshipCount={drawerRels.length + productLinks.length}
               openDebtCount={techDebtSummary?.open_count ?? 0}
               className="mt-4"
             />
@@ -285,11 +326,16 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
           <SystemRelationshipsTab
             system={liveSystem ?? object}
             relationships={drawerRels}
+            productLinks={productLinks}
+            productLinksLoading={productLinksLoading}
             diagramRefreshing={diagramRefreshing}
             onExpandDiagram={() => setShowChart(true)}
             onAdd={canEdit ? () => setShowRelForm(true) : undefined}
+            onLinkProduct={canEdit ? () => setShowLinkProduct(true) : undefined}
             onRemove={canEdit ? (id) => deleteRelMutation.mutate(id) : undefined}
+            onUnlinkProduct={canEdit ? (id) => unlinkProductMutation.mutate(id) : undefined}
             isRemoving={deleteRelMutation.isPending}
+            isUnlinkingProduct={unlinkProductMutation.isPending}
           />
         )}
 
@@ -421,8 +467,18 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
           onSuccess={() => {
             setShowRelForm(false);
             queryClient.invalidateQueries({ queryKey: ["relationships"] });
+            invalidateProductLinkQueries();
             refreshObject();
           }}
+        />
+      )}
+
+      {showLinkProduct && (
+        <LinkProductDialog
+          linkedProductIds={productLinks.map((link) => link.id)}
+          onClose={() => setShowLinkProduct(false)}
+          onLink={(productId) => linkProductMutation.mutate(productId)}
+          isLinking={linkProductMutation.isPending}
         />
       )}
 

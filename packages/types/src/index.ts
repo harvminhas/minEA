@@ -919,6 +919,16 @@ export interface ObjectTechDebtRollupProduct {
   name: string;
 }
 
+export interface SystemProductLink {
+  id: string;
+  name: string;
+  link_type: "derived" | "override";
+}
+
+export interface SystemProductLinksResponse {
+  items: SystemProductLink[];
+}
+
 export interface ObjectTechDebtSummary {
   open_count: number;
   items: ProductTechDebtItem[];

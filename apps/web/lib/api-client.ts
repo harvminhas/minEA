@@ -5,6 +5,7 @@ import type {
   ObjectHistoryResponse,
   ObjectTechDebtSummary,
   ObjectListResponse,
+  SystemProductLinksResponse,
   Relationship,
   RelationshipCreate,
   Workspace,
@@ -290,6 +291,40 @@ export const objectsApi = {
     apiFetch<ObjectTechDebtSummary>(
       `${wsBase(orgSlug, workspaceSlug)}/objects/${objectId}/tech-debt`,
       { token }
+    ),
+
+  productLinks: (orgSlug: string, workspaceSlug: string, objectId: string, token: string) =>
+    apiFetch<SystemProductLinksResponse>(
+      `${wsBase(orgSlug, workspaceSlug)}/objects/${objectId}/products`,
+      { token }
+    ),
+
+  linkProduct: (
+    orgSlug: string,
+    workspaceSlug: string,
+    objectId: string,
+    productId: string,
+    token: string
+  ) =>
+    apiFetch<SystemProductLinksResponse>(
+      `${wsBase(orgSlug, workspaceSlug)}/objects/${objectId}/products`,
+      {
+        method: "POST",
+        body: JSON.stringify({ product_id: productId }),
+        token,
+      }
+    ),
+
+  unlinkProduct: (
+    orgSlug: string,
+    workspaceSlug: string,
+    objectId: string,
+    productId: string,
+    token: string
+  ) =>
+    apiFetch<SystemProductLinksResponse>(
+      `${wsBase(orgSlug, workspaceSlug)}/objects/${objectId}/products/${productId}`,
+      { method: "DELETE", token }
     ),
 };
 

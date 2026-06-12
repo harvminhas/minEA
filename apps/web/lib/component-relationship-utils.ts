@@ -147,6 +147,32 @@ export async function syncComponentRelationships(
   }
 }
 
+/** Keep component.properties.systems in sync when linking from the system side. */
+export async function appendComponentSystemRef(
+  orgSlug: string,
+  workspaceSlug: string,
+  component: MinEAObject,
+  system: MinEAObject,
+  token: string
+): Promise<void> {
+  const props = (component.properties ?? {}) as ComponentProperties;
+  const systems = props.systems ?? [];
+  if (systems.some((s) => s.system_id === system.id)) return;
+
+  await objectsApi.update(
+    orgSlug,
+    workspaceSlug,
+    component.id,
+    {
+      properties: {
+        ...props,
+        systems: [...systems, { system_id: system.id, system_name: system.name }],
+      } as Record<string, unknown>,
+    },
+    token
+  );
+}
+
 export type ComponentArchitectureUpdate = {
   systems?: ComponentSystemRef[];
   runtime?: ComponentRuntimeRef | null;

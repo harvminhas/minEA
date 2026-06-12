@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.objects import ChangeLog, MinEAObject
 from app.models.tenancy import User
 from app.schemas.objects import (
+    LinkSystemProductRequest,
     ObjectCreate,
     ObjectHistoryEntry,
     ObjectHistoryResponse,
@@ -16,11 +17,17 @@ from app.schemas.objects import (
     ObjectRead,
     ObjectTechDebtSummary,
     ObjectUpdate,
+    SystemProductLinksResponse,
 )
 from app.services.authorization import require_limit
 from app.services.capability_validation import validate_object_write
 from app.services.object_history import describe_object_history
 from app.services.object_tech_debt import tech_debt_summary_for_object
+from app.services.system_products import (
+    link_system_to_product,
+    products_for_system,
+    unlink_system_from_product,
+)
 from app.services.object_stats import (
     DATA_TYPES,
     SYSTEM_TYPES,
@@ -310,6 +317,76 @@ async def get_object_tech_debt(
         db, object_id, ctx.workspace.id, ctx.org_id
     )
     return ObjectTechDebtSummary.model_validate(summary)
+
+
+@router.get("/{object_id}/products", response_model=SystemProductLinksResponse)
+async def get_system_products(
+    object_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> SystemProductLinksResponse:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
+    result = await db.execute(
+        select(MinEAObject).where(
+            MinEAObject.id == object_id,
+            MinEAObject.workspace_id == ctx.workspace.id,
+            MinEAObject.org_id == ctx.org_id,
+        )
+    )
+    obj = result.scalar_one_or_none()
+    if obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
+    if obj.type not in SYSTEM_TYPES:
+        return SystemProductLinksResponse(items=[])
+
+    items = await products_for_system(db, object_id, ctx.workspace.id, ctx.org_id)
+    return SystemProductLinksResponse(items=items)
+
+
+@router.post("/{object_id}/products", response_model=SystemProductLinksResponse)
+async def link_system_product(
+    object_id: UUID,
+    body: LinkSystemProductRequest,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> SystemProductLinksResponse:
+    await ctx.require_permission(db, "object.edit")
+    assert ctx.workspace
+
+    try:
+        await link_system_to_product(
+            db, object_id, body.product_id, ctx.workspace.id, ctx.org_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
+    items = await products_for_system(db, object_id, ctx.workspace.id, ctx.org_id)
+    return SystemProductLinksResponse(items=items)
+
+
+@router.delete("/{object_id}/products/{product_id}", response_model=SystemProductLinksResponse)
+async def unlink_system_product(
+    object_id: UUID,
+    product_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> SystemProductLinksResponse:
+    await ctx.require_permission(db, "object.edit")
+    assert ctx.workspace
+
+    try:
+        await unlink_system_from_product(
+            db, object_id, product_id, ctx.workspace.id, ctx.org_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
+    items = await products_for_system(db, object_id, ctx.workspace.id, ctx.org_id)
+    return SystemProductLinksResponse(items=items)
 
 
 @router.get("/{object_id}/history", response_model=ObjectHistoryResponse)

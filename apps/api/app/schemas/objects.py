@@ -108,6 +108,20 @@ class ObjectRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SystemProductLink(BaseModel):
+    id: str
+    name: str
+    link_type: str  # derived | override
+
+
+class SystemProductLinksResponse(BaseModel):
+    items: list[SystemProductLink] = Field(default_factory=list)
+
+
+class LinkSystemProductRequest(BaseModel):
+    product_id: UUID
+
+
 class ObjectTechDebtSummary(BaseModel):
     open_count: int = 0
     items: list[ProductTechDebtItem] = Field(default_factory=list)

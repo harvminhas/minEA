@@ -3,7 +3,8 @@
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQueries } from "@tanstack/react-query";
-import type { MinEAObject, Relationship } from "@minea/types";
+import { Link2, Plus, X } from "lucide-react";
+import type { MinEAObject, Relationship, SystemProductLink } from "@minea/types";
 import { objectsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import { otherRelationshipObjectId } from "@/lib/relationship-display";
@@ -18,21 +19,31 @@ import { ObjectRelationshipsTab } from "@/components/objects/ObjectRelationships
 interface Props {
   system: MinEAObject;
   relationships: Relationship[];
+  productLinks?: SystemProductLink[];
+  productLinksLoading?: boolean;
   diagramRefreshing?: boolean;
   onExpandDiagram: () => void;
   onAdd?: () => void;
+  onLinkProduct?: () => void;
   onRemove?: (relationshipId: string) => void;
+  onUnlinkProduct?: (productId: string) => void;
   isRemoving?: boolean;
+  isUnlinkingProduct?: boolean;
 }
 
 export function SystemRelationshipsTab({
   system,
   relationships,
+  productLinks = [],
+  productLinksLoading = false,
   diagramRefreshing = false,
   onExpandDiagram,
   onAdd,
+  onLinkProduct,
   onRemove,
+  onUnlinkProduct,
   isRemoving,
+  isUnlinkingProduct,
 }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
@@ -112,6 +123,68 @@ export function SystemRelationshipsTab({
             ))}
           </div>
         )}
+      </div>
+
+      <div>
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+          Products
+        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm text-gray-500">
+            {productLinksLoading
+              ? "Loading products…"
+              : productLinks.length === 0
+                ? "No product links yet."
+                : `${productLinks.length} product${productLinks.length === 1 ? "" : "s"}`}
+          </p>
+          {onLinkProduct && (
+            <button
+              type="button"
+              onClick={onLinkProduct}
+              className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
+            >
+              <Plus size={12} />
+              Link product
+            </button>
+          )}
+        </div>
+
+        {productLinks.length > 0 && (
+          <div className="space-y-2 mb-6">
+            {productLinks.map((link) => (
+              <div
+                key={link.id}
+                className="flex items-start gap-2 py-2.5 px-3 bg-stone-50 rounded-lg"
+              >
+                <Link2 size={14} className="text-gray-400 flex-shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-gray-900 leading-snug">{link.name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5 capitalize">
+                    {link.link_type === "override"
+                      ? "Linked directly · Product → System"
+                      : "Via capabilities · Product → System"}
+                  </p>
+                </div>
+                {onUnlinkProduct && link.link_type === "override" && (
+                  <button
+                    type="button"
+                    onClick={() => onUnlinkProduct(link.id)}
+                    disabled={isUnlinkingProduct}
+                    className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 disabled:opacity-50"
+                    aria-label={`Unlink ${link.name}`}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <p className="text-xs text-gray-400">
+          Products connect through capability mappings or a direct link. Derived links follow
+          capability support; use Link product to include this system in a product scope directly.
+        </p>
       </div>
 
       <div>
