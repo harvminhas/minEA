@@ -10,6 +10,7 @@ interface Props {
   graph?: ProductGraphResponse;
   isLoading?: boolean;
   onExpand: () => void;
+  disabled?: boolean;
 }
 
 export function ProductArchitecturePreview({
@@ -17,14 +18,17 @@ export function ProductArchitecturePreview({
   graph,
   isLoading,
   onExpand,
+  disabled,
 }: Props) {
   return (
     <button
       type="button"
       onClick={onExpand}
+      disabled={disabled}
       className={cn(
         "group relative w-full text-left rounded-lg border border-gray-200 overflow-hidden",
-        "hover:border-indigo-300 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        "hover:border-indigo-300 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500",
+        disabled && "pointer-events-none opacity-80"
       )}
       aria-label="Expand architecture graph"
     >

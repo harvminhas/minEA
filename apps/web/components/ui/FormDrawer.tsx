@@ -25,8 +25,8 @@ export function FormDrawer({
 }: FormDrawerProps) {
   return (
     <>
-      <div className="fixed inset-0 bg-black/20 z-50" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full w-[440px] bg-white shadow-xl z-50 flex flex-col">
+      <div className="fixed inset-0 bg-black/20 z-[80]" onClick={onClose} />
+      <div className="fixed right-0 top-0 h-full w-[440px] bg-white shadow-xl z-[90] flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
           <h2 className="font-semibold text-gray-900">{title}</h2>
           <button type="button" onClick={onClose} className="p-1.5 rounded-md hover:bg-gray-100">

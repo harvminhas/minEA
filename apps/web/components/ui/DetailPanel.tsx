@@ -12,8 +12,8 @@ interface DetailPanelProps {
 export function DetailPanel({ onClose, header, footer, children }: DetailPanelProps) {
   return (
     <>
-      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full w-[480px] bg-white shadow-xl z-50 flex flex-col overflow-hidden">
+      <div className="fixed inset-0 bg-black/20 z-[80]" onClick={onClose} />
+      <div className="fixed right-0 top-0 h-full w-[480px] bg-white shadow-xl z-[90] flex flex-col overflow-hidden">
         {header}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">{children}</div>
         {footer}

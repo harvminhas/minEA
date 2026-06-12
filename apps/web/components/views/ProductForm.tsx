@@ -142,9 +142,9 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/20 z-50" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/20 z-[80]" onClick={onClose} />
 
-      <div className="fixed right-0 top-0 h-full w-[480px] bg-white shadow-xl z-50 flex flex-col">
+      <div className="fixed right-0 top-0 h-full w-[480px] bg-white shadow-xl z-[90] flex flex-col">
         <div className="flex items-start justify-between px-6 pt-6 pb-2 flex-shrink-0">
           <div>
             <h2 className="font-semibold text-gray-900 text-base">

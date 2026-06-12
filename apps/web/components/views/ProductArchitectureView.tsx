@@ -51,8 +51,8 @@ export function ProductArchitectureView({ productId, productName, onClose }: Pro
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/30 z-[60]" onClick={onClose} />
-      <div className="fixed inset-4 md:inset-8 bg-white rounded-xl shadow-2xl z-[70] flex flex-col overflow-hidden">
+      <div className="fixed inset-0 bg-black/30 z-[100]" onClick={onClose} />
+      <div className="fixed inset-4 md:inset-8 bg-white rounded-xl shadow-2xl z-[110] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
             <p className="text-xs text-gray-400 mb-0.5">Architecture view</p>
