@@ -260,16 +260,12 @@ export function CreateRoadmapPanel({
   ]);
 
   const canSubmit =
-    title.trim().length > 0 &&
-    kind.trim().length > 0 &&
-    !!product &&
-    owner.trim().length > 0;
+    title.trim().length > 0 && kind.trim().length > 0 && owner.trim().length > 0;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
-      if (!product) throw new Error("Product is required");
       if (!owner.trim()) throw new Error("Owner is required");
 
       const body = {
@@ -318,7 +314,7 @@ export function CreateRoadmapPanel({
             <h2 className="text-base font-semibold text-gray-900">
               {isEdit ? "Edit roadmap item" : "New roadmap item"}
             </h2>
-            <p className="text-xs text-gray-400 mt-0.5">A planned change against a product</p>
+            <p className="text-xs text-gray-400 mt-0.5">A planned change on the strategy roadmap</p>
           </div>
           <button type="button" onClick={onClose} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 -mt-0.5">
             <X size={16} />
@@ -377,25 +373,38 @@ export function CreateRoadmapPanel({
               <SectionHeader>Attachment</SectionHeader>
               <div className="space-y-3">
                 <div>
-                  <FieldLabel required>For product</FieldLabel>
+                  <FieldLabel>For product</FieldLabel>
                   {lockProduct && product ? (
                     <div className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800">
                       {product.product_name}
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => setShowProductDialog(true)}
-                      className={cn(
-                        "w-full text-left rounded-md border px-3 py-2 text-sm transition-colors",
-                        product
-                          ? "border-gray-200 text-gray-800 hover:border-violet-300"
-                          : "border-dashed border-gray-300 text-gray-400 hover:border-violet-300"
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowProductDialog(true)}
+                        className={cn(
+                          "flex-1 text-left rounded-md border px-3 py-2 text-sm transition-colors",
+                          product
+                            ? "border-gray-200 text-gray-800 hover:border-violet-300"
+                            : "border-dashed border-gray-300 text-gray-400 hover:border-violet-300"
+                        )}
+                      >
+                        {product ? product.product_name : "None (optional)"}
+                      </button>
+                      {product && (
+                        <button
+                          type="button"
+                          onClick={() => setProduct(null)}
+                          className="p-2 rounded-md border border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+                          aria-label="Clear product"
+                        >
+                          <X size={14} />
+                        </button>
                       )}
-                    >
-                      {product ? product.product_name : "Select product…"}
-                    </button>
+                    </div>
                   )}
+                  <p className="text-[11px] text-gray-400 mt-1.5">Optional — link to a product when relevant</p>
                 </div>
 
                 <div>

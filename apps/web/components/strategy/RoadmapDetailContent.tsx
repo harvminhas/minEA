@@ -15,6 +15,7 @@ import {
   type RoadmapTimelineDrawer,
 } from "@/components/strategy/RoadmapTrackSegmentDrawer";
 import { CreateRoadmapPanel } from "@/components/strategy/CreateRoadmapPanel";
+import { DeleteRoadmapConfirmDialog } from "@/components/strategy/DeleteRoadmapConfirmDialog";
 import { RoadmapTimeline } from "@/components/strategy/RoadmapTimeline";
 import { RoadmapTimelineFullscreen } from "@/components/strategy/RoadmapTimelineFullscreen";
 import {
@@ -52,6 +53,8 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
 
   const [showEditForm, setShowEditForm] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [timelineFullscreen, setTimelineFullscreen] = useState(false);
   const [timelineDrawer, setTimelineDrawer] = useState<RoadmapTimelineDrawer | null>(null);
 
@@ -124,12 +127,17 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
       return objectsApi.delete(orgSlug, workspaceSlug, roadmapId, token!);
     },
     onSuccess: () => {
+      setDeleteError(null);
       queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, "roadmap_item"] });
       if (layout === "modal") {
         onClose?.();
       } else {
         router.push(listPath);
       }
+    },
+    onError: (err) => {
+      setShowDeleteConfirm(false);
+      setDeleteError(err instanceof Error ? err.message : "Could not delete roadmap");
     },
   });
 
@@ -199,6 +207,9 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
           {subtitleParts.length > 0 && (
             <p className="text-sm text-gray-500 mt-1.5">{subtitleParts.join(" · ")}</p>
           )}
+          {deleteError && (
+            <p className="text-sm text-red-600 mt-2">{deleteError}</p>
+          )}
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -223,10 +234,13 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
           )}
 
           {canDelete && (
-            <div className="relative">
+            <div className={cn("relative", showMenu && "z-[120]")}>
               <button
                 type="button"
-                onClick={() => setShowMenu((v) => !v)}
+                onClick={() => {
+                  setDeleteError(null);
+                  setShowMenu((v) => !v);
+                }}
                 className="p-2 rounded-md hover:bg-gray-100 text-gray-500"
                 aria-label="More actions"
               >
@@ -240,9 +254,9 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
                       type="button"
                       onClick={() => {
                         setShowMenu(false);
-                        deleteMutation.mutate();
+                        setDeleteError(null);
+                        setShowDeleteConfirm(true);
                       }}
-                      disabled={deleteMutation.isPending}
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                     >
                       <Trash2 size={14} />
@@ -399,6 +413,16 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
           onClose={() => setTimelineDrawer(null)}
           onSave={(next) => saveTracks.mutate(next)}
           saving={saveTracks.isPending}
+        />
+      )}
+
+      {canDelete && showDeleteConfirm && roadmap && (
+        <DeleteRoadmapConfirmDialog
+          roadmap={roadmap}
+          tracks={tracks}
+          onCancel={() => setShowDeleteConfirm(false)}
+          onConfirm={() => deleteMutation.mutate()}
+          isPending={deleteMutation.isPending}
         />
       )}
     </>

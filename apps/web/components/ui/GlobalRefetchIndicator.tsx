@@ -35,10 +35,8 @@ export function GlobalRefetchIndicator({ topClassName = "top-12" }: Props) {
   if (!visible) return null;
 
   return (
-    <div
-      className={`fixed left-0 right-0 z-[70] pointer-events-none shadow-md ${topClassName}`}
-    >
-      <DiagramSavingBar active label="Updating…" />
+    <div className={`fixed left-0 right-0 z-[70] pointer-events-none ${topClassName}`}>
+      <DiagramSavingBar active compact label="Updating" />
     </div>
   );
 }

@@ -185,7 +185,7 @@ export function buildRoadmapProperties(params: {
 
   return {
     roadmap_kind: params.kind as RoadmapItemProperties["roadmap_kind"],
-    product: params.product,
+    product: params.product ?? undefined,
     resolves_debt: params.resolvesDebt && params.resolvesDebt.length > 0 ? params.resolvesDebt : undefined,
     roadmap_status: params.roadmapStatus as RoadmapItemProperties["roadmap_status"],
     timeline_mode: params.timelineMode,

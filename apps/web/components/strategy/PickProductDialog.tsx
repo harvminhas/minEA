@@ -46,7 +46,7 @@ export function PickProductDialog({ selected, onClose, onApply }: Props) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <div>
             <h3 className="text-sm font-semibold text-gray-900">For product</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Select the product this roadmap item belongs to</p>
+            <p className="text-xs text-gray-400 mt-0.5">Optional — link this roadmap item to a product</p>
           </div>
           <button type="button" onClick={onClose} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400">
             <X size={16} />
@@ -67,6 +67,16 @@ export function PickProductDialog({ selected, onClose, onApply }: Props) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 py-2">
+          <button
+            type="button"
+            onClick={() => setPicked(null)}
+            className={cn(
+              "w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors mb-1",
+              picked === null ? "bg-violet-50 text-violet-900" : "hover:bg-gray-50 text-gray-500"
+            )}
+          >
+            No product
+          </button>
           {isLoading ? (
             <p className="text-sm text-gray-400 text-center py-8">Loading…</p>
           ) : products.length === 0 ? (
@@ -107,8 +117,7 @@ export function PickProductDialog({ selected, onClose, onApply }: Props) {
           <button
             type="button"
             onClick={() => onApply(picked)}
-            disabled={!picked}
-            className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-md disabled:bg-violet-300"
+            className="px-4 py-2 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded-md"
           >
             Apply
           </button>
