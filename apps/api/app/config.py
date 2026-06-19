@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # App
     app_name: str = "minEA API"
     debug: bool = False
+    # Signs email-verification links; falls back to RESEND_API_KEY in DEBUG only.
+    app_secret: str = ""
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:password@localhost:5432/minea"

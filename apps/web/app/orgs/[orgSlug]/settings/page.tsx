@@ -42,7 +42,7 @@ export default function OrgSettingsPage() {
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
 
-  const emailVerified = user?.emailVerified ?? false;
+  const emailVerified = user ? !user.requiresEmailVerification : false;
 
   useEffect(() => {
     const billing = searchParams.get("billing");

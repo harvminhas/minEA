@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { postAuthDestination, verificationPagePath } from "@/lib/auth-routes";
 import { BuboMapWordmark } from "@/components/brand/BuboMapLogo";
 
 interface Props {
@@ -34,7 +35,7 @@ function GoogleIcon() {
 }
 
 export function AuthForm({ mode }: Props) {
-  const { signInWithEmail, signInWithGoogle, signUpWithEmail } = useAuth();
+  const { signInWithEmail, signInWithGoogle, signUpWithEmail, refreshSession } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get("redirect_url") ?? "/home";
@@ -51,7 +52,10 @@ export function AuthForm({ mode }: Props) {
     setLoading(true);
     try {
       await signInWithGoogle();
-      router.replace(redirectUrl);
+      const sessionUser = await refreshSession();
+      router.replace(
+        postAuthDestination(redirectUrl, !sessionUser?.requiresEmailVerification)
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed");
     } finally {
@@ -67,12 +71,16 @@ export function AuthForm({ mode }: Props) {
     try {
       if (isSignIn) {
         await signInWithEmail(email, password);
+        const sessionUser = await refreshSession();
+        router.replace(
+          postAuthDestination(redirectUrl, !sessionUser?.requiresEmailVerification)
+        );
+        return;
       } else {
         await signUpWithEmail(email, password);
-        router.replace(`/auth/verify-email?redirect_url=${encodeURIComponent(redirectUrl)}`);
+        router.replace(verificationPagePath(redirectUrl));
         return;
       }
-      router.replace(redirectUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {

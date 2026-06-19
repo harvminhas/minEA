@@ -8,7 +8,7 @@ export interface VerificationEmailResult {
 
 export function verificationActionSettings(): ActionCodeSettings {
   const origin =
-    typeof window !== "undefined" ? window.location.origin : "http://localhost:3001";
+    typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
   return {
     url: `${origin}/auth/verify-email`,
     handleCodeInApp: false,

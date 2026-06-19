@@ -122,11 +122,33 @@ export interface VerificationEmailResult {
   verification_link?: string | null;
 }
 
+export interface AuthMeResult {
+  email: string;
+  email_verified: boolean;
+  requires_email_verification: boolean;
+  providers: string[];
+  email_verified_at?: string | null;
+}
+
+export interface ConfirmEmailVerificationResult {
+  message: string;
+  verified: boolean;
+}
+
 export const authApi = {
-  sendVerificationEmail: (token: string) =>
+  me: (token: string) => apiFetch<AuthMeResult>("/auth/me", { token }),
+
+  sendVerificationEmail: (token: string, appOrigin?: string) =>
     apiFetch<VerificationEmailResult>("/auth/send-verification-email", {
       method: "POST",
       token,
+      body: JSON.stringify(appOrigin ? { app_origin: appOrigin } : {}),
+    }),
+
+  confirmEmailVerification: (token: string) =>
+    apiFetch<ConfirmEmailVerificationResult>("/auth/confirm-email-verification", {
+      method: "POST",
+      body: JSON.stringify({ token }),
     }),
 
   /** @deprecated Use sendVerificationEmail */

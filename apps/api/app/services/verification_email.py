@@ -1,25 +1,14 @@
-"""Email verification — generate links (Firebase Admin) and send via Resend."""
+"""Email verification — send via Resend with app-signed confirmation links."""
 from __future__ import annotations
 
 import logging
 
 import resend
-from firebase_admin import auth as firebase_auth
 
-from app.auth import _ensure_firebase
 from app.config import settings
+from app.services.email_verification_token import build_verification_url
 
 logger = logging.getLogger(__name__)
-
-
-def generate_verification_link(email: str) -> str:
-    _ensure_firebase()
-    continue_url = f"{settings.web_app_url.rstrip('/')}/auth/verify-email"
-    action_settings = firebase_auth.ActionCodeSettings(
-        url=continue_url,
-        handle_code_in_app=False,
-    )
-    return firebase_auth.generate_email_verification_link(email, action_settings)
 
 
 def _verification_email_html(verify_url: str) -> str:
@@ -44,14 +33,18 @@ def _verification_email_html(verify_url: str) -> str:
     """
 
 
-def send_verification_email(email: str) -> tuple[bool, str, str | None]:
+def send_verification_email(
+    firebase_uid: str,
+    email: str,
+    *,
+    app_origin: str | None = None,
+) -> tuple[bool, str, str | None]:
     """
     Send a verification email. Returns (email_sent, user_message, optional_link).
 
-    When Resend is configured, sends branded mail from minEA.
-    When Resend is not configured (local dev), returns the link for in-app display.
+    Uses app-signed links so delivery does not depend on Firebase outbound email APIs.
     """
-    link = generate_verification_link(email)
+    link = build_verification_url(firebase_uid, email, app_origin=app_origin)
 
     if not settings.resend_api_key.strip():
         if settings.debug:
@@ -71,13 +64,13 @@ def send_verification_email(email: str) -> tuple[bool, str, str | None]:
     try:
         resend.Emails.send(
             {
-                "from": settings.email_from,
+                "from": _format_from_address(settings.email_from),
                 "to": [email],
                 "subject": "Verify your minEA email",
                 "html": _verification_email_html(link),
             }
         )
-    except Exception as exc:
+    except Exception:
         logger.exception("Resend verification email failed for %s", email)
         if settings.debug:
             return (
@@ -91,8 +84,14 @@ def send_verification_email(email: str) -> tuple[bool, str, str | None]:
             None,
         )
 
-    return (
-        True,
-        "Verification email sent. Check your inbox and spam folder.",
-        None,
-    )
+    message = "Verification email sent. Check your inbox and spam folder."
+    if settings.debug:
+        return True, message, link
+    return True, message, None
+
+
+def _format_from_address(raw: str) -> str:
+    value = raw.strip()
+    if "<" in value and ">" in value:
+        return value
+    return f"minEA <{value}>"

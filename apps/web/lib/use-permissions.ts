@@ -25,7 +25,7 @@ export function usePermissions() {
 
   const orgRole = activeOrg?.role as OrgRole | undefined;
   const workspaceRole = activeWorkspace?.role as WorkspaceRole | undefined;
-  const emailVerified = user?.emailVerified ?? false;
+  const emailVerified = user ? !user.requiresEmailVerification : false;
   const effectiveRole = effectiveWorkspaceRole(orgRole, workspaceRole);
 
   const ctx = { orgRole, workspaceRole, emailVerified };

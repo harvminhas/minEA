@@ -15,7 +15,7 @@ export default function WorkspaceSettingsPage() {
   const { getToken, user } = useAuth();
   const queryClient = useQueryClient();
   const { canManageWorkspace, canInviteWorkspaceMembers, effectiveRole } = usePermissions();
-  const emailVerified = user?.emailVerified ?? false;
+  const emailVerified = user ? !user.requiresEmailVerification : false;
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
