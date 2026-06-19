@@ -42,7 +42,8 @@ The proxy reads `API_URL` at **request time** (not build time), so set it on the
 | `WEB_APP_URL` | Yes | `https://your-web.vercel.app` (set after step 2) |
 | `DEBUG` | No | `false` |
 | `CORS_ORIGINS` | Optional | JSON array, e.g. `["https://your-web.vercel.app"]` |
-| `RESEND_API_KEY` | For invites | |
+| `RESEND_API_KEY` | For verification + invites | Use a verified sender domain in Resend |
+| `EMAIL_FROM` | No | e.g. `minEA <noreply@yourdomain.com>` |
 | `GOOGLE_API_KEY` | For AI chat, insights, ingestion | From [Google AI Studio](https://aistudio.google.com/apikey) |
 | `GEMINI_MODEL` | No | `gemini-2.5-flash` (do not use retired `gemini-2.0-flash`) |
 

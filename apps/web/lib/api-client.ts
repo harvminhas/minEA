@@ -123,15 +123,18 @@ export interface VerificationEmailResult {
 }
 
 export const authApi = {
-  getDevVerificationLink: (token: string) =>
-    apiFetch<{ message: string; verification_link: string }>("/auth/dev-verification-link", {
+  sendVerificationEmail: (token: string) =>
+    apiFetch<VerificationEmailResult>("/auth/send-verification-email", {
       method: "POST",
       token,
-    }).then((result) => ({
-      message: result.message,
-      email_sent: false,
-      verification_link: result.verification_link,
-    })),
+    }),
+
+  /** @deprecated Use sendVerificationEmail */
+  getDevVerificationLink: (token: string) =>
+    apiFetch<VerificationEmailResult>("/auth/dev-verification-link", {
+      method: "POST",
+      token,
+    }),
 };
 
 // ─── Orgs ────────────────────────────────────────────────────────────────────

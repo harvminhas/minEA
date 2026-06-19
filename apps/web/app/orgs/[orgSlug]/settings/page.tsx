@@ -22,7 +22,7 @@ export default function OrgSettingsPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { getToken, user, resendVerificationEmail, getDevVerificationLink, reloadUser } = useAuth();
+  const { getToken, user, resendVerificationEmail, reloadUser } = useAuth();
   const queryClient = useQueryClient();
   const {
     canManageOrg,
@@ -156,8 +156,6 @@ export default function OrgSettingsPage() {
     },
   });
 
-  const isDev = process.env.NODE_ENV === "development";
-
   async function handleResendVerification() {
     setVerifyLoading(true);
     setVerifyMessage(null);
@@ -165,23 +163,9 @@ export default function OrgSettingsPage() {
     try {
       const result = await resendVerificationEmail();
       setVerifyMessage(result.message);
-    } catch (err) {
-      setVerifyMessage(err instanceof Error ? err.message : "Could not send email");
-    } finally {
-      setVerifyLoading(false);
-    }
-  }
-
-  async function handleDevVerificationLink() {
-    setVerifyLoading(true);
-    setVerifyMessage(null);
-    setVerifyLink(null);
-    try {
-      const result = await getDevVerificationLink();
-      setVerifyMessage(result.message);
       if (result.verification_link) setVerifyLink(result.verification_link);
     } catch (err) {
-      setVerifyMessage(err instanceof Error ? err.message : "Could not get dev link");
+      setVerifyMessage(err instanceof Error ? err.message : "Could not send email");
     } finally {
       setVerifyLoading(false);
     }
@@ -278,7 +262,7 @@ export default function OrgSettingsPage() {
           <h2 className="font-semibold text-amber-950 mb-2">Verify your email</h2>
           <p className="text-sm text-amber-900 mb-4">
             Your account ({user?.email}) must be verified before you can invite members or perform
-            sensitive actions. Firebase sends the verification email — check inbox and spam.
+            sensitive actions. Check your inbox and spam folder for the verification email.
           </p>
           <div className="flex flex-wrap gap-3">
             <button
@@ -289,16 +273,6 @@ export default function OrgSettingsPage() {
             >
               {verifyLoading ? "Sending…" : "Resend verification email"}
             </button>
-            {isDev && (
-              <button
-                type="button"
-                disabled={verifyLoading}
-                onClick={handleDevVerificationLink}
-                className="bg-white hover:bg-amber-100 disabled:opacity-50 text-amber-950 border border-amber-300 px-4 py-2 rounded-md text-sm font-medium"
-              >
-                Show dev link
-              </button>
-            )}
             <button
               type="button"
               disabled={verifyLoading}
@@ -311,7 +285,7 @@ export default function OrgSettingsPage() {
           {verifyMessage && <p className="text-sm text-amber-800 mt-3">{verifyMessage}</p>}
           {verifyLink && (
             <p className="text-sm text-amber-900 mt-3 break-all">
-              Dev verification link:{" "}
+              Verification link:{" "}
               <a href={verifyLink} className="text-indigo-700 underline font-medium">
                 {verifyLink}
               </a>

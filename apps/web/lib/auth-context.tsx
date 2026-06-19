@@ -13,18 +13,13 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged,
   reload,
-  sendEmailVerification,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut as firebaseSignOut,
   type User,
 } from "firebase/auth";
 import { authApi } from "@/lib/api-client";
-import {
-  firebaseAuthErrorMessage,
-  verificationActionSettings,
-  type VerificationEmailResult,
-} from "@/lib/firebase-verification";
+import { firebaseAuthErrorMessage, type VerificationEmailResult } from "@/lib/firebase-verification";
 import { getFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
 
 export interface AuthUser {
@@ -97,32 +92,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signUpWithEmail = useCallback(async (email: string, password: string) => {
-    const cred = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
-    await sendEmailVerification(cred.user, verificationActionSettings());
+    await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
   }, []);
 
   const resendVerificationEmail = useCallback(async (): Promise<VerificationEmailResult> => {
-    const current = getFirebaseAuth().currentUser;
-    if (!current) throw new Error("Not signed in");
-    if (current.emailVerified) {
-      return { message: "Email already verified.", email_sent: false };
-    }
-    try {
-      await sendEmailVerification(current, verificationActionSettings());
-      return {
-        message: "Verification email sent via Firebase. Check your inbox and spam folder.",
-        email_sent: true,
-      };
-    } catch (err) {
-      throw new Error(firebaseAuthErrorMessage(err));
-    }
-  }, []);
-
-  const getDevVerificationLink = useCallback(async (): Promise<VerificationEmailResult> => {
     const token = await getToken();
     if (!token) throw new Error("Not signed in");
-    return authApi.getDevVerificationLink(token);
+    const current = getFirebaseAuth().currentUser;
+    if (current?.emailVerified) {
+      return { message: "Email already verified.", email_sent: false };
+    }
+    return authApi.sendVerificationEmail(token);
   }, [getToken]);
+
+  const getDevVerificationLink = useCallback(async (): Promise<VerificationEmailResult> => {
+    return resendVerificationEmail();
+  }, [resendVerificationEmail]);
 
   const reloadUser = useCallback(async () => {
     const current = getFirebaseAuth().currentUser;
