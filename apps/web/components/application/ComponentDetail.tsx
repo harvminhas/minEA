@@ -15,6 +15,11 @@ import { excludeTechDebtRelationships } from "@/lib/relationship-display";
 import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useTenancy } from "@/lib/tenancy";
 import { OwnershipDetailRow } from "@/components/ownership/OwnershipDetailRow";
+import {
+  DetailPanel,
+  DetailRow,
+  DetailSection,
+} from "@/components/ui/DetailPanel";
 import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
 import { usePermissions } from "@/lib/use-permissions";
 import { CreateComponentPanel } from "@/components/application/CreateComponentPanel";
