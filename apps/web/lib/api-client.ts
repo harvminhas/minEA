@@ -62,6 +62,11 @@ import type {
   TeamUpdate,
   TeamDetail,
   TeamListResponse,
+  PeopleContact,
+  PeopleContactCreate,
+  PeopleContactDetail,
+  PeopleContactUpdate,
+  PeopleContactListResponse,
   TeamRoleAssignmentCreate,
   TeamRoleAssignmentUpdate,
   AddRoleToTeamCreate,
@@ -674,6 +679,55 @@ export const peopleApi = {
 
   listTeams: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<TeamListResponse>(`${wsBase(orgSlug, workspaceSlug)}/people/teams`, { token }),
+
+  listContacts: (
+    orgSlug: string,
+    workspaceSlug: string,
+    token: string,
+    teamId?: string
+  ) => {
+    const params = teamId ? `?team_id=${encodeURIComponent(teamId)}` : "";
+    return apiFetch<PeopleContactListResponse>(
+      `${wsBase(orgSlug, workspaceSlug)}/people/contacts${params}`,
+      { token }
+    );
+  },
+
+  getContact: (orgSlug: string, workspaceSlug: string, contactId: string, token: string) =>
+    apiFetch<PeopleContactDetail>(`${wsBase(orgSlug, workspaceSlug)}/people/contacts/${contactId}`, {
+      token,
+    }),
+
+  createContact: (
+    orgSlug: string,
+    workspaceSlug: string,
+    body: PeopleContactCreate,
+    token: string
+  ) =>
+    apiFetch<PeopleContact>(`${wsBase(orgSlug, workspaceSlug)}/people/contacts`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  updateContact: (
+    orgSlug: string,
+    workspaceSlug: string,
+    contactId: string,
+    body: PeopleContactUpdate,
+    token: string
+  ) =>
+    apiFetch<PeopleContact>(`${wsBase(orgSlug, workspaceSlug)}/people/contacts/${contactId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  deleteContact: (orgSlug: string, workspaceSlug: string, contactId: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/contacts/${contactId}`, {
+      method: "DELETE",
+      token,
+    }),
 
   getTeam: (orgSlug: string, workspaceSlug: string, teamId: string, token: string) =>
     apiFetch<TeamDetail>(`${wsBase(orgSlug, workspaceSlug)}/people/teams/${teamId}`, { token }),

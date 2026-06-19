@@ -5,6 +5,8 @@ import { Sparkles, Trash2, X } from "lucide-react";
 import type { Process } from "@minea/types";
 import type { MinEAObject } from "@minea/types";
 import { formFieldClass } from "@/components/ui/FormDrawer";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import type { StepDraft } from "@/components/views/JourneyFlowCanvas";
 import { cn } from "@/lib/utils";
 
@@ -33,9 +35,11 @@ export function StepDetailPanel({
   onClose,
 }: Props) {
   const [draft, setDraft] = useState(step);
+  const ownership = useOwnershipForm(step);
 
   useEffect(() => {
     setDraft(step);
+    ownership.reset(step);
   }, [step.id]);
 
   const derivedIds = useMemo(() => new Set(derivedSystems.map((s) => s.id)), [derivedSystems]);
@@ -184,15 +188,12 @@ export function StepDetailPanel({
           </div>
         </div>
 
-        <label className="block">
-          <span className="text-xs font-medium text-gray-600 mb-1 block">Owner / team</span>
-          <input
-            value={draft.owner}
-            onChange={(e) => setDraft((p) => ({ ...p, owner: e.target.value }))}
-            placeholder="e.g. Customer success team"
-            className={formFieldClass}
-          />
-        </label>
+        <OwnershipFields
+          value={ownership.value}
+          onChange={ownership.setValue}
+          required={false}
+          teamLabel="Owner / team"
+        />
 
         <label className="block">
           <span className="text-xs font-medium text-gray-600 mb-1 block">AI opportunities</span>
@@ -228,7 +229,12 @@ export function StepDetailPanel({
           type="button"
           onClick={() => {
             if (!canSave) return;
-            onSave(draft);
+            const ownershipPayload = ownership.toPayload();
+            onSave({
+              ...draft,
+              ...ownershipPayload,
+              owner: ownershipPayload.owner ?? "",
+            });
             onClose();
           }}
           disabled={!canSave}

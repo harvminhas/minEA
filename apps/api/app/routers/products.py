@@ -18,6 +18,7 @@ from app.schemas.products import (
     ProductRead,
     ProductUpdate,
 )
+from app.services.owner_fields import apply_ownership_write_resolved, ownership_from_body, ownership_read_payload
 from app.services.portfolio_signals import enrich_portfolio_signals
 from app.services.product_detail import compute_health_dimensions, enrich_product_detail
 from app.services.product_graph import build_product_graph, load_product_for_graph
@@ -92,6 +93,7 @@ async def _to_read(db: AsyncSession, product: Product, *, include_detail: bool =
         "product_line": product.product_line,
         "lifecycle": product.lifecycle,
         "owner": product.owner,
+        **ownership_read_payload(product),
         "description": product.description,
         "graph_layout": product.graph_layout,
         "created_at": product.created_at,
@@ -181,10 +183,18 @@ async def create_product(
         name=body.name,
         product_line=body.product_line,
         lifecycle=body.lifecycle,
-        owner=body.owner,
+        owner=None,
         description=body.description,
         created_by=ctx.user_id,
         updated_by=ctx.user_id,
+    )
+    await apply_ownership_write_resolved(
+        db,
+        product,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        user_id=ctx.user_id,
+        **ownership_from_body(body),
     )
     db.add(product)
     await db.flush()
@@ -312,13 +322,40 @@ async def update_product(
             db.add(ProductCapability(product_id=product.id, capability_id=cap_id))
 
     field_changes: dict = {}
-    for field in ("name", "product_line", "lifecycle", "owner", "description", "graph_layout"):
-        if field in body.model_fields_set:
-            old_val = getattr(product, field)
-            new_val = getattr(body, field)
-            if old_val != new_val and field != "graph_layout":
-                field_changes[field] = {"old": old_val, "new": new_val}
-            setattr(product, field, new_val)
+    updates = body.model_dump(exclude_unset=True)
+    ownership_updates = {
+        k: updates.pop(k)
+        for k in list(updates)
+        if k
+        in {
+            "owner",
+            "owner_team_id",
+            "owner_team_name",
+            "point_of_contact_id",
+            "point_of_contact_name",
+        }
+    }
+    if ownership_updates:
+        old_owner = product.owner
+        await apply_ownership_write_resolved(
+            db,
+            product,
+            workspace_id=ctx.workspace.id,
+            org_id=ctx.org_id,
+            user_id=ctx.user_id,
+            **ownership_updates,
+        )
+        if product.owner != old_owner:
+            field_changes["owner"] = {"old": old_owner, "new": product.owner}
+
+    for field in ("name", "product_line", "lifecycle", "description", "graph_layout"):
+        if field not in updates:
+            continue
+        old_val = getattr(product, field)
+        new_val = updates[field]
+        if old_val != new_val and field != "graph_layout":
+            field_changes[field] = {"old": old_val, "new": new_val}
+        setattr(product, field, new_val)
 
     if field_changes:
         db.add(ChangeLog(

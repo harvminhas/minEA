@@ -5,11 +5,17 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.people import PeopleAccountability, PeopleRole, Team, TeamRoleAssignment
+from app.models.people import PeopleAccountability, PeopleContact, PeopleRole, Team, TeamRoleAssignment
 from app.schemas.people import (
     AccountabilityCreate,
     AccountabilityUpdate,
     AddRoleToTeamCreate,
+    PeopleContactCreate,
+    PeopleContactDetail,
+    PeopleContactListResponse,
+    PeopleContactRead,
+    PeopleContactUpdate,
+    ContactAssignmentRead,
     PeopleRoleCreate,
     PeopleRoleDetail,
     PeopleRoleListResponse,
@@ -23,6 +29,7 @@ from app.schemas.people import (
     TeamRoleAssignmentUpdate,
     TeamUpdate,
 )
+from app.services.contact_assignments import load_contact_assignments
 from app.services.people import (
     load_accountabilities,
     load_role_teams,
@@ -282,6 +289,177 @@ async def add_role_accountability(
             link_kind=body.link_kind,
         )
     )
+
+
+async def _contact_read(db: AsyncSession, contact: PeopleContact) -> PeopleContactRead:
+    team_name: str | None = None
+    if contact.team_id:
+        result = await db.execute(select(Team.name).where(Team.id == contact.team_id))
+        team_name = result.scalar_one_or_none()
+    return PeopleContactRead(
+        id=contact.id,
+        workspace_id=contact.workspace_id,
+        org_id=contact.org_id,
+        name=contact.name,
+        email=contact.email,
+        team_id=contact.team_id,
+        team_name=team_name,
+        created_at=contact.created_at,
+        updated_at=contact.updated_at,
+    )
+
+
+async def _contact_detail(db: AsyncSession, contact: PeopleContact) -> PeopleContactDetail:
+    base = await _contact_read(db, contact)
+    assignments = await load_contact_assignments(
+        db, contact.workspace_id, contact.org_id, contact.id
+    )
+    return PeopleContactDetail(**base.model_dump(), assignments=assignments)
+
+
+# ─── Contacts ────────────────────────────────────────────────────────────────
+
+
+@router.get("/contacts", response_model=PeopleContactListResponse)
+async def list_contacts(
+    team_id: UUID | None = None,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> PeopleContactListResponse:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
+    q = select(PeopleContact).where(
+        PeopleContact.workspace_id == ctx.workspace.id,
+        PeopleContact.org_id == ctx.org_id,
+    )
+    if team_id:
+        q = q.where((PeopleContact.team_id == team_id) | (PeopleContact.team_id.is_(None)))
+    result = await db.execute(q.order_by(PeopleContact.name))
+    contacts = result.scalars().all()
+    items = [await _contact_read(db, contact) for contact in contacts]
+    return PeopleContactListResponse(items=items, total=len(items))
+
+
+@router.post("/contacts", response_model=PeopleContactRead, status_code=status.HTTP_201_CREATED)
+async def create_contact(
+    body: PeopleContactCreate,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> PeopleContactRead:
+    await ctx.require_write(db)
+    assert ctx.workspace
+
+    if body.team_id:
+        team_result = await db.execute(
+            select(Team.id).where(
+                Team.id == body.team_id,
+                Team.workspace_id == ctx.workspace.id,
+                Team.org_id == ctx.org_id,
+            )
+        )
+        if not team_result.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Team not found")
+
+    contact = PeopleContact(
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        name=body.name.strip(),
+        email=body.email,
+        team_id=body.team_id,
+        created_by=ctx.user_id,
+    )
+    db.add(contact)
+    await db.flush()
+    await db.refresh(contact)
+    return await _contact_read(db, contact)
+
+
+@router.get("/contacts/{contact_id}", response_model=PeopleContactDetail)
+async def get_contact(
+    contact_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> PeopleContactDetail:
+    await ctx.require_read(db)
+    assert ctx.workspace
+
+    result = await db.execute(
+        select(PeopleContact).where(
+            PeopleContact.id == contact_id,
+            PeopleContact.workspace_id == ctx.workspace.id,
+            PeopleContact.org_id == ctx.org_id,
+        )
+    )
+    contact = result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    return await _contact_detail(db, contact)
+
+
+@router.put("/contacts/{contact_id}", response_model=PeopleContactRead)
+async def update_contact(
+    contact_id: UUID,
+    body: PeopleContactUpdate,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> PeopleContactRead:
+    await ctx.require_write(db)
+    assert ctx.workspace
+
+    result = await db.execute(
+        select(PeopleContact).where(
+            PeopleContact.id == contact_id,
+            PeopleContact.workspace_id == ctx.workspace.id,
+            PeopleContact.org_id == ctx.org_id,
+        )
+    )
+    contact = result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+
+    if body.team_id is not None:
+        if body.team_id:
+            team_result = await db.execute(
+                select(Team.id).where(
+                    Team.id == body.team_id,
+                    Team.workspace_id == ctx.workspace.id,
+                    Team.org_id == ctx.org_id,
+                )
+            )
+            if not team_result.scalar_one_or_none():
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Team not found")
+        contact.team_id = body.team_id
+    if body.name is not None:
+        contact.name = body.name.strip()
+    if body.email is not None:
+        contact.email = body.email
+
+    await db.flush()
+    await db.refresh(contact)
+    return await _contact_read(db, contact)
+
+
+@router.delete("/contacts/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_contact(
+    contact_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await ctx.require_write(db)
+    assert ctx.workspace
+
+    result = await db.execute(
+        select(PeopleContact).where(
+            PeopleContact.id == contact_id,
+            PeopleContact.workspace_id == ctx.workspace.id,
+            PeopleContact.org_id == ctx.org_id,
+        )
+    )
+    contact = result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    await db.delete(contact)
 
 
 # ─── Teams ───────────────────────────────────────────────────────────────────

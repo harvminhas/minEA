@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.products import ProductTechDebtItem
+from app.schemas.ownership import OwnershipFields
 
 VALID_TYPES = {
     "business_domain", "capability", "value_stream", "roadmap_item",
@@ -19,7 +20,7 @@ VALID_STATUSES = {
 }
 
 
-class ObjectCreate(BaseModel):
+class ObjectCreate(OwnershipFields, BaseModel):
     type: str = Field(..., description="One of the valid object types")
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
@@ -39,7 +40,7 @@ class ObjectCreate(BaseModel):
             raise ValueError(f"Invalid status '{self.status}'.")
 
 
-class ObjectUpdate(BaseModel):
+class ObjectUpdate(OwnershipFields, BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     description: str | None = None
     owner: str | None = None
@@ -72,7 +73,7 @@ class ObjectTechDebtRemediationRef(BaseModel):
     roadmap_title: str
 
 
-class ObjectRead(BaseModel):
+class ObjectRead(OwnershipFields, BaseModel):
     id: UUID
     workspace_id: UUID
     org_id: UUID

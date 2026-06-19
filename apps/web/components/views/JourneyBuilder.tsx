@@ -14,6 +14,8 @@ import {
 } from "@/components/views/JourneyFlowCanvas";
 import { AddJourneyPathDialog } from "@/components/views/AddJourneyPathDialog";
 import { StepDetailPanel } from "@/components/views/StepDetailPanel";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { DeleteStageConfirmDialog } from "@/components/views/DeleteStageConfirmDialog";
 import {
   canAutosave,
@@ -56,7 +58,8 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
   const [journeyId, setJourneyId] = useState<string | null>(initialValues?.id ?? null);
   const [displayStatus, setDisplayStatus] = useState(initialValues?.status ?? "draft");
   const [name, setName] = useState(initialValues?.name ?? "");
-  const [owner, setOwner] = useState(initialValues?.owner ?? "");
+  const ownership = useOwnershipForm(initialValues);
+  const ownerLabel = ownership.value.ownerTeamName;
   const [customerSegment, setCustomerSegment] = useState(initialValues?.customer_segment ?? "");
   const [steps, setSteps] = useState<StepDraft[]>(() => initialDrafts);
   const [graphEdges, setGraphEdges] = useState<EdgeDraft[]>(() => initialEdges);
@@ -104,14 +107,14 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
   journeyIdRef.current = journeyId;
   const draftRef = useRef({
     name,
-    owner,
+    owner: ownerLabel,
     customerSegment,
     steps,
     graphEdges,
     nodeLayout,
     edgeLabelLayout,
   });
-  draftRef.current = { name, owner, customerSegment, steps, graphEdges, nodeLayout, edgeLabelLayout };
+  draftRef.current = { name, owner: ownerLabel, customerSegment, steps, graphEdges, nodeLayout, edgeLabelLayout };
 
   const { data: processesData } = useQuery({
     queryKey: ["processes", orgSlug, workspaceSlug],
@@ -155,8 +158,8 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
 
   const currentSnapshot = useMemo(
     () =>
-      serializeJourneyState(name, owner, customerSegment, steps, graphEdges, nodeLayout, edgeLabelLayout),
-    [name, owner, customerSegment, steps, graphEdges, nodeLayout, edgeLabelLayout]
+      serializeJourneyState(name, ownerLabel, customerSegment, steps, graphEdges, nodeLayout, edgeLabelLayout),
+    [name, ownerLabel, customerSegment, steps, graphEdges, nodeLayout, edgeLabelLayout]
   );
 
   const isDirty = savedSnapshot !== "" && currentSnapshot !== savedSnapshot;
@@ -306,7 +309,11 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
         nodeLayout: nl,
         edgeLabelLayout: el,
       } = draftRef.current;
-      const payload = { ...journeyFromSnapshot(n, o, cs, s, ge, nl, el), status };
+      const payload = {
+        ...journeyFromSnapshot(n, o, cs, s, ge, nl, el),
+        ...ownership.toPayload(),
+        status,
+      };
       const id = journeyIdRef.current;
       if (id) {
         return journeysApi.update(orgSlug, workspaceSlug, id, payload, token!);
@@ -320,7 +327,7 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
       setJourneyId(saved.id);
       journeyIdRef.current = saved.id;
       setName(saved.name);
-      setOwner(saved.owner ?? "");
+      ownership.reset(saved);
       setCustomerSegment(saved.customer_segment ?? "");
       setDisplayStatus(saved.status);
       setSteps(newDrafts);
@@ -384,7 +391,7 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
     };
   }, [
     name,
-    owner,
+    ownerLabel,
     customerSegment,
     steps,
     graphEdges,
@@ -427,13 +434,22 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
               Map a journey as connected steps linked to underlying processes
             </p>
             <div className="flex flex-wrap items-center gap-2 mt-3 px-2 -mx-2">
-              <input
-                value={owner}
-                onChange={(e) => setOwner(e.target.value)}
-                readOnly={isReadOnly}
-                placeholder="Owner: CX team"
-                className="text-xs border border-gray-200 rounded-full px-3 py-1 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-auto min-w-[160px]"
-              />
+              {!isReadOnly ? (
+                <div className="min-w-[280px] max-w-md">
+                  <OwnershipFields
+                    value={ownership.value}
+                    onChange={ownership.setValue}
+                    required={false}
+                    teamLabel="Journey owner"
+                  />
+                </div>
+              ) : (
+                ownerLabel && (
+                  <span className="text-xs border border-gray-200 rounded-full px-3 py-1 bg-gray-50 text-gray-600">
+                    {ownerLabel}
+                  </span>
+                )
+              )}
               <input
                 value={customerSegment}
                 onChange={(e) => setCustomerSegment(e.target.value)}

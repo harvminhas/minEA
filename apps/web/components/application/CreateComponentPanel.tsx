@@ -6,7 +6,9 @@ import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { objectsApi, peopleApi } from "@/lib/api-client";
+import { objectsApi } from "@/lib/api-client";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import {
   persistComponentArchitecture,
   syncComponentRelationships,
@@ -140,7 +142,7 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
   const [systems, setSystems] = useState<ComponentSystemRef[]>(init.systems);
   const [runtimeKey, setRuntimeKey] = useState(init.runtimeKey);
   const [platformId, setPlatformId] = useState(init.platformId);
-  const [owner, setOwner] = useState(init.owner);
+  const ownership = useOwnershipForm(init);
   const [status, setStatus] = useState<ObjectStatus>(init.status);
   const [error, setError] = useState<string | null>(null);
   const [showSystemDialog, setShowSystemDialog] = useState(false);
@@ -148,15 +150,6 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
   const [draftLayout, setDraftLayout] = useState<NodeLayout>(init.draftLayout);
 
   useEffect(() => setMounted(true), []);
-
-  const { data: teamsData } = useQuery({
-    queryKey: ["teams", orgSlug, workspaceSlug],
-    queryFn: async () => {
-      const token = await getToken();
-      return peopleApi.listTeams(orgSlug, workspaceSlug, token!);
-    },
-    enabled,
-  });
 
   const runtimeQueries = useQueries({
     queries: (["tool", "model", "cloud_service"] as const).map((type) => ({
@@ -248,14 +241,14 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
         runtime: selectedRuntime,
         platform: selectedPlatform,
         status,
-        owner: owner.trim() || undefined,
+        owner: ownership.toPayload().owner,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         nodeLayout: Object.keys(draftLayout).length > 0 ? draftLayout : undefined,
       }),
-    [name, componentType, techStack, systems, selectedRuntime, selectedPlatform, status, owner, tags, draftLayout]
+    [name, componentType, techStack, systems, selectedRuntime, selectedPlatform, status, ownership.value, tags, draftLayout]
   );
 
-  const canSubmit = name.trim().length > 0 && systems.length > 0 && !!componentType;
+  const canSubmit = name.trim().length > 0 && systems.length > 0 && !!componentType && ownership.isValid;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -281,7 +274,7 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
           initialValues.id,
           {
             name: name.trim(),
-            owner: owner.trim() || undefined,
+            ...ownership.toPayload(),
             status,
             tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
             properties: properties as Record<string, unknown>,
@@ -321,7 +314,7 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
         {
           type: "component",
           name: name.trim(),
-          owner: owner.trim() || undefined,
+          ...ownership.toPayload(),
           status,
           tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
           properties: properties as Record<string, unknown>,
@@ -493,19 +486,7 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
               <SectionHeader>Governance</SectionHeader>
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 <div className="col-span-2">
-                  <FieldLabel>Owner (team)</FieldLabel>
-                  <input
-                    value={owner}
-                    onChange={(e) => setOwner(e.target.value)}
-                    list="component-owner-options"
-                    placeholder="Search team…"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <datalist id="component-owner-options">
-                    {(teamsData?.items ?? []).map((team) => (
-                      <option key={team.id} value={team.name} />
-                    ))}
-                  </datalist>
+                  <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
                 </div>
                 <div className="col-span-2">
                   <FieldLabel>Lifecycle</FieldLabel>

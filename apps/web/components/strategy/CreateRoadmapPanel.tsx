@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/lib/auth-context";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { AlertTriangle, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { objectsApi, peopleApi, relationshipsApi } from "@/lib/api-client";
-import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { objectsApi, relationshipsApi } from "@/lib/api-client";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { LinkDebtDialog } from "@/components/strategy/LinkDebtDialog";
 import { PickProductDialog } from "@/components/strategy/PickProductDialog";
 import {
@@ -181,7 +182,6 @@ export function CreateRoadmapPanel({
 
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
-  const enabled = useAuthQueryEnabled();
   const [mounted, setMounted] = useState(false);
 
   const [title, setTitle] = useState(init.title);
@@ -190,7 +190,7 @@ export function CreateRoadmapPanel({
   const [kind, setKind] = useState<string>(init.kind);
   const [product, setProduct] = useState<RoadmapProductRef | null>(init.product ?? defaultProduct ?? null);
   const [resolvesDebt, setResolvesDebt] = useState<RoadmapDebtRef[]>(init.resolvesDebt);
-  const [owner, setOwner] = useState(init.owner || defaultOwner || "");
+  const ownership = useOwnershipForm({ ...init, owner: init.owner || defaultOwner || "" });
   const [roadmapStatus, setRoadmapStatus] = useState<string>(init.roadmapStatus);
   const [timelineMode, setTimelineMode] = useState<"date_bound" | "relative">(init.timelineMode);
   const [timelineStartMonth, setTimelineStartMonth] = useState(init.timelineStartMonth);
@@ -212,15 +212,6 @@ export function CreateRoadmapPanel({
     () => RELATIVE_DURATION_OPTIONS[timelineUnit].map((n) => ({ value: String(n), label: String(n) })),
     [timelineUnit]
   );
-
-  const { data: teamsData } = useQuery({
-    queryKey: ["teams", orgSlug, workspaceSlug],
-    queryFn: async () => {
-      const token = await getToken();
-      return peopleApi.listTeams(orgSlug, workspaceSlug, token!);
-    },
-    enabled,
-  });
 
   const properties = useMemo(() => {
     const parsedCost = cost.trim() ? Number(cost.replace(/,/g, "")) : null;
@@ -260,18 +251,18 @@ export function CreateRoadmapPanel({
   ]);
 
   const canSubmit =
-    title.trim().length > 0 && kind.trim().length > 0 && owner.trim().length > 0;
+    title.trim().length > 0 && kind.trim().length > 0 && ownership.isValid;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
-      if (!owner.trim()) throw new Error("Owner is required");
+      if (!ownership.isValid) throw new Error("Owner is required");
 
       const body = {
         name: title.trim(),
         description: description.trim() || undefined,
-        owner: owner.trim(),
+        ...ownership.toPayload(),
         status: roadmapStatusToObjectStatus(roadmapStatus),
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         properties: properties as Record<string, unknown>,
@@ -448,19 +439,7 @@ export function CreateRoadmapPanel({
                 </div>
 
                 <div>
-                  <FieldLabel required>Owner (team)</FieldLabel>
-                  <input
-                    value={owner}
-                    onChange={(e) => setOwner(e.target.value)}
-                    list="roadmap-owner-options"
-                    placeholder="Search team…"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  />
-                  <datalist id="roadmap-owner-options">
-                    {(teamsData?.items ?? []).map((team) => (
-                      <option key={team.id} value={team.name} />
-                    ))}
-                  </datalist>
+                  <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
                 </div>
               </div>
             </section>

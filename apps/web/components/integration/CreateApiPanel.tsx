@@ -6,7 +6,9 @@ import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Info, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { objectsApi, peopleApi } from "@/lib/api-client";
+import { objectsApi } from "@/lib/api-client";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { syncApiRelationships } from "@/lib/api-relationship-utils";
 import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
@@ -157,7 +159,7 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
   const [gatewayKey, setGatewayKey] = useState(init.gatewayKey);
   const [audience, setAudience] = useState<string>(init.audience);
   const [criticality, setCriticality] = useState<string>(init.criticality);
-  const [owner, setOwner] = useState(init.owner);
+  const ownership = useOwnershipForm(init);
   const [status, setStatus] = useState<ObjectStatus>(init.status);
   const [error, setError] = useState<string | null>(null);
   const [showProviderDialog, setShowProviderDialog] = useState(false);
@@ -166,15 +168,6 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
   const [draftLayout, setDraftLayout] = useState<NodeLayout>(init.draftLayout);
 
   useEffect(() => setMounted(true), []);
-
-  const { data: teamsData } = useQuery({
-    queryKey: ["teams", orgSlug, workspaceSlug],
-    queryFn: async () => {
-      const token = await getToken();
-      return peopleApi.listTeams(orgSlug, workspaceSlug, token!);
-    },
-    enabled,
-  });
 
   const { data: infraToolsData } = useQuery({
     queryKey: integrationInfraToolsQueryKey(orgSlug, workspaceSlug),
@@ -213,7 +206,7 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
         audience,
         criticality,
         status,
-        owner: owner.trim() || undefined,
+        owner: ownership.toPayload().owner,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         nodeLayout: Object.keys(draftLayout).length > 0 ? draftLayout : undefined,
       }),
@@ -228,13 +221,13 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
       audience,
       criticality,
       status,
-      owner,
+      ownership.value,
       tags,
       draftLayout,
     ]
   );
 
-  const canSubmit = name.trim().length > 0 && !!provider;
+  const canSubmit = name.trim().length > 0 && !!provider && ownership.isValid;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -260,7 +253,7 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
       const body = {
         name: name.trim(),
         description: description.trim() || undefined,
-        owner: owner.trim() || undefined,
+        ...ownership.toPayload(),
         status,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         properties: properties as Record<string, unknown>,
@@ -579,19 +572,7 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
               <SectionHeader>Governance</SectionHeader>
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 <div className="col-span-2">
-                  <FieldLabel>Owner (team)</FieldLabel>
-                  <input
-                    value={owner}
-                    onChange={(e) => setOwner(e.target.value)}
-                    list="api-owner-options"
-                    placeholder="Search team…"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                  <datalist id="api-owner-options">
-                    {(teamsData?.items ?? []).map((team) => (
-                      <option key={team.id} value={team.name} />
-                    ))}
-                  </datalist>
+                  <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
                 </div>
                 <div>
                   <FieldLabel>Lifecycle</FieldLabel>

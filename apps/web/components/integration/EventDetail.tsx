@@ -14,6 +14,7 @@ import {
 import { excludeTechDebtRelationships } from "@/lib/relationship-display";
 import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useTenancy } from "@/lib/tenancy";
+import { OwnershipDetailRow } from "@/components/ownership/OwnershipDetailRow";
 import {
   DetailPanel,
   DetailRow,
@@ -342,7 +343,7 @@ export function EventDetail({ event, onClose, onDelete, onUpdate }: Props) {
             <DetailSection title="Governance">
               <div className="space-y-2 text-sm">
                 {props.broker && <DetailRow label="Broker" value={props.broker.broker_name} />}
-                {liveEvent.owner && <DetailRow label="Owner" value={liveEvent.owner} />}
+                <OwnershipDetailRow entity={liveEvent} />
                 {props.audience && (
                   <DetailRow label="Audience" value={AUDIENCE_LABEL[props.audience] ?? props.audience} />
                 )}

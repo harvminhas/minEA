@@ -3,8 +3,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.ownership import OwnershipFields
 
-class JourneyStepCreate(BaseModel):
+
+class JourneyStepCreate(OwnershipFields, BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     position: int = 0
     channel: str | None = None
@@ -17,7 +19,7 @@ class JourneyStepCreate(BaseModel):
     system_ids: list[UUID] = Field(default_factory=list)
 
 
-class JourneyStepRead(BaseModel):
+class JourneyStepRead(OwnershipFields, BaseModel):
     id: UUID
     title: str
     position: int
@@ -33,7 +35,7 @@ class JourneyStepRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class JourneyCreate(BaseModel):
+class JourneyCreate(OwnershipFields, BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     owner: str | None = None
     status: str = Field(default="draft")
@@ -44,7 +46,7 @@ class JourneyCreate(BaseModel):
     steps: list[JourneyStepCreate] = Field(default_factory=list)
 
 
-class JourneyUpdate(BaseModel):
+class JourneyUpdate(OwnershipFields, BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     owner: str | None = None
     status: str | None = None
@@ -55,7 +57,7 @@ class JourneyUpdate(BaseModel):
     steps: list[JourneyStepCreate] | None = None
 
 
-class JourneyRead(BaseModel):
+class JourneyRead(OwnershipFields, BaseModel):
     id: UUID
     workspace_id: UUID
     org_id: UUID

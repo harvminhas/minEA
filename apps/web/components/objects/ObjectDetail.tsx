@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { OwnershipDetailRow } from "@/components/ownership/OwnershipDetailRow";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { X, Trash2, Edit2 } from "lucide-react";
@@ -141,7 +142,7 @@ function LegacyObjectDetail({
           <div>
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Properties</h3>
             <div className="space-y-2 text-sm">
-              {object.owner && <DetailRow label="Owner" value={object.owner} />}
+              <OwnershipDetailRow entity={object} />
               {object.tags.length > 0 && (
                 <DetailRow
                   label="Tags"

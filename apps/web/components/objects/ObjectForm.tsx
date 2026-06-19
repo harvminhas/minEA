@@ -28,6 +28,8 @@ import {
   syncSystemCapabilityRelations,
 } from "@/lib/system-capability-utils";
 import { FormDrawer, FormField, FormSection, formFieldClass } from "@/components/ui/FormDrawer";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { AiRoleField } from "@/components/ui/AiRoleField";
 import { aiRoleForProperties, aiRoleFromProperties, SYSTEM_OBJECT_TYPES } from "@/lib/ai-role-utils";
 import type { AiRole } from "@minea/types";
@@ -144,9 +146,10 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
   const [selectedCapabilityIds, setSelectedCapabilityIds] = useState<string[]>([]);
   const [capSearch, setCapSearch] = useState("");
 
+  const ownership = useOwnershipForm(initialValues);
+
   const [name, setName] = useState(initialValues?.name ?? "");
   const [description, setDescription] = useState(initialValues?.description ?? "");
-  const [owner, setOwner] = useState(initialValues?.owner ?? "");
   const [status, setStatus] = useState(initialValues?.status ?? "");
   const [tags, setTags] = useState((initialValues?.tags ?? []).join(", "));
   const [properties, setProperties] = useState<Record<string, string>>(
@@ -274,7 +277,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       const shared = {
         name,
         description: description || undefined,
-        owner: owner || undefined,
+        ...ownership.toPayload(),
         status: status ? (status as ObjectUpdate["status"]) : undefined,
         tags: tags
           .split(",")
@@ -329,7 +332,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       onSubmit={() => mutation.mutate()}
       submitLabel={isEdit ? "Save changes" : "Create"}
       isSubmitting={mutation.isPending}
-      submitDisabled={!name}
+      submitDisabled={!name || !ownership.isValid}
       error={mutation.isError ? (mutation.error as Error).message : null}
     >
       <FormField label="Name" required>
@@ -361,14 +364,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
         </select>
       </FormField>
 
-      <FormField label="Owner">
-        <input
-          value={owner}
-          onChange={(e) => setOwner(e.target.value)}
-          className={formFieldClass}
-          placeholder="e.g. Sales Team"
-        />
-      </FormField>
+      <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
 
       {isApplication && (
         <>

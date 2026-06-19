@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/lib/auth-context";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Link2, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { objectsApi, peopleApi } from "@/lib/api-client";
+import { objectsApi } from "@/lib/api-client";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { syncTechDebtRelationships } from "@/lib/tech-debt-relationships";
-import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { PickAffectedDialog } from "@/components/risk/PickAffectedDialog";
 import {
   buildTargetResolutionOptions,
@@ -148,7 +149,6 @@ export function CreateTechDebtPanel({
 
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
-  const enabled = useAuthQueryEnabled();
   const [mounted, setMounted] = useState(false);
 
   const [title, setTitle] = useState(init.title);
@@ -161,7 +161,7 @@ export function CreateTechDebtPanel({
   const [affects, setAffects] = useState<TechDebtAffectsRef | null>(
     init.affects ?? lockedProductAffects ?? lockedObjectAffects
   );
-  const [owner, setOwner] = useState(init.owner || defaultOwner || "");
+  const ownership = useOwnershipForm({ ...init, owner: init.owner || defaultOwner || "" });
   const [identifiedBy, setIdentifiedBy] = useState(init.identifiedBy);
   const [targetResolution, setTargetResolution] = useState(init.targetResolution);
   const [effortEstimate, setEffortEstimate] = useState<string>(init.effortEstimate);
@@ -169,15 +169,6 @@ export function CreateTechDebtPanel({
   const [showAffectsDialog, setShowAffectsDialog] = useState(false);
 
   useEffect(() => setMounted(true), []);
-
-  const { data: teamsData } = useQuery({
-    queryKey: ["teams", orgSlug, workspaceSlug],
-    queryFn: async () => {
-      const token = await getToken();
-      return peopleApi.listTeams(orgSlug, workspaceSlug, token!);
-    },
-    enabled,
-  });
 
   const properties = useMemo(
     () =>
@@ -210,7 +201,7 @@ export function CreateTechDebtPanel({
     severity.trim().length > 0 &&
     debtType.trim().length > 0 &&
     (!requiresAffects || !!affects) &&
-    owner.trim().length > 0 &&
+    ownership.isValid &&
     (debtType !== "other" || debtTypeOther.trim().length > 0);
 
   const saveMutation = useMutation({
@@ -218,12 +209,12 @@ export function CreateTechDebtPanel({
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
       if (requiresAffects && !affects) throw new Error("Affected object is required");
-      if (!owner.trim()) throw new Error("Owner is required");
+      if (!ownership.isValid) throw new Error("Owner is required");
 
       const body = {
         name: title.trim(),
         description: description.trim() || undefined,
-        owner: owner.trim(),
+        ...ownership.toPayload(),
         status: debtStatusToObjectStatus(debtStatus),
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         properties: properties as Record<string, unknown>,
@@ -406,20 +397,8 @@ export function CreateTechDebtPanel({
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <div>
-                    <FieldLabel required>Owner (team)</FieldLabel>
-                    <input
-                      value={owner}
-                      onChange={(e) => setOwner(e.target.value)}
-                      list="tech-debt-owner-options"
-                      placeholder="Search team…"
-                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                    />
-                    <datalist id="tech-debt-owner-options">
-                      {(teamsData?.items ?? []).map((team) => (
-                        <option key={team.id} value={team.name} />
-                      ))}
-                    </datalist>
+                  <div className="col-span-2">
+                    <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
                   </div>
                   <div>
                     <FieldLabel>Identified by</FieldLabel>

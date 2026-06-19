@@ -7,6 +7,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { AddVendorDialog } from "@/components/integration/AddVendorDialog";
 import {
@@ -72,6 +74,7 @@ function initFromInfra(infra?: MinEAObject) {
 export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess }: Props) {
   const isEdit = !!initialValues;
   const init = initFromInfra(initialValues);
+  const ownership = useOwnershipForm(init);
 
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
@@ -132,7 +135,8 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
     kind.trim().length > 0 &&
     vendor.trim().length > 0 &&
     handles.length > 0 &&
-    (kind !== "custom" || kindOther.trim().length > 0);
+    (kind !== "custom" || kindOther.trim().length > 0) &&
+    ownership.isValid;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -160,7 +164,7 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
       const body = {
         name: name.trim(),
         description: description.trim() || undefined,
-        owner: init.owner.trim() || undefined,
+        ...ownership.toPayload(),
         status: lifecycleToStatus(init.lifecycle),
         tags: tags
           .split(",")
@@ -414,6 +418,11 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
                   />
                 </div>
               </div>
+            </section>
+
+            <section>
+              <SectionHeader>Governance</SectionHeader>
+              <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
             </section>
 
             {error && (

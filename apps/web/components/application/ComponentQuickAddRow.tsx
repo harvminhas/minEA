@@ -6,6 +6,8 @@ import { useMutation } from "@tanstack/react-query";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { COMPONENT_STATUSES, COMPONENT_TYPES } from "@/lib/component-utils";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import type { MinEAObject, ObjectStatus } from "@minea/types";
 import { cn, getStatusLabel } from "@/lib/utils";
 
@@ -22,11 +24,11 @@ export function ComponentQuickAddRow({
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const nameRef = useRef<HTMLInputElement>(null);
+  const ownership = useOwnershipForm();
 
   const [name, setName] = useState("");
   const [componentType, setComponentType] = useState("");
   const [techStack, setTechStack] = useState("");
-  const [owner, setOwner] = useState("");
   const [status, setStatus] = useState<(typeof COMPONENT_STATUSES)[number]["value"]>("planned");
   const [error, setError] = useState<string | null>(null);
 
@@ -59,7 +61,7 @@ export function ComponentQuickAddRow({
         {
           type: "component",
           name: trimmedName,
-          owner: owner.trim() || undefined,
+          ...ownership.toPayload(),
           status: status as ObjectStatus,
           properties,
         },
@@ -72,7 +74,7 @@ export function ComponentQuickAddRow({
     },
   });
 
-  const canSave = name.trim().length > 0 && !saveMutation.isPending;
+  const canSave = name.trim().length > 0 && ownership.isValid && !saveMutation.isPending;
 
   return (
     <tr className="border-t border-indigo-100 bg-indigo-50/30">
@@ -113,12 +115,13 @@ export function ComponentQuickAddRow({
       <td className="px-4 py-2 text-gray-400 text-sm text-center">—</td>
       <td className="px-4 py-2 text-gray-400 text-sm text-center">—</td>
       <td className="px-4 py-2 text-gray-400 text-sm text-center">—</td>
-      <td className="px-4 py-2 min-w-[120px]">
-        <input
-          value={owner}
-          onChange={(e) => setOwner(e.target.value)}
-          placeholder="Owner"
-          className={inputClass}
+      <td className="px-4 py-2 min-w-[220px]">
+        <OwnershipFields
+          value={ownership.value}
+          onChange={ownership.setValue}
+          required
+          teamLabel="Owner"
+          pocLabel="Point of contact"
         />
       </td>
       <td className="px-4 py-2 min-w-[110px]">

@@ -75,6 +75,8 @@ export function entityPath(
       return `${basePath}/data/data-domains`;
     case "data_store":
       return `${basePath}/data/data-stores`;
+    case "journey":
+      return `${basePath}/views/journeys`;
     default:
       return null;
   }

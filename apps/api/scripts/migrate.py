@@ -48,6 +48,9 @@ MIGRATION_FILES = [
     "030_free_share_limit.sql",
     "031_plans_free_business.sql",
     "032_contact_inquiries.sql",
+    "033_object_ownership.sql",
+    "034_backfill_owner_accountabilities.sql",
+    "035_people_contacts.sql",
 ]
 
 

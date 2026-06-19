@@ -23,6 +23,7 @@ from app.services.authorization import require_limit
 from app.services.capability_validation import validate_object_write
 from app.services.object_history import describe_object_history
 from app.services.object_tech_debt import tech_debt_summary_for_object
+from app.services.owner_fields import apply_ownership_write_resolved, ownership_from_body, ownership_read_payload
 from app.services.system_products import (
     link_system_to_product,
     products_for_system,
@@ -59,7 +60,7 @@ def _first_name(user: User | None) -> str | None:
 
 
 async def _to_read(db: AsyncSession, obj: MinEAObject) -> ObjectRead:
-    base = ObjectRead.model_validate(obj)
+    base = ObjectRead.model_validate(obj).model_copy(update=ownership_read_payload(obj))
     if obj.type in SYSTEM_TYPES:
         extra = await enrich_single_system(db, obj)
         return base.model_copy(update=extra)
@@ -126,7 +127,7 @@ async def list_objects(
             stats_map.setdefault(obj_id, {}).update(fields)
     reads: list[ObjectRead] = []
     for obj in items:
-        base = ObjectRead.model_validate(obj)
+        base = ObjectRead.model_validate(obj).model_copy(update=ownership_read_payload(obj))
         extra = stats_map.get(obj.id)
         reads.append(base.model_copy(update=extra) if extra else base)
 
@@ -153,7 +154,7 @@ async def create_object(
         type=body.type,
         name=body.name,
         description=body.description,
-        owner=body.owner,
+        owner=None,
         status=body.status,
         tags=body.tags,
         external_id=body.external_id,
@@ -161,6 +162,14 @@ async def create_object(
         properties=body.properties,
         created_by=ctx.user_id,
         updated_by=ctx.user_id,
+    )
+    await apply_ownership_write_resolved(
+        db,
+        obj,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        user_id=ctx.user_id,
+        **ownership_from_body(body),
     )
     db.add(obj)
     await db.flush()
@@ -250,8 +259,27 @@ async def update_object(
         existing_name=obj.name,
     )
 
+    OWNERSHIP_FIELDS = {
+        "owner",
+        "owner_team_id",
+        "owner_team_name",
+        "point_of_contact_id",
+        "point_of_contact_name",
+    }
+    updates = body.model_dump(exclude_none=True)
+    ownership_updates = {k: updates.pop(k) for k in list(updates) if k in OWNERSHIP_FIELDS}
+    if ownership_updates:
+        await apply_ownership_write_resolved(
+            db,
+            obj,
+            workspace_id=ctx.workspace.id,
+            org_id=ctx.org_id,
+            user_id=ctx.user_id,
+            **ownership_updates,
+        )
+
     field_changes: dict[str, Any] = {}
-    for field, value in body.model_dump(exclude_none=True).items():
+    for field, value in updates.items():
         if field == "properties":
             merged = {**(obj.properties or {}), **value}
             if merged != (obj.properties or {}):

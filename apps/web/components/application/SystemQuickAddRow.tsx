@@ -6,6 +6,8 @@ import { useMutation } from "@tanstack/react-query";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { mergeCategoryOptions } from "@/lib/system-list-utils";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import type { MinEAObject } from "@minea/types";
 import { cn, getStatusLabel } from "@/lib/utils";
 
@@ -26,12 +28,12 @@ export function SystemQuickAddRow({
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const nameRef = useRef<HTMLInputElement>(null);
+  const ownership = useOwnershipForm();
 
   const [name, setName] = useState("");
   const [vendor, setVendor] = useState("");
   const [category, setCategory] = useState("");
   const [annualCost, setAnnualCost] = useState("");
-  const [owner, setOwner] = useState("");
   const [status, setStatus] = useState<(typeof QUICK_ADD_STATUSES)[number]>("planned");
   const [error, setError] = useState<string | null>(null);
 
@@ -68,7 +70,7 @@ export function SystemQuickAddRow({
         {
           type: "application",
           name: trimmedName,
-          owner: owner.trim() || undefined,
+          ...ownership.toPayload(),
           status,
           properties,
         },
@@ -129,12 +131,13 @@ export function SystemQuickAddRow({
         />
       </td>
       <td className="px-4 py-2 text-gray-400 text-sm text-center">—</td>
-      <td className="px-4 py-2 min-w-[120px]">
-        <input
-          value={owner}
-          onChange={(e) => setOwner(e.target.value)}
-          placeholder="Owner"
-          className={inputClass}
+      <td className="px-4 py-2 min-w-[220px]">
+        <OwnershipFields
+          value={ownership.value}
+          onChange={ownership.setValue}
+          required={false}
+          teamLabel="Owner"
+          pocLabel="Point of contact"
         />
       </td>
       <td className="px-4 py-2 min-w-[110px]">

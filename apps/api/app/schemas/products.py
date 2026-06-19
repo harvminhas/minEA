@@ -4,7 +4,10 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-class ProductCreate(BaseModel):
+from app.schemas.ownership import OwnershipFields
+
+
+class ProductCreate(OwnershipFields, BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     product_line: str | None = None
     lifecycle: str = Field(default="planned")
@@ -13,7 +16,7 @@ class ProductCreate(BaseModel):
     capability_ids: list[UUID] = Field(default_factory=list)
 
 
-class ProductUpdate(BaseModel):
+class ProductUpdate(OwnershipFields, BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     product_line: str | None = None
     lifecycle: str | None = None
@@ -92,7 +95,7 @@ class ProductHistoryResponse(BaseModel):
     entries: list[ProductHistoryEntry]
 
 
-class ProductRead(BaseModel):
+class ProductRead(OwnershipFields, BaseModel):
     id: UUID
     workspace_id: UUID
     org_id: UUID

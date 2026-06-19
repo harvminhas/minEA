@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, Sparkles, Trash2, X } from "lucide-react";
 import type { MinEAObject } from "@minea/types";
 import { formFieldClass } from "@/components/ui/FormDrawer";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import type { StageDraft } from "@/components/views/ProcessFlowCanvas";
 import { cn } from "@/lib/utils";
 
@@ -18,10 +20,12 @@ interface Props {
 export function StageDetailPanel({ stage, capabilities, onSave, onRequestDelete, onClose }: Props) {
   const [draft, setDraft] = useState(stage);
   const [capSearch, setCapSearch] = useState("");
+  const ownership = useOwnershipForm(stage);
 
   useEffect(() => {
     setDraft(stage);
     setCapSearch("");
+    ownership.reset(stage);
   }, [stage.id]);
 
   const filteredCaps = capSearch
@@ -54,7 +58,12 @@ export function StageDetailPanel({ stage, capabilities, onSave, onRequestDelete,
 
   const handleSave = () => {
     if (!canSave) return;
-    onSave(draft);
+    const ownershipPayload = ownership.toPayload();
+    onSave({
+      ...draft,
+      ...ownershipPayload,
+      owner: ownershipPayload.owner ?? "",
+    });
     onClose();
   };
 
@@ -171,15 +180,12 @@ export function StageDetailPanel({ stage, capabilities, onSave, onRequestDelete,
           </div>
         )}
 
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Stage owner</label>
-          <input
-            value={draft.owner}
-            onChange={(e) => setDraft((prev) => ({ ...prev, owner: e.target.value }))}
-            className={formFieldClass}
-            placeholder="e.g. Compliance team"
-          />
-        </div>
+        <OwnershipFields
+          value={ownership.value}
+          onChange={ownership.setValue}
+          required={false}
+          teamLabel="Stage owner"
+        />
 
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Typical duration</label>

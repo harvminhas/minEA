@@ -9,6 +9,8 @@ import { capabilityMapApi } from "@/lib/api-client";
 import { PickerItem } from "@/components/capability-map/TemplateAccordion";
 import { domainIcon } from "@/lib/capability-map-icons";
 import { formFieldClass } from "@/components/ui/FormDrawer";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { useTenancy } from "@/lib/tenancy";
 import { cn } from "@/lib/utils";
 
@@ -71,7 +73,7 @@ export function AddCapabilityPickerDialog({ domain, onAdd, onClose, isSubmitting
   const { orgSlug, workspaceSlug } = useTenancy();
   const [mode, setMode] = useState<"suggestions" | "create">("suggestions");
   const [newName, setNewName] = useState("");
-  const [owner, setOwner] = useState("");
+  const ownership = useOwnershipForm();
 
   const { data, isLoading } = useQuery({
     queryKey: ["capability-library-caps", orgSlug, workspaceSlug, domain.id],
@@ -96,7 +98,7 @@ export function AddCapabilityPickerDialog({ domain, onAdd, onClose, isSubmitting
   const submitAdd = (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    onAdd({ name: trimmed, owner: owner.trim() || undefined });
+    onAdd({ name: trimmed, ...ownership.toPayload() });
   };
 
   const handleCreate = () => {
@@ -142,15 +144,7 @@ export function AddCapabilityPickerDialog({ domain, onAdd, onClose, isSubmitting
         </div>
 
         <div className="px-5 pt-3 flex-shrink-0">
-          <label className="block">
-            <span className="text-xs font-medium text-gray-600 mb-1.5 block">Owner</span>
-            <input
-              value={owner}
-              onChange={(e) => setOwner(e.target.value)}
-              placeholder="e.g. PDY, Sales Team"
-              className={formFieldClass}
-            />
-          </label>
+          <OwnershipFields value={ownership.value} onChange={ownership.setValue} required={false} />
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">

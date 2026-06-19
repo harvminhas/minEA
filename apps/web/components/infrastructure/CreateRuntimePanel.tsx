@@ -6,7 +6,9 @@ import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Cpu, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { objectsApi, peopleApi } from "@/lib/api-client";
+import { objectsApi } from "@/lib/api-client";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { AddProviderDialog } from "@/components/infrastructure/AddProviderDialog";
 import {
@@ -126,21 +128,12 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
   const [slaTarget, setSlaTarget] = useState<string>(init.slaTarget);
   const [lifecycle, setLifecycle] = useState<string>(init.lifecycle);
   const [criticality, setCriticality] = useState<string>(init.criticality);
-  const [owner, setOwner] = useState(init.owner);
+  const ownership = useOwnershipForm(init);
   const [error, setError] = useState<string | null>(null);
   const [showAddProvider, setShowAddProvider] = useState(false);
   const [sessionProviders, setSessionProviders] = useState<string[]>([]);
 
   useEffect(() => setMounted(true), []);
-
-  const { data: teamsData } = useQuery({
-    queryKey: ["teams", orgSlug, workspaceSlug],
-    queryFn: async () => {
-      const token = await getToken();
-      return peopleApi.listTeams(orgSlug, workspaceSlug, token!);
-    },
-    enabled,
-  });
 
   const { data: runtimesData } = useQuery({
     queryKey: ["objects", orgSlug, workspaceSlug, "compute_runtime"],
@@ -195,18 +188,18 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
   );
 
   const canSubmit =
-    name.trim().length > 0 && kind.trim().length > 0 && provider.trim().length > 0 && owner.trim().length > 0;
+    name.trim().length > 0 && kind.trim().length > 0 && provider.trim().length > 0 && ownership.isValid;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
-      if (!owner.trim()) throw new Error("Owner is required");
+      if (!ownership.isValid) throw new Error("Owner is required");
 
       const body = {
         name: name.trim(),
         description: description.trim() || undefined,
-        owner: owner.trim(),
+        ...ownership.toPayload(),
         status: lifecycleToStatus(lifecycle),
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         properties: properties as Record<string, unknown>,
@@ -484,19 +477,7 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
               <SectionHeader>Governance</SectionHeader>
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 <div className="col-span-2">
-                  <FieldLabel required>Owner (team)</FieldLabel>
-                  <input
-                    value={owner}
-                    onChange={(e) => setOwner(e.target.value)}
-                    list="runtime-owner-options"
-                    placeholder="Search team…"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  />
-                  <datalist id="runtime-owner-options">
-                    {(teamsData?.items ?? []).map((team) => (
-                      <option key={team.id} value={team.name} />
-                    ))}
-                  </datalist>
+                  <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
                 </div>
                 <div>
                   <FieldLabel>SLA target</FieldLabel>

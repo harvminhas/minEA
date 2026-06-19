@@ -3,8 +3,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.ownership import OwnershipFields
 
-class StageCreate(BaseModel):
+
+class StageCreate(OwnershipFields, BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     position: int = 0
     owner: str | None = None
@@ -16,7 +18,7 @@ class StageCreate(BaseModel):
     capability_ids: list[UUID] = Field(default_factory=list)
 
 
-class StageRead(BaseModel):
+class StageRead(OwnershipFields, BaseModel):
     id: UUID
     name: str
     position: int
@@ -31,7 +33,7 @@ class StageRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class ProcessCreate(BaseModel):
+class ProcessCreate(OwnershipFields, BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     owner: str | None = None
     status: str = Field(default="draft")
@@ -43,7 +45,7 @@ class ProcessCreate(BaseModel):
     stages: list[StageCreate] = Field(default_factory=list)
 
 
-class ProcessUpdate(BaseModel):
+class ProcessUpdate(OwnershipFields, BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     owner: str | None = None
     status: str | None = None
@@ -55,7 +57,7 @@ class ProcessUpdate(BaseModel):
     stages: list[StageCreate] | None = None
 
 
-class ProcessRead(BaseModel):
+class ProcessRead(OwnershipFields, BaseModel):
     id: UUID
     workspace_id: UUID
     org_id: UUID

@@ -14,6 +14,7 @@ import {
 import { excludeTechDebtRelationships } from "@/lib/relationship-display";
 import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useTenancy } from "@/lib/tenancy";
+import { OwnershipDetailRow } from "@/components/ownership/OwnershipDetailRow";
 import {
   DetailPanel,
   DetailRow,
@@ -352,7 +353,7 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
 
             <DetailSection title="Properties">
               <div className="space-y-2 text-sm">
-                {liveFlow.owner && <DetailRow label="Owner" value={liveFlow.owner} />}
+                <OwnershipDetailRow entity={liveFlow} />
                 {props.protocol && (
                   <DetailRow label="Protocol" value={labelFor(PROTOCOL_LABEL, props.protocol)} />
                 )}

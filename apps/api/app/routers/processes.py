@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.objects import MinEAObject
 from app.models.views_graph import Process, Stage, StageCapability
 from app.schemas.processes import ProcessCreate, ProcessListResponse, ProcessRead, ProcessUpdate, StageRead
+from app.services.owner_fields import apply_ownership_write_resolved, ownership_from_body, ownership_read_payload
 from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
 
@@ -42,7 +43,7 @@ def _stage_to_read(stage: Stage) -> StageRead:
         id=stage.id,
         name=stage.name,
         position=stage.position,
-        owner=stage.owner,
+        **ownership_read_payload(stage),
         cycle_time_target=stage.cycle_time_target,
         typical_duration=stage.typical_duration,
         transition_condition=stage.transition_condition,
@@ -60,7 +61,7 @@ async def _to_read(process: Process) -> ProcessRead:
         workspace_id=process.workspace_id,
         org_id=process.org_id,
         name=process.name,
-        owner=process.owner,
+        **ownership_read_payload(process),
         status=process.status,
         description=process.description,
         trigger_event=process.trigger_event,
@@ -95,6 +96,7 @@ async def _apply_stages(
     process: Process,
     workspace_id: UUID,
     org_id: UUID,
+    user_id: UUID | None,
     stages_data: list,
 ) -> None:
     # Do not use process.stages.clear() — it triggers sync lazy-load IO in async sessions.
@@ -112,12 +114,20 @@ async def _apply_stages(
             process_id=process.id,
             name=stage_data.name,
             position=stage_data.position,
-            owner=stage_data.owner,
+            owner=None,
             cycle_time_target=stage_data.cycle_time_target,
             typical_duration=stage_data.typical_duration,
             transition_condition=stage_data.transition_condition,
             transition_trigger=stage_data.transition_trigger,
             transition_handoff=stage_data.transition_handoff,
+        )
+        await apply_ownership_write_resolved(
+            db,
+            stage,
+            workspace_id=workspace_id,
+            org_id=org_id,
+            user_id=user_id,
+            **ownership_from_body(stage_data),
         )
         db.add(stage)
         await db.flush()
@@ -158,7 +168,7 @@ async def create_process(
         workspace_id=ctx.workspace.id,
         org_id=ctx.org_id,
         name=body.name,
-        owner=body.owner,
+        owner=None,
         status=body.status,
         description=body.description,
         trigger_event=body.trigger_event,
@@ -166,11 +176,19 @@ async def create_process(
         canvas_layout=body.canvas_layout,
         graph_edges=body.graph_edges,
     )
+    await apply_ownership_write_resolved(
+        db,
+        process,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        user_id=ctx.user_id,
+        **ownership_from_body(body),
+    )
     db.add(process)
     await db.flush()
 
     if body.stages:
-        await _apply_stages(db, process, ctx.workspace.id, ctx.org_id, body.stages)
+        await _apply_stages(db, process, ctx.workspace.id, ctx.org_id, ctx.user_id, body.stages)
 
     await db.flush()
     refreshed = await _load_process(db, process.id, ctx.workspace.id, ctx.org_id)
@@ -208,12 +226,34 @@ async def update_process(
     if not process:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Process not found")
 
+    updates = body.model_dump(exclude_unset=True)
     if body.stages is not None:
-        await _apply_stages(db, process, ctx.workspace.id, ctx.org_id, body.stages)
+        await _apply_stages(db, process, ctx.workspace.id, ctx.org_id, ctx.user_id, body.stages)
+
+    ownership_updates = {
+        k: updates.pop(k)
+        for k in list(updates)
+        if k
+        in {
+            "owner",
+            "owner_team_id",
+            "owner_team_name",
+            "point_of_contact_id",
+            "point_of_contact_name",
+        }
+    }
+    if ownership_updates:
+        await apply_ownership_write_resolved(
+            db,
+            process,
+            workspace_id=ctx.workspace.id,
+            org_id=ctx.org_id,
+            user_id=ctx.user_id,
+            **ownership_updates,
+        )
 
     for field in (
         "name",
-        "owner",
         "status",
         "description",
         "trigger_event",
@@ -221,9 +261,9 @@ async def update_process(
         "canvas_layout",
         "graph_edges",
     ):
-        value = getattr(body, field)
-        if value is not None:
-            setattr(process, field, value)
+        if field not in updates:
+            continue
+        setattr(process, field, updates[field])
 
     await db.flush()
     refreshed = await _load_process(db, process.id, ctx.workspace.id, ctx.org_id)

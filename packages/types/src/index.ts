@@ -127,7 +127,15 @@ export interface ObjectHistoryResponse {
   entries: ObjectHistoryEntry[];
 }
 
-export interface MinEAObject {
+/** Team owner + optional point of contact (shared across entities). */
+export interface OwnershipFields {
+  owner_team_id?: string | null;
+  owner_team_name?: string | null;
+  point_of_contact_id?: string | null;
+  point_of_contact_name?: string | null;
+}
+
+export interface MinEAObject extends OwnershipFields {
   id: string;
   workspace_id: string;
   org_id: string;
@@ -163,7 +171,7 @@ export interface MinEAObject {
   governed_store_count?: number;
 }
 
-export interface ObjectCreate {
+export interface ObjectCreate extends OwnershipFields {
   type: ObjectType;
   name: string;
   description?: string;
@@ -174,7 +182,7 @@ export interface ObjectCreate {
   properties?: Record<string, unknown>;
 }
 
-export interface ObjectUpdate {
+export interface ObjectUpdate extends OwnershipFields {
   name?: string;
   description?: string;
   owner?: string;
@@ -992,7 +1000,7 @@ export interface ProductHistoryResponse {
   entries: ProductHistoryEntry[];
 }
 
-export interface Product {
+export interface Product extends OwnershipFields {
   id: string;
   workspace_id: string;
   org_id: string;
@@ -1039,7 +1047,7 @@ export interface Product {
   data_stores?: ProductIntegrationItem[];
 }
 
-export interface ProductCreate {
+export interface ProductCreate extends OwnershipFields {
   name: string;
   product_line?: string;
   lifecycle?: string;
@@ -1048,7 +1056,7 @@ export interface ProductCreate {
   capability_ids?: string[];
 }
 
-export interface ProductUpdate {
+export interface ProductUpdate extends OwnershipFields {
   name?: string;
   product_line?: string;
   lifecycle?: string;
@@ -1103,7 +1111,7 @@ export interface ProcessGraphEdge {
   handoff?: string | null;
 }
 
-export interface ProcessStage {
+export interface ProcessStage extends OwnershipFields {
   id: string;
   name: string;
   position: number;
@@ -1116,7 +1124,7 @@ export interface ProcessStage {
   capability_ids: string[];
 }
 
-export interface Process {
+export interface Process extends OwnershipFields {
   id: string;
   workspace_id: string;
   org_id: string;
@@ -1135,7 +1143,7 @@ export interface Process {
   updated_at: string;
 }
 
-export interface ProcessStageCreate {
+export interface ProcessStageCreate extends OwnershipFields {
   name: string;
   position?: number;
   owner?: string;
@@ -1147,7 +1155,7 @@ export interface ProcessStageCreate {
   capability_ids?: string[];
 }
 
-export interface ProcessCreate {
+export interface ProcessCreate extends OwnershipFields {
   name: string;
   owner?: string;
   status?: string;
@@ -1176,7 +1184,7 @@ export interface JourneyGraphEdge {
   entry_criteria?: string | null;
 }
 
-export interface JourneyStep {
+export interface JourneyStep extends OwnershipFields {
   id: string;
   title: string;
   position: number;
@@ -1190,7 +1198,7 @@ export interface JourneyStep {
   system_ids: string[];
 }
 
-export interface Journey {
+export interface Journey extends OwnershipFields {
   id: string;
   workspace_id: string;
   org_id: string;
@@ -1208,7 +1216,7 @@ export interface Journey {
   updated_at: string;
 }
 
-export interface JourneyStepCreate {
+export interface JourneyStepCreate extends OwnershipFields {
   title: string;
   position?: number;
   channel?: string;
@@ -1221,7 +1229,7 @@ export interface JourneyStepCreate {
   system_ids?: string[];
 }
 
-export interface JourneyCreate {
+export interface JourneyCreate extends OwnershipFields {
   name: string;
   owner?: string;
   status?: string;
@@ -1681,6 +1689,46 @@ export interface TeamDetail extends Team {
 export interface TeamListResponse {
   items: Team[];
   total: number;
+}
+
+export interface PeopleContact {
+  id: string;
+  workspace_id: string;
+  org_id: string;
+  name: string;
+  email?: string | null;
+  team_id?: string | null;
+  team_name?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PeopleContactCreate {
+  name: string;
+  email?: string | null;
+  team_id?: string | null;
+}
+
+export interface PeopleContactUpdate {
+  name?: string;
+  email?: string | null;
+  team_id?: string | null;
+}
+
+export interface PeopleContactListResponse {
+  items: PeopleContact[];
+  total: number;
+}
+
+export interface ContactAssignment {
+  entity_kind: string;
+  entity_id: string;
+  entity_name: string;
+  subtitle?: string | null;
+}
+
+export interface PeopleContactDetail extends PeopleContact {
+  assignments: ContactAssignment[];
 }
 
 export interface TeamRoleAssignmentCreate {

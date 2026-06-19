@@ -29,6 +29,13 @@ class Product(Base):
     product_line: Mapped[str | None] = mapped_column(Text, nullable=True)
     lifecycle: Mapped[str] = mapped_column(Text, default="planned")
     owner: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="SET NULL"), nullable=True
+    )
+    point_of_contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("people_contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    point_of_contact_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     graph_layout: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
@@ -119,6 +126,13 @@ class Process(Base):
     value_delivered: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="SET NULL"), nullable=True
+    )
+    point_of_contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("people_contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    point_of_contact_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(Text, default="draft")
     canvas_layout: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     graph_edges: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -138,6 +152,13 @@ class Stage(Base):
     cycle_time_current: Mapped[float | None] = mapped_column(Double, nullable=True)
     cycle_time_target: Mapped[float | None] = mapped_column(Double, nullable=True)
     owner: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="SET NULL"), nullable=True
+    )
+    point_of_contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("people_contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    point_of_contact_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     typical_duration: Mapped[str | None] = mapped_column(Text, nullable=True)
     transition_condition: Mapped[str | None] = mapped_column(Text, nullable=True)
     transition_trigger: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -173,6 +194,13 @@ class CustomerJourney(Base):
     customer_segment: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="SET NULL"), nullable=True
+    )
+    point_of_contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("people_contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    point_of_contact_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(Text, default="draft")
     canvas_layout: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     graph_edges: Mapped[list | None] = mapped_column(JSONB, nullable=True)
@@ -197,6 +225,13 @@ class JourneyMoment(Base):
     goal: Mapped[str | None] = mapped_column(Text, nullable=True)
     pain_points: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="SET NULL"), nullable=True
+    )
+    point_of_contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("people_contacts.id", ondelete="SET NULL"), nullable=True
+    )
+    point_of_contact_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_opportunities: Mapped[str | None] = mapped_column(Text, nullable=True)
     sentiment_friction: Mapped[str | None] = mapped_column(Text, nullable=True)
     emotion: Mapped[str | None] = mapped_column(Text, nullable=True)

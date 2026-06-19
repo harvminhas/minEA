@@ -8,6 +8,7 @@ import type { MinEAObject, ModelProperties } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { OwnershipDetailRow } from "@/components/ownership/OwnershipDetailRow";
 import {
   DetailPanel,
   DetailRow,
@@ -231,7 +232,7 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
             </DetailSection>
 
             <DetailSection title="Governance">
-              {runtime.owner && <DetailRow label="Owner" value={runtime.owner} />}
+              <OwnershipDetailRow entity={runtime} />
               {props.sla_target && (
                 <DetailRow label="SLA target" value={PLATFORM_SLA_LABEL[props.sla_target] ?? props.sla_target} />
               )}

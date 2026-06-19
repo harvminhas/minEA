@@ -7,6 +7,8 @@ import type { CapabilityMapCapability } from "@minea/types";
 import { useAuth } from "@/lib/auth-context";
 import { objectsApi } from "@/lib/api-client";
 import { formFieldClass } from "@/components/ui/FormDrawer";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { useTenancy } from "@/lib/tenancy";
 
 interface Props {
@@ -20,7 +22,7 @@ export function EditCapabilityDialog({ capability, domainName, onClose, onSucces
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const [name, setName] = useState(capability.name);
-  const [owner, setOwner] = useState(capability.owner ?? "");
+  const ownership = useOwnershipForm(capability);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -33,7 +35,7 @@ export function EditCapabilityDialog({ capability, domainName, onClose, onSucces
         capability.id,
         {
           name: trimmedName,
-          owner: owner.trim() || undefined,
+          ...ownership.toPayload(),
         },
         token!
       );
@@ -77,15 +79,7 @@ export function EditCapabilityDialog({ capability, domainName, onClose, onSucces
               autoFocus
             />
           </label>
-          <label className="block">
-            <span className="text-xs font-medium text-gray-600 mb-1.5 block">Owner</span>
-            <input
-              value={owner}
-              onChange={(e) => setOwner(e.target.value)}
-              placeholder="e.g. PDY, Sales Team"
-              className={formFieldClass}
-            />
-          </label>
+          <OwnershipFields value={ownership.value} onChange={ownership.setValue} required={false} />
         </div>
 
         <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-100 bg-gray-50 rounded-b-xl">

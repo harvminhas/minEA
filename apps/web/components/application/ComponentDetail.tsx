@@ -14,11 +14,7 @@ import {
 import { excludeTechDebtRelationships } from "@/lib/relationship-display";
 import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useTenancy } from "@/lib/tenancy";
-import {
-  DetailPanel,
-  DetailRow,
-  DetailSection,
-} from "@/components/ui/DetailPanel";
+import { OwnershipDetailRow } from "@/components/ownership/OwnershipDetailRow";
 import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
 import { usePermissions } from "@/lib/use-permissions";
 import { CreateComponentPanel } from "@/components/application/CreateComponentPanel";
@@ -341,7 +337,7 @@ export function ComponentDetail({ component, onClose, onDelete, onUpdate }: Prop
               <div className="space-y-2 text-sm">
                 {typeLabel && <DetailRow label="Type" value={typeLabel} />}
                 {props.tech_stack && <DetailRow label="Tech stack" value={props.tech_stack} />}
-                {liveComponent.owner && <DetailRow label="Owner" value={liveComponent.owner} />}
+                <OwnershipDetailRow entity={liveComponent} />
                 {props.runtime && (
                   <DetailRow label="Runs on" value={props.runtime.runtime_name} />
                 )}

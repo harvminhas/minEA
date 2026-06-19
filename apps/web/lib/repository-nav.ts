@@ -15,7 +15,8 @@ export type NavCountSource =
   | { kind: "processes" }
   | { kind: "capability-map" }
   | { kind: "people-roles" }
-  | { kind: "people-teams" };
+  | { kind: "people-teams" }
+  | { kind: "people-contacts" };
 
 export type RepositoryNavItem = {
   label: string;
@@ -175,6 +176,7 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
     items: [
       { label: "Roles", segment: "people/roles", countSource: { kind: "people-roles" } },
       { label: "Teams", segment: "people/teams", countSource: { kind: "people-teams" } },
+      { label: "Contacts", segment: "people/contacts", countSource: { kind: "people-contacts" } },
     ],
   },
 ];

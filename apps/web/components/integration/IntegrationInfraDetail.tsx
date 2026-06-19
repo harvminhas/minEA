@@ -13,6 +13,7 @@ import {
   infraDiagramNameById,
   mergeInfraArchitectureRelationships,
 } from "@/lib/integration-infra-relationship-utils";
+import { OwnershipDetailRow } from "@/components/ownership/OwnershipDetailRow";
 import {
   DetailPanel,
   DetailRow,
@@ -406,7 +407,7 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
             </DetailSection>
 
             <DetailSection title="Governance">
-              {infra.owner && <DetailRow label="Owner" value={infra.owner} />}
+              <OwnershipDetailRow entity={infra} />
               {props.sla_target && (
                 <DetailRow label="SLA target" value={PLATFORM_SLA_LABEL[props.sla_target] ?? props.sla_target} />
               )}

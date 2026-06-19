@@ -12,6 +12,8 @@ import {
   resolveToMapCapability,
 } from "@/lib/system-capability-utils";
 import { formFieldClass } from "@/components/ui/FormDrawer";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import type { Product } from "@minea/types";
 
 const LIFECYCLES = ["planned", "beta", "live", "retiring", "retired"];
@@ -29,7 +31,7 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
   const isEdit = !!initialValues;
 
   const [name, setName] = useState(initialValues?.name ?? "");
-  const [owner, setOwner] = useState(initialValues?.owner ?? "");
+  const ownership = useOwnershipForm(initialValues);
   const [productLine, setProductLine] = useState(initialValues?.product_line ?? "");
   const [lifecycle, setLifecycle] = useState(initialValues?.lifecycle ?? "planned");
   const [selectedCaps, setSelectedCaps] = useState<string[]>(
@@ -124,7 +126,7 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
       ];
       const body = {
         name,
-        owner: owner || undefined,
+        ...ownership.toPayload(),
         product_line: productLine || undefined,
         lifecycle,
         capability_ids,
@@ -299,15 +301,7 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Owner</label>
-              <input
-                value={owner}
-                onChange={(e) => setOwner(e.target.value)}
-                className={formFieldClass}
-                placeholder="e.g. Product Team"
-              />
-            </div>
+            <OwnershipFields value={ownership.value} onChange={ownership.setValue} required={false} />
           </div>
         </div>
 

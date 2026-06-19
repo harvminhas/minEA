@@ -6,7 +6,9 @@ import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowRight, Info, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { dataApi, objectsApi, peopleApi } from "@/lib/api-client";
+import { dataApi, objectsApi } from "@/lib/api-client";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { syncFlowCarrierRelationship } from "@/lib/flow-relationship-utils";
 import { AddFlowEndpointDialog } from "@/components/integration/AddFlowEndpointDialog";
@@ -196,7 +198,7 @@ export function CreateFlowPanel({ onClose, onSuccess }: Props) {
   const [auth, setAuth] = useState("oauth2");
 
   // Governance
-  const [owner, setOwner] = useState("");
+  const ownership = useOwnershipForm();
   const [status, setStatus] = useState("planned");
   const [criticality, setCriticality] = useState("low");
   const [dataClassification, setDataClassification] = useState("inherited");
@@ -211,15 +213,6 @@ export function CreateFlowPanel({ onClose, onSuccess }: Props) {
     queryFn: async () => {
       const token = await getToken();
       return dataApi.getFlowEndpointCatalog(orgSlug, workspaceSlug, token!);
-    },
-    enabled,
-  });
-
-  const { data: teamsData } = useQuery({
-    queryKey: ["teams", orgSlug, workspaceSlug],
-    queryFn: async () => {
-      const token = await getToken();
-      return peopleApi.listTeams(orgSlug, workspaceSlug, token!);
     },
     enabled,
   });
@@ -255,7 +248,8 @@ export function CreateFlowPanel({ onClose, onSuccess }: Props) {
   const canSubmit =
     name.trim().length > 0 &&
     sources.systems.length > 0 &&
-    destinations.systems.length > 0;
+    destinations.systems.length > 0 &&
+    ownership.isValid;
 
   const classificationLabel = useMemo(() => {
     const base = dataClassification === "inherited" ? inherited.level : dataClassification;
@@ -291,7 +285,7 @@ export function CreateFlowPanel({ onClose, onSuccess }: Props) {
           type: "integration_flow",
           name: name.trim(),
           description: description.trim() || undefined,
-          owner: owner.trim() || undefined,
+          ...ownership.toPayload(),
           status: status as ObjectStatus,
           tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
           properties: properties as Record<string, unknown>,
@@ -549,19 +543,7 @@ export function CreateFlowPanel({ onClose, onSuccess }: Props) {
               <SectionHeader>Governance</SectionHeader>
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 <div className="col-span-2">
-                  <FieldLabel>Owner</FieldLabel>
-                  <input
-                    value={owner}
-                    onChange={(e) => setOwner(e.target.value)}
-                    list="flow-owner-options"
-                    placeholder="Search team or person…"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
-                  <datalist id="flow-owner-options">
-                    {(teamsData?.items ?? []).map((team) => (
-                      <option key={team.id} value={team.name} />
-                    ))}
-                  </datalist>
+                  <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
                 </div>
                 <div>
                   <FieldLabel>Status</FieldLabel>

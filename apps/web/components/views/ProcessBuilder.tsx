@@ -15,6 +15,8 @@ import {
 } from "@/components/views/ProcessFlowCanvas";
 import { AddPathDialog } from "@/components/views/AddPathDialog";
 import { StageDetailPanel } from "@/components/views/StageDetailPanel";
+import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { DeleteStageConfirmDialog } from "@/components/views/DeleteStageConfirmDialog";
 import {
   canAutosave,
@@ -67,7 +69,8 @@ export function ProcessBuilder({ initialValues, onClose }: Props) {
   const [processId, setProcessId] = useState<string | null>(initialValues?.id ?? null);
   const [displayStatus, setDisplayStatus] = useState(initialValues?.status ?? "draft");
   const [name, setName] = useState(initialValues?.name ?? "");
-  const [owner, setOwner] = useState(initialValues?.owner ?? "");
+  const ownership = useOwnershipForm(initialValues);
+  const ownerLabel = ownership.value.ownerTeamName;
   const [stages, setStages] = useState<StageDraft[]>(() => initialDrafts);
   const [graphEdges, setGraphEdges] = useState<EdgeDraft[]>(() => initialEdges);
   const [nodeLayout, setNodeLayout] = useState<NodeLayoutMap>(() => initialLayout.nodeLayout);
@@ -110,8 +113,8 @@ export function ProcessBuilder({ initialValues, onClose }: Props) {
   const savingRef = useRef(false);
   const processIdRef = useRef(processId);
   processIdRef.current = processId;
-  const draftRef = useRef({ name, owner, stages, graphEdges, nodeLayout, edgeLabelLayout });
-  draftRef.current = { name, owner, stages, graphEdges, nodeLayout, edgeLabelLayout };
+  const draftRef = useRef({ name, owner: ownerLabel, stages, graphEdges, nodeLayout, edgeLabelLayout });
+  draftRef.current = { name, owner: ownerLabel, stages, graphEdges, nodeLayout, edgeLabelLayout };
 
   const { data: capabilities } = useQuery({
     queryKey: ["objects", orgSlug, workspaceSlug, "capability"],
@@ -133,8 +136,8 @@ export function ProcessBuilder({ initialValues, onClose }: Props) {
   }, [addPathSourceId, graphEdges]);
 
   const currentSnapshot = useMemo(
-    () => serializeProcessState(name, owner, stages, graphEdges, nodeLayout, edgeLabelLayout),
-    [name, owner, stages, graphEdges, nodeLayout, edgeLabelLayout]
+    () => serializeProcessState(name, ownerLabel, stages, graphEdges, nodeLayout, edgeLabelLayout),
+    [name, ownerLabel, stages, graphEdges, nodeLayout, edgeLabelLayout]
   );
 
   const isDirty = savedSnapshot !== "" && currentSnapshot !== savedSnapshot;
@@ -284,7 +287,11 @@ export function ProcessBuilder({ initialValues, onClose }: Props) {
       const token = await getToken();
       const { name: n, owner: o, stages: s, graphEdges: ge, nodeLayout: nl, edgeLabelLayout: el } =
         draftRef.current;
-      const payload = { ...processFromSnapshot(n, o, s, ge, nl, el), status };
+      const payload = {
+        ...processFromSnapshot(n, o, s, ge, nl, el),
+        ...ownership.toPayload(),
+        status,
+      };
       const id = processIdRef.current;
       if (id) {
         return processesApi.update(orgSlug, workspaceSlug, id, payload, token!);
@@ -298,7 +305,7 @@ export function ProcessBuilder({ initialValues, onClose }: Props) {
       setProcessId(saved.id);
       processIdRef.current = saved.id;
       setName(saved.name);
-      setOwner(saved.owner ?? "");
+      ownership.reset(saved);
       setDisplayStatus(saved.status);
       setStages(newDrafts);
       setGraphEdges(newEdges);
@@ -358,7 +365,7 @@ export function ProcessBuilder({ initialValues, onClose }: Props) {
     return () => {
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     };
-  }, [name, owner, stages, graphEdges, nodeLayout, edgeLabelLayout, currentSnapshot, savedSnapshot, isReadOnly]);
+  }, [name, ownerLabel, stages, graphEdges, nodeLayout, edgeLabelLayout, currentSnapshot, savedSnapshot, isReadOnly]);
 
   const handlePublish = async () => {
     await saveMutation.mutateAsync({ status: "live" });
@@ -392,13 +399,22 @@ export function ProcessBuilder({ initialValues, onClose }: Props) {
               Define a process as an ordered sequence of stages
             </p>
             <div className="flex flex-wrap items-center gap-2 mt-3 px-2 -mx-2">
-              <input
-                value={owner}
-                onChange={(e) => setOwner(e.target.value)}
-                readOnly={isReadOnly}
-                placeholder="Owner: Payments team"
-                className="text-xs border border-gray-200 rounded-full px-3 py-1 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-auto min-w-[160px]"
-              />
+              {!isReadOnly ? (
+                <div className="min-w-[280px] max-w-md">
+                  <OwnershipFields
+                    value={ownership.value}
+                    onChange={ownership.setValue}
+                    required={false}
+                    teamLabel="Process owner"
+                  />
+                </div>
+              ) : (
+                ownerLabel && (
+                  <span className="text-xs border border-gray-200 rounded-full px-3 py-1 bg-gray-50 text-gray-600">
+                    {ownerLabel}
+                  </span>
+                )
+              )}
               <span className="text-xs border border-gray-200 rounded-full px-3 py-1 text-gray-500 capitalize">
                 {displayStatus}
               </span>

@@ -13,6 +13,7 @@ import {
 import { excludeTechDebtRelationships } from "@/lib/relationship-display";
 import { refreshObjectRelationshipQueries } from "@/lib/relationship-query-utils";
 import { useTenancy } from "@/lib/tenancy";
+import { OwnershipDetailRow } from "@/components/ownership/OwnershipDetailRow";
 import {
   DetailPanel,
   DetailRow,
@@ -361,7 +362,7 @@ export function ApiDetail({ api, onClose, onDelete, onUpdate }: Props) {
 
             <DetailSection title="Governance">
               <div className="space-y-2 text-sm">
-                {liveApi.owner && <DetailRow label="Owner" value={liveApi.owner} />}
+                <OwnershipDetailRow entity={liveApi} />
                 {props.audience && (
                   <DetailRow label="Audience" value={AUDIENCE_LABEL[props.audience] ?? props.audience} />
                 )}

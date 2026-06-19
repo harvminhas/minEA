@@ -156,3 +156,43 @@ class AccountabilityUpdate(BaseModel):
         ...,
         pattern=r"^(owns|performs|approves|informed|stewards|manages)$",
     )
+
+
+class PeopleContactCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    email: str | None = None
+    team_id: UUID | None = None
+
+
+class PeopleContactUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    email: str | None = None
+    team_id: UUID | None = None
+
+
+class PeopleContactRead(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    org_id: UUID
+    name: str
+    email: str | None
+    team_id: UUID | None
+    team_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ContactAssignmentRead(BaseModel):
+    entity_kind: str
+    entity_id: UUID
+    entity_name: str
+    subtitle: str | None = None
+
+
+class PeopleContactDetail(PeopleContactRead):
+    assignments: list[ContactAssignmentRead] = Field(default_factory=list)
+
+
+class PeopleContactListResponse(BaseModel):
+    items: list[PeopleContactRead]
+    total: int

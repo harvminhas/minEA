@@ -16,6 +16,7 @@ from app.schemas.journeys import (
     JourneyUpdate,
     JourneyStepRead,
 )
+from app.services.owner_fields import apply_ownership_write_resolved, ownership_from_body, ownership_read_payload
 from app.services.journey_systems import derive_systems_for_processes
 from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
@@ -71,7 +72,7 @@ def _step_to_read(step: JourneyMoment) -> JourneyStepRead:
         channel=step.channel or step.touchpoint_type,
         goal=step.goal,
         pain_points=step.pain_points or step.friction_notes,
-        owner=step.owner,
+        **ownership_read_payload(step),
         ai_opportunities=step.ai_opportunities,
         sentiment_friction=step.sentiment_friction or step.emotion,
         process_ids=[mp.process_id for mp in step.processes],
@@ -87,7 +88,7 @@ async def _to_read(journey: CustomerJourney) -> JourneyRead:
         workspace_id=journey.workspace_id,
         org_id=journey.org_id,
         name=journey.name,
-        owner=journey.owner,
+        **ownership_read_payload(journey),
         status=journey.status,
         customer_segment=journey.customer_segment,
         description=journey.description,
@@ -126,6 +127,7 @@ async def _apply_steps(
     journey: CustomerJourney,
     workspace_id: UUID,
     org_id: UUID,
+    user_id: UUID | None,
     steps_data: list,
 ) -> None:
     await db.execute(delete(JourneyMoment).where(JourneyMoment.journey_id == journey.id))
@@ -146,12 +148,20 @@ async def _apply_steps(
             channel=step_data.channel,
             goal=step_data.goal,
             pain_points=step_data.pain_points,
-            owner=step_data.owner,
+            owner=None,
             ai_opportunities=step_data.ai_opportunities,
             sentiment_friction=step_data.sentiment_friction,
             touchpoint_type=step_data.channel,
             friction_notes=step_data.pain_points,
             emotion=step_data.sentiment_friction,
+        )
+        await apply_ownership_write_resolved(
+            db,
+            step,
+            workspace_id=workspace_id,
+            org_id=org_id,
+            user_id=user_id,
+            **ownership_from_body(step_data),
         )
         db.add(step)
         await db.flush()
@@ -210,18 +220,26 @@ async def create_journey(
         workspace_id=ctx.workspace.id,
         org_id=ctx.org_id,
         name=body.name,
-        owner=body.owner,
+        owner=None,
         status=body.status,
         customer_segment=body.customer_segment,
         description=body.description,
         canvas_layout=body.canvas_layout,
         graph_edges=body.graph_edges,
     )
+    await apply_ownership_write_resolved(
+        db,
+        journey,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        user_id=ctx.user_id,
+        **ownership_from_body(body),
+    )
     db.add(journey)
     await db.flush()
 
     if body.steps:
-        await _apply_steps(db, journey, ctx.workspace.id, ctx.org_id, body.steps)
+        await _apply_steps(db, journey, ctx.workspace.id, ctx.org_id, ctx.user_id, body.steps)
 
     await db.flush()
     refreshed = await _load_journey(db, journey.id, ctx.workspace.id, ctx.org_id)
@@ -259,21 +277,43 @@ async def update_journey(
     if not journey:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Journey not found")
 
+    updates = body.model_dump(exclude_unset=True)
     if body.steps is not None:
-        await _apply_steps(db, journey, ctx.workspace.id, ctx.org_id, body.steps)
+        await _apply_steps(db, journey, ctx.workspace.id, ctx.org_id, ctx.user_id, body.steps)
+
+    ownership_updates = {
+        k: updates.pop(k)
+        for k in list(updates)
+        if k
+        in {
+            "owner",
+            "owner_team_id",
+            "owner_team_name",
+            "point_of_contact_id",
+            "point_of_contact_name",
+        }
+    }
+    if ownership_updates:
+        await apply_ownership_write_resolved(
+            db,
+            journey,
+            workspace_id=ctx.workspace.id,
+            org_id=ctx.org_id,
+            user_id=ctx.user_id,
+            **ownership_updates,
+        )
 
     for field in (
         "name",
-        "owner",
         "status",
         "customer_segment",
         "description",
         "canvas_layout",
         "graph_edges",
     ):
-        value = getattr(body, field)
-        if value is not None:
-            setattr(journey, field, value)
+        if field not in updates:
+            continue
+        setattr(journey, field, updates[field])
 
     await db.flush()
     refreshed = await _load_journey(db, journey.id, ctx.workspace.id, ctx.org_id)

@@ -7,6 +7,7 @@ import { AlertTriangle } from "lucide-react";
 import type { MinEAObject, TechDebtProperties } from "@minea/types";
 import { objectsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
+import { OwnershipDetailRow } from "@/components/ownership/OwnershipDetailRow";
 import {
   DetailPanel,
   DetailRow,
@@ -111,7 +112,7 @@ export function TechDebtDetail({ techDebt, onClose, onDelete, onUpdate }: Props)
               value={`${props.affects.object_name} (${affectsKindLabel(props.affects.object_kind)})`}
             />
           )}
-          {techDebt.owner && <DetailRow label="Owner" value={techDebt.owner} />}
+          <OwnershipDetailRow entity={techDebt} />
           {props.identified_by && <DetailRow label="Identified by" value={props.identified_by} />}
         </DetailSection>
 

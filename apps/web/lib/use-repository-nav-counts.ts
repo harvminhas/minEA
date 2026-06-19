@@ -71,6 +71,7 @@ async function resolveCount(
     processes?: number;
     roles?: number;
     teams?: number;
+    contacts?: number;
     objectTypes: Map<ObjectType, number>;
     objectMulti: Map<string, number>;
   }
@@ -113,6 +114,13 @@ async function resolveCount(
         cache.teams = res.total;
       }
       return cache.teams;
+    }
+    case "people-contacts": {
+      if (cache.contacts === undefined) {
+        const res = await peopleApi.listContacts(orgSlug, workspaceSlug, token);
+        cache.contacts = res.total;
+      }
+      return cache.contacts;
     }
     case "objects": {
       if (!cache.objectTypes.has(source.type)) {
