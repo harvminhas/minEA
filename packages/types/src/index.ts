@@ -545,7 +545,7 @@ export interface RoadmapDebtRef {
   severity?: "low" | "medium" | "high" | "critical";
 }
 
-export type RoadmapMilestoneStatus = "not_started" | "in_flight" | "done";
+export type RoadmapMilestoneStatus = "not_started" | "on_track" | "at_risk" | "done" | "in_flight";
 
 /** @deprecated Legacy point-in-time milestones — replaced by tracks/segments. */
 export interface RoadmapMilestone {
@@ -565,6 +565,8 @@ export interface RoadmapSegment {
   /** ISO date (YYYY-MM-DD), inclusive. */
   end_date: string;
   status?: RoadmapMilestoneStatus;
+  /** What happens during this span on the timeline. */
+  description?: string;
   /** Hex override; defaults to the track color. */
   color?: string;
 }
@@ -606,6 +608,10 @@ export interface RoadmapItemProperties {
   cost?: number | null;
   investment_category?: "innovation" | "modernization" | "run";
   blocked_reason?: string | null;
+  /** Expected measurable result when delivered. */
+  outcome?: string;
+  /** Delivery risk assessment (four levels). */
+  risk?: "low" | "moderate" | "high" | "critical";
   /** How this initiative relates to AI. Omitted or "none" = not AI-related. */
   ai_role?: AiRole;
   /** @deprecated Converted to tracks on first edit. */

@@ -1,22 +1,30 @@
 "use client";
 
-import { useMemo } from "react";
-import { Check, ChevronLeft, ChevronRight, Maximize2, Pencil, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Maximize2, Pencil, Plus } from "lucide-react";
 import type { RoadmapSegment, RoadmapTimelineView, RoadmapTrack } from "@minea/types";
 import {
   autoTimelineRange,
   buildTimelineTicks,
   extendTimelineView,
   formatTimelineBindingLabel,
+  normalizeSegmentStatus,
   segmentAddAnchor,
   segmentBarStyle,
   segmentDoneCount,
+  segmentStatusDensity,
+  segmentStatusLabel,
   segmentTotalCount,
   sortedSegments,
   sortedTracks,
   trackColor,
   type RoadmapTimelineBinding,
 } from "@/lib/roadmap-utils";
+import { SegmentBarStatus, SegmentStatusLegend } from "@/components/strategy/SegmentStatusBadge";
+import {
+  SegmentHoverTooltip,
+  type SegmentHoverTarget,
+} from "@/components/strategy/SegmentHoverTooltip";
 import { cn } from "@/lib/utils";
 
 const LABEL_COL_WIDTH = 220;
@@ -49,6 +57,10 @@ export function RoadmapTimeline({
   onExpand,
   saving = false,
 }: Props) {
+  const [showStatus, setShowStatus] = useState(true);
+  const [hoveredSegment, setHoveredSegment] = useState<SegmentHoverTarget | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [canvasWidth, setCanvasWidth] = useState(0);
   const ordered = useMemo(() => sortedTracks(tracks), [tracks]);
   const autoRange = useMemo(() => autoTimelineRange(tracks), [tracks]);
   const { range, axis: axisMode, mode: timelineMode } = timelineBinding;
@@ -67,6 +79,18 @@ export function RoadmapTimeline({
   const canExtend = Boolean(onTimelineViewChange && timelineMode === "date_bound");
   const isEmpty = ordered.length === 0;
 
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+
+    const update = () => setCanvasWidth(el.getBoundingClientRect().width);
+    update();
+
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [tracks, fullWidth, isEmpty]);
+
   function extendRange(direction: "start" | "end") {
     if (!onTimelineViewChange) return;
     onTimelineViewChange(extendTimelineView(timelineView, autoRange, direction));
@@ -84,6 +108,30 @@ export function RoadmapTimeline({
           Timeline{total > 0 && ` · ${done} of ${total} segments done`}
         </p>
         <div className="flex items-center gap-2 ml-auto">
+          {total > 0 && (
+            <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+              <span className="text-xs font-medium text-gray-600">Show status</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showStatus}
+                onClick={() => setShowStatus((v) => !v)}
+                className={cn(
+                  "relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border transition-colors",
+                  showStatus
+                    ? "bg-violet-600 border-violet-600"
+                    : "bg-gray-200 border-gray-300"
+                )}
+              >
+                <span
+                  className={cn(
+                    "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transition-transform mt-0.5",
+                    showStatus ? "translate-x-4 ml-0.5" : "translate-x-0.5"
+                  )}
+                />
+              </button>
+            </label>
+          )}
           {onExpand && (
             <button
               type="button"
@@ -95,6 +143,10 @@ export function RoadmapTimeline({
           )}
         </div>
       </div>
+
+      {showStatus && total > 0 && !isEmpty && (
+        <SegmentStatusLegend className="mb-4" />
+      )}
 
       {isEmpty ? (
         <div className="py-16 text-center border-2 border-dashed border-gray-200 rounded-xl">
@@ -138,7 +190,7 @@ export function RoadmapTimeline({
                     4 wk
                   </button>
                 )}
-                <div className="relative flex-1 h-6 min-w-0">
+                <div ref={canvasRef} className="relative flex-1 h-6 min-w-0">
                   {ticks.map((tick) => (
                     <span
                       key={tick.key}
@@ -214,30 +266,50 @@ export function RoadmapTimeline({
                       <div className="relative flex-1 min-h-12 h-12 min-w-0">
                         {sortedSegments(track.segments).map((segment) => {
                           const bar = segmentBarStyle(segment, range);
+                          const segmentStatus = normalizeSegmentStatus(segment.status);
+                          const statusDensity = segmentStatusDensity(bar.width, canvasWidth);
                           return (
                             <button
                               key={segment.id}
                               type="button"
-                              disabled={!onEditSegment}
                               onClick={() => onEditSegment?.(track.id, segment)}
+                              onMouseEnter={(e) =>
+                                setHoveredSegment({
+                                  segment,
+                                  trackLabel: track.label,
+                                  trackColor: color,
+                                  rect: e.currentTarget.getBoundingClientRect(),
+                                })
+                              }
+                              onMouseLeave={() => setHoveredSegment(null)}
+                              onFocus={(e) =>
+                                setHoveredSegment({
+                                  segment,
+                                  trackLabel: track.label,
+                                  trackColor: color,
+                                  rect: e.currentTarget.getBoundingClientRect(),
+                                })
+                              }
+                              onBlur={() => setHoveredSegment(null)}
                               className={cn(
-                                "absolute top-1/2 -translate-y-1/2 h-8 rounded-md px-2 flex items-center gap-1 text-left shadow-sm ring-1 ring-black/5",
-                                onEditSegment &&
-                                  "hover:shadow-md hover:brightness-105 transition-shadow cursor-pointer"
+                                "absolute top-1/2 -translate-y-1/2 h-8 rounded-md px-2 flex items-center gap-1 text-left shadow-sm ring-1 ring-black/5 min-w-0 overflow-hidden",
+                                onEditSegment
+                                  ? "hover:shadow-md hover:brightness-105 transition-shadow cursor-pointer"
+                                  : "cursor-default"
                               )}
                               style={{
                                 left: `${bar.left}%`,
                                 width: `${bar.width}%`,
                                 backgroundColor: color,
                               }}
-                              title={segment.label}
+                              aria-label={`${segment.label}, ${segmentStatusLabel(segmentStatus)}, ${track.label}`}
                             >
-                              {segment.status === "done" && (
-                                <Check size={11} className="text-white/80 flex-shrink-0" />
-                              )}
-                              <span className="text-[11px] font-medium text-white truncate">
+                              <span className="text-[11px] font-medium text-white truncate flex-1 min-w-0">
                                 {segment.label}
                               </span>
+                              {showStatus && (
+                                <SegmentBarStatus status={segmentStatus} density={statusDensity} />
+                              )}
                             </button>
                           );
                         })}
@@ -283,6 +355,11 @@ export function RoadmapTimeline({
           </div>
         </div>
       )}
+      <SegmentHoverTooltip
+        target={hoveredSegment}
+        timelineBinding={timelineBinding}
+        showEditHint={Boolean(onEditSegment)}
+      />
     </div>
   );
 }

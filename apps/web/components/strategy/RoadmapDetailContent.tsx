@@ -23,16 +23,19 @@ import {
   roadmapKindLabel,
   roadmapListPath,
   ROADMAP_STATUS_LABEL,
+  ROADMAP_RISK_STYLE,
   INVESTMENT_CATEGORIES,
   defaultInvestmentCategory,
   STRATEGY_LAYER_COLOR,
   TECH_DEBT_EFFORT_LABEL,
   formatRoadmapTimelineLabel,
+  roadmapRiskLabel,
   resolveTimelineBinding,
   tracksFromProperties,
 } from "@/lib/roadmap-utils";
 import { resolveRoadmapSpend } from "@/lib/investment-pipeline";
 import { aiRoleLabel } from "@/lib/ai-role-utils";
+import { initials } from "@/lib/people-utils";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/lib/use-permissions";
@@ -75,10 +78,13 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
   const tracks = tracksFromProperties(props);
   const timelineBinding = useMemo(() => resolveTimelineBinding(props, tracks), [props, tracks]);
   const kindLabel = roadmapKindLabel(props);
-  const subtitleParts = [kindLabel, props.product?.product_name, roadmap?.owner].filter(Boolean);
+  const ownerName = roadmap?.point_of_contact_name ?? roadmap?.owner_team_name ?? roadmap?.owner;
+  const subtitleParts = [kindLabel, props.product?.product_name, roadmap?.owner_team_name ?? roadmap?.owner]
+    .filter(Boolean);
   const spend = roadmap ? resolveRoadmapSpend(props) : null;
   const categoryValue = props.investment_category ?? defaultInvestmentCategory(props.roadmap_kind ?? "epic");
   const categoryLabel = INVESTMENT_CATEGORIES.find((c) => c.value === categoryValue)?.label;
+  const riskStyle = props.risk ? ROADMAP_RISK_STYLE[props.risk] : null;
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey });
@@ -292,50 +298,98 @@ export function RoadmapDetailContent({ roadmapId, layout = "page", onClose }: Pr
           : "flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       )}
     >
-      <div className="rounded-xl border border-gray-200 bg-white p-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</p>
-          <p className="text-sm font-medium text-gray-900 mt-1">
-            {ROADMAP_STATUS_LABEL[props.roadmap_status ?? "discovery"] ?? props.roadmap_status}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Timeline</p>
-          <p className="text-sm font-medium text-gray-900 mt-1">
-            {formatRoadmapTimelineLabel(props)}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Effort</p>
-          <p className="text-sm font-medium text-gray-900 mt-1">
-            {props.effort_estimate
-              ? TECH_DEBT_EFFORT_LABEL[props.effort_estimate] ?? props.effort_estimate.toUpperCase()
-              : "—"}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Category</p>
-          <p className="text-sm font-medium text-gray-900 mt-1">{categoryLabel ?? "—"}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">AI role</p>
-          <p className="text-sm font-medium text-gray-900 mt-1">{aiRoleLabel(props.ai_role)}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Spend</p>
-          <p className="text-sm font-medium text-gray-900 mt-1">
-            {spend && spend.amount > 0 ? (
-              <>
-                {formatCurrency(spend.amount)}
-                {spend.estimated && <span className="text-xs text-gray-400 ml-1">est</span>}
-              </>
+      <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-5">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</p>
+            <p className="text-sm font-medium text-gray-900 mt-1">
+              {ROADMAP_STATUS_LABEL[props.roadmap_status ?? "discovery"] ?? props.roadmap_status}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Timeline</p>
+            <p className="text-sm font-medium text-gray-900 mt-1">
+              {formatRoadmapTimelineLabel(props)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Effort</p>
+            <p className="text-sm font-medium text-gray-900 mt-1">
+              {props.effort_estimate
+                ? TECH_DEBT_EFFORT_LABEL[props.effort_estimate] ?? props.effort_estimate.toUpperCase()
+                : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Category</p>
+            <p className="text-sm font-medium text-gray-900 mt-1">{categoryLabel ?? "—"}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">AI role</p>
+            <p className="text-sm font-medium text-gray-900 mt-1">{aiRoleLabel(props.ai_role)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Risk</p>
+            {props.risk && riskStyle ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 mt-1 rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                  riskStyle.pill,
+                  riskStyle.text
+                )}
+              >
+                <span className={cn("h-1.5 w-1.5 rounded-full", riskStyle.dot)} />
+                {roadmapRiskLabel(props.risk)}
+              </span>
             ) : (
-              "—"
+              <p className="text-sm font-medium text-gray-900 mt-1">—</p>
             )}
-          </p>
+          </div>
         </div>
+
+        {roadmap.description?.trim() && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Description</p>
+            <p className="text-sm text-gray-700 mt-1.5 leading-relaxed whitespace-pre-wrap">
+              {roadmap.description.trim()}
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Outcome</p>
+            <p className="text-sm text-gray-700 mt-1.5 leading-relaxed whitespace-pre-wrap">
+              {props.outcome?.trim() || "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Owner</p>
+            {ownerName ? (
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-violet-100 text-[11px] font-semibold text-violet-700">
+                  {initials(ownerName)}
+                </span>
+                <span className="text-sm font-medium text-gray-900">{ownerName}</span>
+              </div>
+            ) : (
+              <p className="text-sm font-medium text-gray-900 mt-1.5">—</p>
+            )}
+          </div>
+        </div>
+
+        {spend && spend.amount > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Spend</p>
+            <p className="text-sm font-medium text-gray-900 mt-1">
+              {formatCurrency(spend.amount)}
+              {spend.estimated && <span className="text-xs text-gray-400 ml-1">est</span>}
+            </p>
+          </div>
+        )}
+
         {props.roadmap_status === "blocked" && props.blocked_reason?.trim() && (
-          <div className="col-span-2 md:col-span-3 lg:col-span-6">
+          <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-red-400">Blocked reason</p>
             <p className="text-sm text-red-700 mt-1">{props.blocked_reason.trim()}</p>
           </div>

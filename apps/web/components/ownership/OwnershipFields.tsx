@@ -13,6 +13,7 @@ interface Props {
   value: OwnershipValue;
   onChange: (value: OwnershipValue) => void;
   required?: boolean;
+  pocRequired?: boolean;
   className?: string;
   teamLabel?: string;
   pocLabel?: string;
@@ -22,6 +23,7 @@ export function OwnershipFields({
   value,
   onChange,
   required = true,
+  pocRequired = false,
   className = "",
   teamLabel = "Owner (team)",
   pocLabel = "Point of contact (optional)",
@@ -102,12 +104,16 @@ export function OwnershipFields({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">{pocLabel}</label>
+        <label className="block text-xs font-medium text-gray-700 mb-1">
+          {pocLabel}
+          {pocRequired && <span className="text-red-500"> *</span>}
+        </label>
         <NameCombobox
           value={value.pointOfContactName}
           onChange={handlePocChange}
           options={contactOptions}
           placeholder="Select or type a contact…"
+          required={pocRequired}
           hint="Fed from People → Contacts. Type a new name to create on save."
         />
       </div>

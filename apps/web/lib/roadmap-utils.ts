@@ -4,6 +4,7 @@ import type {
   ProductRoadmapNextMilestone,
   RoadmapItemProperties,
   RoadmapMilestone,
+  RoadmapMilestoneStatus,
   RoadmapSegment,
   RoadmapTimelineView,
   RoadmapTrack,
@@ -60,6 +61,32 @@ export function defaultInvestmentCategory(kind: string): string {
 
 export const ROADMAP_KIND_LABEL = Object.fromEntries(ROADMAP_KINDS.map((k) => [k.value, k.label]));
 export const ROADMAP_STATUS_LABEL = Object.fromEntries(ROADMAP_STATUS.map((s) => [s.value, s.label]));
+
+export const ROADMAP_RISK = [
+  { value: "low", label: "Low" },
+  { value: "moderate", label: "Moderate" },
+  { value: "high", label: "High" },
+  { value: "critical", label: "Critical" },
+] as const;
+
+export type RoadmapRisk = (typeof ROADMAP_RISK)[number]["value"];
+
+export const ROADMAP_RISK_LABEL = Object.fromEntries(ROADMAP_RISK.map((r) => [r.value, r.label]));
+
+export const ROADMAP_RISK_STYLE: Record<
+  RoadmapRisk,
+  { dot: string; pill: string; text: string }
+> = {
+  low: { dot: "bg-emerald-500", pill: "bg-emerald-50 border-emerald-200", text: "text-emerald-800" },
+  moderate: { dot: "bg-amber-500", pill: "bg-amber-50 border-amber-200", text: "text-amber-900" },
+  high: { dot: "bg-orange-500", pill: "bg-orange-50 border-orange-200", text: "text-orange-900" },
+  critical: { dot: "bg-red-500", pill: "bg-red-50 border-red-200", text: "text-red-800" },
+};
+
+export function roadmapRiskLabel(risk?: RoadmapItemProperties["risk"]): string {
+  if (!risk) return "—";
+  return ROADMAP_RISK_LABEL[risk] ?? risk;
+}
 
 export function roadmapKindLabel(props: RoadmapItemProperties): string {
   return ROADMAP_KIND_LABEL[props.roadmap_kind ?? ""] ?? props.roadmap_kind ?? "";
@@ -173,6 +200,8 @@ export function buildRoadmapProperties(params: {
   cost?: number | null;
   investmentCategory?: string;
   blockedReason?: string | null;
+  outcome?: string;
+  risk?: string;
   aiRole?: string;
 }): RoadmapItemProperties {
   const timeline_view = deriveTimelineView({
@@ -199,19 +228,97 @@ export function buildRoadmapProperties(params: {
     cost: params.cost != null && params.cost > 0 ? params.cost : undefined,
     investment_category: (params.investmentCategory || undefined) as RoadmapItemProperties["investment_category"],
     blocked_reason: params.blockedReason?.trim() || undefined,
+    outcome: params.outcome?.trim() || undefined,
+    risk: (params.risk || undefined) as RoadmapItemProperties["risk"],
     ai_role: aiRoleForProperties(params.aiRole),
   };
 }
 
 export const ROADMAP_MILESTONE_STATUS = [
   { value: "not_started", label: "Not started" },
-  { value: "in_flight", label: "In flight" },
+  { value: "on_track", label: "On track" },
+  { value: "at_risk", label: "At risk" },
   { value: "done", label: "Done" },
 ] as const;
 
 export const ROADMAP_MILESTONE_STATUS_LABEL = Object.fromEntries(
   ROADMAP_MILESTONE_STATUS.map((s) => [s.value, s.label])
 );
+
+/** Legacy `in_flight` reads as on track. */
+export function normalizeSegmentStatus(
+  status?: RoadmapMilestoneStatus | string | null
+): "not_started" | "on_track" | "at_risk" | "done" {
+  if (status === "done") return "done";
+  if (status === "at_risk") return "at_risk";
+  if (status === "on_track" || status === "in_flight") return "on_track";
+  return "not_started";
+}
+
+export function segmentStatusLabel(status?: RoadmapMilestoneStatus | string | null): string {
+  const normalized = normalizeSegmentStatus(status);
+  return ROADMAP_MILESTONE_STATUS_LABEL[normalized] ?? normalized;
+}
+
+export type SegmentStatusDensity = "full" | "short" | "dot";
+
+/** Abbreviated labels for narrow timeline segments. */
+export const SEGMENT_STATUS_SHORT: Record<
+  ReturnType<typeof normalizeSegmentStatus>,
+  string
+> = {
+  not_started: "NS",
+  on_track: "OT",
+  at_risk: "AR",
+  done: "✓",
+};
+
+export function segmentStatusShortLabel(status?: RoadmapMilestoneStatus | string | null): string {
+  const normalized = normalizeSegmentStatus(status);
+  return SEGMENT_STATUS_SHORT[normalized];
+}
+
+/** Minimum segment bar width (px) for each status display mode. */
+const STATUS_FULL_MIN_PX = 76;
+const STATUS_SHORT_MIN_PX = 26;
+
+/** Pick badge density from segment bar width (% of timeline, optional canvas px width). */
+export function segmentStatusDensity(
+  barWidthPct: number,
+  canvasWidthPx?: number
+): SegmentStatusDensity {
+  if (canvasWidthPx != null && canvasWidthPx > 0) {
+    const barWidthPx = (barWidthPct / 100) * canvasWidthPx;
+    if (barWidthPx >= STATUS_FULL_MIN_PX) return "full";
+    if (barWidthPx >= STATUS_SHORT_MIN_PX) return "short";
+    return "dot";
+  }
+  if (barWidthPct >= 16) return "full";
+  if (barWidthPct >= 7) return "short";
+  return "dot";
+}
+
+export const SEGMENT_STATUS_BADGE: Record<
+  ReturnType<typeof normalizeSegmentStatus>,
+  { pill: string; onBar?: string }
+> = {
+  done: {
+    pill: "bg-emerald-600 text-white border-emerald-700",
+    onBar: "bg-emerald-50 text-emerald-900 border-emerald-300",
+  },
+  on_track: {
+    pill: "bg-slate-700 text-white border-slate-800",
+    onBar: "bg-white text-slate-900 border-slate-300 shadow-sm",
+  },
+  at_risk: {
+    pill: "bg-orange-500 text-white border-orange-600",
+    onBar: "bg-orange-50 text-orange-900 border-orange-300",
+  },
+  not_started: {
+    pill: "bg-gray-100 text-gray-700 border-gray-300",
+    onBar: "bg-white/90 text-gray-600 border-gray-300",
+  },
+};
 
 export function roadmapListPath(orgSlug: string, workspaceSlug: string) {
   return `/orgs/${orgSlug}/workspaces/${workspaceSlug}/strategy/roadmaps`;
@@ -343,6 +450,24 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
 export function formatSegmentDate(iso: string): string {
   const d = parseIsoDate(iso);
   return `${MONTH_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+}
+
+/** Human-readable span for segment hover cards and detail. */
+export function formatSegmentSpanLabel(
+  segment: RoadmapSegment,
+  binding: RoadmapTimelineBinding
+): string {
+  if (binding.mode === "relative" && binding.periodPrefix) {
+    const start = dateToPeriod(binding, segment.start_date);
+    const end = dateToPeriod(binding, segment.end_date);
+    const p = binding.periodPrefix;
+    if (start === end) return `${p}${start}`;
+    return `${p}${start} – ${p}${end}`;
+  }
+  if (segment.start_date === segment.end_date) {
+    return formatSegmentDate(segment.start_date);
+  }
+  return `${formatSegmentDate(segment.start_date)} – ${formatSegmentDate(segment.end_date)}`;
 }
 
 function formatMonthYear(d: Date): string {
@@ -826,7 +951,9 @@ export const ROADMAP_EFFORT_SHORT: Record<string, string> = {
 
 export const ROADMAP_MILESTONE_SEGMENT: Record<string, string> = {
   done: "bg-emerald-500",
-  in_flight: "bg-violet-500",
+  on_track: "bg-gray-700",
+  in_flight: "bg-gray-700",
+  at_risk: "bg-orange-400",
   not_started: "bg-gray-200",
 };
 
@@ -873,14 +1000,16 @@ export function roadmapCardFromObject(item: MinEAObject): RoadmapCardModel {
   const tracks = tracksFromProperties(props);
   const segments = flattenSegments(tracks);
   const done = segmentDoneCount(tracks);
-  const strip = segments.map((s) => ({ status: s.status ?? "not_started" }));
+  const strip = segments.map((s) => ({ status: normalizeSegmentStatus(s.status) }));
 
   return {
     id: item.id,
     name: item.name,
     kindLabel: roadmapKindLabel(props) || "Item",
     statusLabel: ROADMAP_STATUS_LABEL[props.roadmap_status ?? "discovery"] ?? "Discovery",
-    subtitle: [props.product?.product_name, item.owner].filter(Boolean).join(" · "),
+    subtitle: [props.product?.product_name, item.point_of_contact_name ?? item.owner_team_name ?? item.owner]
+      .filter(Boolean)
+      .join(" · "),
     spendLabel: formatRoadmapSpendDisplay(props),
     targetLabel: formatRoadmapTimelineLabel(props),
     effortLabel: formatRoadmapEffortDisplay(props),

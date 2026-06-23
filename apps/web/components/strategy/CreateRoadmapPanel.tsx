@@ -20,6 +20,7 @@ import {
   roadmapStatusToObjectStatus,
   ROADMAP_KINDS,
   ROADMAP_STATUS,
+  ROADMAP_RISK,
   INVESTMENT_CATEGORIES,
   defaultInvestmentCategory,
   TECH_DEBT_EFFORT,
@@ -109,11 +110,13 @@ function initFromRoadmap(item?: MinEAObject) {
   return {
     title: item?.name ?? "",
     description: item?.description ?? "",
+    outcome: props.outcome ?? "",
     tags: (item?.tags ?? []).join(", "),
     kind: props.roadmap_kind ?? "initiative",
     product: props.product ?? null,
     resolvesDebt: props.resolves_debt ?? [],
     owner: item?.owner ?? "",
+    risk: props.risk ?? "",
     roadmapStatus: props.roadmap_status ?? "discovery",
     timelineMode: timelineMode as "date_bound" | "relative",
     timelineStartMonth: props.timeline_start_date
@@ -186,11 +189,13 @@ export function CreateRoadmapPanel({
 
   const [title, setTitle] = useState(init.title);
   const [description, setDescription] = useState(init.description);
+  const [outcome, setOutcome] = useState(init.outcome);
   const [tags, setTags] = useState(init.tags);
   const [kind, setKind] = useState<string>(init.kind);
   const [product, setProduct] = useState<RoadmapProductRef | null>(init.product ?? defaultProduct ?? null);
   const [resolvesDebt, setResolvesDebt] = useState<RoadmapDebtRef[]>(init.resolvesDebt);
   const ownership = useOwnershipForm({ ...init, owner: init.owner || defaultOwner || "" });
+  const [risk, setRisk] = useState<string>(init.risk);
   const [roadmapStatus, setRoadmapStatus] = useState<string>(init.roadmapStatus);
   const [timelineMode, setTimelineMode] = useState<"date_bound" | "relative">(init.timelineMode);
   const [timelineStartMonth, setTimelineStartMonth] = useState(init.timelineStartMonth);
@@ -231,6 +236,8 @@ export function CreateRoadmapPanel({
       cost: parsedCost != null && !Number.isNaN(parsedCost) ? parsedCost : null,
       investmentCategory,
       blockedReason: roadmapStatus === "blocked" ? blockedReason : null,
+      outcome,
+      risk,
       aiRole,
     });
   }, [
@@ -247,17 +254,21 @@ export function CreateRoadmapPanel({
     cost,
     investmentCategory,
     blockedReason,
+    outcome,
+    risk,
     aiRole,
   ]);
 
   const canSubmit =
-    title.trim().length > 0 && kind.trim().length > 0 && ownership.isValid;
+    title.trim().length > 0 &&
+    kind.trim().length > 0 &&
+    ownership.value.pointOfContactName.trim().length > 0;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
-      if (!ownership.isValid) throw new Error("Owner is required");
+      if (!ownership.value.pointOfContactName.trim()) throw new Error("Owner is required");
 
       const body = {
         name: title.trim(),
@@ -339,12 +350,22 @@ export function CreateRoadmapPanel({
                   />
                 </div>
                 <div>
-                  <FieldLabel>Outcome / description</FieldLabel>
+                  <FieldLabel>Description</FieldLabel>
                   <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="What changes when this is done? What business or technical outcome does it deliver?"
-                    rows={4}
+                    placeholder="We believe that… (hypothesis, context, or rationale)"
+                    rows={3}
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Outcome</FieldLabel>
+                  <textarea
+                    value={outcome}
+                    onChange={(e) => setOutcome(e.target.value)}
+                    placeholder="What measurable result does this deliver when done?"
+                    rows={2}
                     className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-500"
                   />
                 </div>
@@ -439,8 +460,27 @@ export function CreateRoadmapPanel({
                 </div>
 
                 <div>
-                  <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
+                  <OwnershipFields
+                    value={ownership.value}
+                    onChange={ownership.setValue}
+                    teamLabel="Owning team (optional)"
+                    pocLabel="Owner"
+                    required={false}
+                    pocRequired
+                  />
                 </div>
+              </div>
+            </section>
+
+            <section>
+              <SectionHeader>Assessment</SectionHeader>
+              <div>
+                <FieldLabel>Risk</FieldLabel>
+                <SelectField
+                  value={risk}
+                  onChange={setRisk}
+                  options={[{ value: "", label: "Not assessed" }, ...ROADMAP_RISK.map((r) => ({ value: r.value, label: r.label }))]}
+                />
               </div>
             </section>
 

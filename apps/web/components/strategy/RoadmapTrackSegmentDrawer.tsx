@@ -13,6 +13,7 @@ import {
   periodToEndDate,
   periodToStartDate,
   ROADMAP_MILESTONE_STATUS,
+  normalizeSegmentStatus,
   sortedTracks,
   type RoadmapTimelineBinding,
   TRACK_COLORS,
@@ -93,10 +94,11 @@ export function RoadmapTrackSegmentDrawer({
   );
 
   const [segLabel, setSegLabel] = useState(editSegment?.label ?? "");
+  const [segDescription, setSegDescription] = useState(editSegment?.description ?? "");
   const [segStartPeriod, setSegStartPeriod] = useState(initialPeriods.startPeriod);
   const [segEndPeriod, setSegEndPeriod] = useState(initialPeriods.endPeriod);
   const [segStatus, setSegStatus] = useState<RoadmapMilestoneStatus | "">(
-    editSegment?.status ?? ""
+    editSegment?.status ? normalizeSegmentStatus(editSegment.status) : "not_started"
   );
 
   useEffect(() => setMounted(true), []);
@@ -162,9 +164,10 @@ export function RoadmapTrackSegmentDrawer({
     const segment: RoadmapSegment = {
       id: editSegment?.id ?? newSegmentId(),
       label: segLabel.trim(),
+      description: segDescription.trim() || undefined,
       start_date: segStart,
       end_date: segEnd,
-      status: segStatus || undefined,
+      status: segStatus ? normalizeSegmentStatus(segStatus) : undefined,
       color: segmentTrack ? trackColor(segmentTrack, Math.max(0, segmentTrackIdx)) : undefined,
     };
 
@@ -308,16 +311,25 @@ export function RoadmapTrackSegmentDrawer({
                 <FieldLabel>Status</FieldLabel>
                 <select
                   value={segStatus}
-                  onChange={(e) => setSegStatus(e.target.value as RoadmapMilestoneStatus | "")}
+                  onChange={(e) => setSegStatus(e.target.value as RoadmapMilestoneStatus)}
                   className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500"
                 >
-                  <option value="">—</option>
                   {ROADMAP_MILESTONE_STATUS.map((s) => (
                     <option key={s.value} value={s.value}>
                       {s.label}
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <FieldLabel>Description</FieldLabel>
+                <textarea
+                  value={segDescription}
+                  onChange={(e) => setSegDescription(e.target.value)}
+                  placeholder="What specifically is happening in this span…"
+                  rows={3}
+                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
               </div>
             </>
           )}
