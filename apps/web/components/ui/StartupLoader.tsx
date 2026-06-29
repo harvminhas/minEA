@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { BuboMapWordmark } from "@/components/brand/BuboMapLogo";
 import { cn } from "@/lib/utils";
 
@@ -22,11 +23,19 @@ export const STARTUP_HOME_STEPS: StartupStep[] = [
   { label: "Opening your workspace", progress: 92 },
 ];
 
+export const STARTUP_SHELL_STEPS: StartupStep[] = [
+  { label: "Loading your organization", progress: 55 },
+  { label: "Loading your workspace", progress: 82 },
+  { label: "Almost ready", progress: 94 },
+];
+
 interface Props {
   stepIndex: number;
   steps?: StartupStep[];
   subtitle?: string;
   className?: string;
+  /** Fixed full-screen overlay — used during app boot so nothing flashes underneath. */
+  overlay?: boolean;
 }
 
 export function StartupLoader({
@@ -34,11 +43,17 @@ export function StartupLoader({
   steps = STARTUP_AUTH_STEPS,
   subtitle,
   className,
+  overlay = false,
 }: Props) {
   const safeIndex = Math.max(0, Math.min(stepIndex, steps.length - 1));
   const step = steps[safeIndex]!;
   const target = step.progress;
   const [displayProgress, setDisplayProgress] = useState(8);
+  const [mounted, setMounted] = useState(false);
+
+  useLayoutEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setDisplayProgress((prev) => Math.max(prev, target));
@@ -56,12 +71,14 @@ export function StartupLoader({
     return () => window.clearInterval(id);
   }, [target]);
 
-  return (
+  const content = (
     <div
       className={cn(
-        "min-h-screen flex flex-col items-center justify-center bg-gray-50 px-6",
+        "flex flex-col items-center justify-center bg-gray-50 px-6",
+        overlay ? "fixed inset-0 z-[10000]" : "min-h-screen",
         className
       )}
+      data-startup-loader
       role="status"
       aria-live="polite"
       aria-busy="true"
@@ -86,4 +103,11 @@ export function StartupLoader({
       </div>
     </div>
   );
+
+  if (overlay) {
+    if (!mounted) return null;
+    return createPortal(content, document.body);
+  }
+
+  return content;
 }

@@ -4,6 +4,8 @@ import dynamic from "next/dynamic";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { AuthProvider } from "@/lib/auth-context";
+import { AppBootProvider } from "@/lib/app-boot-context";
+import { AppBootGate } from "@/components/ui/AppBootGate";
 import { Toaster } from "@/components/ui/toaster";
 
 const ReactQueryDevtools = dynamic(
@@ -27,7 +29,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClient}>
-        {children}
+        <AppBootProvider>
+          <AppBootGate>{children}</AppBootGate>
+        </AppBootProvider>
         <Toaster />
         <ReactQueryDevtools initialIsOpen={false} />
       </QueryClientProvider>

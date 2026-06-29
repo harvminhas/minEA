@@ -8,13 +8,14 @@ import { useQuery } from "@tanstack/react-query";
 import { orgsApi, workspacesApi } from "@/lib/api-client";
 import { apiBaseLabel, apiConfigHelpText } from "@/lib/api-base";
 import { primaryViewPath } from "@/lib/tenancy";
-import { STARTUP_HOME_STEPS, StartupLoader } from "@/components/ui/StartupLoader";
+import { useAppBoot } from "@/lib/app-boot-context";
 
 type HomePhase = "orgs" | "workspaces" | "redirect";
 
 export default function HomePage() {
   const { getToken, isLoaded } = useAuth();
   const router = useRouter();
+  const { setHomeStep } = useAppBoot();
   const [phase, setPhase] = useState<HomePhase>("orgs");
 
   const { data: orgs, isLoading, isError, error } = useQuery({
@@ -51,8 +52,9 @@ export default function HomePage() {
     })();
   }, [orgs, isLoading, isLoaded, isError, router, getToken]);
 
-  const stepIndex =
-    phase === "orgs" ? 0 : phase === "workspaces" ? 1 : 2;
+  useEffect(() => {
+    setHomeStep(phase === "orgs" ? 0 : phase === "workspaces" ? 1 : 2);
+  }, [phase, setHomeStep]);
 
   return (
     <RequireAuth>
@@ -68,9 +70,7 @@ export default function HomePage() {
             </p>
           </div>
         </div>
-      ) : (
-        <StartupLoader stepIndex={stepIndex} steps={STARTUP_HOME_STEPS} />
-      )}
+      ) : null}
     </RequireAuth>
   );
 }

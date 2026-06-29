@@ -70,6 +70,11 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  body.app-boot-pending {
+    background-color: #f9fafb;
+    overflow: hidden;
+  }
 }
 
 /* Sidebar dark background */

@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { verificationPagePath } from "@/lib/auth-routes";
-import { StartupLoader } from "@/components/ui/StartupLoader";
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isLoaded, sessionReady, isSignedIn, user } = useAuth();
@@ -25,8 +24,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   }, [isLoaded, sessionReady, isSignedIn, needsVerification, router, pathname]);
 
   if (!isLoaded || !sessionReady || !isSignedIn || needsVerification) {
-    const stepIndex = !isLoaded ? 0 : !sessionReady ? 1 : 2;
-    return <StartupLoader stepIndex={stepIndex} />;
+    return null;
   }
 
   return children;
