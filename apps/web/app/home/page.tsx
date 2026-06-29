@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
@@ -8,10 +8,14 @@ import { useQuery } from "@tanstack/react-query";
 import { orgsApi, workspacesApi } from "@/lib/api-client";
 import { apiBaseLabel, apiConfigHelpText } from "@/lib/api-base";
 import { primaryViewPath } from "@/lib/tenancy";
+import { STARTUP_HOME_STEPS, StartupLoader } from "@/components/ui/StartupLoader";
+
+type HomePhase = "orgs" | "workspaces" | "redirect";
 
 export default function HomePage() {
   const { getToken, isLoaded } = useAuth();
   const router = useRouter();
+  const [phase, setPhase] = useState<HomePhase>("orgs");
 
   const { data: orgs, isLoading, isError, error } = useQuery({
     queryKey: ["orgs"],
@@ -32,9 +36,12 @@ export default function HomePage() {
     }
 
     const org = orgs[0]!;
+    setPhase("workspaces");
+
     (async () => {
       const token = await getToken();
       const workspaces = await workspacesApi.list(org.slug, token!);
+      setPhase("redirect");
       const ws = workspaces[0];
       if (ws) {
         router.replace(primaryViewPath(org.slug, ws.slug));
@@ -44,11 +51,14 @@ export default function HomePage() {
     })();
   }, [orgs, isLoading, isLoaded, isError, router, getToken]);
 
+  const stepIndex =
+    phase === "orgs" ? 0 : phase === "workspaces" ? 1 : 2;
+
   return (
     <RequireAuth>
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        {isError ? (
-          <div className="text-center max-w-md px-4">
+      {isError ? (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+          <div className="text-center max-w-md">
             <p className="text-sm text-red-600 mb-2">API request failed.</p>
             <p className="text-xs text-gray-500 break-words">{(error as Error).message}</p>
             <p className="text-xs text-gray-400 mt-3">{apiConfigHelpText()}</p>
@@ -57,10 +67,10 @@ export default function HomePage() {
               <code className="bg-gray-100 px-1 rounded">{apiBaseLabel()}</code>
             </p>
           </div>
-        ) : (
-          <p className="text-sm text-gray-500">Loading your workspace...</p>
-        )}
-      </div>
+        </div>
+      ) : (
+        <StartupLoader stepIndex={stepIndex} steps={STARTUP_HOME_STEPS} />
+      )}
     </RequireAuth>
   );
 }
