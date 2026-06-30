@@ -163,6 +163,8 @@ async def create_object(
         created_by=ctx.user_id,
         updated_by=ctx.user_id,
     )
+    db.add(obj)
+    await db.flush()
     await apply_ownership_write_resolved(
         db,
         obj,
@@ -171,8 +173,6 @@ async def create_object(
         user_id=ctx.user_id,
         **ownership_from_body(body),
     )
-    db.add(obj)
-    await db.flush()
 
     db.add(ChangeLog(
         workspace_id=ctx.workspace.id,

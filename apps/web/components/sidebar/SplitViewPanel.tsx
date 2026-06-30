@@ -6,11 +6,11 @@ import { ChevronDown, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/lib/store";
 import { useTenancy } from "@/lib/tenancy";
-import { NAV_VIEWS, getView, resolveViewId, viewPath } from "@/lib/views";
+import { SPLIT_PANEL_VIEWS, getView, resolveViewId, viewPath } from "@/lib/views";
 import { ViewPanelContent } from "@/components/views/ViewPanelContent";
 
 export function SplitViewPanel() {
-  const { splitViewId: storedSplitViewId, setSplitViewId } = useAppStore();
+  const { splitViewId: storedSplitViewId, setSplitViewId, setViewMode } = useAppStore();
   const splitViewId = resolveViewId(storedSplitViewId);
   const { orgSlug, workspaceSlug } = useTenancy();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -63,7 +63,7 @@ export function SplitViewPanel() {
 
           {dropdownOpen && (
             <div className="absolute left-0 top-full mt-1 w-full min-w-[200px] bg-white border border-violet-200/60 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
-              {NAV_VIEWS.map((view) => (
+              {SPLIT_PANEL_VIEWS.map((view) => (
                 <button
                   key={view.id}
                   type="button"
@@ -93,7 +93,8 @@ export function SplitViewPanel() {
 
         <Link
           href={fullscreenHref}
-          title="Open fullscreen"
+          title="Open in Views mode"
+          onClick={() => setViewMode("views")}
           className="p-1.5 text-violet-400 hover:text-violet-700 hover:bg-violet-100/80 rounded transition-colors flex-shrink-0"
         >
           <Maximize2 size={13} />

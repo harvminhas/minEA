@@ -51,6 +51,8 @@ async def sync_owner_team_accountability(
         return
 
     entity_kind, entity_id, link_kind = target
+    if entity_id is None:
+        return
 
     if previous_team_id and previous_team_id != team_id:
         await db.execute(

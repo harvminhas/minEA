@@ -128,6 +128,21 @@ export const NAV_VIEWS: ViewConfig[] = [PRODUCTS_VIEW, ...VIEWS_V1];
 
 const ALL_VIEWS: ViewConfig[] = [PRODUCTS_VIEW, PROCESSES_VIEW, ...VIEWS_V1];
 
+/** All views that can render in the split panel (includes Processes). */
+export const SPLIT_PANEL_VIEWS: ViewConfig[] = ALL_VIEWS;
+
+export function isViewsAreaPath(pathname: string): boolean {
+  return /\/views(\/|$)/.test(pathname);
+}
+
+/** Resolve a view id from a workspace pathname, if the URL is a view route. */
+export function viewIdFromPathname(pathname: string): ViewId | null {
+  for (const view of ALL_VIEWS) {
+    if (pathname.includes(`/${view.segment}`)) return view.id;
+  }
+  return null;
+}
+
 export function isViewId(id: string): id is ViewId {
   return ALL_VIEWS.some((v) => v.id === id);
 }

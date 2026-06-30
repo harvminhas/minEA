@@ -155,6 +155,8 @@ async def _apply_steps(
             friction_notes=step_data.pain_points,
             emotion=step_data.sentiment_friction,
         )
+        db.add(step)
+        await db.flush()
         await apply_ownership_write_resolved(
             db,
             step,
@@ -163,8 +165,6 @@ async def _apply_steps(
             user_id=user_id,
             **ownership_from_body(step_data),
         )
-        db.add(step)
-        await db.flush()
 
         for process_id in step_data.process_ids:
             db.add(MomentProcess(moment_id=step.id, process_id=process_id))
@@ -227,6 +227,8 @@ async def create_journey(
         canvas_layout=body.canvas_layout,
         graph_edges=body.graph_edges,
     )
+    db.add(journey)
+    await db.flush()
     await apply_ownership_write_resolved(
         db,
         journey,
@@ -235,8 +237,6 @@ async def create_journey(
         user_id=ctx.user_id,
         **ownership_from_body(body),
     )
-    db.add(journey)
-    await db.flush()
 
     if body.steps:
         await _apply_steps(db, journey, ctx.workspace.id, ctx.org_id, ctx.user_id, body.steps)

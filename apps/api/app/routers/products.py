@@ -188,6 +188,8 @@ async def create_product(
         created_by=ctx.user_id,
         updated_by=ctx.user_id,
     )
+    db.add(product)
+    await db.flush()
     await apply_ownership_write_resolved(
         db,
         product,
@@ -196,8 +198,6 @@ async def create_product(
         user_id=ctx.user_id,
         **ownership_from_body(body),
     )
-    db.add(product)
-    await db.flush()
 
     for cap_id in body.capability_ids:
         db.add(ProductCapability(product_id=product.id, capability_id=cap_id))

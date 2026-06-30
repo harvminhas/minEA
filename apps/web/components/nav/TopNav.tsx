@@ -2,12 +2,13 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { ChevronDown, Bell, HelpCircle, Search, LogOut, Settings, BookOpen, LayoutTemplate, Columns2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useAppStore, type ViewMode } from "@/lib/store";
 import { useTenancy, primaryViewPath } from "@/lib/tenancy";
+import { isViewsAreaPath, viewIdFromPathname, workspaceHomePath } from "@/lib/views";
 import { useQuery } from "@tanstack/react-query";
 import { billingApi, orgsApi, workspacesApi } from "@/lib/api-client";
 import { usePermissions } from "@/lib/use-permissions";
@@ -18,9 +19,10 @@ import { useArchitectureInsights } from "@/lib/use-architecture-insights";
 
 export function TopNav() {
   const router = useRouter();
+  const pathname = usePathname();
   const { getToken, user, signOut } = useAuth();
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
-  const { activeOrg, activeWorkspace, viewMode, setViewMode } = useAppStore();
+  const { activeOrg, activeWorkspace, viewMode, setViewMode, setSplitViewId } = useAppStore();
 
   const [wsOpen, setWsOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
@@ -190,11 +192,17 @@ export function TopNav() {
               type="button"
               onClick={() => {
                 setViewMode(mode);
-                if (!basePath) return;
+                if (!basePath || !orgSlug || !workspaceSlug) return;
                 if (mode === "views") {
                   router.push(`${basePath}/views`);
                 } else if (mode === "repository") {
                   router.push(basePath);
+                } else if (mode === "split") {
+                  const activeViewId = viewIdFromPathname(pathname);
+                  if (activeViewId) setSplitViewId(activeViewId);
+                  if (isViewsAreaPath(pathname)) {
+                    router.push(workspaceHomePath(orgSlug, workspaceSlug));
+                  }
                 }
               }}
               title={label}

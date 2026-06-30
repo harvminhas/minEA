@@ -456,12 +456,6 @@ function ExpandedViewsNav({
 
   return (
     <div>
-      <div className="flex items-center justify-between px-4 mb-1">
-        <p className="text-[10px] font-semibold text-violet-300/50 uppercase tracking-wider">
-          Views
-        </p>
-      </div>
-
       {/* Gallery */}
       <Link
         href={galleryHref}
@@ -525,12 +519,6 @@ function ExpandedRepoNav({
 
   return (
     <div>
-      <div className="px-4 mb-1">
-        <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">
-          Repository
-        </p>
-      </div>
-
       <Link
         href={overviewHref}
         className={cn(
@@ -622,6 +610,7 @@ export function AppSidebar() {
   const showCounts = navCounts !== undefined;
 
   const isViews = viewMode === "views";
+  const sidebarModeLabel = isViews ? "Views" : "Repository";
 
   const settingsHref = orgSlug ? `/orgs/${orgSlug}/settings` : "/home";
   const isOnSettings = pathname.endsWith("/settings");
@@ -668,7 +657,7 @@ export function AppSidebar() {
               isViews ? "text-violet-300/50" : "text-white/30"
             )}
           >
-            {isViews ? "Views" : "Repository"}
+            {sidebarModeLabel}
           </span>
         )}
         {toggleBtn}

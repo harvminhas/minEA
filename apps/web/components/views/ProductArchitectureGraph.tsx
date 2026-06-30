@@ -14,14 +14,24 @@ const LAYER_LABELS: Record<number, string> = {
   3: "Dependencies",
 };
 
-function GraphNodeCard({ data, compact }: { data: ProductGraphNode; compact?: boolean }) {
+function GraphNodeCard({
+  data,
+  compact,
+}: {
+  data: ProductGraphNode & { sharedCount?: number };
+  compact?: boolean;
+}) {
   const color =
     data.type === "product" ? "#6366f1" : getLayerColor(getTypeLayer(data.type as never));
+  const shared = (data.sharedCount ?? 0) > 1;
 
   if (compact) {
     return (
       <div
-        className="rounded-md border bg-white px-1.5 py-1 min-w-[72px] max-w-[88px]"
+        className={cn(
+          "rounded-md border bg-white px-1.5 py-1 min-w-[72px] max-w-[88px] relative",
+          shared && "ring-1 ring-amber-300"
+        )}
         style={{ borderColor: `${color}66` }}
       >
         <Handle type="target" position={Position.Left} className="!opacity-0 !w-1 !h-1" />
@@ -41,7 +51,10 @@ function GraphNodeCard({ data, compact }: { data: ProductGraphNode; compact?: bo
 
   return (
     <div
-      className="rounded-lg border bg-white shadow-sm px-3 py-2 min-w-[160px] max-w-[200px]"
+      className={cn(
+        "rounded-lg border bg-white shadow-sm px-3 py-2 min-w-[160px] max-w-[200px] relative",
+        shared && "ring-1 ring-amber-300"
+      )}
       style={{ borderColor: `${color}55` }}
     >
       <Handle type="target" position={Position.Left} className="!bg-gray-300 !w-2 !h-2 !border-0" />
@@ -56,7 +69,9 @@ function GraphNodeCard({ data, compact }: { data: ProductGraphNode; compact?: bo
         <div className="min-w-0">
           <p className="text-xs font-semibold text-gray-900 truncate">{data.label}</p>
           <p className="text-[10px] text-gray-400 capitalize truncate">
-            {data.type.replace(/_/g, " ")}
+            {shared
+              ? `Shared · ${data.sharedCount} products`
+              : data.type.replace(/_/g, " ")}
           </p>
         </div>
       </div>

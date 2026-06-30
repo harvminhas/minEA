@@ -18,7 +18,7 @@ import { ProductCard } from "@/components/views/ProductCard";
 import { ProductForm } from "@/components/views/ProductForm";
 import { ProductDetail } from "@/components/views/ProductDetail";
 import { PortfolioTable } from "@/components/views/PortfolioTable";
-import { PortfolioCapabilityMap } from "@/components/views/PortfolioCapabilityMap";
+import { PortfolioArchitectureMap } from "@/components/views/PortfolioArchitectureMap";
 import {
   formatDebtSummary,
   formatProductCost,
@@ -72,12 +72,13 @@ export function PortfolioView() {
   const isViewsMode = useViewsTheme();
   const showPageHeader = !embedded || !!shareSession;
 
+  const [layout, setLayout] = useState<PortfolioLayout>("table");
+
+  const isMapLayout = layout === "capability-map";
   const shellClass = cn(
     "mx-auto w-full",
-    embedded ? "px-4 pt-4" : "max-w-6xl px-8 pt-8"
+    embedded ? "px-4 pt-4" : isMapLayout ? "px-4 sm:px-6 pt-8" : "max-w-6xl px-8 pt-8"
   );
-
-  const [layout, setLayout] = useState<PortfolioLayout>("table");
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState(TEAM_COLORS[0]!);
@@ -197,7 +198,7 @@ export function PortfolioView() {
           <p className="text-sm text-gray-500 mb-6">
             Add products and map them to capabilities to see the portfolio landscape — health, shared risks, and ownership gaps.
           </p>
-          {canCreate && (
+          {canCreate && !isViewsMode && (
             <button
               type="button"
               onClick={() => setShowCreateForm(true)}
@@ -207,7 +208,7 @@ export function PortfolioView() {
             </button>
           )}
         </div>
-        {canCreate && showCreateForm && (
+        {canCreate && !isViewsMode && showCreateForm && (
           <ProductForm
             onClose={() => setShowCreateForm(false)}
             onSuccess={() => { setShowCreateForm(false); refreshProducts(); }}
@@ -285,7 +286,7 @@ export function PortfolioView() {
                 title="Product portfolio"
               />
             )}
-            {canCreate && (
+            {canCreate && !isViewsMode && (
               <button
                 type="button"
                 onClick={() => setShowCreateForm(true)}
@@ -339,7 +340,7 @@ export function PortfolioView() {
             onClickProduct={openProduct}
           />
         ) : (
-          <PortfolioCapabilityMap products={products} onProductClick={openProductById} />
+          <PortfolioArchitectureMap products={products} onProductClick={openProductById} />
         )}
       </div>
 
@@ -363,7 +364,7 @@ export function PortfolioView() {
       </div>
 
       {/* ── Drawers ── */}
-      {canCreate && showCreateForm && (
+      {canCreate && !isViewsMode && showCreateForm && (
         <ProductForm
           onClose={() => setShowCreateForm(false)}
           onSuccess={() => {

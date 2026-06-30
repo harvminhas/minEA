@@ -34,6 +34,7 @@ import {
   type EdgeTypes,
   type Node,
   type NodeDragHandler,
+  type NodeMouseHandler,
   type NodeTypes,
 } from "reactflow";
 import "reactflow/dist/style.css";
@@ -87,6 +88,8 @@ export interface EntityFlowCanvasProps {
 
   /** Container element for PNG export capture. */
   containerRef?: RefObject<HTMLDivElement | null>;
+
+  onNodeClick?: NodeMouseHandler;
 }
 
 // ─── Inner canvas (must be inside ReactFlowProvider) ──────────────────────────
@@ -104,6 +107,7 @@ function CanvasInner({
   hasCustomLayout = false,
   exportFilename,
   containerRef,
+  onNodeClick,
 }: Omit<EntityFlowCanvasProps, "className" | "emptyLabel">) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -178,6 +182,7 @@ function CanvasInner({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeDragStop={interactive ? handleNodeDragStop : undefined}
+        onNodeClick={interactive ? onNodeClick : undefined}
         fitView
         fitViewOptions={{ padding: fitViewPadding }}
         nodesDraggable={interactive}
@@ -266,7 +271,7 @@ export function EntityFlowCanvas({
 }: EntityFlowCanvasProps) {
   const internalContainerRef = useRef<HTMLDivElement>(null);
   const containerRef = externalContainerRef ?? internalContainerRef;
-  const isEmpty = nodes.length <= 1;
+  const isEmpty = nodes.length === 0;
 
   if (isEmpty) {
     return (

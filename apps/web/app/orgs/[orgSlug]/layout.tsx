@@ -12,13 +12,14 @@ import { useAppStore } from "@/lib/store";
 import { orgsApi, workspacesApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { GlobalRefetchIndicator } from "@/components/ui/GlobalRefetchIndicator";
+import { isViewsAreaPath, viewIdFromPathname, workspaceHomePath } from "@/lib/views";
 
 export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
   const router = useRouter();
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const pathname = usePathname();
-  const { setActiveOrg, setActiveWorkspace, activeWorkspace, viewMode, sidebarExpanded } =
+  const { setActiveOrg, setActiveWorkspace, activeWorkspace, viewMode, sidebarExpanded, setSplitViewId } =
     useAppStore();
   const queryEnabled = useAuthQueryEnabled(orgSlug);
   const isEmbed = pathname.includes("/embed/");
@@ -61,6 +62,19 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
       router.replace("/home");
     }
   }, [isFetched, isError, router, setActiveOrg]);
+
+  // Split mode: main pane is repository-only; views live in the right panel.
+  useEffect(() => {
+    if (viewMode !== "split" || !orgSlug || !pathname.includes("/workspaces/")) return;
+    if (!isViewsAreaPath(pathname)) return;
+
+    const activeViewId = viewIdFromPathname(pathname);
+    if (activeViewId) setSplitViewId(activeViewId);
+
+    const wsMatch = pathname.match(/\/workspaces\/([^/]+)/);
+    const wsSlug = wsMatch?.[1];
+    if (wsSlug) router.replace(workspaceHomePath(orgSlug, wsSlug));
+  }, [viewMode, pathname, orgSlug, router, setSplitViewId]);
 
   if (isEmbed) {
     return (

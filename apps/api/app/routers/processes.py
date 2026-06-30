@@ -121,6 +121,8 @@ async def _apply_stages(
             transition_trigger=stage_data.transition_trigger,
             transition_handoff=stage_data.transition_handoff,
         )
+        db.add(stage)
+        await db.flush()
         await apply_ownership_write_resolved(
             db,
             stage,
@@ -129,8 +131,6 @@ async def _apply_stages(
             user_id=user_id,
             **ownership_from_body(stage_data),
         )
-        db.add(stage)
-        await db.flush()
 
         for cap_id in stage_data.capability_ids:
             db.add(StageCapability(stage_id=stage.id, capability_id=cap_id))
@@ -176,6 +176,8 @@ async def create_process(
         canvas_layout=body.canvas_layout,
         graph_edges=body.graph_edges,
     )
+    db.add(process)
+    await db.flush()
     await apply_ownership_write_resolved(
         db,
         process,
@@ -184,8 +186,6 @@ async def create_process(
         user_id=ctx.user_id,
         **ownership_from_body(body),
     )
-    db.add(process)
-    await db.flush()
 
     if body.stages:
         await _apply_stages(db, process, ctx.workspace.id, ctx.org_id, ctx.user_id, body.stages)
