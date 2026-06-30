@@ -1336,7 +1336,15 @@ export interface CapabilityMap {
   domains: CapabilityMapDomain[];
 }
 
-export type HeatmapCellLevel = "empty" | "gap" | "strong" | "good" | "fair" | "poor" | "eol";
+export type HeatmapCellLevel =
+  | "empty"
+  | "gap"
+  | "unrated"
+  | "strong"
+  | "good"
+  | "fair"
+  | "poor"
+  | "eol";
 
 export interface HeatmapCell {
   level: HeatmapCellLevel | string;
@@ -1351,6 +1359,8 @@ export interface HeatmapCapabilityRow {
   cells: Record<string, HeatmapCell>;
   overlap: boolean;
   realising_count: number;
+  domain_name?: string;
+  domain_id?: string;
 }
 
 export interface HeatmapDomainGroup {

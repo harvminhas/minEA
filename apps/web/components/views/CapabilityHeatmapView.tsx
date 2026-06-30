@@ -1,78 +1,128 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
-import type { HeatmapCell, HeatmapCellLevel, HeatmapProductColumn } from "@minea/types";
+import type {
+  HeatmapCell,
+  HeatmapCellLevel,
+  HeatmapCapabilityRow,
+  HeatmapProductColumn,
+} from "@minea/types";
 import { capabilityMapApi } from "@/lib/api-client";
-import { domainIcon } from "@/lib/capability-map-icons";
 import { useViewDataGate } from "@/lib/use-view-summary";
 import { getView } from "@/lib/views";
 import { cn } from "@/lib/utils";
 
 type ColorMode = "fitness";
 
-const CELL_STYLE: Record<string, string> = {
-  strong: "bg-emerald-700 text-white",
-  good: "bg-emerald-200 text-emerald-900",
-  fair: "bg-amber-200 text-amber-900",
-  poor: "bg-orange-300 text-orange-950",
-  eol: "bg-red-700 text-white",
-  gap: "border border-dashed border-red-300 bg-red-50/30 text-red-400",
-  empty: "bg-stone-100/60 border border-stone-200/80",
+const DOMAIN_TAG_STYLES = [
+  "bg-violet-100 text-violet-800 border-violet-200",
+  "bg-teal-100 text-teal-800 border-teal-200",
+  "bg-rose-100 text-rose-800 border-rose-200",
+  "bg-sky-100 text-sky-800 border-sky-200",
+  "bg-amber-100 text-amber-800 border-amber-200",
+  "bg-indigo-100 text-indigo-800 border-indigo-200",
+];
+
+const CELL_CLASS: Record<string, string> = {
+  strong: "bg-emerald-50 text-emerald-800 border border-emerald-200",
+  good: "bg-emerald-50/80 text-emerald-700 border border-emerald-100",
+  fair: "bg-amber-50 text-amber-800 border border-amber-200",
+  poor: "bg-orange-50 text-orange-800 border border-orange-200",
+  eol: "bg-red-50 text-red-800 border border-red-200",
+  gap: "border border-dashed border-gray-300 bg-white text-gray-500",
+  unrated: "border border-dashed border-amber-400 bg-amber-50/40 text-amber-700",
 };
 
-const LEGEND: { level: HeatmapCellLevel; label: string; className: string }[] = [
-  { level: "strong", label: "Strong", className: "bg-emerald-700" },
-  { level: "good", label: "Good", className: "bg-emerald-300" },
-  { level: "fair", label: "Fair", className: "bg-amber-300" },
-  { level: "poor", label: "Poor", className: "bg-orange-300" },
-  { level: "eol", label: "EOL", className: "bg-red-700" },
-  { level: "gap", label: "Gap", className: "border border-dashed border-red-400 bg-red-50" },
-];
+function domainTagClass(domainId: string, index: number) {
+  const hash = domainId.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return DOMAIN_TAG_STYLES[(hash + index) % DOMAIN_TAG_STYLES.length]!;
+}
 
 function ProductHeader({ product }: { product: HeatmapProductColumn }) {
   return (
-    <div className="flex flex-col items-center gap-1 min-w-[72px] px-1">
+    <div className="flex flex-col items-center gap-1.5 min-w-[88px] px-1">
       <span
-        className="h-7 w-7 rounded-md flex items-center justify-center text-white text-[10px] font-bold"
+        className="h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold"
         style={{ backgroundColor: product.color }}
         title={product.name}
       >
         {product.short_code}
       </span>
-      <span className="text-[10px] font-medium text-gray-600 truncate max-w-[72px]">
-        {product.abbrev}
+      <span className="text-xs font-medium text-gray-700 text-center leading-tight max-w-[96px]">
+        {product.name}
       </span>
     </div>
   );
 }
 
-function HeatmapCellView({
-  cell,
-  onClick,
-}: {
-  cell: HeatmapCell;
-  onClick?: () => void;
-}) {
-  const level = cell.level;
+function HeatmapCellView({ cell }: { cell: HeatmapCell }) {
+  const level = cell.level as HeatmapCellLevel;
+
   if (level === "empty") {
-    return <div className="h-9 min-w-[72px] rounded-md mx-auto bg-stone-100/60 border border-stone-200/80" />;
+    return (
+      <span className="inline-flex h-9 min-w-[88px] items-center justify-center text-sm text-gray-300">
+        —
+      </span>
+    );
   }
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <span
       className={cn(
-        "h-9 min-w-[72px] w-full max-w-[88px] mx-auto rounded-md text-[11px] font-semibold capitalize transition-opacity hover:opacity-90",
-        CELL_STYLE[level] ?? CELL_STYLE.empty
+        "inline-flex h-9 min-w-[88px] items-center justify-center rounded-md px-2 text-[11px] font-medium whitespace-nowrap",
+        CELL_CLASS[level] ?? CELL_CLASS.gap
       )}
       title={cell.label}
     >
       {cell.label}
-    </button>
+    </span>
+  );
+}
+
+function CapabilityRow({
+  cap,
+  products,
+  domainStyle,
+}: {
+  cap: HeatmapCapabilityRow;
+  products: HeatmapProductColumn[];
+  domainStyle: string;
+}) {
+  return (
+    <tr className="border-b border-gray-100 last:border-b-0">
+      <td className="sticky left-0 z-10 bg-white px-4 py-3 align-middle border-r border-gray-100 min-w-[240px]">
+        <div className="flex flex-wrap items-center gap-2">
+          {cap.domain_name && (
+            <span
+              className={cn(
+                "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold capitalize",
+                domainStyle
+              )}
+            >
+              {cap.domain_name}
+            </span>
+          )}
+          <span className="text-sm font-medium text-gray-900">{cap.name}</span>
+          {cap.is_planned && <span className="text-xs text-gray-400">(planned)</span>}
+          {cap.overlap && (
+            <span className="inline-flex items-center rounded-md border border-dashed border-amber-400 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+              overlap
+            </span>
+          )}
+        </div>
+      </td>
+      {products.map((product) => {
+        const cell = cap.cells[product.id] ?? { level: "empty", label: "—" };
+        return (
+          <td key={product.id} className="px-3 py-3 text-center align-middle">
+            <HeatmapCellView cell={cell} />
+          </td>
+        );
+      })}
+    </tr>
   );
 }
 
@@ -100,7 +150,7 @@ function SummaryFooterCard({
       <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
         {label}
       </p>
-      <p className="text-lg font-bold text-gray-900">{value}</p>
+      <p className="text-2xl font-bold text-gray-900">{value}</p>
       <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{subtext}</p>
     </div>
   );
@@ -113,7 +163,6 @@ export function CapabilityHeatmapView() {
   const { orgSlug, workspaceSlug, summaryPending, showEmptyFromSummary, skipHeavyFetch, metrics } =
     useViewDataGate("capability-heatmap");
   const [colorMode, setColorMode] = useState<ColorMode>("fitness");
-  const [selectedCell, setSelectedCell] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["capability-heatmap", orgSlug, workspaceSlug],
@@ -123,6 +172,26 @@ export function CapabilityHeatmapView() {
     },
     enabled: !skipHeavyFetch,
   });
+
+  const capabilities = useMemo(() => {
+    if (!data) return [];
+    return data.domains.flatMap((domain) =>
+      domain.capabilities.map((cap) => ({
+        ...cap,
+        domain_name: cap.domain_name ?? domain.name,
+        domain_id: domain.id,
+      }))
+    );
+  }, [data]);
+
+  const domainStyles = useMemo(() => {
+    if (!data) return new Map<string, string>();
+    const styles = new Map<string, string>();
+    data.domains.forEach((domain, index) => {
+      styles.set(domain.id, domainTagClass(domain.id, index));
+    });
+    return styles;
+  }, [data]);
 
   if (summaryPending) {
     return <p className="text-sm text-gray-400">Loading capability heatmap…</p>;
@@ -158,9 +227,9 @@ export function CapabilityHeatmapView() {
     );
   }
 
-  const { products, domains, summary } = data;
-  const overlapNames = summary.overlaps.names.slice(0, 3).join(" · ");
-  const gapItem = summary.gaps[0];
+  const { products, summary } = data;
+  const firstGap = summary.gaps[0];
+  const firstOverlap = summary.overlaps.names[0];
   const hotSpot = summary.hot_spots[0];
 
   return (
@@ -194,112 +263,79 @@ export function CapabilityHeatmapView() {
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-max border-collapse text-sm">
+          <table className="w-full min-w-max border-collapse">
             <thead>
               <tr className="border-b border-gray-200">
-                <th className="sticky left-0 z-10 bg-white px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-400 w-[200px] min-w-[200px]">
+                <th className="sticky left-0 z-10 bg-white px-4 py-4 text-left text-xs font-semibold text-gray-500 w-[240px] min-w-[240px]">
                   Capability
                 </th>
                 {products.map((product) => (
-                  <th key={product.id} className="px-2 py-3 text-center align-bottom">
+                  <th key={product.id} className="px-3 py-4 text-center align-bottom">
                     <ProductHeader product={product} />
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {domains.map((domain) => {
-                const Icon = domainIcon(domain.icon);
-                return (
-                  <Fragment key={domain.id}>
-                    <tr className="bg-stone-50 border-y border-gray-200">
-                      <td
-                        colSpan={products.length + 1}
-                        className="sticky left-0 px-4 py-2 bg-stone-50"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Icon size={13} className="text-gray-500 flex-shrink-0" />
-                            <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
-                              {domain.name}
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-gray-400">
-                            {domain.capabilities.length} capabilit
-                            {domain.capabilities.length === 1 ? "y" : "ies"}
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                    {domain.capabilities.map((cap) => (
-                      <tr key={cap.id} className="border-b border-gray-100 hover:bg-stone-50/40">
-                        <td className="sticky left-0 z-10 bg-white px-4 py-2.5 align-middle border-r border-gray-100">
-                          <span className="text-sm font-medium text-gray-900">{cap.name}</span>
-                          {cap.is_planned && (
-                            <span className="text-xs text-gray-400 ml-1">(planned)</span>
-                          )}
-                          {cap.overlap && (
-                            <span className="block text-[10px] text-amber-600 font-medium mt-0.5">
-                              overlap
-                            </span>
-                          )}
-                        </td>
-                        {products.map((product) => {
-                          const cell = cap.cells[product.id] ?? { level: "empty", label: "" };
-                          const cellKey = `${cap.id}:${product.id}`;
-                          return (
-                            <td key={product.id} className="px-2 py-2 text-center align-middle">
-                              <HeatmapCellView
-                                cell={cell}
-                                onClick={
-                                  cell.level !== "empty"
-                                    ? () => setSelectedCell(cellKey)
-                                    : undefined
-                                }
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </Fragment>
-                );
-              })}
+              {capabilities.map((cap) => (
+                <CapabilityRow
+                  key={cap.id}
+                  cap={cap}
+                  products={products}
+                  domainStyle={
+                    domainStyles.get(cap.domain_id ?? cap.id) ?? DOMAIN_TAG_STYLES[0]!
+                  }
+                />
+              ))}
             </tbody>
           </table>
         </div>
 
-        <div className="flex items-center justify-between gap-4 flex-wrap px-4 py-3 border-t border-gray-100 bg-gray-50/50">
-          <div className="flex items-center gap-4 flex-wrap">
-            {LEGEND.map(({ level, label, className }) => (
-              <span key={level} className="inline-flex items-center gap-1.5 text-[11px] text-gray-500">
-                <span className={cn("h-2.5 w-2.5 rounded-sm flex-shrink-0", className)} />
-                {label}
-              </span>
-            ))}
-          </div>
-          <p className="text-[11px] text-gray-400">Click a cell for details</p>
+        <div className="flex items-center gap-5 flex-wrap px-4 py-3 border-t border-gray-100 bg-gray-50/60">
+          <span className="inline-flex items-center gap-2 text-[11px] text-gray-500">
+            <span className="inline-flex h-7 min-w-[72px] items-center justify-center rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-medium">
+              ● Strong
+            </span>
+            well supported
+          </span>
+          <span className="inline-flex items-center gap-2 text-[11px] text-gray-500">
+            <span className="inline-flex h-7 min-w-[56px] items-center justify-center rounded-md border border-dashed border-gray-300 text-[10px] font-medium text-gray-500">
+              — gap
+            </span>
+            no realising product
+          </span>
+          <span className="inline-flex items-center gap-2 text-[11px] text-gray-500">
+            <span className="inline-flex h-6 items-center justify-center rounded-md border border-dashed border-amber-400 px-2 text-[10px] font-semibold text-amber-700">
+              overlap
+            </span>
+            multiple products claim it
+          </span>
+          <span className="inline-flex items-center gap-2 text-[11px] text-gray-500">
+            <span className="text-sm text-gray-300">—</span>
+            not applicable
+          </span>
         </div>
       </div>
-
-      {selectedCell && (
-        <p className="text-xs text-gray-500">
-          Selected cell <span className="font-mono text-gray-700">{selectedCell}</span> — detail panel
-          coming soon.
-        </p>
-      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <SummaryFooterCard
           label="Capability gaps"
-          value={gapItem?.capability_name ?? "None"}
-          subtext={gapItem?.detail ?? "Every capability has a realising product"}
+          value={String(summary.gap_count)}
+          subtext={
+            firstGap
+              ? `${firstGap.capability_name} — ${firstGap.detail}`
+              : "Every capability has a realising product"
+          }
           accent={summary.gap_count > 0 ? "red" : undefined}
         />
         <SummaryFooterCard
           label="Overlaps"
-          value={`${summary.overlap_count} capabilit${summary.overlap_count === 1 ? "y" : "ies"}`}
-          subtext={overlapNames || "No overlapping realisations"}
+          value={String(summary.overlap_count)}
+          subtext={
+            firstOverlap
+              ? `${firstOverlap} — review for redundancy`
+              : "No overlapping realisations"
+          }
           accent={summary.overlap_count > 0 ? "amber" : undefined}
         />
         <SummaryFooterCard

@@ -211,9 +211,9 @@ async def build_capability_heatmap(
 
     product_cap_sets = {p["id"]: set(p["capability_ids"]) for p in product_reads}
 
-    def cell_for(product_id: str, cap_id: str) -> dict:
+    def cell_for(product_id: str, cap_id: str, realising_count: int) -> dict:
         if cap_id not in product_cap_sets.get(product_id, set()):
-            return {"level": "empty", "label": ""}
+            return {"level": "empty", "label": "—"}
 
         scope = product_scopes.get(product_id, set())
         cap_rels = supported_by.get(cap_id, [])
@@ -230,13 +230,21 @@ async def build_capability_heatmap(
                     fit for sid, fit in cap_rels if sid in relevant_systems
                 ]
             if not relevant_fitness:
-                return {"level": "gap", "label": "—"}
+                if realising_count > 1:
+                    return {"level": "unrated", "label": "— unrated"}
+                return {"level": "gap", "label": "— gap"}
 
         if any(system_status.get(sid) in EOL_STATUSES for sid in relevant_systems if sid in scope):
-            return {"level": "eol", "label": "EOL"}
+            return {"level": "eol", "label": "● EOL"}
 
         level = _fitness_to_level(relevant_fitness)
-        return {"level": level, "label": level}
+        fitness_labels = {
+            "strong": "● Strong",
+            "good": "● Good",
+            "fair": "● Fair",
+            "poor": "● Poor",
+        }
+        return {"level": level, "label": fitness_labels.get(level, level)}
 
     domain_reads = []
     all_cap_rows: list[dict] = []
@@ -255,10 +263,12 @@ async def build_capability_heatmap(
             key=lambda c: ((c.properties or {}).get("order_index") or 999, c.name),
         ):
             cid = str(cap.id)
-            cells = {p["id"]: cell_for(p["id"], cid) for p in product_reads}
             realising_count = sum(
                 1 for p in product_reads if cid in product_cap_sets.get(p["id"], set())
             )
+            cells = {
+                p["id"]: cell_for(p["id"], cid, realising_count) for p in product_reads
+            }
             row = {
                 "id": cid,
                 "name": cap.name,
@@ -267,6 +277,7 @@ async def build_capability_heatmap(
                 "cells": cells,
                 "overlap": realising_count > 1,
                 "realising_count": realising_count,
+                "domain_name": domain.name,
             }
             cap_rows.append(row)
             all_cap_rows.append({**row, "domain_name": domain.name})
@@ -316,7 +327,7 @@ async def build_capability_heatmap(
                 {
                     "capability_name": r["name"],
                     "domain_name": r["domain_name"],
-                    "detail": "No realising product · operations risk",
+                    "detail": "no realising product",
                 }
                 for r in gap_caps[:5]
             ],
