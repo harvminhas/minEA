@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 export interface NameComboboxOption {
@@ -29,7 +29,6 @@ export function NameCombobox({
   hint,
   emptyMessage = "No matches — use what you typed",
 }: Props) {
-  const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
@@ -91,7 +90,6 @@ export function NameCombobox({
               setOpen(false);
             }
           }}
-          list={listId}
           placeholder={placeholder}
           disabled={disabled}
           required={required}
@@ -103,12 +101,6 @@ export function NameCombobox({
           className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400"
         />
       </div>
-
-      <datalist id={listId}>
-        {options.map((option) => (
-          <option key={option.id} value={option.label} />
-        ))}
-      </datalist>
 
       {showList && (
         <ul
