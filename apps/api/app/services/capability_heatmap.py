@@ -213,7 +213,7 @@ async def build_capability_heatmap(
 
     def cell_for(product_id: str, cap_id: str, realising_count: int) -> dict:
         if cap_id not in product_cap_sets.get(product_id, set()):
-            return {"level": "empty", "label": "—"}
+            return {"level": "empty", "label": "n/a"}
 
         scope = product_scopes.get(product_id, set())
         cap_rels = supported_by.get(cap_id, [])
@@ -231,20 +231,31 @@ async def build_capability_heatmap(
                 ]
             if not relevant_fitness:
                 if realising_count > 1:
-                    return {"level": "unrated", "label": "— unrated"}
-                return {"level": "gap", "label": "— gap"}
+                    return {"level": "unrated", "label": "unrated"}
+                return {"level": "gap", "label": "gap"}
 
         if any(system_status.get(sid) in EOL_STATUSES for sid in relevant_systems if sid in scope):
-            return {"level": "eol", "label": "● EOL"}
+            return {"level": "eol", "label": "EOL"}
 
         level = _fitness_to_level(relevant_fitness)
         fitness_labels = {
-            "strong": "● Strong",
-            "good": "● Good",
-            "fair": "● Fair",
-            "poor": "● Poor",
+            "strong": "Strong",
+            "good": "Good",
+            "fair": "Fair",
+            "poor": "Poor",
         }
         return {"level": level, "label": fitness_labels.get(level, level)}
+
+    def unmapped_system_count(cap_id: str) -> int:
+        rel_systems = {sid for sid, _ in supported_by.get(cap_id, [])}
+        return len(cap_realization_systems.get(cap_id, set()) | rel_systems)
+
+    def gap_detail_for(cap_id: str) -> str:
+        count = unmapped_system_count(cap_id)
+        if count > 0:
+            noun = "systems" if count != 1 else "system"
+            return f"operations risk · {count} {noun} exist, unmapped"
+        return "operations risk · no realising product"
 
     domain_reads = []
     all_cap_rows: list[dict] = []
@@ -269,6 +280,11 @@ async def build_capability_heatmap(
             cells = {
                 p["id"]: cell_for(p["id"], cid, realising_count) for p in product_reads
             }
+            claiming_products = [
+                {"id": p["id"], "name": p["name"], "color": p["color"]}
+                for p in product_reads
+                if cid in product_cap_sets.get(p["id"], set())
+            ]
             row = {
                 "id": cid,
                 "name": cap.name,
@@ -278,6 +294,9 @@ async def build_capability_heatmap(
                 "overlap": realising_count > 1,
                 "realising_count": realising_count,
                 "domain_name": domain.name,
+                "claiming_products": claiming_products,
+                "unmapped_system_count": unmapped_system_count(cid),
+                "gap_detail": gap_detail_for(cid),
             }
             cap_rows.append(row)
             all_cap_rows.append({**row, "domain_name": domain.name})
@@ -327,7 +346,7 @@ async def build_capability_heatmap(
                 {
                     "capability_name": r["name"],
                     "domain_name": r["domain_name"],
-                    "detail": "no realising product",
+                    "detail": r["gap_detail"],
                 }
                 for r in gap_caps[:5]
             ],

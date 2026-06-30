@@ -193,6 +193,12 @@ class HeatmapCell(BaseModel):
     label: str
 
 
+class HeatmapClaimingProduct(BaseModel):
+    id: str
+    name: str
+    color: str
+
+
 class HeatmapCapabilityRow(BaseModel):
     id: str
     name: str
@@ -201,6 +207,10 @@ class HeatmapCapabilityRow(BaseModel):
     cells: dict[str, HeatmapCell]
     overlap: bool = False
     realising_count: int = 0
+    domain_name: str | None = None
+    claiming_products: list[HeatmapClaimingProduct] = Field(default_factory=list)
+    unmapped_system_count: int = 0
+    gap_detail: str | None = None
 
 
 class HeatmapDomainGroup(BaseModel):

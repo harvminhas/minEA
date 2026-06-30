@@ -1351,6 +1351,12 @@ export interface HeatmapCell {
   label: string;
 }
 
+export interface HeatmapClaimingProduct {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export interface HeatmapCapabilityRow {
   id: string;
   name: string;
@@ -1361,6 +1367,9 @@ export interface HeatmapCapabilityRow {
   realising_count: number;
   domain_name?: string;
   domain_id?: string;
+  claiming_products?: HeatmapClaimingProduct[];
+  unmapped_system_count?: number;
+  gap_detail?: string;
 }
 
 export interface HeatmapDomainGroup {

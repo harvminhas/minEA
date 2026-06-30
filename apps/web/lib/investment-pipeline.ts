@@ -162,8 +162,12 @@ export interface PipelineInitiativeRow {
 export interface InvestmentPipelineData {
   lastUpdated: string | null;
   metrics: {
+    /** Spend on initiatives in the Committed (planned) stage only. */
     committedSpend: number;
+    committedCount: number;
+    /** All non-delivered pipeline initiatives (any active stage). */
     activeCount: number;
+    totalPipelineSpend: number;
     inFlightSpend: number;
     inFlightCount: number;
     atRiskCount: number;
@@ -174,7 +178,8 @@ export interface InvestmentPipelineData {
   stages: PipelineStageRollup[];
   mix: InvestmentMixSlice[];
   mixTotal: number;
-  mixInsight: string | null;
+  /** Factual mix summary — no prescriptive language. */
+  mixFact: string | null;
   topInitiatives: PipelineInitiativeRow[];
   hasEstimatedSpend: boolean;
 }
@@ -195,7 +200,9 @@ export function buildInvestmentPipeline(
   }
 
   let committedSpend = 0;
+  let committedCount = 0;
   let activeCount = 0;
+  let totalPipelineSpend = 0;
   let inFlightSpend = 0;
   let inFlightCount = 0;
   let atRiskCount = 0;
@@ -233,14 +240,16 @@ export function buildInvestmentPipeline(
 
     if (stage !== "done_ytd") {
       activeCount += 1;
+      totalPipelineSpend += amount;
       const category =
         props.investment_category ??
         (defaultInvestmentCategory(props.roadmap_kind ?? "epic") as InvestmentCategory);
       mixByCategory[category] += amount;
     }
 
-    if (stage === "committed" || stage === "in_flight") {
+    if (stage === "committed") {
       committedSpend += amount;
+      committedCount += 1;
     }
     if (stage === "in_flight") {
       inFlightSpend += amount;
@@ -288,11 +297,15 @@ export function buildInvestmentPipeline(
     percent: mixTotal > 0 ? Math.round((mixByCategory[cat.value] / mixTotal) * 100) : 0,
   }));
 
-  const topCategory = [...mix].sort((a, b) => b.spend - a.spend)[0];
-  const mixInsight =
-    topCategory && topCategory.spend > 0
-      ? `${topCategory.label} is highest — consistent with current debt levels`
-      : null;
+  const categoriesWithSpend = mix.filter((slice) => slice.spend > 0);
+  let mixFact: string | null = null;
+  if (mixTotal > 0 && categoriesWithSpend.length === 1) {
+    mixFact = `${categoriesWithSpend[0]!.percent}% of pipeline spend is ${categoriesWithSpend[0]!.label}`;
+  } else if (categoriesWithSpend.length >= 2) {
+    mixFact = categoriesWithSpend
+      .map((slice) => `${slice.label} ${slice.percent}%`)
+      .join(" · ");
+  }
 
   const topInitiatives = [...rows]
     .filter((r) => r.status !== "delivered" && r.status !== "cancelled" && r.status !== "deferred")
@@ -303,7 +316,9 @@ export function buildInvestmentPipeline(
     lastUpdated: latestUpdate,
     metrics: {
       committedSpend,
+      committedCount,
       activeCount,
+      totalPipelineSpend,
       inFlightSpend,
       inFlightCount,
       atRiskCount,
@@ -320,7 +335,7 @@ export function buildInvestmentPipeline(
     })),
     mix,
     mixTotal,
-    mixInsight,
+    mixFact,
     topInitiatives,
     hasEstimatedSpend,
   };
