@@ -73,3 +73,19 @@ export function domainIcon(name: string | null | undefined): LucideIcon {
   if (!name) return Layers;
   return DOMAIN_ICONS[name] ?? Layers;
 }
+
+const DOMAIN_ICON_PALETTE = [
+  { bg: "bg-emerald-100", text: "text-emerald-600" },
+  { bg: "bg-violet-100", text: "text-violet-600" },
+  { bg: "bg-amber-100", text: "text-amber-600" },
+  { bg: "bg-sky-100", text: "text-sky-600" },
+  { bg: "bg-rose-100", text: "text-rose-600" },
+  { bg: "bg-indigo-100", text: "text-indigo-600" },
+] as const;
+
+export function domainIconStyle(domainId: string): { bg: string; text: string } {
+  const index =
+    domainId.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) %
+    DOMAIN_ICON_PALETTE.length;
+  return DOMAIN_ICON_PALETTE[index];
+}

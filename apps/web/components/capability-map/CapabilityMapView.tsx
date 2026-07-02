@@ -3,19 +3,23 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import { AlertTriangle, Pencil, Plus, Trash2, Users } from "lucide-react";
 import type { CapabilityMap, CapabilityMapCapability, CapabilityMapDomain } from "@minea/types";
 import { FitnessHealthBar, FitnessLegend } from "@/components/capability-map/DomainFitnessBar";
 import {
   capabilityCoverageDisplay,
+  capabilityMapStats,
   domainCardCoverageCounts,
+  domainHasGap,
+  filterCapabilityMapDomains,
+  type CapabilityMapFilter,
 } from "@/lib/capability-map-card-utils";
 import { useAuth } from "@/lib/auth-context";
 import { objectsApi } from "@/lib/api-client";
 import { AddCapabilityPickerDialog } from "@/components/capability-map/AddCapabilityPickerDialog";
 import { EditCapabilityDialog } from "@/components/capability-map/EditCapabilityDialog";
 import { AddDomainPickerDialog } from "@/components/capability-map/AddDomainPickerDialog";
-import { domainIcon } from "@/lib/capability-map-icons";
+import { domainIcon, domainIconStyle } from "@/lib/capability-map-icons";
 import { objectListPath } from "@/lib/tenancy";
 import { useTenancy } from "@/lib/tenancy";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
@@ -33,11 +37,34 @@ interface Props {
   onRefresh: () => void;
 }
 
+const FILTER_OPTIONS: { id: CapabilityMapFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "has_gaps", label: "Has gaps" },
+  { id: "unassigned", label: "Unassigned" },
+  { id: "no_capabilities", label: "No capabilities" },
+];
+
+function formatStatsLine(stats: ReturnType<typeof capabilityMapStats>): string {
+  const parts = [
+    `${stats.domains} domain${stats.domains === 1 ? "" : "s"}`,
+    `${stats.capabilities} capabilit${stats.capabilities === 1 ? "y" : "ies"}`,
+  ];
+  if (stats.gaps > 0) {
+    parts.push(`${stats.gaps} gap${stats.gaps === 1 ? "" : "s"}`);
+  }
+  if (stats.unassigned > 0) {
+    parts.push(`${stats.unassigned} unassigned`);
+  }
+  return parts.join(" · ");
+}
+
 export function CapabilityMapView({ map, onRefresh }: Props) {
   const { getToken } = useAuth();
   const { canCreate, canEdit, canDelete } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
+  const [filter, setFilter] = useState<CapabilityMapFilter>("all");
+  const [emptySectionHidden, setEmptySectionHidden] = useState(false);
   const [showDomainPicker, setShowDomainPicker] = useState(false);
   const [capPickerDomain, setCapPickerDomain] = useState<CapabilityMapDomain | null>(null);
   const [editCapability, setEditCapability] = useState<{
@@ -51,6 +78,13 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
     domainId: string;
     domainName: string;
   } | null>(null);
+
+  const stats = useMemo(() => capabilityMapStats(map.domains), [map.domains]);
+  const { populated, empty } = useMemo(
+    () => filterCapabilityMapDomains(map.domains, filter),
+    [map.domains, filter]
+  );
+  const showEmptySection = filter === "all" && empty.length > 0 && !emptySectionHidden;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
@@ -169,33 +203,76 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
     },
   });
 
-  const totalCapabilities = map.domains.reduce((sum, d) => sum + d.capabilities.length, 0);
   const existingDomainNames = map.domains.map((d) => d.name);
+
+  const domainCardProps = (domain: CapabilityMapDomain) => ({
+    domain,
+    readOnly: !canEdit,
+    onAddCapability: canEdit ? () => setCapPickerDomain(domain) : undefined,
+    onEditCapability: canEdit
+      ? (capability: CapabilityMapCapability) =>
+          setEditCapability({
+            capability,
+            domainId: domain.id,
+            domainName: domain.name,
+          })
+      : undefined,
+    onDeleteDomain: canDelete ? () => setDeleteDomain(domain) : undefined,
+    onDeleteCapability: canDelete
+      ? (capability: CapabilityMapCapability) =>
+          setDeleteCapability({
+            capability,
+            domainId: domain.id,
+            domainName: domain.name,
+          })
+      : undefined,
+  });
 
   return (
     <>
       <div className="flex flex-col h-full">
-        <div className="px-8 py-5 border-b border-gray-100 bg-white flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Capability map</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Level 1 domains and level 2 capabilities. Duplicate names across domains when needed.
-            </p>
-            {map.domains.length > 0 && (
-              <p className="text-xs text-gray-400 mt-1">
-                {map.domains.length} domain{map.domains.length === 1 ? "" : "s"} · {totalCapabilities} capabilit
-                {totalCapabilities === 1 ? "y" : "ies"}
+        <div className="px-8 py-5 border-b border-gray-100 bg-white">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Capability map</h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Level 1 domains and level 2 capabilities. Duplicate names across domains when needed.
               </p>
+              {map.domains.length > 0 && (
+                <p className="text-xs text-gray-400 mt-1">{formatStatsLine(stats)}</p>
+              )}
+            </div>
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => setShowDomainPicker(true)}
+                className="inline-flex items-center gap-1.5 border border-gray-200 rounded-md px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 flex-shrink-0"
+              >
+                <Plus size={14} />
+                Add domain
+              </button>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => setShowDomainPicker(true)}
-            className="inline-flex items-center gap-1.5 border border-gray-200 rounded-md px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            <Plus size={14} />
-            Add domain
-          </button>
+
+          {map.domains.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {FILTER_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setFilter(option.id)}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    filter === option.id
+                      ? "border-gray-900 bg-gray-900 text-white"
+                      : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-800"
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-8">
@@ -216,38 +293,48 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {map.domains.map((domain) => (
-                <DomainCard
-                  key={domain.id}
-                  domain={domain}
-                  readOnly={!canEdit}
-                  onAddCapability={
-                    canEdit ? () => setCapPickerDomain(domain) : undefined
-                  }
-                  onEditCapability={
-                    canEdit
-                      ? (capability) =>
-                          setEditCapability({
-                            capability,
-                            domainId: domain.id,
-                            domainName: domain.name,
-                          })
-                      : undefined
-                  }
-                  onDeleteDomain={canDelete ? () => setDeleteDomain(domain) : undefined}
-                  onDeleteCapability={
-                    canDelete
-                      ? (capability) =>
-                          setDeleteCapability({
-                            capability,
-                            domainId: domain.id,
-                            domainName: domain.name,
-                          })
-                      : undefined
-                  }
-                />
-              ))}
+            <div className="space-y-8">
+              {populated.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {populated.map((domain) => (
+                    <DomainCard key={domain.id} {...domainCardProps(domain)} />
+                  ))}
+                </div>
+              ) : filter !== "all" ? (
+                <p className="text-sm text-gray-500 py-8 text-center">
+                  No domains match this filter.
+                </p>
+              ) : null}
+
+              {showEmptySection && (
+                <section>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      Domains with no capabilities ({empty.length})
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setEmptySectionHidden(true)}
+                      className="text-xs font-medium text-gray-500 hover:text-gray-700"
+                    >
+                      Hide
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                    {empty.map((domain) => (
+                      <EmptyDomainCard key={domain.id} {...domainCardProps(domain)} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {filter === "no_capabilities" && empty.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {empty.map((domain) => (
+                    <EmptyDomainCard key={domain.id} {...domainCardProps(domain)} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -347,18 +434,31 @@ function DomainCard({
 }) {
   const { orgSlug, workspaceSlug } = useTenancy();
   const Icon = domainIcon(domain.icon);
+  const iconStyle = domainIconStyle(domain.id);
   const detailPath = `${objectListPath(orgSlug, workspaceSlug, "business", "capabilities")}/domains/${domain.id}`;
   const coverageCounts = useMemo(
     () => domainCardCoverageCounts(domain.capabilities),
     [domain.capabilities]
   );
   const capTotal = domain.capabilities.length;
+  const hasGap = domainHasGap(domain);
 
   return (
-    <div className="group/card rounded-xl border border-gray-200 bg-white p-4 hover:border-indigo-200 transition-colors flex flex-col">
+    <div
+      className={cn(
+        "group/card rounded-xl border bg-white p-4 transition-colors flex flex-col",
+        hasGap ? "border-amber-400 shadow-sm shadow-amber-100/50" : "border-gray-200 hover:border-indigo-200"
+      )}
+    >
       <div className="flex items-start gap-3 mb-3">
         <Link href={detailPath} className="flex items-start gap-3 min-w-0 flex-1 group">
-          <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-600 flex-shrink-0 group-hover:bg-indigo-50 group-hover:text-indigo-700 transition-colors">
+          <div
+            className={cn(
+              "h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors",
+              iconStyle.bg,
+              iconStyle.text
+            )}
+          >
             <Icon size={18} />
           </div>
           <div className="min-w-0">
@@ -390,36 +490,95 @@ function DomainCard({
         )}
       </div>
 
-      {capTotal > 0 && (
-        <div className="mb-3">
-          <FitnessHealthBar counts={coverageCounts} total={capTotal} />
-          <FitnessLegend counts={coverageCounts} hideZero className="mt-2" />
-        </div>
-      )}
+      <div className="mb-3">
+        <FitnessHealthBar counts={coverageCounts} total={capTotal} />
+        <FitnessLegend counts={coverageCounts} hideZero className="mt-2" />
+      </div>
 
-      {capTotal === 0 ? (
-        <p className="text-sm text-gray-400 italic mb-2">No capabilities yet</p>
-      ) : (
-        <ul className="divide-y divide-gray-100 mb-2">
-          {domain.capabilities.map((cap) => (
-            <CapabilityL2Row
-              key={cap.id}
-              capability={cap}
-              readOnly={readOnly}
-              onEdit={onEditCapability ? () => onEditCapability(cap) : undefined}
-              onDelete={onDeleteCapability ? () => onDeleteCapability(cap) : undefined}
-            />
-          ))}
-        </ul>
-      )}
+      <ul className="divide-y divide-gray-100 mb-2">
+        {domain.capabilities.map((cap) => (
+          <CapabilityL2Row
+            key={cap.id}
+            capability={cap}
+            readOnly={readOnly}
+            onEdit={onEditCapability ? () => onEditCapability(cap) : undefined}
+            onDelete={onDeleteCapability ? () => onDeleteCapability(cap) : undefined}
+          />
+        ))}
+      </ul>
 
       {!readOnly && onAddCapability && (
         <button
           type="button"
           onClick={onAddCapability}
-          className={cn(
-            "inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-indigo-600"
-          )}
+          className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-indigo-600"
+        >
+          <Plus size={12} />
+          Add capability
+        </button>
+      )}
+    </div>
+  );
+}
+
+function EmptyDomainCard({
+  domain,
+  readOnly = false,
+  onAddCapability,
+  onDeleteDomain,
+}: {
+  domain: CapabilityMapDomain;
+  readOnly?: boolean;
+  onAddCapability?: () => void;
+  onDeleteDomain?: () => void;
+}) {
+  const { orgSlug, workspaceSlug } = useTenancy();
+  const Icon = domainIcon(domain.icon);
+  const iconStyle = domainIconStyle(domain.id);
+  const detailPath = `${objectListPath(orgSlug, workspaceSlug, "business", "capabilities")}/domains/${domain.id}`;
+
+  return (
+    <div className="group/card rounded-xl border border-gray-200 bg-white p-4 flex flex-col">
+      <div className="flex items-start gap-3">
+        <Link href={detailPath} className="flex items-start gap-3 min-w-0 flex-1 group">
+          <div
+            className={cn(
+              "h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0",
+              iconStyle.bg,
+              iconStyle.text
+            )}
+          >
+            <Icon size={18} />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-semibold text-gray-900 text-base group-hover:text-indigo-700">
+              {domain.name}
+            </h3>
+          </div>
+        </Link>
+        {!readOnly && onDeleteDomain && (
+          <HoverActionMenu
+            buttonClassName="opacity-0 group-hover/card:opacity-100"
+            ariaLabel={`Actions for ${domain.name}`}
+            items={[
+              {
+                label: "Delete domain",
+                icon: <Trash2 size={14} />,
+                variant: "danger",
+                onClick: onDeleteDomain,
+              },
+            ]}
+          />
+        )}
+      </div>
+
+      <p className="text-sm text-gray-400 italic mt-4 mb-3">No capabilities yet</p>
+
+      {!readOnly && onAddCapability && (
+        <button
+          type="button"
+          onClick={onAddCapability}
+          className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
         >
           <Plus size={12} />
           Add capability
@@ -445,28 +604,29 @@ function CapabilityL2Row({
 
   return (
     <li className="group/row flex items-center justify-between gap-2 py-2.5 first:pt-0">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-gray-900 leading-snug">{capability.name}</p>
-        <p
-          className={cn(
-            "flex items-center gap-1 text-[11px] leading-tight",
-            unowned ? "text-red-600" : "text-gray-500"
-          )}
-        >
-          <Users
-            size={11}
-            className={cn("flex-shrink-0", unowned ? "text-red-500" : "text-gray-400")}
-          />
-          <span className="truncate">{unowned ? "Unassigned" : capability.owner}</span>
-        </p>
+      <div className="min-w-0 flex flex-1 items-start gap-2.5">
+        <span className={cn("mt-1.5 h-2 w-2 rounded-full flex-shrink-0", coverage.dot)} aria-hidden />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900 leading-snug">{capability.name}</p>
+          <p
+            className={cn(
+              "flex items-center gap-1 text-[11px] leading-tight mt-0.5",
+              unowned ? "text-amber-700" : "text-gray-500"
+            )}
+          >
+            {unowned ? (
+              <AlertTriangle size={11} className="flex-shrink-0 text-amber-500" />
+            ) : (
+              <Users size={11} className="flex-shrink-0 text-gray-400" />
+            )}
+            <span className="truncate">{unowned ? "Unassigned" : capability.owner}</span>
+          </p>
+        </div>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
-        <div className="flex items-center gap-1.5">
-          <span className={cn("h-2 w-2 rounded-full", coverage.dot)} aria-hidden />
-          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", coverage.badge)}>
-            {coverage.label}
-          </span>
-        </div>
+        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", coverage.badge)}>
+          {coverage.label}
+        </span>
         {!readOnly && onEdit && onDelete && (
           <HoverActionMenu
             buttonClassName="opacity-0 group-hover/row:opacity-100"

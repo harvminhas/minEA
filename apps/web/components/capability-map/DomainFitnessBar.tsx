@@ -52,13 +52,13 @@ export function FitnessLegend({
     { label: "strong", count: counts.strong, dot: "bg-emerald-500" },
     { label: "adequate", count: counts.adequate, dot: "bg-amber-400" },
     { label: "weak", count: counts.weak ?? 0, dot: "bg-red-500" },
-    { label: "gap", count: counts.gap, dot: "bg-gray-400" },
+    { label: "gap", count: counts.gap, dot: "bg-red-500" },
   ].filter((item) => !hideZero || item.count > 0);
 
   if (items.length === 0) return null;
 
   return (
-    <div className={cn("flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500", className)}>
+    <div className={cn("flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500", className)}>
       {items.map((item) => (
         <span key={item.label} className="inline-flex items-center gap-1.5">
           <span className={cn("h-2 w-2 rounded-full", item.dot)} />

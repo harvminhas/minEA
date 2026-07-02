@@ -1,4 +1,17 @@
-import type { CapabilityCoverageStatus, CapabilityMapCapability } from "@minea/types";
+import type {
+  CapabilityCoverageStatus,
+  CapabilityMapCapability,
+  CapabilityMapDomain,
+} from "@minea/types";
+
+export type CapabilityMapFilter = "all" | "has_gaps" | "unassigned" | "no_capabilities";
+
+export interface CapabilityMapStats {
+  domains: number;
+  capabilities: number;
+  gaps: number;
+  unassigned: number;
+}
 
 export interface DomainCardCoverageCounts {
   strong: number;
@@ -25,6 +38,51 @@ export function domainCardCoverageCounts(
     }
   }
   return counts;
+}
+
+export function capabilityIsUnassigned(cap: CapabilityMapCapability): boolean {
+  return !cap.owner?.trim();
+}
+
+export function domainHasGap(domain: CapabilityMapDomain): boolean {
+  return domain.capabilities.some((cap) => resolveCapabilityCoverage(cap) === "no_system");
+}
+
+export function domainHasUnassigned(domain: CapabilityMapDomain): boolean {
+  return domain.capabilities.some(capabilityIsUnassigned);
+}
+
+export function capabilityMapStats(domains: CapabilityMapDomain[]): CapabilityMapStats {
+  let capabilities = 0;
+  let gaps = 0;
+  let unassigned = 0;
+  for (const domain of domains) {
+    for (const cap of domain.capabilities) {
+      capabilities += 1;
+      if (resolveCapabilityCoverage(cap) === "no_system") gaps += 1;
+      if (capabilityIsUnassigned(cap)) unassigned += 1;
+    }
+  }
+  return { domains: domains.length, capabilities, gaps, unassigned };
+}
+
+export function filterCapabilityMapDomains(
+  domains: CapabilityMapDomain[],
+  filter: CapabilityMapFilter
+): { populated: CapabilityMapDomain[]; empty: CapabilityMapDomain[] } {
+  const populated = domains.filter((domain) => domain.capabilities.length > 0);
+  const empty = domains.filter((domain) => domain.capabilities.length === 0);
+
+  switch (filter) {
+    case "has_gaps":
+      return { populated: populated.filter(domainHasGap), empty: [] };
+    case "unassigned":
+      return { populated: populated.filter(domainHasUnassigned), empty: [] };
+    case "no_capabilities":
+      return { populated: [], empty };
+    default:
+      return { populated, empty };
+  }
 }
 
 export function resolveCapabilityCoverage(
