@@ -10,6 +10,8 @@ import { objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { usePermissions } from "@/lib/use-permissions";
 import { CreateDataPanel } from "@/components/data/CreateDataPanel";
+import { DataDomainSelect, DomainAssignmentLabel } from "@/components/data/DataDomainSelect";
+import { DataGovernanceGapBanner } from "@/components/data/DataGovernanceGapBanner";
 import { EntityDetailPanel } from "@/components/data/EntityDetailPanel";
 import { StoreDetailPanel } from "@/components/data/StoreDetailPanel";
 import { DomainDetailPanel } from "@/components/data/DomainDetailPanel";
@@ -27,6 +29,12 @@ import {
   STORE_ICON_STYLE,
   storeTopBadge,
 } from "@/lib/data-utils";
+import {
+  countUnassignedEntities,
+  countUnassignedStores,
+  governanceDomainDisplayName,
+  isGovernanceDomainUnassigned,
+} from "@/lib/data-domain-assignment";
 import type { DataDomainProperties } from "@minea/types";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import { cn } from "@/lib/utils";
@@ -36,6 +44,7 @@ type DataListConfig = {
   title: string;
   titlePlural: string;
   createKind: "entity" | "store" | "domain";
+  addLabel: string;
 };
 
 const CONFIGS: Record<string, DataListConfig> = {
@@ -44,18 +53,21 @@ const CONFIGS: Record<string, DataListConfig> = {
     title: "Data Entities",
     titlePlural: "entities",
     createKind: "entity",
+    addLabel: "Add entity",
   },
   "data-stores": {
     objectType: "data_store",
     title: "Data Stores",
     titlePlural: "stores",
     createKind: "store",
+    addLabel: "Add store",
   },
   "data-domains": {
     objectType: "data_domain",
     title: "Data Domains",
     titlePlural: "domains",
     createKind: "domain",
+    addLabel: "Add domain",
   },
 };
 
@@ -128,8 +140,10 @@ function EntityCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: (
       <div className="divide-y divide-gray-100 text-xs">
         <PropertyRow
           label="Data domain"
-          value={item.data_domain_name ?? "—"}
-          valueClassName={!item.data_domain_name ? "font-normal text-gray-400" : undefined}
+          value={<DomainAssignmentLabel name={governanceDomainDisplayName(item)} />}
+          valueClassName={
+            isGovernanceDomainUnassigned(item) ? "font-normal text-amber-800/90" : undefined
+          }
         />
         <PropertyRow
           label="Owned by"
@@ -184,8 +198,10 @@ function StoreCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: ()
         />
         <PropertyRow
           label="Data domain"
-          value={item.data_domain_name ?? "—"}
-          valueClassName={!item.data_domain_name ? "font-normal text-gray-400" : undefined}
+          value={<DomainAssignmentLabel name={governanceDomainDisplayName(item)} />}
+          valueClassName={
+            isGovernanceDomainUnassigned(item) ? "font-normal text-amber-800/90" : undefined
+          }
         />
         <PropertyRow label="Data entities" value={String(entityCount)} />
         <PropertyRow
@@ -274,7 +290,33 @@ export function DataLayerList({ typePath }: { typePath: string }) {
     enabled,
   });
 
+  const needsCrossTypeCounts = typePath === "data-domains";
+
+  const { data: entitiesData } = useQuery({
+    queryKey: ["objects", orgSlug, workspaceSlug, "data_object"],
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "data_object" }, token!);
+    },
+    enabled: enabled && (needsCrossTypeCounts || typePath === "data-objects"),
+  });
+
+  const { data: storesData } = useQuery({
+    queryKey: ["objects", orgSlug, workspaceSlug, "data_store"],
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "data_store" }, token!);
+    },
+    enabled: enabled && (needsCrossTypeCounts || typePath === "data-stores"),
+  });
+
   const items = data?.items ?? [];
+  const entityItems = typePath === "data-objects" ? items : (entitiesData?.items ?? []);
+  const storeItems = typePath === "data-stores" ? items : (storesData?.items ?? []);
+  const unassignedEntityCount = countUnassignedEntities(entityItems);
+  const unassignedStoreCount = countUnassignedStores(storeItems);
+  const gapFocus =
+    typePath === "data-objects" ? "entities" : typePath === "data-stores" ? "stores" : "all";
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, config.objectType] });
@@ -313,13 +355,19 @@ export function DataLayerList({ typePath }: { typePath: string }) {
             <button
               type="button"
               onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-md text-sm font-medium"
+              className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
             >
               <Plus size={14} />
-              Add
+              {config.addLabel}
             </button>
           )}
         </div>
+
+        <DataGovernanceGapBanner
+          unassignedEntityCount={unassignedEntityCount}
+          unassignedStoreCount={unassignedStoreCount}
+          focus={gapFocus}
+        />
 
         <div className="flex-1 overflow-y-auto p-8">
           {isLoading ? (

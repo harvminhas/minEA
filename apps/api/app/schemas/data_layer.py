@@ -125,6 +125,7 @@ class DataStoreCreate(BaseModel):
     store_type: str | None = "relational_db"
     technology: str | None = None
     health: str | None = "healthy"
+    data_domain_id: UUID | None = None
 
 
 class DataDomainCreate(BaseModel):

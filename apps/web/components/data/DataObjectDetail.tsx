@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowUpRight, Database } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,6 +9,7 @@ import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { AssignDataLinkDialog } from "@/components/data/AssignDataLinkDialog";
 import { DataFormFooter, DataSelect } from "@/components/data/DataDetailShell";
 import { type AssignTarget } from "@/components/data/DataLinksPanel";
+import { OperationalLinkList } from "@/components/data/OperationalLinkList";
 import {
   DataObjectRelationshipsTab,
   DATA_OBJECT_ACCENT,
@@ -28,14 +27,16 @@ import {
 import { excludeTechDebtRelationships } from "@/lib/relationship-display";
 import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import {
-  entityPath,
   entityStoreAssignSection,
   entityStoreLinks,
   initials,
-  ROLE_TAG_STYLE,
 } from "@/lib/data-utils";
-import { cn } from "@/lib/utils";
-import { DEFAULT_DATA_DOMAIN_NAME, useDataDomainOptions } from "@/lib/use-data-domains";
+import { DataDomainSelect, DomainAssignmentLabel } from "@/components/data/DataDomainSelect";
+import {
+  normalizeDomainFormValue,
+  UNASSIGNED_DOMAIN_LABEL,
+} from "@/lib/data-domain-assignment";
+import { useDataDomainOptions } from "@/lib/use-data-domains";
 import { useApplicationOptions } from "@/lib/use-application-options";
 import { usePermissions } from "@/lib/use-permissions";
 import type { DataObjectProperties, MinEAObject } from "@minea/types";
@@ -88,7 +89,7 @@ export function DataObjectDetail({ entityId, onClose, onUpdate }: Props) {
   const [showChart, setShowChart] = useState(false);
   const [liveObject, setLiveObject] = useState<MinEAObject | null>(null);
   const liveObjectRef = useRef<MinEAObject | null>(null);
-  const { options: domainOptions, defaultDomainId, isLoading: domainsLoading } = useDataDomainOptions();
+  const { options: domainOptions, isLoading: domainsLoading } = useDataDomainOptions();
   const { options: applicationOptions, isLoading: applicationsLoading } = useApplicationOptions();
   const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(entityId);
 
@@ -201,7 +202,7 @@ export function DataObjectDetail({ entityId, onClose, onUpdate }: Props) {
         classification,
         sensitivity: sensitivity || null,
         description: description || null,
-        data_domain_id: domainId || defaultDomainId || null,
+        data_domain_id: domainId || null,
         owner_system_id: ownerSystemId || null,
       }, token!);
     },
@@ -222,9 +223,9 @@ export function DataObjectDetail({ entityId, onClose, onUpdate }: Props) {
     setClassification(entity.classification ?? "core");
     setSensitivity(entity.sensitivity ?? "");
     setDescription(entity.description ?? "");
-    setDomainId(entity.data_domain_id ?? defaultDomainId ?? "");
+    setDomainId(normalizeDomainFormValue(entity.data_domain_id, entity.data_domain_name));
     setOwnerSystemId(entity.owner_system_id ?? "");
-  }, [entity, defaultDomainId]);
+  }, [entity]);
 
   const refreshEntity = () => {
     queryClient.invalidateQueries({ queryKey: ["data-entity", orgSlug, workspaceSlug, entityId] });
@@ -244,10 +245,11 @@ export function DataObjectDetail({ entityId, onClose, onUpdate }: Props) {
     refreshEntity();
   };
 
-  const selectedDomainName =
-    domainOptions.find((option) => option.value === domainId)?.label ??
-    entity?.data_domain_name ??
-    DEFAULT_DATA_DOMAIN_NAME;
+  const selectedDomainName = domainId
+    ? domainOptions.find((option) => option.value === domainId)?.label ??
+      entity?.data_domain_name ??
+      UNASSIGNED_DOMAIN_LABEL
+    : UNASSIGNED_DOMAIN_LABEL;
 
   const relationshipCount = drawerRels.length;
 
@@ -284,7 +286,7 @@ export function DataObjectDetail({ entityId, onClose, onUpdate }: Props) {
                 <div className="min-w-0">
                   <h2 className="font-semibold text-gray-900 truncate">{entity.name}</h2>
                   <p className="text-sm text-gray-400 truncate">
-                    Data entity · {selectedDomainName}
+                    Data entity · <DomainAssignmentLabel name={selectedDomainName} />
                   </p>
                 </div>
               </div>
@@ -326,26 +328,15 @@ export function DataObjectDetail({ entityId, onClose, onUpdate }: Props) {
           <>
             <DetailSection
               title="Data domain"
-              hint="Each entity belongs to one data domain. Many entities can share the same domain."
+              hint="Optional governance metadata. Many entities can share one domain when assigned."
             >
-              {domainsLoading ? (
-                <p className="text-sm text-gray-400">Loading domains…</p>
-              ) : (
-                <DataSelect
-                  value={domainId || defaultDomainId}
-                  onChange={setDomainId}
-                  options={
-                    domainOptions.length > 0
-                      ? domainOptions
-                      : [{ value: "", label: DEFAULT_DATA_DOMAIN_NAME }]
-                  }
-                />
-              )}
-              {domainOptions.length === 0 && !domainsLoading && (
-                <p className="mt-1.5 text-[11px] text-gray-400">
-                  No domains yet — {DEFAULT_DATA_DOMAIN_NAME} will be created on save.
-                </p>
-              )}
+              <DataDomainSelect
+                value={domainId}
+                onChange={setDomainId}
+                options={domainOptions}
+                loading={domainsLoading}
+                disabled={!canEdit}
+              />
             </DetailSection>
 
             <DetailSection
@@ -381,41 +372,11 @@ export function DataObjectDetail({ entityId, onClose, onUpdate }: Props) {
                 ) : undefined
               }
             >
-              {storeLinks.length === 0 ? (
-                <p className="text-sm text-gray-400">No data stores assigned</p>
-              ) : (
-                <ul className="space-y-2">
-                  {storeLinks.map((link) => {
-                    const href = entityPath(basePath, link.entity_kind, link.entity_id);
-                    return (
-                      <li key={link.id}>
-                        <Link
-                          href={href}
-                          className="flex items-center gap-2.5 rounded-lg border border-gray-200/80 bg-white px-3 py-2.5 transition-colors hover:border-gray-300"
-                        >
-                          <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded bg-gray-50 text-gray-400">
-                            <Database size={12} />
-                          </div>
-                          <p className="min-w-0 flex-1 truncate text-sm text-gray-800">
-                            {link.entity_name}
-                          </p>
-                          {link.role_tag && (
-                            <span
-                              className={cn(
-                                "flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
-                                ROLE_TAG_STYLE[link.role_tag] ?? "bg-gray-100 text-gray-600"
-                              )}
-                            >
-                              {link.role_tag.replace(/_/g, " ")}
-                            </span>
-                          )}
-                          <ArrowUpRight size={13} className="flex-shrink-0 text-gray-300" />
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+              <OperationalLinkList
+                links={storeLinks}
+                basePath={basePath}
+                emptyLabel="No data stores assigned"
+              />
             </DetailSection>
 
             <DetailSection title="Classification">

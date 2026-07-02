@@ -168,46 +168,65 @@ export function entityStoreAssignSection(links: DataLink[]): DataLinkSection {
   };
 }
 
+export function storeEntityLinks(links: DataLink[]): DataLink[] {
+  return byKind(links, "stores", "data_object");
+}
+
+export function storeHostLinks(links: DataLink[]): DataLink[] {
+  return byKind(links, "hosts", "application");
+}
+
+export function storeIntegrationLinks(links: DataLink[]): DataLink[] {
+  return byKind(links, "source_target", "integration_flow");
+}
+
+export function storeEntityAssignSection(links: DataLink[]): DataLinkSection {
+  return {
+    key: "entities",
+    title: "Data Entities",
+    subtitle: "STORES · many ↔ many",
+    entityKind: "data_object",
+    linkKind: "stores",
+    items: storeEntityLinks(links),
+    actionLabel: "+ Add",
+    roleTags: ["primary"],
+    footnote: "Entities stored in this location. Tag one as primary when it is the main copy.",
+  };
+}
+
+export function storeHostAssignSection(links: DataLink[]): DataLinkSection {
+  return {
+    key: "host",
+    title: "Hosting System",
+    subtitle: "HOSTS · many → 1",
+    entityKind: "application",
+    linkKind: "hosts",
+    items: storeHostLinks(links),
+    actionLabel: "Change",
+    footnote: "The system that hosts or operates this store. Only one hosting system at a time.",
+  };
+}
+
+export function storeIntegrationAssignSection(links: DataLink[]): DataLinkSection {
+  return {
+    key: "integrations",
+    title: "Integrations",
+    subtitle: "SOURCE / TARGET · many ↔ many",
+    entityKind: "integration_flow",
+    linkKind: "source_target",
+    items: storeIntegrationLinks(links),
+    actionLabel: "+ Assign",
+    roleTags: ["source", "target"],
+    footnote: "Flows that read from or write to this store.",
+  };
+}
+
+/** @deprecated Use detail-tab helpers instead of DataLinksPanel sections. */
 export function storeLinkSections(links: DataLink[]): DataLinkSection[] {
   return [
-    {
-      key: "domain",
-      title: "Data Domains",
-      subtitle: "BELONGS TO",
-      entityKind: "data_domain",
-      linkKind: "governed_by",
-      items: byKind(links, "governed_by", "data_domain"),
-      actionLabel: "+ Assign",
-    },
-    {
-      key: "entities",
-      title: "Data Entities",
-      subtitle: "STORES",
-      entityKind: "data_object",
-      linkKind: "stores",
-      items: byKind(links, "stores"),
-      actionLabel: "+ Add",
-      roleTags: ["primary"],
-    },
-    {
-      key: "host",
-      title: "Hosting System",
-      subtitle: "",
-      entityKind: "application",
-      linkKind: "hosts",
-      items: byKind(links, "hosts"),
-      actionLabel: "Change",
-    },
-    {
-      key: "integrations",
-      title: "Integrations",
-      subtitle: "SOURCE / TARGET",
-      entityKind: "integration_flow",
-      linkKind: "source_target",
-      items: byKind(links, "source_target"),
-      actionLabel: "+ Assign",
-      roleTags: ["source", "target"],
-    },
+    storeEntityAssignSection(links),
+    storeHostAssignSection(links),
+    storeIntegrationAssignSection(links),
   ];
 }
 

@@ -1847,7 +1847,7 @@ export interface DataObjectCreate {
   description?: string;
   classification?: string;
   sensitivity?: string;
-  data_domain_id?: string;
+  data_domain_id?: string | null;
 }
 
 export interface DataObjectUpdate {
@@ -1881,6 +1881,7 @@ export interface DataStoreCreate {
   store_type?: string;
   technology?: string;
   health?: string;
+  data_domain_id?: string | null;
 }
 
 export interface DataStoreUpdate {

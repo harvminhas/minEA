@@ -31,17 +31,19 @@ from app.services.data_layer import (
     validate_link_entity,
 )
 from app.services.data_domain_rollup import (
-    add_store_domain_assignment,
+    clear_entity_domain_assignment,
     clear_entity_owner_assignment,
+    clear_store_domain_assignment,
     enrich_entity_domain_links,
     enrich_entity_owner_links,
-    get_or_create_default_data_domain,
     load_assigned_domain_id,
     load_domain_rollup,
     load_entity_owner_system_id,
     replace_entity_domain_assignment,
     replace_entity_owner_assignment,
+    replace_store_domain_assignment,
     sync_entity_domain_property,
+    sync_store_domain_property,
 )
 from app.services.tenancy import TenancyContext, get_workspace_context
 
@@ -76,6 +78,34 @@ async def _assign_entity_data_domain(
         ctx.workspace.id,
         ctx.org_id,
         "data_entity",
+        obj.id,
+        "data_domain",
+        domain_id,
+        "governed_by",
+    )
+
+
+async def _assign_store_data_domain(
+    db: AsyncSession,
+    ctx: TenancyContext,
+    obj: MinEAObject,
+    domain_id: UUID,
+) -> None:
+    assert ctx.workspace
+    await replace_store_domain_assignment(
+        db,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        store_id=obj.id,
+        domain_id=domain_id,
+        user_id=ctx.user_id,
+    )
+    await sync_store_domain_property(obj, domain_id=domain_id)
+    await add_data_link(
+        db,
+        ctx.workspace.id,
+        ctx.org_id,
+        "data_store",
         obj.id,
         "data_domain",
         domain_id,
@@ -188,16 +218,8 @@ async def create_entity(
     db.add(obj)
     await db.flush()
 
-    domain_id = body.data_domain_id
-    if domain_id is None:
-        default_domain = await get_or_create_default_data_domain(
-            db,
-            workspace_id=ctx.workspace.id,
-            org_id=ctx.org_id,
-            user_id=ctx.user_id,
-        )
-        domain_id = default_domain.id
-    await _assign_entity_data_domain(db, ctx, obj, domain_id)
+    if body.data_domain_id is not None:
+        await _assign_entity_data_domain(db, ctx, obj, body.data_domain_id)
     obj.properties = _props(obj)
     await db.flush()
     return await get_entity(obj.id, ctx, db)
@@ -303,27 +325,19 @@ async def update_entity(
         props["classification"] = body.classification
     if body.sensitivity is not None:
         props["sensitivity"] = body.sensitivity
-    domain_to_assign = body.data_domain_id
-    if domain_to_assign is None:
-        existing_domain = await load_assigned_domain_id(
-            db,
-            workspace_id=ctx.workspace.id,
-            org_id=ctx.org_id,
-            subject_id=obj.id,
-            subject_type="data_object",
-        )
-        if existing_domain is None and _props(obj).get("data_domain_id") is None:
-            default_domain = await get_or_create_default_data_domain(
+    patch = body.model_dump(exclude_unset=True)
+    if "data_domain_id" in patch:
+        if patch["data_domain_id"] is None:
+            await clear_entity_domain_assignment(
                 db,
                 workspace_id=ctx.workspace.id,
                 org_id=ctx.org_id,
-                user_id=ctx.user_id,
+                entity_id=obj.id,
             )
-            domain_to_assign = default_domain.id
-    if domain_to_assign is not None:
-        await _assign_entity_data_domain(db, ctx, obj, domain_to_assign)
+            await sync_entity_domain_property(obj, domain_id=None)
+        else:
+            await _assign_entity_data_domain(db, ctx, obj, patch["data_domain_id"])
         props = _props(obj)
-    patch = body.model_dump(exclude_unset=True)
     if "owner_system_id" in patch:
         if patch["owner_system_id"] is None:
             await clear_entity_owner_assignment(
@@ -398,6 +412,10 @@ async def create_store(
     )
     db.add(obj)
     await db.flush()
+    if body.data_domain_id is not None:
+        await _assign_store_data_domain(db, ctx, obj, body.data_domain_id)
+        obj.properties = _props(obj)
+        await db.flush()
     return await get_store(obj.id, ctx, db)
 
 
@@ -462,26 +480,19 @@ async def update_store(
         props["technology"] = body.technology
     if body.health is not None:
         props["health"] = body.health
-    if body.data_domain_id is not None:
-        await add_store_domain_assignment(
-            db,
-            workspace_id=ctx.workspace.id,
-            org_id=ctx.org_id,
-            store_id=obj.id,
-            domain_id=body.data_domain_id,
-            user_id=ctx.user_id,
-        )
-        props.setdefault("data_domain_id", str(body.data_domain_id))
-        await add_data_link(
-            db,
-            ctx.workspace.id,
-            ctx.org_id,
-            "data_store",
-            obj.id,
-            "data_domain",
-            body.data_domain_id,
-            "governed_by",
-        )
+    patch = body.model_dump(exclude_unset=True)
+    if "data_domain_id" in patch:
+        if patch["data_domain_id"] is None:
+            await clear_store_domain_assignment(
+                db,
+                workspace_id=ctx.workspace.id,
+                org_id=ctx.org_id,
+                store_id=obj.id,
+            )
+            await sync_store_domain_property(obj, domain_id=None)
+        else:
+            await _assign_store_data_domain(db, ctx, obj, patch["data_domain_id"])
+        props = _props(obj)
     obj.properties = props
     await db.flush()
     return await get_store(store_id, ctx, db)

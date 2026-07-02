@@ -303,6 +303,110 @@ async def replace_entity_domain_assignment(
     )
 
 
+async def clear_entity_domain_assignment(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    org_id: uuid.UUID,
+    entity_id: uuid.UUID,
+) -> None:
+    await db.execute(
+        delete(Relationship).where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            Relationship.type == "belongs_to",
+            Relationship.from_object_id == entity_id,
+            Relationship.from_type == "data_object",
+            Relationship.to_type == "data_domain",
+        )
+    )
+    await db.execute(
+        delete(DataLink).where(
+            DataLink.workspace_id == workspace_id,
+            DataLink.org_id == org_id,
+            DataLink.subject_type == "data_entity",
+            DataLink.subject_id == entity_id,
+            DataLink.link_kind == "governed_by",
+            DataLink.entity_kind == "data_domain",
+        )
+    )
+
+
+async def sync_store_domain_property(
+    obj: MinEAObject,
+    *,
+    domain_id: uuid.UUID | None,
+) -> None:
+    props = dict(obj.properties or {})
+    if domain_id is None:
+        props.pop("data_domain_id", None)
+    else:
+        props["data_domain_id"] = str(domain_id)
+    obj.properties = props
+
+
+async def replace_store_domain_assignment(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    org_id: uuid.UUID,
+    store_id: uuid.UUID,
+    domain_id: uuid.UUID,
+    user_id: uuid.UUID | None,
+) -> None:
+    await db.execute(
+        delete(Relationship).where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            Relationship.type == "belongs_to",
+            Relationship.from_object_id == store_id,
+            Relationship.from_type == "data_store",
+            Relationship.to_type == "data_domain",
+        )
+    )
+    db.add(
+        Relationship(
+            workspace_id=workspace_id,
+            org_id=org_id,
+            type="belongs_to",
+            from_object_id=store_id,
+            from_type="data_store",
+            to_object_id=domain_id,
+            to_type="data_domain",
+            created_by=user_id,
+        )
+    )
+
+
+async def clear_store_domain_assignment(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    org_id: uuid.UUID,
+    store_id: uuid.UUID,
+) -> None:
+    await db.execute(
+        delete(Relationship).where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            Relationship.type == "belongs_to",
+            Relationship.from_object_id == store_id,
+            Relationship.from_type == "data_store",
+            Relationship.to_type == "data_domain",
+        )
+    )
+    await db.execute(
+        delete(DataLink).where(
+            DataLink.workspace_id == workspace_id,
+            DataLink.org_id == org_id,
+            DataLink.subject_type == "data_store",
+            DataLink.subject_id == store_id,
+            DataLink.link_kind == "governed_by",
+            DataLink.entity_kind == "data_domain",
+        )
+    )
+
+
 async def replace_system_domain_assignment(
     db: AsyncSession,
     *,
