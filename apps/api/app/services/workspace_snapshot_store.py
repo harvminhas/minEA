@@ -181,6 +181,7 @@ def _empty_metrics() -> WorkspaceSummaryRead:
         incomplete_domain_count=0,
         capabilities_without_system_count=0,
         products_without_capabilities_count=0,
+        capabilities_without_owner_count=0,
     )
 
 

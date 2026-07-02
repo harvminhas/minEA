@@ -58,8 +58,8 @@ async def _count_table(
 
 async def _gap_counts(
     db: AsyncSession, workspace_id: UUID, org_id: UUID
-) -> tuple[int, int, int]:
-    """Domains without capabilities, caps without systems, products without caps."""
+) -> tuple[int, int, int, int]:
+    """Domains without capabilities, caps without systems/owners, products without caps."""
     domains, capabilities = await load_capability_map(db, workspace_id, org_id)
 
     caps_by_domain: dict[str, list] = defaultdict(list)
@@ -94,10 +94,15 @@ async def _gap_counts(
         1 for p in products_result.scalars().all() if not p.capabilities
     )
 
+    capabilities_without_owner_count = sum(
+        1 for c in capabilities if not (c.owner or "").strip()
+    )
+
     return (
         incomplete_domain_count,
         capabilities_without_system_count,
         products_without_capabilities_count,
+        capabilities_without_owner_count,
     )
 
 
@@ -124,9 +129,12 @@ async def fetch_workspace_summary(
         _gap_counts(db, workspace_id, org_id),
     )
 
-    incomplete_domain_count, capabilities_without_system_count, products_without_capabilities_count = (
-        gap_counts
-    )
+    (
+        incomplete_domain_count,
+        capabilities_without_system_count,
+        products_without_capabilities_count,
+        capabilities_without_owner_count,
+    ) = gap_counts
 
     return WorkspaceSummaryRead(
         domain_count=domain_count,
@@ -140,4 +148,5 @@ async def fetch_workspace_summary(
         incomplete_domain_count=incomplete_domain_count,
         capabilities_without_system_count=capabilities_without_system_count,
         products_without_capabilities_count=products_without_capabilities_count,
+        capabilities_without_owner_count=capabilities_without_owner_count,
     )

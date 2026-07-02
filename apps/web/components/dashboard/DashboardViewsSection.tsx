@@ -14,10 +14,10 @@ import { cn } from "@/lib/utils";
 
 function viewStatusClass(tone: ViewStatusTone): string {
   switch (tone) {
-    case "ready":
+    case "healthy":
       return "text-emerald-600";
     case "action":
-      return "text-indigo-600";
+      return "text-amber-600";
     default:
       return "text-gray-400";
   }
@@ -61,12 +61,15 @@ function ViewCardButton({
         </p>
         <p
           className={cn(
-            "text-[10px] font-medium mt-0.5 flex items-center gap-0.5",
+            "text-[10px] font-medium mt-0.5 flex items-center gap-1",
             viewStatusClass(card.statusTone)
           )}
         >
-          {card.statusTone === "ready" && (
+          {card.statusTone === "healthy" && (
             <span className="h-1 w-1 rounded-full bg-emerald-400 inline-block" />
+          )}
+          {card.statusTone === "action" && (
+            <span className="h-1 w-1 rounded-full bg-amber-400 inline-block" />
           )}
           {card.statusLabel}
         </p>

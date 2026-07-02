@@ -15,9 +15,27 @@ export interface WorkspaceMetrics {
   incompleteDomainCount: number;
   capabilitiesWithoutSystemCount: number;
   productsWithoutCapabilitiesCount: number;
+  capabilitiesWithoutOwnerCount: number;
 }
 
-export type ViewStatusTone = "ready" | "action" | "needs";
+export type ViewStatusTone = "healthy" | "action" | "needs";
+
+export type MetricCardVariant = "default" | "warn" | "success";
+
+export interface MetricCardState {
+  subtext: string;
+  variant: MetricCardVariant;
+}
+
+export interface StructuralGap {
+  id: string;
+  key: string;
+  title: string;
+  subtitle: string;
+  severity: "high" | "medium" | "low";
+  badgeLabel: string;
+  description?: string;
+}
 
 export interface DashboardViewCard {
   id: string;
@@ -144,96 +162,106 @@ export function greetingName(displayName: string | null | undefined, email: stri
   return first.charAt(0).toUpperCase() + first.slice(1);
 }
 
-export function metricSubtexts(
-  metrics: WorkspaceMetrics,
-  insights: AiInsight[] = []
-): {
+function plural(count: number, singular: string, pluralForm?: string): string {
+  return count === 1 ? singular : pluralForm ?? `${singular}s`;
+}
+
+function metricVariant(subtext: string): MetricCardVariant {
+  const lower = subtext.toLowerCase();
+  if (lower.includes("all mapped") || lower.includes("all defined") || lower.includes("all connected")) {
+    return "success";
+  }
+  if (lower.includes("none yet")) return "default";
+  return "warn";
+}
+
+export function metricCardStates(metrics: WorkspaceMetrics): {
+  domains: MetricCardState;
+  capabilities: MetricCardState;
+  systems: MetricCardState;
+  products: MetricCardState;
+} {
+  const domainsSubtext =
+    metrics.domainCount === 0
+      ? "none yet"
+      : metrics.incompleteDomainCount > 0
+        ? `${metrics.incompleteDomainCount} missing ${plural(metrics.incompleteDomainCount, "capability")}`
+        : "all defined";
+
+  const capabilitiesSubtext =
+    metrics.capabilityCount === 0
+      ? "none yet"
+      : metrics.capabilitiesWithoutSystemCount > 0
+        ? `${metrics.capabilitiesWithoutSystemCount} no realising ${plural(metrics.capabilitiesWithoutSystemCount, "system")}`
+        : "all mapped";
+
+  const systemsSubtext =
+    metrics.systemCount === 0
+      ? "none yet"
+      : metrics.capabilitiesWithoutSystemCount > 0
+        ? `${metrics.capabilitiesWithoutSystemCount} capability ${plural(metrics.capabilitiesWithoutSystemCount, "gap")}`
+        : "all connected";
+
+  const productsSubtext =
+    metrics.productCount === 0
+      ? "none yet"
+      : metrics.productsWithoutCapabilitiesCount > 0
+        ? `${metrics.productsWithoutCapabilitiesCount} missing ${plural(metrics.productsWithoutCapabilitiesCount, "capability")}`
+        : "All mapped";
+
+  return {
+    domains: { subtext: domainsSubtext, variant: metricVariant(domainsSubtext) },
+    capabilities: { subtext: capabilitiesSubtext, variant: metricVariant(capabilitiesSubtext) },
+    systems: { subtext: systemsSubtext, variant: metricVariant(systemsSubtext) },
+    products: { subtext: productsSubtext, variant: metricVariant(productsSubtext) },
+  };
+}
+
+/** @deprecated Use metricCardStates(). */
+export function metricSubtexts(metrics: WorkspaceMetrics): {
   domains: string;
   capabilities: string;
   systems: string;
   products: string;
 } {
-  const unlinkedInvestments = countInsight(insights, "investment", "unlinked");
-
-  const domains =
-    metrics.domainCount === 0
-      ? "none yet"
-      : metrics.incompleteDomainCount > 0
-        ? `${metrics.incompleteDomainCount} incomplete`
-        : "all defined";
-
-  const capabilities =
-    metrics.capabilityCount === 0
-      ? "none yet"
-      : metrics.capabilitiesWithoutSystemCount > 0
-        ? `${metrics.capabilitiesWithoutSystemCount} unmapped`
-        : "all mapped";
-
-  const systems =
-    metrics.systemCount === 0
-      ? "none yet"
-      : metrics.capabilitiesWithoutSystemCount > 0
-        ? `${metrics.capabilitiesWithoutSystemCount} gaps`
-        : "all mapped";
-
-  const products =
-    metrics.productCount === 0
-      ? "none yet"
-      : metrics.productsWithoutCapabilitiesCount > 0
-        ? `${metrics.productsWithoutCapabilitiesCount} incomplete`
-        : unlinkedInvestments > 0
-          ? `${unlinkedInvestments} with gaps`
-          : "all mapped";
-
-  return { domains, capabilities, systems, products };
-}
-
-/** Share of core repository + view prerequisites defined (0–100). */
-export function workspaceCompletenessPercent(metrics: WorkspaceMetrics): number {
-  const steps = [
-    metrics.domainCount > 0,
-    metrics.capabilityCount > 0,
-    metrics.systemCount > 0,
-    metrics.productCount > 0,
-    metrics.processCount > 0,
-    metrics.journeyCount > 0,
-    metrics.investmentCount > 0,
-  ];
-  const done = steps.filter(Boolean).length;
-  return Math.round((done / steps.length) * 100);
-}
-
-function normalizeInsightTitle(title: string): string {
-  return title.toLowerCase().replace(/\d+/g, "#").trim();
-}
-
-/** Merge AI insights with metric-based gaps so sparse workspaces still feel guided. */
-export function buildDashboardInsights(
-  metrics: WorkspaceMetrics,
-  aiInsights: AiInsight[]
-): AiInsight[] {
-  const seen = new Set(aiInsights.map((i) => normalizeInsightTitle(i.title)));
-  const extras: AiInsight[] = [];
-
-  const add = (
-    title: string,
-    severity: "low" | "medium" | "high",
-    description: string,
-    type: AiInsight["type"] = "gap"
-  ) => {
-    const key = normalizeInsightTitle(title);
-    if (seen.has(key)) return;
-    seen.add(key);
-    extras.push({
-      id: `local-${extras.length}`,
-      type,
-      title,
-      description,
-      severity,
-      affected_object_ids: [],
-      created_at: new Date().toISOString(),
-    });
+  const states = metricCardStates(metrics);
+  return {
+    domains: states.domains.subtext,
+    capabilities: states.capabilities.subtext,
+    systems: states.systems.subtext,
+    products: states.products.subtext,
   };
+}
+
+export function gapDedupeKey(title: string): string {
+  const t = title.toLowerCase();
+  if (t.includes("domain") && t.includes("capabilit")) return "domains-without-capabilities";
+  if (t.includes("capabilit") && t.includes("system")) return "capabilities-without-system";
+  if (t.includes("capabilit") && t.includes("owner")) return "capabilities-without-owner";
+  if (t.includes("product") && t.includes("capabilit")) return "products-without-capabilities";
+  if (t.includes("investment") && t.includes("unlink")) return "investments-unlinked";
+  if (t.includes("capability map not started")) return "map-not-started";
+  if (t.includes("no capabilities defined")) return "no-capabilities";
+  if (t.includes("no products defined")) return "no-products";
+  if (t.includes("no systems registered")) return "no-systems";
+  return t.replace(/\d+/g, "#").trim();
+}
+
+export function dedupeInsights(insights: AiInsight[]): AiInsight[] {
+  const seen = new Set<string>();
+  const result: AiInsight[] = [];
+  for (const insight of insights) {
+    const key = gapDedupeKey(insight.title);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(insight);
+  }
+  return result;
+}
+
+/** Deterministic structural gaps aligned with snapshot metrics — one row per gap type. */
+export function buildStructuralGaps(metrics: WorkspaceMetrics): StructuralGap[] {
+  const gaps: StructuralGap[] = [];
 
   if (
     metrics.domainCount === 0 &&
@@ -241,82 +269,120 @@ export function buildDashboardInsights(
     metrics.systemCount === 0 &&
     metrics.productCount === 0
   ) {
-    add(
-      "Capability map not started",
-      "high",
-      "Add domains and capabilities from the capability map — most views build on this foundation."
+    gaps.push({
+      id: "map-not-started",
+      key: "map-not-started",
+      title: "Capability map not started",
+      subtitle: "Foundation · not started",
+      severity: "high",
+      badgeLabel: "Start here",
+      description: "Add domains and capabilities from the capability map — most views build on this foundation.",
+    });
+    return gaps;
+  }
+
+  if (metrics.incompleteDomainCount > 0) {
+    gaps.push({
+      id: "domains-without-capabilities",
+      key: "domains-without-capabilities",
+      title: `${metrics.incompleteDomainCount} ${plural(metrics.incompleteDomainCount, "domain")} have no capabilities`,
+      subtitle: "Domain · no coverage",
+      severity: "high",
+      badgeLabel: `${metrics.incompleteDomainCount} ${plural(metrics.incompleteDomainCount, "domain")}`,
+    });
+  }
+
+  if (metrics.capabilitiesWithoutSystemCount > 0) {
+    gaps.push({
+      id: "capabilities-without-system",
+      key: "capabilities-without-system",
+      title: `${metrics.capabilitiesWithoutSystemCount} ${plural(metrics.capabilitiesWithoutSystemCount, "capability", "capabilities")} have no realising system`,
+      subtitle: "Capability · unmapped",
+      severity: "high",
+      badgeLabel: `${metrics.capabilitiesWithoutSystemCount} ${plural(metrics.capabilitiesWithoutSystemCount, "capability", "capabilities")}`,
+    });
+  }
+
+  if (metrics.capabilitiesWithoutOwnerCount > 0) {
+    gaps.push({
+      id: "capabilities-without-owner",
+      key: "capabilities-without-owner",
+      title: `${metrics.capabilitiesWithoutOwnerCount} ${plural(metrics.capabilitiesWithoutOwnerCount, "capability", "capabilities")} have no owner assigned`,
+      subtitle: "Ownership · unassigned",
+      severity: "medium",
+      badgeLabel: `${metrics.capabilitiesWithoutOwnerCount} ${plural(metrics.capabilitiesWithoutOwnerCount, "capability", "capabilities")}`,
+    });
+  }
+
+  if (metrics.productsWithoutCapabilitiesCount > 0) {
+    gaps.push({
+      id: "products-without-capabilities",
+      key: "products-without-capabilities",
+      title: `${metrics.productsWithoutCapabilitiesCount} ${plural(metrics.productsWithoutCapabilitiesCount, "product")} reference no capabilities`,
+      subtitle: "Product · operations risk",
+      severity: "high",
+      badgeLabel: metrics.productsWithoutCapabilitiesCount === 1 ? "At risk" : `${metrics.productsWithoutCapabilitiesCount} products`,
+    });
+  }
+
+  return gaps;
+}
+
+/** Concrete structural facts for the overview — no composite score. */
+export function buildStructuralSummary(metrics: WorkspaceMetrics): string | null {
+  const parts: string[] = [];
+
+  if (metrics.capabilitiesWithoutOwnerCount > 0) {
+    parts.push(
+      `${metrics.capabilitiesWithoutOwnerCount} ${plural(metrics.capabilitiesWithoutOwnerCount, "capability", "capabilities")} without ownership`
     );
-  } else if (metrics.domainCount > 0 && metrics.capabilityCount === 0) {
-    add(
-      `${metrics.domainCount} domain${metrics.domainCount === 1 ? "" : "s"} have no capabilities mapped`,
-      "high",
-      "Define what each domain does on the capability map so heatmaps and portfolios can analyse your architecture."
+  }
+  if (metrics.capabilitiesWithoutSystemCount > 0) {
+    parts.push(
+      `${metrics.capabilitiesWithoutSystemCount} ${plural(metrics.capabilitiesWithoutSystemCount, "capability", "capabilities")} without a realising system`
     );
-  } else if (metrics.capabilityCount === 0) {
-    add(
-      "No capabilities defined yet",
-      "medium",
-      "Capabilities describe what your business does — they unlock the capability heatmap and product portfolio views."
+  }
+  if (metrics.incompleteDomainCount > 0) {
+    parts.push(
+      `${metrics.incompleteDomainCount} ${plural(metrics.incompleteDomainCount, "domain")} without capabilities`
+    );
+  }
+  if (metrics.productsWithoutCapabilitiesCount > 0) {
+    parts.push(
+      `${metrics.productsWithoutCapabilitiesCount} ${plural(metrics.productsWithoutCapabilitiesCount, "product")} without capability links`
     );
   }
 
-  if (metrics.productCount === 0) {
-    add(
-      "No products defined yet",
-      "medium",
-      "Products connect customer offerings to capabilities — add them to use the product portfolio view."
-    );
-  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
 
-  if (metrics.systemCount === 0 && metrics.capabilityCount > 0) {
-    add(
-      "No systems registered yet",
-      "medium",
-      "Link applications to capabilities so you can see technology coverage and gaps."
-    );
-  }
+/** Merge AI insights for the full panel; dashboard list uses metrics-only gaps to avoid duplicates. */
+export function buildDashboardInsights(
+  metrics: WorkspaceMetrics,
+  aiInsights: AiInsight[]
+): AiInsight[] {
+  const dedupedAi = dedupeInsights(aiInsights);
+  const metricKeys = new Set(buildStructuralGaps(metrics).map((g) => g.key));
+  const extras: AiInsight[] = [];
 
-  if (
-    metrics.processCount === 0 &&
-    (metrics.capabilityCount > 0 || metrics.productCount > 0)
-  ) {
-    add(
-      "No processes documented yet",
-      "low",
-      "Processes show end-to-end flows and bottlenecks once capabilities and products exist."
-    );
-  }
-
-  if (metrics.journeyCount === 0 && metrics.processCount > 0) {
-    add(
-      "No customer journeys mapped yet",
-      "low",
-      "Journeys connect customer steps to back-end processes — add one when you are ready to analyse experience gaps."
-    );
-  }
-
-  if (
-    metrics.investmentCount === 0 &&
-    (metrics.capabilityCount > 0 || metrics.productCount > 0)
-  ) {
-    add(
-      "No investments in pipeline yet",
-      "low",
-      "Track initiatives and impact in the investment pipeline when you start prioritising change."
-    );
-  }
-
-  const hasOwnerGap = aiInsights.some((i) => i.title.toLowerCase().includes("no owner"));
-  if (metrics.capabilityCount > 0 && !hasOwnerGap) {
-    add(
-      "No capability owners set",
-      "medium",
-      "Assign owners on the capability map for accountability and governance reporting."
-    );
+  for (const insight of dedupedAi) {
+    if (!metricKeys.has(gapDedupeKey(insight.title))) {
+      extras.push(insight);
+    }
   }
 
   const severityRank = { high: 0, medium: 1, low: 2 };
-  return [...aiInsights, ...extras].sort(
+  const metricAsInsights: AiInsight[] = buildStructuralGaps(metrics).map((gap) => ({
+    id: gap.id,
+    type: "gap" as const,
+    title: gap.title,
+    description: gap.description ?? gap.subtitle,
+    severity: gap.severity,
+    affected_object_ids: [],
+    created_at: new Date().toISOString(),
+  }));
+
+  return [...metricAsInsights, ...extras].sort(
     (a, b) =>
       (severityRank[a.severity ?? "low"] ?? 3) - (severityRank[b.severity ?? "low"] ?? 3)
   );
@@ -343,17 +409,6 @@ export function dashboardPrimaryCta(
     actionLabel: "Open capability map",
     actionHref: `${basePath}/business/capabilities`,
   };
-}
-
-function countInsight(insights: AiInsight[], titleNeedle: string, altNeedle?: string): number {
-  const match = insights.find(
-    (i) =>
-      i.title.toLowerCase().includes(titleNeedle) &&
-      (!altNeedle || i.title.toLowerCase().includes(altNeedle))
-  );
-  if (!match) return 0;
-  const num = match.title.match(/(\d+)/);
-  return num ? parseInt(num[1]!, 10) : 0;
 }
 
 const DASHBOARD_EXTRA_VIEWS: ViewConfig[] = [PROCESSES_VIEW];
@@ -387,31 +442,63 @@ export function viewReadiness(
   viewId: ViewId | "processes",
   metrics: WorkspaceMetrics
 ): { ready: boolean; statusLabel: string; statusTone: ViewStatusTone } {
-  const ready = { ready: true as const, statusLabel: "Ready", statusTone: "ready" as const };
-
   switch (viewId) {
     case "products":
-      return metrics.productCount > 0
-        ? ready
-        : { ready: false, statusLabel: "Add products", statusTone: "action" };
+      if (metrics.productCount === 0) {
+        return { ready: false, statusLabel: "Add products", statusTone: "needs" };
+      }
+      if (metrics.productsWithoutCapabilitiesCount > 0) {
+        return {
+          ready: true,
+          statusLabel: `${metrics.productsWithoutCapabilitiesCount} missing capabilities`,
+          statusTone: "action",
+        };
+      }
+      return {
+        ready: true,
+        statusLabel: `${metrics.productCount} product${metrics.productCount === 1 ? "" : "s"} · all mapped`,
+        statusTone: "healthy",
+      };
     case "capability-heatmap":
-      return metrics.capabilityCount > 0
-        ? ready
-        : { ready: false, statusLabel: "Add capabilities", statusTone: "action" };
+      if (metrics.capabilityCount === 0) {
+        return { ready: false, statusLabel: "Add capabilities", statusTone: "needs" };
+      }
+      if (metrics.capabilitiesWithoutSystemCount > 0 || metrics.incompleteDomainCount > 0) {
+        const gapCount =
+          metrics.capabilitiesWithoutSystemCount + metrics.incompleteDomainCount;
+        return {
+          ready: true,
+          statusLabel: `${gapCount} gap${gapCount === 1 ? "" : "s"} detected`,
+          statusTone: "action",
+        };
+      }
+      return { ready: true, statusLabel: "No gaps detected", statusTone: "healthy" };
     case "processes":
       return metrics.processCount > 0
-        ? ready
+        ? {
+            ready: true,
+            statusLabel: `${metrics.processCount} process${metrics.processCount === 1 ? "" : "es"} mapped`,
+            statusTone: "healthy",
+          }
         : { ready: false, statusLabel: "Needs processes", statusTone: "needs" };
     case "journeys":
       return metrics.journeyCount > 0
-        ? ready
-        : { ready: false, statusLabel: "Needs journeys", statusTone: "needs" };
+        ? {
+            ready: true,
+            statusLabel: `${metrics.journeyCount} journey${metrics.journeyCount === 1 ? "" : "s"} mapped`,
+            statusTone: "healthy",
+          }
+        : { ready: false, statusLabel: "No journeys mapped", statusTone: "needs" };
     case "investments":
       return metrics.investmentCount > 0
-        ? ready
+        ? {
+            ready: true,
+            statusLabel: `${metrics.investmentCount} initiative${metrics.investmentCount === 1 ? "" : "s"} tracked`,
+            statusTone: "healthy",
+          }
         : { ready: false, statusLabel: "Needs investments", statusTone: "needs" };
     case "tech-debt":
-      return ready;
+      return { ready: true, statusLabel: "None open", statusTone: "healthy" };
     default:
       return { ready: false, statusLabel: "Needs data", statusTone: "needs" };
   }

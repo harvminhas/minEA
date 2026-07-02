@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
-import { buildDashboardViewCards } from "@/lib/workspace-dashboard";
+import { buildDashboardViewCards, type ViewStatusTone } from "@/lib/workspace-dashboard";
 import { useWorkspaceDashboard } from "@/lib/use-workspace-dashboard";
 import { WorkspaceSnapshotRefreshBar } from "@/components/dashboard/WorkspaceSnapshotRefreshBar";
 import { PROCESSES_VIEW, NAV_VIEWS } from "@/lib/views";
@@ -115,7 +115,7 @@ function GalleryCard({
   view: ViewConfig;
   href: string;
   statusLabel?: string;
-  statusTone?: "ready" | "action" | "needs";
+  statusTone?: ViewStatusTone;
   locked?: boolean;
 }) {
   const Illustration = ILLUSTRATIONS[view.id];
@@ -150,8 +150,8 @@ function GalleryCard({
             <span
               className={cn(
                 "text-[10px] font-medium flex-shrink-0",
-                statusTone === "ready" && "text-emerald-600",
-                statusTone === "action" && "text-indigo-600",
+                statusTone === "healthy" && "text-emerald-600",
+                statusTone === "action" && "text-amber-600",
                 statusTone === "needs" && "text-gray-400"
               )}
             >

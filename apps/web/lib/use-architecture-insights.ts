@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { aiApi } from "@/lib/api-client";
+import { dedupeInsights } from "@/lib/workspace-dashboard";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 
 export function insightsQueryKey(orgSlug: string, workspaceSlug: string) {
@@ -128,7 +129,7 @@ export function useArchitectureInsights(orgSlug: string, workspaceSlug: string) 
     })();
   }, [enabled, orgSlug, workspaceSlug, isLoading, data?.count, data?.analysed_at, getToken, queryClient, queryKey]);
 
-  const insights = data?.insights ?? [];
+  const insights = useMemo(() => dedupeInsights(data?.insights ?? []), [data?.insights]);
 
   const badgeCount = useMemo(
     () => insights.filter((i) => i.severity === "high" || i.severity === "medium").length,

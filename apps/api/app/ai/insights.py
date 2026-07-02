@@ -116,6 +116,21 @@ async def _run_insights_agent(
     return await compute_architecture_gaps(db, workspace_id, org_id)
 
 
+def _gap_dedupe_key(item: dict) -> str:
+    title = (item.get("title") or "").lower()
+    if "domain" in title and "capabilit" in title:
+        return "domains-without-capabilities"
+    if "capabilit" in title and "system" in title:
+        return "capabilities-without-system"
+    if "capabilit" in title and "owner" in title:
+        return "capabilities-without-owner"
+    if "product" in title and "capabilit" in title:
+        return "products-without-capabilities"
+    if "investment" in title and "unlink" in title:
+        return "investments-unlinked"
+    return title.strip()
+
+
 async def _persist_insights(
     db: AsyncSession,
     workspace_id: uuid.UUID,
@@ -123,7 +138,14 @@ async def _persist_insights(
     raw_insights: list[dict],
 ) -> list[AiInsight]:
     insights: list[AiInsight] = []
-    for item in raw_insights[:15]:
+    seen_keys: set[str] = set()
+    for item in raw_insights:
+        key = _gap_dedupe_key(item)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        if len(insights) >= 15:
+            break
         examples = item.get("examples") or []
         impact_note = item.get("impact_note") or item.get("description") or ""
         insight = AiInsight(

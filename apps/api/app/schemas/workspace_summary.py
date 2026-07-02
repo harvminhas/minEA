@@ -17,6 +17,7 @@ class WorkspaceSummaryRead(BaseModel):
     incomplete_domain_count: int = 0
     capabilities_without_system_count: int = 0
     products_without_capabilities_count: int = 0
+    capabilities_without_owner_count: int = 0
 
 
 class WorkspaceSnapshotResponse(BaseModel):

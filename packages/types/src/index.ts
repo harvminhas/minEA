@@ -1312,6 +1312,7 @@ export interface WorkspaceSummary {
   incomplete_domain_count: number;
   capabilities_without_system_count: number;
   products_without_capabilities_count: number;
+  capabilities_without_owner_count: number;
 }
 
 /** Postgres-derived workspace snapshot envelope. */

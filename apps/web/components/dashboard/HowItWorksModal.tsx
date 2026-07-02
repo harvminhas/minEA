@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Grid3X3, Layers, Package, Server, X } from "lucide-react";
+import { Cloud, Database, Grid3X3, Layers, Package, Server, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -23,18 +23,18 @@ export function HowItWorksTrigger({ onClick }: { onClick: () => void }) {
 
 function EntityBlock({
   icon: Icon,
-  iconClassName,
   iconBgClassName,
+  iconClassName,
   title,
   description,
   examples,
   className,
 }: {
   icon: React.ComponentType<{ size?: number; className?: string }>;
-  iconClassName: string;
   iconBgClassName: string;
+  iconClassName: string;
   title: string;
-  description: React.ReactNode;
+  description: string;
   examples: string;
   className?: string;
 }) {
@@ -91,7 +91,7 @@ export function HowItWorksModal({ open, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="how-it-works-title"
-        className="relative w-full max-w-lg max-h-[min(90vh,720px)] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden"
+        className="relative w-full max-w-lg max-h-[min(90vh,780px)] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden"
       >
         <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-6 py-5 flex-shrink-0">
           <h2 id="how-it-works-title" className="text-base font-semibold text-gray-900 pr-4">
@@ -113,12 +113,7 @@ export function HowItWorksModal({ open, onClose }: Props) {
             iconBgClassName="bg-violet-100"
             iconClassName="text-violet-600"
             title="Domain"
-            description={
-              <>
-                A broad area of your business — typically aligned to a function or team. Domains
-                group related capabilities together.
-              </>
-            }
+            description="A broad area of your business — typically aligned to a function or team. Groups related capabilities together."
             examples="e.g. Finance, Sales, Risk, Technology"
           />
 
@@ -126,46 +121,58 @@ export function HowItWorksModal({ open, onClose }: Props) {
 
           <EntityBlock
             icon={Grid3X3}
-            iconBgClassName="bg-teal-100"
-            iconClassName="text-teal-600"
+            iconBgClassName="bg-emerald-100"
+            iconClassName="text-emerald-600"
             title="Capability"
-            description={
-              <>
-                Something your business <strong className="font-semibold text-gray-800">does</strong> —
-                independent of how or who does it. The anchor of everything in BuboMap.
-              </>
-            }
+            description="Something your business does — independent of how or who does it. The anchor of everything in BuboMap."
             examples="e.g. Customer onboarding, Risk assessment, Regulatory reporting"
           />
 
-          <FlowConnector label="delivered by / consumed by" />
+          <div className="grid grid-cols-2 gap-3">
+            <FlowConnector label="realised by" />
+            <FlowConnector label="consumed by" />
+          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <EntityBlock
               icon={Server}
               iconBgClassName="bg-sky-100"
               iconClassName="text-sky-600"
               title="System"
-              description={
-                <>
-                  The tools and platforms that <strong className="font-semibold text-gray-800">deliver</strong> a
-                  capability.
-                </>
-              }
+              description="The tools and platforms that deliver a capability technically."
               examples="e.g. Salesforce, SAP, Azure"
             />
             <EntityBlock
               icon={Package}
-              iconBgClassName="bg-orange-100"
-              iconClassName="text-orange-600"
+              iconBgClassName="bg-rose-100"
+              iconClassName="text-rose-600"
               title="Product"
-              description={
-                <>
-                  What your org <strong className="font-semibold text-gray-800">ships</strong> — built on top of
-                  capabilities.
-                </>
-              }
+              description="What your org ships — built on top of capabilities."
               examples="e.g. Customer portal, Mobile app"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <FlowConnector label="runs on" />
+            <FlowConnector label="reads and writes" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <EntityBlock
+              icon={Cloud}
+              iconBgClassName="bg-stone-100"
+              iconClassName="text-stone-600"
+              title="Technology"
+              description="Platforms and runtimes systems are built on."
+              examples="e.g. AWS, Kubernetes, .NET"
+            />
+            <EntityBlock
+              icon={Database}
+              iconBgClassName="bg-amber-100"
+              iconClassName="text-amber-700"
+              title="Data"
+              description="Entities, stores, and domains a system owns or accesses."
+              examples="e.g. Customer, Orders, Dataverse"
             />
           </div>
         </div>

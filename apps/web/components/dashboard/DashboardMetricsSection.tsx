@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { AiInsight } from "@minea/types";
 import type { WorkspaceMetrics } from "@/lib/workspace-dashboard";
-import { metricSubtexts } from "@/lib/workspace-dashboard";
+import { metricCardStates } from "@/lib/workspace-dashboard";
 import { MetricDetailDrawer } from "@/components/dashboard/MetricDetailDrawer";
 import { MetricSummaryCard } from "@/components/dashboard/MetricSummaryCard";
 import { useMetricDrawerData, type MetricDrawerId } from "@/lib/use-metric-drawer-data";
@@ -13,7 +12,6 @@ interface Props {
   orgSlug: string;
   workspaceSlug: string;
   metrics: WorkspaceMetrics;
-  insights?: AiInsight[];
 }
 
 export function DashboardMetricsSection({
@@ -21,17 +19,9 @@ export function DashboardMetricsSection({
   orgSlug,
   workspaceSlug,
   metrics,
-  insights = [],
 }: Props) {
   const [selectedMetric, setSelectedMetric] = useState<MetricDrawerId | null>(null);
-  const subtexts = metricSubtexts(metrics, insights);
-
-  const domainsWarn =
-    metrics.domainCount > 0 &&
-    (subtexts.domains.includes("incomplete") || metrics.capabilityCount === 0);
-
-  const productsWarn =
-    subtexts.products.includes("incomplete") || subtexts.products === "none yet";
+  const cards = metricCardStates(metrics);
 
   const { data, isLoading } = useMetricDrawerData(selectedMetric, orgSlug, workspaceSlug);
 
@@ -41,30 +31,32 @@ export function DashboardMetricsSection({
         <MetricSummaryCard
           label="Domains"
           value={metrics.domainCount}
-          subtext={subtexts.domains}
-          variant={domainsWarn ? "warn" : "default"}
+          subtext={cards.domains.subtext}
+          variant={cards.domains.variant}
           selected={selectedMetric === "domains"}
           onClick={() => setSelectedMetric("domains")}
         />
         <MetricSummaryCard
           label="Capabilities"
           value={metrics.capabilityCount}
-          subtext={subtexts.capabilities}
+          subtext={cards.capabilities.subtext}
+          variant={cards.capabilities.variant}
           selected={selectedMetric === "capabilities"}
           onClick={() => setSelectedMetric("capabilities")}
         />
         <MetricSummaryCard
           label="Systems"
           value={metrics.systemCount}
-          subtext={subtexts.systems}
+          subtext={cards.systems.subtext}
+          variant={cards.systems.variant}
           selected={selectedMetric === "systems"}
           onClick={() => setSelectedMetric("systems")}
         />
         <MetricSummaryCard
           label="Products"
           value={metrics.productCount}
-          subtext={subtexts.products}
-          variant={productsWarn ? "warn" : "default"}
+          subtext={cards.products.subtext}
+          variant={cards.products.variant}
           selected={selectedMetric === "products"}
           onClick={() => setSelectedMetric("products")}
         />

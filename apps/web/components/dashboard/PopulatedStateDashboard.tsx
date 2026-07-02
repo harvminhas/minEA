@@ -6,8 +6,9 @@ import type { AiInsight } from "@minea/types";
 import type { WorkspaceMetrics } from "@/lib/workspace-dashboard";
 import {
   buildDashboardInsights,
+  buildStructuralGaps,
+  buildStructuralSummary,
   dashboardPrimaryCta,
-  workspaceCompletenessPercent,
 } from "@/lib/workspace-dashboard";
 import { DashboardMetricsSection } from "@/components/dashboard/DashboardMetricsSection";
 import { DashboardViewsSection } from "@/components/dashboard/DashboardViewsSection";
@@ -23,11 +24,6 @@ function severityConfig(severity: AiInsight["severity"]) {
     default:
       return { dot: "bg-blue-300", badge: "bg-blue-50 text-blue-600 border-blue-100" };
   }
-}
-
-function insightCount(insight: AiInsight): number | null {
-  const match = insight.title.match(/(\d+)/);
-  return match ? parseInt(match[1]!, 10) : null;
 }
 
 interface Props {
@@ -57,10 +53,11 @@ export function PopulatedStateDashboard({
   onOpenInsights,
   onOpenHowItWorks,
 }: Props) {
+  const structuralGaps = buildStructuralGaps(metrics);
+  const structuralSummary = buildStructuralSummary(metrics);
   const allInsights = buildDashboardInsights(metrics, insights);
-  const completeness = workspaceCompletenessPercent(metrics);
   const cta = dashboardPrimaryCta(metrics, basePath);
-  const topInsights = allInsights.slice(0, 6);
+  const topGaps = structuralGaps.slice(0, 6);
 
   return (
     <div className="max-w-5xl space-y-7">
@@ -81,13 +78,12 @@ export function PopulatedStateDashboard({
         orgSlug={orgSlug}
         workspaceSlug={workspaceSlug}
         metrics={metrics}
-        insights={allInsights}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-5">
         <section className="rounded-2xl border border-gray-200/80 bg-white overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-800">Architecture insights</h2>
+            <h2 className="text-sm font-semibold text-gray-800">Structural gaps</h2>
             <button
               type="button"
               onClick={onOpenInsights}
@@ -97,18 +93,17 @@ export function PopulatedStateDashboard({
             </button>
           </div>
 
-          <div className="px-5 py-4 border-b border-gray-50">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-gray-500">Workspace completeness</span>
-              <span className="text-xs font-semibold text-indigo-600 tabular-nums">{completeness}%</span>
+          {structuralSummary ? (
+            <div className="px-5 py-4 border-b border-gray-50">
+              <p className="text-xs text-gray-600 leading-relaxed">{structuralSummary}</p>
             </div>
-            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-indigo-500 transition-all duration-500"
-                style={{ width: `${completeness}%` }}
-              />
+          ) : (
+            <div className="px-5 py-4 border-b border-gray-50">
+              <p className="text-xs text-emerald-700/90 leading-relaxed">
+                No structural gaps detected in core repository coverage.
+              </p>
             </div>
-          </div>
+          )}
 
           {cta && (
             <div className="mx-5 mt-4 mb-1 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3.5">
@@ -123,33 +118,42 @@ export function PopulatedStateDashboard({
             </div>
           )}
 
-          <ul className="divide-y divide-gray-50">
-            {topInsights.map((insight) => {
-              const cfg = severityConfig(insight.severity);
-              const count = insightCount(insight);
-              return (
-                <li
-                  key={insight.id}
-                  className="flex items-center gap-3.5 px-5 py-3.5 hover:bg-gray-50/60 transition-colors"
-                >
-                  <span className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0 mt-px", cfg.dot)} />
-                  <span className="flex-1 text-[13px] text-gray-700 leading-snug">{insight.title}</span>
-                  {count !== null ? (
+          {topGaps.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-gray-400">No structural gaps right now.</p>
+          ) : (
+            <ul className="divide-y divide-gray-50">
+              {topGaps.map((gap) => {
+                const cfg = severityConfig(gap.severity);
+                return (
+                  <li
+                    key={gap.id}
+                    className="flex items-start gap-3.5 px-5 py-3.5 hover:bg-gray-50/60 transition-colors"
+                  >
+                    <span className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0 mt-2", cfg.dot)} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] text-gray-800 leading-snug">{gap.title}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{gap.subtitle}</p>
+                    </div>
                     <span
                       className={cn(
-                        "text-xs font-semibold rounded-full border px-2 py-0.5 tabular-nums",
+                        "text-xs font-semibold rounded-full border px-2 py-0.5 tabular-nums flex-shrink-0",
                         cfg.badge
                       )}
                     >
-                      {count}
+                      {gap.badgeLabel}
                     </span>
-                  ) : (
-                    <span className="text-xs text-gray-300 tabular-nums w-6 text-center">—</span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {allInsights.length > structuralGaps.length && (
+            <p className="px-5 py-3 text-[11px] text-gray-400 border-t border-gray-50">
+              {allInsights.length - structuralGaps.length} additional insight
+              {allInsights.length - structuralGaps.length === 1 ? "" : "s"} in the full list.
+            </p>
+          )}
         </section>
 
         <DashboardViewsSection basePath={basePath} metrics={metrics} />
