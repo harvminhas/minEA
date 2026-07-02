@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation } from "@tanstack/react-query";
 import { useTenancy } from "@/lib/tenancy";
 import { dataApi } from "@/lib/api-client";
 import { DataDetailShell, DataFieldLabel, DataFormFooter, DataSelect } from "@/components/data/DataDetailShell";
 import { DATA_LAYER_COLOR } from "@/lib/data-utils";
+import { DEFAULT_DATA_DOMAIN_NAME, useDataDomainOptions } from "@/lib/use-data-domains";
 
 type CreateKind = "entity" | "store" | "domain";
 
@@ -25,6 +26,13 @@ export function CreateDataPanel({ kind, onClose, onSuccess }: Props) {
   const [sensitivity, setSensitivity] = useState("");
   const [storeType, setStoreType] = useState("relational_db");
   const [owningTeam, setOwningTeam] = useState("");
+  const [domainId, setDomainId] = useState("");
+  const { options: domainOptions, defaultDomainId, isLoading: domainsLoading } = useDataDomainOptions();
+
+  useEffect(() => {
+    if (kind !== "entity" || domainId) return;
+    if (defaultDomainId) setDomainId(defaultDomainId);
+  }, [kind, defaultDomainId, domainId]);
 
   const labels = {
     entity: { breadcrumb: "Data · Entity", title: "New entity", button: "Create entity" },
@@ -41,6 +49,7 @@ export function CreateDataPanel({ kind, onClose, onSuccess }: Props) {
           description,
           classification,
           sensitivity: sensitivity || undefined,
+          data_domain_id: domainId || undefined,
         }, token!);
       }
       if (kind === "store") {
@@ -81,6 +90,27 @@ export function CreateDataPanel({ kind, onClose, onSuccess }: Props) {
 
               {kind === "entity" && (
                 <>
+                  <div>
+                    <DataFieldLabel>Data Domain</DataFieldLabel>
+                    {domainsLoading ? (
+                      <p className="text-sm text-gray-400">Loading domains…</p>
+                    ) : (
+                      <DataSelect
+                        value={domainId || defaultDomainId}
+                        onChange={setDomainId}
+                        options={
+                          domainOptions.length > 0
+                            ? domainOptions
+                            : [{ value: "", label: DEFAULT_DATA_DOMAIN_NAME }]
+                        }
+                      />
+                    )}
+                    {domainOptions.length === 0 && !domainsLoading && (
+                      <p className="mt-1.5 text-[11px] text-gray-400">
+                        No domains yet — {DEFAULT_DATA_DOMAIN_NAME} will be created automatically.
+                      </p>
+                    )}
+                  </div>
                   <div>
                     <DataFieldLabel>Classification</DataFieldLabel>
                     <DataSelect
@@ -155,7 +185,9 @@ export function CreateDataPanel({ kind, onClose, onSuccess }: Props) {
               {name ? name.charAt(0).toUpperCase() : "D"}
             </div>
             <p className="text-sm text-gray-500 max-w-xs">
-              After creating, link this {kind} to domains, stores, systems, and integrations.
+              {kind === "entity"
+                ? "Every entity belongs to a data domain. Other links can be added after creating."
+                : `After creating, link this ${kind} to domains, stores, systems, and integrations.`}
             </p>
           </div>
         }

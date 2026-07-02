@@ -103,6 +103,7 @@ class DataDomainDetail(BaseModel):
     capability_domain_name: str | None = None
     links: list[DataLinkRead] = Field(default_factory=list)
     inferred_summary: list[str] = Field(default_factory=list)
+    domain_rollup: dict[str, list[dict[str, str]]] | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -112,6 +113,7 @@ class DataObjectCreate(BaseModel):
     description: str | None = None
     classification: str | None = "core"
     sensitivity: str | None = None
+    data_domain_id: UUID | None = None
 
 
 class DataStoreCreate(BaseModel):

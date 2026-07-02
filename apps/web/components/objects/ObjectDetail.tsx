@@ -14,6 +14,7 @@ import { getStatusColor, getStatusLabel, getObjectInitial } from "@/lib/utils";
 import { isSystemObject } from "@/lib/system-utils";
 import { usePermissions } from "@/lib/use-permissions";
 import { SystemObjectDetail } from "@/components/objects/SystemObjectDetail";
+import { DataDomainObjectDetail } from "@/components/objects/DataDomainObjectDetail";
 import { RelationshipForm } from "./RelationshipForm";
 import { ObjectForm } from "./ObjectForm";
 
@@ -30,6 +31,17 @@ export function ObjectDetail({ object, layerColor, onClose, onUpdate }: Props) {
       <SystemObjectDetail
         objectId={object.id}
         accentColor={layerColor}
+        onClose={onClose}
+        onUpdate={onUpdate}
+      />
+    );
+  }
+
+  if (object.type === "data_domain") {
+    return (
+      <DataDomainObjectDetail
+        object={object}
+        layerColor={layerColor}
         onClose={onClose}
         onUpdate={onUpdate}
       />

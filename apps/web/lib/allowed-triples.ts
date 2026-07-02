@@ -23,7 +23,16 @@ export const ALLOWED_TRIPLES_FRONTEND: [string, string, string][] = [
   ["consumes", "application", "api"],
   ["subscribes", "application", "event"],
   ["subscribes", "component", "event"],
-  ["stores_in", "application", "data_store"],
+  ["reads", "application", "data_store"],
+  ["writes", "application", "data_store"],
+  ["owns", "application", "data_store"],
+  ["creates", "application", "data_object"],
+  ["updates", "application", "data_object"],
+  ["reads", "application", "data_object"],
+  ["owns", "application", "data_object"],
+  ["belongs_to", "data_object", "data_domain"],
+  ["belongs_to", "data_store", "data_domain"],
+  ["belongs_to", "application", "data_domain"],
   ["exposes", "application", "tool"],
   ["part_of", "component", "application"],
   ["runs_on", "component", "tool"],
@@ -57,3 +66,10 @@ export const ALLOWED_TRIPLES_FRONTEND: [string, string, string][] = [
   ["accesses", "tool", "data_object"],
   ["connects_to", "tool", "application"],
 ];
+
+/** Canonical direction only — do not offer inverse in the relationship picker. */
+export const OUTBOUND_ONLY_TRIPLES = new Set(["belongs_to:application:data_domain"]);
+
+export function tripleKey(type: string, from: string, to: string): string {
+  return `${type}:${from}:${to}`;
+}

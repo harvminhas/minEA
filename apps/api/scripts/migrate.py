@@ -51,6 +51,9 @@ MIGRATION_FILES = [
     "033_object_ownership.sql",
     "034_backfill_owner_accountabilities.sql",
     "035_people_contacts.sql",
+    "036_system_data_store_access.sql",
+    "037_data_domain_belongs_to.sql",
+    "038_system_belongs_to_data_domain.sql",
 ]
 
 

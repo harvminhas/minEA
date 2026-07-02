@@ -38,7 +38,16 @@ Valid relationship types and allowed triples:
   publishes: application → event
   consumes: application → api
   subscribes: application → event
-  stores_in: application → data_store
+  reads: application → data_store
+  writes: application → data_store
+  owns: application → data_store (primary custodian; only one system per store)
+  creates: application → data_object (originates records for this entity)
+  updates: application → data_object (modifies existing entity records)
+  reads: application → data_object (consumes without modifying)
+  owns: application → data_object (system of record; only one system per entity)
+  belongs_to: data_object → data_domain (mandatory; one domain per entity)
+  belongs_to: data_store → data_domain (optional; a store may belong to multiple domains)
+  belongs_to: application → data_domain (one domain per system)
   contains: data_store → data_object
   connects: integration_flow → api | event
   routes: message_broker → event

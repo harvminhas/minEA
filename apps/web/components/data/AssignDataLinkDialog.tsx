@@ -19,7 +19,7 @@ interface Props {
   section: DataLinkSection;
   existingEntityIds: string[];
   onClose: () => void;
-  onAssign: (entityId: string, roleTag?: string) => void;
+  onAssign: (entityId: string, roleTag?: string) => void | Promise<void>;
 }
 
 function useEntityOptions(entityKind: string) {
@@ -77,10 +77,20 @@ export function AssignDataLinkDialog({
   const [roleTag, setRoleTag] = useState(section.roleTags?.[0] ?? "");
 
   const { options, isLoading } = useEntityOptions(section.entityKind);
+  const isDomainPicker = section.entityKind === "data_domain";
 
   const available = useMemo(
     () => options.filter((o) => !existingEntityIds.includes(o.id)),
     [options, existingEntityIds]
+  );
+
+  const domainSelectOptions = useMemo(
+    () =>
+      available.map((option) => ({
+        value: option.id,
+        label: option.subtitle ? `${option.name} · ${option.subtitle}` : option.name,
+      })),
+    [available]
   );
 
   const filtered = search
@@ -128,6 +138,30 @@ export function AssignDataLinkDialog({
           </div>
         )}
 
+        {isDomainPicker ? (
+          <div className="px-4 py-4 border-b border-gray-100">
+            {isLoading ? (
+              <p className="text-xs text-gray-400 text-center py-2">Loading domains…</p>
+            ) : domainSelectOptions.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-2">No domains available to assign</p>
+            ) : (
+              <select
+                autoFocus
+                value={selectedId}
+                onChange={(e) => setSelectedId(e.target.value)}
+                className="w-full rounded-md border border-gray-200 px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                <option value="">Select a domain…</option>
+                {domainSelectOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        ) : (
+          <>
         <div className="px-3 py-2 border-b border-gray-100">
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -174,8 +208,18 @@ export function AssignDataLinkDialog({
             </ul>
           )}
         </div>
+          </>
+        )}
 
-        <div className="px-4 py-3 border-t border-gray-100 flex justify-end gap-2">
+        <div className="px-4 py-3 border-t border-gray-100 flex flex-col gap-2">
+          {assignMutation.isError && (
+            <p className="text-xs text-red-600">
+              {assignMutation.error instanceof Error
+                ? assignMutation.error.message
+                : "Could not save assignment."}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm text-gray-500">
             Cancel
           </button>
@@ -187,6 +231,7 @@ export function AssignDataLinkDialog({
           >
             {assignMutation.isPending ? "Saving…" : actionLabel}
           </button>
+          </div>
         </div>
       </div>
     </>

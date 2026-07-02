@@ -73,6 +73,17 @@ class ObjectTechDebtRemediationRef(BaseModel):
     roadmap_title: str
 
 
+class DomainRollupItem(BaseModel):
+    id: str
+    name: str
+
+
+class DomainRollupRead(BaseModel):
+    entities: list[DomainRollupItem] = Field(default_factory=list)
+    stores: list[DomainRollupItem] = Field(default_factory=list)
+    systems: list[DomainRollupItem] = Field(default_factory=list)
+
+
 class ObjectRead(OwnershipFields, BaseModel):
     id: UUID
     workspace_id: UUID
@@ -105,6 +116,7 @@ class ObjectRead(OwnershipFields, BaseModel):
     hosting_system_name: str | None = None
     governed_entity_count: int = 0
     governed_store_count: int = 0
+    domain_rollup: DomainRollupRead | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

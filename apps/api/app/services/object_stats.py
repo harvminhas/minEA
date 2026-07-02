@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from collections import defaultdict
 
-from sqlalchemy import func, select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.data_layer import DataLink
@@ -12,6 +12,7 @@ from app.models.objects import MinEAObject
 from app.models.relationships import Relationship
 from app.models.tenancy import User
 from app.services.portfolio_signals import _is_open_debt, _normalize_object_id
+from app.services.data_domain_rollup import load_domain_rollup
 
 SYSTEM_TYPES = ("application", "solution", "technical_capability")
 COMPONENT_TYPES = ("component",)
@@ -192,6 +193,29 @@ async def _count_by_from_to_type(
     return {row[0]: int(row[1]) for row in result.all()}
 
 
+async def _count_distinct_data_stores_by_system(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    org_id: uuid.UUID,
+    object_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, int]:
+    if not object_ids:
+        return {}
+    result = await db.execute(
+        select(Relationship.from_object_id, func.count(distinct(Relationship.to_object_id)))
+        .where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            Relationship.type.in_(("reads", "writes", "owns")),
+            Relationship.from_object_id.in_(object_ids),
+            Relationship.from_type == "application",
+            Relationship.to_type == "data_store",
+        )
+        .group_by(Relationship.from_object_id)
+    )
+    return {row[0]: int(row[1]) for row in result.all()}
+
+
 async def enrich_system_objects(
     db: AsyncSession, objects: list[MinEAObject]
 ) -> dict[uuid.UUID, dict]:
@@ -207,7 +231,7 @@ async def enrich_system_objects(
     caps = await _count_by_to(db, workspace_id, org_id, ids, "supported_by")
     apis_provided = await _count_by_from_to_type(db, workspace_id, org_id, ids, "exposes", "api")
     apis_consumed = await _count_by_from_to_type(db, workspace_id, org_id, ids, "consumes", "api")
-    data_stores = await _count_by_from_to_type(db, workspace_id, org_id, ids, "stores_in", "data_store")
+    data_stores = await _count_distinct_data_stores_by_system(db, workspace_id, org_id, ids)
 
     updater_ids = list({o.updated_by for o in system_objs if o.updated_by})
     user_map: dict[uuid.UUID, str | None] = {}
@@ -359,6 +383,56 @@ async def _linked_entity_names(
     return out
 
 
+async def _belongs_to_domain_names(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    org_id: uuid.UUID,
+    subject_ids: list[uuid.UUID],
+    subject_type: str,
+) -> dict[uuid.UUID, str]:
+    if not subject_ids:
+        return {}
+    result = await db.execute(
+        select(Relationship.from_object_id, MinEAObject.name)
+        .join(MinEAObject, MinEAObject.id == Relationship.to_object_id)
+        .where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            Relationship.type == "belongs_to",
+            Relationship.from_type == subject_type,
+            Relationship.to_type == "data_domain",
+            Relationship.from_object_id.in_(subject_ids),
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.org_id == org_id,
+        )
+    )
+    return {row[0]: row[1] for row in result.all()}
+
+
+async def _count_inbound_belongs_to(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    org_id: uuid.UUID,
+    domain_ids: list[uuid.UUID],
+    from_type: str,
+) -> dict[uuid.UUID, int]:
+    if not domain_ids:
+        return {}
+    result = await db.execute(
+        select(Relationship.to_object_id, func.count())
+        .where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            Relationship.type == "belongs_to",
+            Relationship.from_type == from_type,
+            Relationship.to_type == "data_domain",
+            Relationship.to_object_id.in_(domain_ids),
+        )
+        .group_by(Relationship.to_object_id)
+    )
+    return {row[0]: int(row[1]) for row in result.all()}
+
+
 async def enrich_data_objects(
     db: AsyncSession, objects: list[MinEAObject]
 ) -> dict[uuid.UUID, dict]:
@@ -425,23 +499,17 @@ async def enrich_data_objects(
         link_kind="hosts",
         entity_kind="application",
     )
-    domain_entity_counts = await _count_data_links(
-        db,
-        workspace_id,
-        org_id,
-        subject_type="data_domain",
-        subject_ids=domain_obj_ids,
-        link_kind="governs",
-        entity_kind="data_object",
+    entity_domain_names = await _belongs_to_domain_names(
+        db, workspace_id, org_id, entity_ids, "data_object"
     )
-    domain_store_counts = await _count_data_links(
-        db,
-        workspace_id,
-        org_id,
-        subject_type="data_domain",
-        subject_ids=domain_obj_ids,
-        link_kind="governs",
-        entity_kind="data_store",
+    store_domain_names = await _belongs_to_domain_names(
+        db, workspace_id, org_id, store_ids, "data_store"
+    )
+    domain_entity_counts = await _count_inbound_belongs_to(
+        db, workspace_id, org_id, domain_obj_ids, "data_object"
+    )
+    domain_store_counts = await _count_inbound_belongs_to(
+        db, workspace_id, org_id, domain_obj_ids, "data_store"
     )
 
     updater_ids = list({o.updated_by for o in data_objs if o.updated_by})
@@ -454,17 +522,18 @@ async def enrich_data_objects(
 
     out: dict[uuid.UUID, dict] = {}
     for obj in entities:
-        props = obj.properties or {}
-        domain_uuid: uuid.UUID | None = None
-        raw = props.get("data_domain_id")
-        if raw:
-            try:
-                domain_uuid = uuid.UUID(str(raw))
-            except ValueError:
-                pass
+        domain_name = entity_domain_names.get(obj.id)
+        if not domain_name:
+            props = obj.properties or {}
+            raw = props.get("data_domain_id")
+            if raw:
+                try:
+                    domain_name = domain_names.get(uuid.UUID(str(raw)))
+                except ValueError:
+                    pass
         out[obj.id] = {
             "updated_by_name": user_map.get(obj.updated_by) if obj.updated_by else None,
-            "data_domain_name": domain_names.get(domain_uuid) if domain_uuid else None,
+            "data_domain_name": domain_name,
             "system_of_record_name": sor_names.get(obj.id),
             "capability_count": cap_counts.get(obj.id, 0),
             "governed_entity_count": 0,
@@ -473,17 +542,18 @@ async def enrich_data_objects(
         }
 
     for obj in stores:
-        props = obj.properties or {}
-        domain_uuid = None
-        raw = props.get("data_domain_id")
-        if raw:
-            try:
-                domain_uuid = uuid.UUID(str(raw))
-            except ValueError:
-                pass
+        domain_name = store_domain_names.get(obj.id)
+        if not domain_name:
+            props = obj.properties or {}
+            raw = props.get("data_domain_id")
+            if raw:
+                try:
+                    domain_name = domain_names.get(uuid.UUID(str(raw)))
+                except ValueError:
+                    pass
         out[obj.id] = {
             "updated_by_name": user_map.get(obj.updated_by) if obj.updated_by else None,
-            "data_domain_name": domain_names.get(domain_uuid) if domain_uuid else None,
+            "data_domain_name": domain_name,
             "hosting_system_name": host_names.get(obj.id),
             "governed_entity_count": store_entity_counts.get(obj.id, 0),
             "governed_store_count": 0,
@@ -492,6 +562,12 @@ async def enrich_data_objects(
         }
 
     for obj in domains:
+        rollup = await load_domain_rollup(
+            db,
+            workspace_id=workspace_id,
+            org_id=org_id,
+            domain_id=obj.id,
+        )
         out[obj.id] = {
             "updated_by_name": user_map.get(obj.updated_by) if obj.updated_by else None,
             "governed_entity_count": domain_entity_counts.get(obj.id, 0),
@@ -500,6 +576,7 @@ async def enrich_data_objects(
             "system_of_record_name": None,
             "hosting_system_name": None,
             "capability_count": 0,
+            "domain_rollup": rollup,
         }
 
     return out

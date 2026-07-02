@@ -17,6 +17,7 @@ import {
 import { DataDetailRightPanel } from "@/components/data/DataDetailRightPanel";
 import { DataLinksPanel, type AssignTarget } from "@/components/data/DataLinksPanel";
 import { DATA_LAYER_COLOR, entityLinkSections, initials } from "@/lib/data-utils";
+import { DEFAULT_DATA_DOMAIN_NAME, useDataDomainOptions } from "@/lib/use-data-domains";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -34,8 +35,10 @@ export function EntityDetailPanel({ entityId, onClose, onUpdate }: Props) {
   const [classification, setClassification] = useState("core");
   const [sensitivity, setSensitivity] = useState("");
   const [description, setDescription] = useState("");
+  const [domainId, setDomainId] = useState("");
   const [assignTarget, setAssignTarget] = useState<AssignTarget | null>(null);
   const [showAddRelated, setShowAddRelated] = useState(false);
+  const { options: domainOptions, defaultDomainId, isLoading: domainsLoading } = useDataDomainOptions();
 
   const { data: entity, isLoading } = useQuery({
     queryKey: ["data-entity", orgSlug, workspaceSlug, entityId],
@@ -51,7 +54,8 @@ export function EntityDetailPanel({ entityId, onClose, onUpdate }: Props) {
     setClassification(entity.classification ?? "core");
     setSensitivity(entity.sensitivity ?? "");
     setDescription(entity.description ?? "");
-  }, [entity]);
+    setDomainId(entity.data_domain_id ?? defaultDomainId ?? "");
+  }, [entity, defaultDomainId]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -60,10 +64,12 @@ export function EntityDetailPanel({ entityId, onClose, onUpdate }: Props) {
         classification,
         sensitivity: sensitivity || null,
         description: description || null,
+        data_domain_id: domainId || defaultDomainId || null,
       }, token!);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["data-entity", orgSlug, workspaceSlug, entityId] });
+      queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, "data_domain"] });
       onUpdate();
       onClose();
     },
@@ -71,20 +77,20 @@ export function EntityDetailPanel({ entityId, onClose, onUpdate }: Props) {
 
   const addLink = async (target: AssignTarget, selectedId: string, roleTag?: string) => {
     const token = await getToken();
-    if (target.linkKind === "governed_by" && target.entityKind === "data_domain") {
-      await dataApi.updateEntity(orgSlug, workspaceSlug, entityId, {
-        data_domain_id: selectedId,
-      }, token!);
-    } else {
-      await dataApi.addEntityLink(orgSlug, workspaceSlug, entityId, {
-        entity_kind: target.entityKind,
-        entity_id: selectedId,
-        link_kind: target.linkKind,
-        role_tag: roleTag,
-      }, token!);
-    }
-    queryClient.invalidateQueries({ queryKey: ["data-entity", orgSlug, workspaceSlug, entityId] });
+    await dataApi.addEntityLink(orgSlug, workspaceSlug, entityId, {
+      entity_kind: target.entityKind,
+      entity_id: selectedId,
+      link_kind: target.linkKind,
+      role_tag: roleTag,
+    }, token!);
+    await queryClient.invalidateQueries({ queryKey: ["data-entity", orgSlug, workspaceSlug, entityId] });
+    onUpdate();
   };
+
+  const selectedDomainName =
+    domainOptions.find((option) => option.value === domainId)?.label ??
+    entity?.data_domain_name ??
+    DEFAULT_DATA_DOMAIN_NAME;
 
   if (isLoading || !entity) {
     return (
@@ -127,14 +133,34 @@ export function EntityDetailPanel({ entityId, onClose, onUpdate }: Props) {
                 </div>
                 <div>
                   <p className="font-semibold text-gray-900">{entity.name}</p>
-                  <p className="text-xs text-gray-400">
-                    {entity.data_domain_name ?? "No domain assigned"}
-                  </p>
+                  <p className="text-xs text-gray-400">{selectedDomainName}</p>
                 </div>
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 pb-4 space-y-5">
+              <div>
+                <DataFieldLabel>Data Domain</DataFieldLabel>
+                {domainsLoading ? (
+                  <p className="text-sm text-gray-400">Loading domains…</p>
+                ) : (
+                  <DataSelect
+                    value={domainId || defaultDomainId}
+                    onChange={setDomainId}
+                    options={
+                      domainOptions.length > 0
+                        ? domainOptions
+                        : [{ value: "", label: DEFAULT_DATA_DOMAIN_NAME }]
+                    }
+                  />
+                )}
+                {domainOptions.length === 0 && !domainsLoading && (
+                  <p className="mt-1.5 text-[11px] text-gray-400">
+                    No domains yet — {DEFAULT_DATA_DOMAIN_NAME} will be created on save.
+                  </p>
+                )}
+              </div>
+
               <div>
                 <DataFieldLabel>Classification</DataFieldLabel>
                 <DataSelect

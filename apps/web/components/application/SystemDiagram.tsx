@@ -33,9 +33,11 @@ import { EntityFlowCanvas, type NodeLayout } from "@/components/shared/EntityFlo
 import { APPLICATION_LAYER_COLOR } from "@/lib/component-utils";
 import {
   extractSystemDiagramLinks,
-  type SystemDiagramLink,
+  mergeSystemDiagramLinks,
+  mergedSystemDiagramEdgeLabel,
+  systemDiagramNodeId,
+  type MergedSystemDiagramLink,
 } from "@/lib/system-relationship-utils";
-import { relationshipVerb } from "@/lib/relationship-display";
 import { OBJECT_TYPE_LABELS, type ApplicationProperties, type MinEAObject, type ObjectType, type Relationship } from "@minea/types";
 import { cn } from "@/lib/utils";
 
@@ -45,8 +47,9 @@ function withEdgeLabel(
   label: string,
   compact?: boolean
 ): Pick<Edge, "label" | "labelStyle" | "labelBgStyle" | "labelBgPadding" | "labelBgBorderRadius"> {
+  const maxLen = compact ? 10 : 56;
   return {
-    label: compact && label.length > 8 ? label.slice(0, 6) + "…" : label,
+    label: compact && label.length > maxLen ? `${label.slice(0, maxLen - 1)}…` : label,
     labelStyle: { fill: "#64748b", fontSize: compact ? 7 : 10, fontWeight: 500 },
     labelBgStyle: { fill: "#f8fafc", fillOpacity: 0.92 },
     labelBgPadding: compact ? ([2, 1] as [number, number]) : ([4, 2] as [number, number]),
@@ -155,7 +158,7 @@ function LinkedObjectNode({
   data,
   compact,
 }: {
-  data: { link: SystemDiagramLink };
+  data: { link: MergedSystemDiagramLink };
   compact?: boolean;
 }) {
   const accent = nodeAccent(data.link.objectType);
@@ -235,7 +238,9 @@ export function buildSystemGraph(
   compact?: boolean,
   savedLayout?: NodeLayout
 ): { nodes: Node[]; edges: Edge[] } {
-  const links = extractSystemDiagramLinks(system.id, relationships, nameById);
+  const links = mergeSystemDiagramLinks(
+    extractSystemDiagramLinks(system.id, relationships, nameById)
+  );
 
   const NODE_H = compact ? 32 : 68;
   const GAP = compact ? 10 : 22;
@@ -246,9 +251,16 @@ export function buildSystemGraph(
   const LEFT_X = compact ? -16 : 40;
   const BOTTOM_Y = compact ? 118 : 180;
 
-  function pos(id: string, auto: { x: number; y: number }) {
+  function pos(nodeId: string, objectId: string, auto: { x: number; y: number }) {
     if (compact) return auto;
-    return savedLayout?.[id] ?? auto;
+    if (savedLayout?.[nodeId]) return savedLayout[nodeId];
+    // Support layouts saved before relationship labels were merged onto one node.
+    if (savedLayout) {
+      const legacyPrefix = `link-${objectId}-`;
+      const legacy = Object.entries(savedLayout).find(([key]) => key.startsWith(legacyPrefix));
+      if (legacy) return legacy[1];
+    }
+    return auto;
   }
 
   const props = (system.properties ?? {}) as ApplicationProperties;
@@ -258,7 +270,7 @@ export function buildSystemGraph(
     {
       id: "system-center",
       type: "systemCenterNode",
-      position: pos("system-center", { x: CENTER_X, y: CENTER_Y }),
+      position: pos("system-center", system.id, { x: CENTER_X, y: CENTER_Y }),
       data: { system, subtitle },
     },
   ];
@@ -269,23 +281,23 @@ export function buildSystemGraph(
     : { type: MarkerType.ArrowClosed, color: APPLICATION_LAYER_COLOR, width: 12, height: 12 };
 
   function addLinkedNodes(
-    group: SystemDiagramLink[],
+    group: MergedSystemDiagramLink[],
     positions: { x: number; y: number }[],
     sourceHandle: string,
     targetHandle: string,
     outbound: boolean
   ) {
     group.forEach((link, i) => {
-      const nodeId = `link-${link.objectId}-${link.relationshipType}-${link.direction}`;
+      const nodeId = systemDiagramNodeId(link);
       const auto = positions[i] ?? positions[positions.length - 1] ?? { x: RIGHT_X, y: 0 };
       nodes.push({
         id: nodeId,
         type: "systemLinkedNode",
-        position: pos(nodeId, auto),
+        position: pos(nodeId, link.objectId, auto),
         data: { link },
       });
 
-      const shortLabel = relationshipVerb(link.relationshipType);
+      const edgeLabel = mergedSystemDiagramEdgeLabel(link);
       if (outbound) {
         edges.push({
           id: `e-${nodeId}-out`,
@@ -296,7 +308,7 @@ export function buildSystemGraph(
           type: "smoothstep",
           style: { stroke: APPLICATION_LAYER_COLOR, strokeWidth: compact ? 1 : 1.5 },
           markerEnd: marker,
-          ...withEdgeLabel(shortLabel, compact),
+          ...withEdgeLabel(edgeLabel, compact),
         });
       } else {
         edges.push({
@@ -308,7 +320,7 @@ export function buildSystemGraph(
           type: "smoothstep",
           style: { stroke: "#94a3b8", strokeWidth: compact ? 1 : 1.5 },
           markerEnd: marker,
-          ...withEdgeLabel(shortLabel, compact),
+          ...withEdgeLabel(edgeLabel, compact),
         });
       }
     });

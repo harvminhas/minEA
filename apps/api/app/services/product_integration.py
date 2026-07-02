@@ -106,6 +106,36 @@ async def _flow_counts(
     return len(flows_in), len(flows_out), flows_in, flows_out
 
 
+async def _distinct_target_items_multi(
+    db: AsyncSession,
+    *,
+    rel_types: frozenset[str],
+    from_ids: frozenset[uuid.UUID],
+    to_type: str,
+    workspace_id: uuid.UUID,
+    org_id: uuid.UUID,
+) -> list[IntegrationItem]:
+    if not from_ids:
+        return []
+    result = await db.execute(
+        select(distinct(Relationship.to_object_id), MinEAObject.name)
+        .join(MinEAObject, MinEAObject.id == Relationship.to_object_id)
+        .where(
+            Relationship.type.in_(rel_types),
+            Relationship.from_object_id.in_(from_ids),
+            Relationship.to_type == to_type,
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            MinEAObject.workspace_id == workspace_id,
+        )
+        .order_by(MinEAObject.name)
+    )
+    return [{"id": str(oid), "name": name, "kind": to_type} for oid, name in result.all()]
+
+
+DATA_STORE_ACCESS_TYPES = frozenset({"reads", "writes", "owns"})
+
+
 async def _data_store_count_and_items(
     db: AsyncSession,
     scope: ProductScope,
@@ -114,9 +144,9 @@ async def _data_store_count_and_items(
 ) -> tuple[int, list[IntegrationItem]]:
     if not scope.system_ids:
         return 0, []
-    items = await _distinct_target_items(
+    items = await _distinct_target_items_multi(
         db,
-        rel_type="stores_in",
+        rel_types=DATA_STORE_ACCESS_TYPES,
         from_ids=scope.system_ids,
         to_type="data_store",
         workspace_id=workspace_id,

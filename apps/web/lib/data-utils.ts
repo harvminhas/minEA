@@ -154,11 +154,11 @@ export function entityLinkSections(
     {
       key: "domain",
       title: "Data Domain",
-      subtitle: "GOVERNED BY",
+      subtitle: "BELONGS TO",
       entityKind: "data_domain",
       linkKind: "governed_by",
       items: byKind(links, "governed_by", "data_domain"),
-      actionLabel: "Change",
+      readOnly: true,
     },
     {
       key: "stores",
@@ -214,12 +214,12 @@ export function storeLinkSections(links: DataLink[]): DataLinkSection[] {
   return [
     {
       key: "domain",
-      title: "Data Domain",
-      subtitle: "GOVERNED BY",
+      title: "Data Domains",
+      subtitle: "BELONGS TO",
       entityKind: "data_domain",
       linkKind: "governed_by",
       items: byKind(links, "governed_by", "data_domain"),
-      actionLabel: "Change",
+      actionLabel: "+ Assign",
     },
     {
       key: "entities",

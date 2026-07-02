@@ -169,6 +169,18 @@ export interface MinEAObject extends OwnershipFields {
   hosting_system_name?: string | null;
   governed_entity_count?: number;
   governed_store_count?: number;
+  domain_rollup?: DomainRollup;
+}
+
+export interface DomainRollupItem {
+  id: string;
+  name: string;
+}
+
+export interface DomainRollup {
+  entities: DomainRollupItem[];
+  stores: DomainRollupItem[];
+  systems: DomainRollupItem[];
 }
 
 export interface ObjectCreate extends OwnershipFields {
@@ -644,7 +656,12 @@ export type RelationshipType =
   | "publishes"
   | "consumes"
   | "subscribes"
-  | "stores_in"
+  | "reads"
+  | "writes"
+  | "creates"
+  | "updates"
+  | "owns"
+  | "belongs_to"
   | "runs_on"
   | "built_on"
   | "affects"
@@ -1828,6 +1845,7 @@ export interface DataObjectCreate {
   description?: string;
   classification?: string;
   sensitivity?: string;
+  data_domain_id?: string;
 }
 
 export interface DataObjectUpdate {
@@ -1885,6 +1903,7 @@ export interface DataDomainDetail {
   capability_domain_name?: string | null;
   links: DataLink[];
   inferred_summary: string[];
+  domain_rollup?: DomainRollup;
   created_at: string;
   updated_at: string;
 }

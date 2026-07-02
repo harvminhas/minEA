@@ -30,6 +30,15 @@ from app.services.data_layer import (
     load_data_links,
     validate_link_entity,
 )
+from app.services.data_domain_rollup import (
+    add_store_domain_assignment,
+    enrich_entity_domain_links,
+    get_or_create_default_data_domain,
+    load_assigned_domain_id,
+    load_domain_rollup,
+    replace_entity_domain_assignment,
+    sync_entity_domain_property,
+)
 from app.services.tenancy import TenancyContext, get_workspace_context
 
 router = APIRouter(
@@ -40,6 +49,34 @@ router = APIRouter(
 
 def _props(obj: MinEAObject) -> dict:
     return dict(obj.properties or {})
+
+
+async def _assign_entity_data_domain(
+    db: AsyncSession,
+    ctx: TenancyContext,
+    obj: MinEAObject,
+    domain_id: UUID,
+) -> None:
+    assert ctx.workspace
+    await replace_entity_domain_assignment(
+        db,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        entity_id=obj.id,
+        domain_id=domain_id,
+        user_id=ctx.user_id,
+    )
+    await sync_entity_domain_property(obj, domain_id=domain_id)
+    await add_data_link(
+        db,
+        ctx.workspace.id,
+        ctx.org_id,
+        "data_entity",
+        obj.id,
+        "data_domain",
+        domain_id,
+        "governed_by",
+    )
 
 
 async def _get_object(
@@ -100,6 +137,19 @@ async def create_entity(
     )
     db.add(obj)
     await db.flush()
+
+    domain_id = body.data_domain_id
+    if domain_id is None:
+        default_domain = await get_or_create_default_data_domain(
+            db,
+            workspace_id=ctx.workspace.id,
+            org_id=ctx.org_id,
+            user_id=ctx.user_id,
+        )
+        domain_id = default_domain.id
+    await _assign_entity_data_domain(db, ctx, obj, domain_id)
+    obj.properties = _props(obj)
+    await db.flush()
     return await get_entity(obj.id, ctx, db)
 
 
@@ -114,8 +164,16 @@ async def get_entity(
 
     obj = await _get_object(db, ctx, entity_id, "data_object")
     props = _props(obj)
-    domain_id = props.get("data_domain_id")
-    domain_uuid = UUID(str(domain_id)) if domain_id else None
+    domain_uuid = await load_assigned_domain_id(
+        db,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        subject_id=obj.id,
+        subject_type="data_object",
+    )
+    if domain_uuid is None:
+        domain_id = props.get("data_domain_id")
+        domain_uuid = UUID(str(domain_id)) if domain_id else None
 
     related = await load_data_links(db, ctx.workspace.id, ctx.org_id, "data_entity", obj.id, ["related"])
     links = await load_data_links(
@@ -125,6 +183,13 @@ async def get_entity(
         "data_entity",
         obj.id,
         ["governed_by", "stored_in", "managed_by", "moved_by"],
+    )
+    links = await enrich_entity_domain_links(
+        db,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        entity_id=obj.id,
+        links=links,
     )
     explicit_caps = await load_data_links(db, ctx.workspace.id, ctx.org_id, "data_entity", obj.id, ["uses"])
     explicit_procs = await load_data_links(db, ctx.workspace.id, ctx.org_id, "data_entity", obj.id, ["reads_writes"])
@@ -171,18 +236,26 @@ async def update_entity(
         props["classification"] = body.classification
     if body.sensitivity is not None:
         props["sensitivity"] = body.sensitivity
-    if body.data_domain_id is not None:
-        props["data_domain_id"] = str(body.data_domain_id)
-        await add_data_link(
+    domain_to_assign = body.data_domain_id
+    if domain_to_assign is None:
+        existing_domain = await load_assigned_domain_id(
             db,
-            ctx.workspace.id,
-            ctx.org_id,
-            "data_entity",
-            obj.id,
-            "data_domain",
-            body.data_domain_id,
-            "governed_by",
+            workspace_id=ctx.workspace.id,
+            org_id=ctx.org_id,
+            subject_id=obj.id,
+            subject_type="data_object",
         )
+        if existing_domain is None and _props(obj).get("data_domain_id") is None:
+            default_domain = await get_or_create_default_data_domain(
+                db,
+                workspace_id=ctx.workspace.id,
+                org_id=ctx.org_id,
+                user_id=ctx.user_id,
+            )
+            domain_to_assign = default_domain.id
+    if domain_to_assign is not None:
+        await _assign_entity_data_domain(db, ctx, obj, domain_to_assign)
+        props = _props(obj)
     obj.properties = props
     await db.flush()
     return await get_entity(entity_id, ctx, db)
@@ -308,7 +381,15 @@ async def update_store(
     if body.health is not None:
         props["health"] = body.health
     if body.data_domain_id is not None:
-        props["data_domain_id"] = str(body.data_domain_id)
+        await add_store_domain_assignment(
+            db,
+            workspace_id=ctx.workspace.id,
+            org_id=ctx.org_id,
+            store_id=obj.id,
+            domain_id=body.data_domain_id,
+            user_id=ctx.user_id,
+        )
+        props.setdefault("data_domain_id", str(body.data_domain_id))
         await add_data_link(
             db,
             ctx.workspace.id,
@@ -413,7 +494,13 @@ async def get_domain(
         ctx.org_id,
         "data_domain",
         obj.id,
-        ["governs", "system_of_record"],
+        ["system_of_record"],
+    )
+    rollup = await load_domain_rollup(
+        db,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        domain_id=obj.id,
     )
 
     return DataDomainDetail(
@@ -430,6 +517,7 @@ async def get_domain(
         capability_domain_name=cap_domain_name,
         links=links,
         inferred_summary=await infer_domain_summary(db, ctx.workspace.id, ctx.org_id, obj.id),
+        domain_rollup=rollup,
         created_at=obj.created_at,
         updated_at=obj.updated_at,
     )

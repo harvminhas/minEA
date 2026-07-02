@@ -611,7 +611,23 @@ async def seed_workspace(
         properties={"engine": "postgresql", "classification": "confidential"},
         owner_team_id=platform_team.id,
     )
-    counts["objects"] += 3
+    customer_entity = await _get_or_create_object(
+        db,
+        workspace_id=workspace_id,
+        org_id=org_id,
+        user_id=user_id,
+        external_id="seed:data-entity:customer",
+        obj_type="data_object",
+        name="Customer",
+        description="Registered customer account and contact profile",
+        status="active",
+        properties={
+            "classification": "pii",
+            "data_domain_id": str(customer_data_domain.id),
+        },
+        owner_team_id=crm_team.id,
+    )
+    counts["objects"] += 4
 
     domain_search_api = await _get_or_create_object(
         db,
@@ -770,7 +786,14 @@ async def seed_workspace(
             ("publishes", domain_portal, domain_registered_event),
             ("publishes", billing_engine, payment_received_event),
             ("consumes", billing_engine, domain_search_api),
-            ("stores_in", domain_portal, domain_registry_store),
+            ("reads", domain_portal, domain_registry_store),
+            ("writes", domain_portal, domain_registry_store),
+            ("owns", domain_portal, domain_registry_store),
+            ("contains", domain_registry_store, customer_entity),
+            ("belongs_to", customer_entity, customer_data_domain),
+            ("creates", domain_portal, customer_entity),
+            ("owns", domain_portal, customer_entity),
+            ("updates", billing_engine, customer_entity),
             ("runs_on", domain_portal, aws),
             ("runs_on", billing_engine, aws),
             ("runs_on", dns_mgmt, aws),
