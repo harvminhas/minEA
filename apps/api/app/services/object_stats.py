@@ -433,6 +433,31 @@ async def _count_inbound_belongs_to(
     return {row[0]: int(row[1]) for row in result.all()}
 
 
+async def _entity_owner_names_from_owns(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    org_id: uuid.UUID,
+    entity_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, str]:
+    if not entity_ids:
+        return {}
+    result = await db.execute(
+        select(Relationship.to_object_id, MinEAObject.name)
+        .join(MinEAObject, MinEAObject.id == Relationship.from_object_id)
+        .where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            Relationship.type == "owns",
+            Relationship.from_type == "application",
+            Relationship.to_type == "data_object",
+            Relationship.to_object_id.in_(entity_ids),
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.org_id == org_id,
+        )
+    )
+    return {row[0]: row[1] for row in result.all()}
+
+
 async def enrich_data_objects(
     db: AsyncSession, objects: list[MinEAObject]
 ) -> dict[uuid.UUID, dict]:
@@ -473,6 +498,9 @@ async def enrich_data_objects(
         link_kind="managed_by",
         entity_kind="application",
     )
+    owns_names = await _entity_owner_names_from_owns(db, workspace_id, org_id, entity_ids)
+    for entity_id, name in owns_names.items():
+        sor_names.setdefault(entity_id, name)
     cap_counts = await _count_data_links(
         db,
         workspace_id,

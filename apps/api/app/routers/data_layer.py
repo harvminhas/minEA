@@ -32,11 +32,15 @@ from app.services.data_layer import (
 )
 from app.services.data_domain_rollup import (
     add_store_domain_assignment,
+    clear_entity_owner_assignment,
     enrich_entity_domain_links,
+    enrich_entity_owner_links,
     get_or_create_default_data_domain,
     load_assigned_domain_id,
     load_domain_rollup,
+    load_entity_owner_system_id,
     replace_entity_domain_assignment,
+    replace_entity_owner_assignment,
     sync_entity_domain_property,
 )
 from app.services.tenancy import TenancyContext, get_workspace_context
@@ -77,6 +81,52 @@ async def _assign_entity_data_domain(
         domain_id,
         "governed_by",
     )
+
+
+async def _assign_entity_owner_system(
+    db: AsyncSession,
+    ctx: TenancyContext,
+    obj: MinEAObject,
+    system_id: UUID,
+) -> None:
+    assert ctx.workspace
+    await replace_entity_owner_assignment(
+        db,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        entity_id=obj.id,
+        system_id=system_id,
+        user_id=ctx.user_id,
+    )
+    await add_data_link(
+        db,
+        ctx.workspace.id,
+        ctx.org_id,
+        "data_entity",
+        obj.id,
+        "application",
+        system_id,
+        "managed_by",
+    )
+
+
+async def _get_application_name(
+    db: AsyncSession,
+    workspace_id: UUID,
+    org_id: UUID,
+    application_id: UUID | None,
+) -> str | None:
+    if not application_id:
+        return None
+    result = await db.execute(
+        select(MinEAObject.name).where(
+            MinEAObject.id == application_id,
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.org_id == org_id,
+            MinEAObject.type == "application",
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 async def _get_object(
@@ -191,8 +241,21 @@ async def get_entity(
         entity_id=obj.id,
         links=links,
     )
+    links = await enrich_entity_owner_links(
+        db,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        entity_id=obj.id,
+        links=links,
+    )
     explicit_caps = await load_data_links(db, ctx.workspace.id, ctx.org_id, "data_entity", obj.id, ["uses"])
     explicit_procs = await load_data_links(db, ctx.workspace.id, ctx.org_id, "data_entity", obj.id, ["reads_writes"])
+    owner_uuid = await load_entity_owner_system_id(
+        db,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        entity_id=obj.id,
+    )
 
     return DataObjectDetail(
         id=obj.id,
@@ -204,6 +267,10 @@ async def get_entity(
         sensitivity=props.get("sensitivity"),
         data_domain_id=domain_uuid,
         data_domain_name=await get_domain_name(db, ctx.workspace.id, ctx.org_id, domain_uuid),
+        owner_system_id=owner_uuid,
+        owner_system_name=await _get_application_name(
+            db, ctx.workspace.id, ctx.org_id, owner_uuid
+        ),
         related_entities=related,
         links=links,
         inferred_capabilities=await infer_capabilities_for_entity(
@@ -256,6 +323,17 @@ async def update_entity(
     if domain_to_assign is not None:
         await _assign_entity_data_domain(db, ctx, obj, domain_to_assign)
         props = _props(obj)
+    patch = body.model_dump(exclude_unset=True)
+    if "owner_system_id" in patch:
+        if patch["owner_system_id"] is None:
+            await clear_entity_owner_assignment(
+                db,
+                workspace_id=ctx.workspace.id,
+                org_id=ctx.org_id,
+                entity_id=obj.id,
+            )
+        else:
+            await _assign_entity_owner_system(db, ctx, obj, patch["owner_system_id"])
     obj.properties = props
     await db.flush()
     return await get_entity(entity_id, ctx, db)
@@ -269,12 +347,16 @@ async def add_entity_link(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await ctx.require_write(db)
-    await _get_object(db, ctx, entity_id, "data_object")
+    obj = await _get_object(db, ctx, entity_id, "data_object")
     assert ctx.workspace
     try:
         await validate_link_entity(db, ctx.workspace.id, ctx.org_id, body.entity_kind, body.entity_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    if body.link_kind == "managed_by" and body.entity_kind == "application":
+        await _assign_entity_owner_system(db, ctx, obj, body.entity_id)
+        return
 
     await add_data_link(
         db,

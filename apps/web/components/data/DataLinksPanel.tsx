@@ -8,6 +8,7 @@ import {
   Database,
   Flag,
   GitBranch,
+  Info,
   Link2,
   Server,
   Sparkles,
@@ -29,13 +30,18 @@ const ICON: Record<string, typeof Box> = {
   business_domain: Star,
 };
 
-function LinkRow({ item }: { item: DataLink }) {
+function LinkRow({ item, navigable = true }: { item: DataLink; navigable?: boolean }) {
   const { basePath } = useTenancy();
   const Icon = ICON[item.entity_kind] ?? Box;
-  const href = entityPath(basePath, item.entity_kind, item.entity_id);
+  const href = navigable ? entityPath(basePath, item.entity_kind, item.entity_id) : null;
 
   const inner = (
-    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-white border border-gray-200/80 hover:border-gray-300 transition-colors">
+    <div
+      className={cn(
+        "flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-white border border-gray-200/80 transition-colors",
+        href && "hover:border-gray-300"
+      )}
+    >
       <div className="h-6 w-6 rounded flex items-center justify-center bg-gray-50 text-gray-400 flex-shrink-0">
         <Icon size={12} />
       </div>
@@ -61,6 +67,26 @@ function LinkRow({ item }: { item: DataLink }) {
 
   if (href) return <Link href={href}>{inner}</Link>;
   return inner;
+}
+
+function SectionHint({ text }: { text: string }) {
+  return (
+    <span className="relative inline-flex flex-shrink-0 group/hint">
+      <button
+        type="button"
+        className="rounded p-0.5 text-gray-300 hover:text-gray-500 focus:outline-none focus-visible:text-gray-500 focus-visible:ring-1 focus-visible:ring-gray-300"
+        aria-label="More information"
+      >
+        <Info size={12} />
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-0 top-full z-20 mt-1.5 hidden w-56 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-[11px] font-normal normal-case leading-snug tracking-normal text-gray-600 shadow-md group-hover/hint:block group-focus-within/hint:block"
+      >
+        {text}
+      </span>
+    </span>
+  );
 }
 
 export type AssignTarget = DataLinkSection;
@@ -140,20 +166,24 @@ function SectionBlock({
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between gap-2 mb-2">
         <span
           className={cn(
-            "font-semibold text-gray-400 uppercase tracking-wider",
+            "font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1 min-w-0",
             compact ? "text-[9px]" : "text-[10px]"
           )}
         >
-          {label}
+          <span className="truncate">{label}</span>
+          {section.footnote && <SectionHint text={section.footnote} />}
         </span>
         {!section.readOnly && section.actionLabel && onAssign && (
           <button
             type="button"
-            onClick={() => onAssign(section)}
-            className="text-[11px] text-gray-500 border border-gray-200 rounded-md px-2 py-0.5 hover:bg-white transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAssign(section);
+            }}
+            className="text-[11px] text-gray-500 border border-gray-200 rounded-md px-2 py-0.5 hover:bg-white transition-colors flex-shrink-0"
           >
             {section.actionLabel}
           </button>
@@ -169,7 +199,7 @@ function SectionBlock({
       ) : (
         <div className="space-y-1.5">
           {section.items.map((item) => (
-            <LinkRow key={item.id} item={item} />
+            <LinkRow key={item.id} item={item} navigable={!section.nonNavigable} />
           ))}
         </div>
       )}

@@ -34,6 +34,7 @@ class DataObjectUpdate(BaseModel):
     classification: str | None = None
     sensitivity: str | None = None
     data_domain_id: UUID | None = None
+    owner_system_id: UUID | None = None
 
 
 class DataStoreUpdate(BaseModel):
@@ -65,6 +66,8 @@ class DataObjectDetail(BaseModel):
     sensitivity: str | None = None
     data_domain_id: UUID | None = None
     data_domain_name: str | None = None
+    owner_system_id: UUID | None = None
+    owner_system_name: str | None = None
     related_entities: list[DataLinkRead] = Field(default_factory=list)
     links: list[DataLinkRead] = Field(default_factory=list)
     inferred_capabilities: list[DataLinkRead] = Field(default_factory=list)

@@ -215,6 +215,14 @@ export function StoreDetailPanel({ storeId, onClose, onUpdate }: Props) {
                 l.link_kind === assignTarget.linkKind && l.entity_kind === assignTarget.entityKind
             )
             .map((l) => l.entity_id)}
+          assignedRoleByEntityId={Object.fromEntries(
+            store.links
+              .filter(
+                (l) =>
+                  l.link_kind === assignTarget.linkKind && l.entity_kind === assignTarget.entityKind
+              )
+              .map((l) => [l.entity_id, l.role_tag ?? undefined])
+          )}
           onClose={() => setAssignTarget(null)}
           onAssign={(id, roleTag) => addLink(assignTarget, id, roleTag)}
         />

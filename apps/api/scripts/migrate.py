@@ -54,6 +54,7 @@ MIGRATION_FILES = [
     "036_system_data_store_access.sql",
     "037_data_domain_belongs_to.sql",
     "038_system_belongs_to_data_domain.sql",
+    "039_entity_owns_backfill.sql",
 ]
 
 

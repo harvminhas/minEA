@@ -127,6 +127,10 @@ export type DataLinkSection = {
   linkKind: string;
   items: DataLink[];
   readOnly?: boolean;
+  /** When true, linked rows are display-only (no navigation). */
+  nonNavigable?: boolean;
+  /** Shown under the section when populated (e.g. assignment hints). */
+  footnote?: string;
   actionLabel?: "+ Assign" | "+ Add" | "Change";
   roleTags?: string[];
 };
@@ -145,69 +149,23 @@ function byKind(links: DataLink[], linkKind: string, entityKind?: string) {
   );
 }
 
-export function entityLinkSections(
-  links: DataLink[],
-  inferredCapabilities: DataLink[],
-  inferredProcesses: DataLink[]
-): DataLinkSection[] {
-  return [
-    {
-      key: "domain",
-      title: "Data Domain",
-      subtitle: "BELONGS TO",
-      entityKind: "data_domain",
-      linkKind: "governed_by",
-      items: byKind(links, "governed_by", "data_domain"),
-      readOnly: true,
-    },
-    {
-      key: "stores",
-      title: "Data Stores",
-      subtitle: "STORED IN",
-      entityKind: "data_store",
-      linkKind: "stored_in",
-      items: byKind(links, "stored_in"),
-      actionLabel: "+ Assign",
-      roleTags: ["primary", "analytical"],
-    },
-    {
-      key: "system",
-      title: "System of Record",
-      subtitle: "MANAGED BY",
-      entityKind: "application",
-      linkKind: "managed_by",
-      items: byKind(links, "managed_by"),
-      actionLabel: "Change",
-    },
-    {
-      key: "integrations",
-      title: "Integrations",
-      subtitle: "MOVED BY",
-      entityKind: "integration_flow",
-      linkKind: "moved_by",
-      items: byKind(links, "moved_by"),
-      actionLabel: "+ Assign",
-      roleTags: ["batch", "event"],
-    },
-    {
-      key: "capabilities",
-      title: "Capabilities",
-      subtitle: "",
-      entityKind: "capability",
-      linkKind: "uses",
-      items: inferredCapabilities,
-      readOnly: true,
-    },
-    {
-      key: "processes",
-      title: "Processes",
-      subtitle: "",
-      entityKind: "process",
-      linkKind: "reads_writes",
-      items: inferredProcesses,
-      readOnly: true,
-    },
-  ];
+export function entityStoreLinks(links: DataLink[]): DataLink[] {
+  return byKind(links, "stored_in", "data_store");
+}
+
+export function entityStoreAssignSection(links: DataLink[]): DataLinkSection {
+  return {
+    key: "stores",
+    title: "Data Stores",
+    subtitle: "STORED IN · many ↔ many",
+    entityKind: "data_store",
+    linkKind: "stored_in",
+    items: entityStoreLinks(links),
+    actionLabel: "+ Assign",
+    roleTags: ["primary", "analytical"],
+    footnote:
+      "An entity can live in multiple stores. Tag one as primary for the system-of-record location.",
+  };
 }
 
 export function storeLinkSections(links: DataLink[]): DataLinkSection[] {

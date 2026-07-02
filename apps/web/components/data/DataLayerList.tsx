@@ -132,7 +132,7 @@ function EntityCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: (
           valueClassName={!item.data_domain_name ? "font-normal text-gray-400" : undefined}
         />
         <PropertyRow
-          label="System of record"
+          label="Owned by"
           value={item.system_of_record_name ?? "—"}
           valueClassName={!item.system_of_record_name ? "font-normal text-gray-400" : undefined}
         />

@@ -12,6 +12,8 @@ interface Props {
   showRelationships?: boolean;
   showTechDebt?: boolean;
   showHistory?: boolean;
+  /** Defaults to "Relationships". Data entities use "Links". */
+  relationshipsTabLabel?: string;
   className?: string;
 }
 
@@ -23,6 +25,7 @@ export function ObjectDrawerTabs({
   showRelationships = false,
   showTechDebt = true,
   showHistory = true,
+  relationshipsTabLabel = "Relationships",
   className,
 }: Props) {
   const tabs: {
@@ -34,7 +37,7 @@ export function ObjectDrawerTabs({
   if (showRelationships) {
     tabs.push({
       id: "relationships",
-      label: "Relationships",
+      label: relationshipsTabLabel,
       badge: relationshipCount > 0 ? relationshipCount : undefined,
       badgeTone: "neutral",
     });

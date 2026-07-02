@@ -1832,6 +1832,8 @@ export interface DataObjectDetail {
   sensitivity?: string | null;
   data_domain_id?: string | null;
   data_domain_name?: string | null;
+  owner_system_id?: string | null;
+  owner_system_name?: string | null;
   related_entities: DataLink[];
   links: DataLink[];
   inferred_capabilities: DataLink[];
@@ -1854,6 +1856,7 @@ export interface DataObjectUpdate {
   classification?: string | null;
   sensitivity?: string | null;
   data_domain_id?: string | null;
+  owner_system_id?: string | null;
 }
 
 export interface DataStoreDetail {

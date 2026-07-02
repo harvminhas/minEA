@@ -6,6 +6,7 @@ import uuid
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.data_layer import DataLink
 from app.models.objects import MinEAObject
 from app.models.relationships import Relationship
 from app.schemas.data_layer import DataLinkRead
@@ -369,3 +370,150 @@ async def add_store_domain_assignment(
             created_by=user_id,
         )
     )
+
+
+async def load_entity_owner_system_id(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    org_id: uuid.UUID,
+    entity_id: uuid.UUID,
+) -> uuid.UUID | None:
+    """Owning system for a data entity (owns relationship, with managed_by fallback)."""
+    rel_result = await db.execute(
+        select(Relationship.from_object_id).where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            Relationship.type == "owns",
+            Relationship.from_type == "application",
+            Relationship.to_object_id == entity_id,
+            Relationship.to_type == "data_object",
+        )
+    )
+    owner_id = rel_result.scalar_one_or_none()
+    if owner_id is not None:
+        return owner_id
+
+    link_result = await db.execute(
+        select(DataLink.entity_id).where(
+            DataLink.workspace_id == workspace_id,
+            DataLink.org_id == org_id,
+            DataLink.subject_type == "data_entity",
+            DataLink.subject_id == entity_id,
+            DataLink.link_kind == "managed_by",
+            DataLink.entity_kind == "application",
+        )
+    )
+    return link_result.scalar_one_or_none()
+
+
+async def clear_entity_owner_assignment(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    org_id: uuid.UUID,
+    entity_id: uuid.UUID,
+) -> None:
+    await db.execute(
+        delete(Relationship).where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            Relationship.type == "owns",
+            Relationship.from_type == "application",
+            Relationship.to_object_id == entity_id,
+            Relationship.to_type == "data_object",
+        )
+    )
+    await db.execute(
+        delete(DataLink).where(
+            DataLink.workspace_id == workspace_id,
+            DataLink.org_id == org_id,
+            DataLink.subject_type == "data_entity",
+            DataLink.subject_id == entity_id,
+            DataLink.link_kind == "managed_by",
+            DataLink.entity_kind == "application",
+        )
+    )
+
+
+async def replace_entity_owner_assignment(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    org_id: uuid.UUID,
+    entity_id: uuid.UUID,
+    system_id: uuid.UUID,
+    user_id: uuid.UUID | None,
+) -> None:
+    await clear_entity_owner_assignment(
+        db,
+        workspace_id=workspace_id,
+        org_id=org_id,
+        entity_id=entity_id,
+    )
+    db.add(
+        Relationship(
+            workspace_id=workspace_id,
+            org_id=org_id,
+            type="owns",
+            from_object_id=system_id,
+            from_type="application",
+            to_object_id=entity_id,
+            to_type="data_object",
+            created_by=user_id,
+        )
+    )
+
+
+async def enrich_entity_owner_links(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    org_id: uuid.UUID,
+    entity_id: uuid.UUID,
+    links: list[DataLinkRead],
+) -> list[DataLinkRead]:
+    """Expose owns assignment in data-layer link lists."""
+    if any(l.link_kind == "managed_by" and l.entity_kind == "application" for l in links):
+        return links
+    system_id = await load_entity_owner_system_id(
+        db,
+        workspace_id=workspace_id,
+        org_id=org_id,
+        entity_id=entity_id,
+    )
+    if system_id is None:
+        return links
+    rel_result = await db.execute(
+        select(Relationship.id).where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            Relationship.type == "owns",
+            Relationship.from_type == "application",
+            Relationship.from_object_id == system_id,
+            Relationship.to_object_id == entity_id,
+            Relationship.to_type == "data_object",
+        )
+    )
+    rel_id = rel_result.scalar_one_or_none()
+    if rel_id is None:
+        return links
+    name_result = await db.execute(
+        select(MinEAObject.name).where(
+            MinEAObject.id == system_id,
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.org_id == org_id,
+            MinEAObject.type == "application",
+        )
+    )
+    name = name_result.scalar_one_or_none()
+    return [
+        DataLinkRead(
+            id=rel_id,
+            entity_kind="application",
+            entity_id=system_id,
+            entity_name=name or "Unknown",
+            link_kind="managed_by",
+        ),
+        *links,
+    ]

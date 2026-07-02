@@ -118,33 +118,43 @@ function SystemCenterNode({
   data,
   compact,
 }: {
-  data: { system: MinEAObject; subtitle: string };
+  data: { system: MinEAObject; subtitle: string; accentColor: string };
   compact?: boolean;
 }) {
+  const CenterIcon = data.system.type === "data_object" ? Database : Layers;
+  const centerIconClass =
+    data.system.type === "data_object" ? "text-violet-600 bg-violet-50" : "text-indigo-600 bg-indigo-50";
+
   if (compact) {
     return (
-      <div className="bg-white border-2 border-indigo-400 rounded-md overflow-hidden min-w-[72px] max-w-[88px]">
+      <div
+        className="bg-white border-2 rounded-md overflow-hidden min-w-[72px] max-w-[88px]"
+        style={{ borderColor: data.accentColor }}
+      >
         <Handle type="source" position={Position.Right} id="right" className="!opacity-0 !w-1 !h-1" />
         <Handle type="source" position={Position.Left} id="left" className="!opacity-0 !w-1 !h-1" />
         <Handle type="source" position={Position.Bottom} id="bottom" className="!opacity-0 !w-1 !h-1" />
         <Handle type="target" position={Position.Top} id="top" className="!opacity-0 !w-1 !h-1" />
-        <div className="h-1 bg-indigo-500" />
+        <div className="h-1" style={{ backgroundColor: data.accentColor }} />
         <p className="text-[8px] font-bold text-gray-900 px-1 py-1 truncate text-center">{data.system.name}</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-xl border-2 border-indigo-400 overflow-hidden w-[220px]">
-      <Handle type="source" position={Position.Right} id="right" style={{ background: APPLICATION_LAYER_COLOR }} />
-      <Handle type="source" position={Position.Left} id="left" style={{ background: APPLICATION_LAYER_COLOR }} />
-      <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: APPLICATION_LAYER_COLOR }} />
-      <Handle type="target" position={Position.Top} id="top" style={{ background: APPLICATION_LAYER_COLOR }} />
-      <div className="h-1 bg-indigo-500" />
+    <div
+      className="bg-white rounded-xl shadow-xl border-2 overflow-hidden w-[220px]"
+      style={{ borderColor: data.accentColor }}
+    >
+      <Handle type="source" position={Position.Right} id="right" style={{ background: data.accentColor }} />
+      <Handle type="source" position={Position.Left} id="left" style={{ background: data.accentColor }} />
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: data.accentColor }} />
+      <Handle type="target" position={Position.Top} id="top" style={{ background: data.accentColor }} />
+      <div className="h-1" style={{ backgroundColor: data.accentColor }} />
       <div className="px-4 py-3 space-y-2">
         <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded bg-indigo-50 flex items-center justify-center flex-shrink-0">
-            <Layers size={12} className="text-indigo-600" />
+          <div className={cn("h-6 w-6 rounded flex items-center justify-center flex-shrink-0", centerIconClass)}>
+            <CenterIcon size={12} />
           </div>
           <p className="text-sm font-bold text-gray-900 truncate">{data.system.name}</p>
         </div>
@@ -236,7 +246,8 @@ export function buildSystemGraph(
   relationships: Relationship[],
   nameById: Record<string, string>,
   compact?: boolean,
-  savedLayout?: NodeLayout
+  savedLayout?: NodeLayout,
+  accentColor: string = APPLICATION_LAYER_COLOR
 ): { nodes: Node[]; edges: Edge[] } {
   const links = mergeSystemDiagramLinks(
     extractSystemDiagramLinks(system.id, relationships, nameById)
@@ -264,21 +275,24 @@ export function buildSystemGraph(
   }
 
   const props = (system.properties ?? {}) as ApplicationProperties;
-  const subtitle = props.platform?.platform_name ?? (OBJECT_TYPE_LABELS[system.type] ?? "System");
+  const subtitle =
+    system.type === "data_object"
+      ? (OBJECT_TYPE_LABELS[system.type] ?? "Data entity")
+      : (props.platform?.platform_name ?? (OBJECT_TYPE_LABELS[system.type] ?? "System"));
 
   const nodes: Node[] = [
     {
       id: "system-center",
       type: "systemCenterNode",
       position: pos("system-center", system.id, { x: CENTER_X, y: CENTER_Y }),
-      data: { system, subtitle },
+      data: { system, subtitle, accentColor },
     },
   ];
   const edges: Edge[] = [];
 
   const marker = compact
     ? undefined
-    : { type: MarkerType.ArrowClosed, color: APPLICATION_LAYER_COLOR, width: 12, height: 12 };
+    : { type: MarkerType.ArrowClosed, color: accentColor, width: 12, height: 12 };
 
   function addLinkedNodes(
     group: MergedSystemDiagramLink[],
@@ -306,7 +320,7 @@ export function buildSystemGraph(
           target: nodeId,
           targetHandle: "left",
           type: "smoothstep",
-          style: { stroke: APPLICATION_LAYER_COLOR, strokeWidth: compact ? 1 : 1.5 },
+          style: { stroke: accentColor, strokeWidth: compact ? 1 : 1.5 },
           markerEnd: marker,
           ...withEdgeLabel(edgeLabel, compact),
         });
@@ -368,6 +382,7 @@ interface GraphProps {
   nameById: Record<string, string>;
   className?: string;
   compact?: boolean;
+  accentColor?: string;
   onLayoutSave?: (layout: NodeLayout) => void;
   onResetLayout?: () => void;
   exportFilename?: string;
@@ -380,6 +395,7 @@ export function SystemArchitectureGraph({
   nameById,
   className,
   compact,
+  accentColor = APPLICATION_LAYER_COLOR,
   onLayoutSave,
   onResetLayout,
   exportFilename,
@@ -390,8 +406,8 @@ export function SystemArchitectureGraph({
   const hasCustomLayout = !!(savedLayout && Object.keys(savedLayout).length > 0);
 
   const { nodes, edges } = useMemo(
-    () => buildSystemGraph(system, relationships, nameById, compact, compact ? undefined : savedLayout),
-    [system, relationships, nameById, compact, savedLayout]
+    () => buildSystemGraph(system, relationships, nameById, compact, compact ? undefined : savedLayout, accentColor),
+    [system, relationships, nameById, compact, savedLayout, accentColor]
   );
 
   return (
@@ -401,7 +417,7 @@ export function SystemArchitectureGraph({
         edges={edges}
         nodeTypes={compact ? SYSTEM_NODE_TYPES_COMPACT : SYSTEM_NODE_TYPES}
         mode={compact ? "thumbnail" : "full"}
-        accentColor={APPLICATION_LAYER_COLOR}
+        accentColor={accentColor}
         fitViewPadding={compact ? 0.1 : 0.2}
         onLayoutSave={compact ? undefined : onLayoutSave}
         onResetLayout={compact ? undefined : onResetLayout}
@@ -422,6 +438,9 @@ export function SystemDiagramModal({
   onLayoutSave,
   onResetLayout,
   onAddConnection,
+  accentColor = APPLICATION_LAYER_COLOR,
+  heading = "System relationships",
+  footerHint = "Drag nodes to rearrange — positions save automatically. Use Add connection to link systems, components, data objects, and technology.",
 }: {
   system: MinEAObject;
   relationships: Relationship[];
@@ -429,6 +448,9 @@ export function SystemDiagramModal({
   onLayoutSave?: (layout: NodeLayout) => void | Promise<void>;
   onResetLayout?: () => void | Promise<void>;
   onAddConnection?: () => void;
+  accentColor?: string;
+  heading?: string;
+  footerHint?: string;
 }) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
@@ -507,8 +529,11 @@ export function SystemDiagramModal({
         <DiagramSavingBar active={savingLayout} label="Saving layout…" />
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
           <div>
-            <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider mb-0.5">
-              System relationships
+            <p
+              className="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+              style={{ color: accentColor }}
+            >
+              {heading}
             </p>
             <h2 className="text-base font-bold text-gray-900">{liveSystem.name}</h2>
             <p className="text-xs text-gray-500 mt-1">
@@ -521,7 +546,8 @@ export function SystemDiagramModal({
               <button
                 type="button"
                 onClick={onAddConnection}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                style={{ color: accentColor, backgroundColor: `${accentColor}14` }}
               >
                 <Plus size={14} />
                 Add connection
@@ -543,6 +569,7 @@ export function SystemDiagramModal({
             system={liveSystem}
             relationships={relationships}
             nameById={nameById}
+            accentColor={accentColor}
             onLayoutSave={handleLayoutSave}
             onResetLayout={handleResetLayout}
             exportFilename={liveSystem.name}
@@ -551,12 +578,11 @@ export function SystemDiagramModal({
         </div>
 
         <div className="px-6 py-2.5 border-t border-gray-100 bg-gray-50/50 flex-shrink-0 flex items-center gap-4 flex-wrap">
-          <p className="text-xs text-gray-400">
-            Drag nodes to rearrange — positions save automatically. Use Add connection to link systems,
-            components, data objects, and technology.
-          </p>
+          <p className="text-xs text-gray-400">{footerHint}</p>
           {hasCustomLayout && (
-            <span className="text-[10px] text-indigo-600 font-medium ml-auto">Layout saved ✓</span>
+            <span className="text-[10px] font-medium ml-auto" style={{ color: accentColor }}>
+              Layout saved ✓
+            </span>
           )}
         </div>
       </div>

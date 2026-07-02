@@ -12,6 +12,8 @@ interface Props {
   nameById: Record<string, string>;
   onExpand: () => void;
   disabled?: boolean;
+  accentColor?: string;
+  emptyHint?: string;
 }
 
 export function SystemDiagramPreview({
@@ -20,6 +22,8 @@ export function SystemDiagramPreview({
   nameById,
   onExpand,
   disabled,
+  accentColor,
+  emptyHint = "No linked objects yet. Expand to add systems, components, data objects, and technology.",
 }: Props) {
   const hasLinks = extractSystemDiagramLinks(system.id, relationships, nameById).length > 0;
 
@@ -30,7 +34,10 @@ export function SystemDiagramPreview({
       disabled={disabled}
       className={cn(
         "group relative w-full text-left rounded-lg border border-gray-200 overflow-hidden",
-        "hover:border-indigo-300 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500",
+        "hover:shadow-sm transition-all focus:outline-none focus:ring-2",
+        accentColor === "#8b5cf6"
+          ? "hover:border-violet-300 focus:ring-violet-500"
+          : "hover:border-indigo-300 focus:ring-indigo-500",
         disabled && "pointer-events-none opacity-80"
       )}
       aria-label="Expand system relationship chart"
@@ -42,17 +49,21 @@ export function SystemDiagramPreview({
             relationships={relationships}
             nameById={nameById}
             compact
+            accentColor={accentColor}
           />
         </div>
       ) : (
         <div className="h-[160px] bg-gray-50 flex items-center justify-center px-4">
-          <p className="text-xs text-gray-400 text-center">
-            No linked objects yet. Expand to add systems, components, data objects, and technology.
-          </p>
+          <p className="text-xs text-gray-400 text-center">{emptyHint}</p>
         </div>
       )}
 
-      <div className="absolute inset-0 bg-indigo-600/0 group-hover:bg-indigo-600/5 transition-colors pointer-events-none" />
+      <div
+        className={cn(
+          "absolute inset-0 transition-colors pointer-events-none opacity-0 group-hover:opacity-100",
+          accentColor === "#8b5cf6" ? "bg-violet-600/5" : "bg-indigo-600/5"
+        )}
+      />
       <div className="absolute bottom-2 right-2 flex items-center gap-1 rounded-md bg-white/90 border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
         <Maximize2 size={10} />
         Expand

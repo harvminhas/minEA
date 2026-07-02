@@ -276,7 +276,7 @@ export const objectsApi = {
   list: (
     orgSlug: string,
     workspaceSlug: string,
-    params: { type?: string; status?: string; search?: string; page?: number },
+    params: { type?: string; status?: string; search?: string; page?: number; page_size?: number },
     token: string
   ) => {
     const qs = new URLSearchParams();
@@ -284,6 +284,7 @@ export const objectsApi = {
     if (params.status) qs.set("status", params.status);
     if (params.search) qs.set("search", params.search);
     if (params.page) qs.set("page", String(params.page));
+    if (params.page_size) qs.set("page_size", String(params.page_size));
     const query = qs.toString();
     return apiFetch<ObjectListResponse>(
       `${wsBase(orgSlug, workspaceSlug)}/objects${query ? `?${query}` : ""}`,

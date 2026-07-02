@@ -16,9 +16,11 @@ from app.services.relationship_rules import (
 )
 from app.services.data_domain_rollup import (
     replace_entity_domain_assignment,
+    replace_entity_owner_assignment,
     replace_system_domain_assignment,
     sync_entity_domain_property,
 )
+from app.services.data_layer import add_data_link
 from app.services.tenancy import TenancyContext, get_workspace_context
 
 router = APIRouter(
@@ -108,13 +110,40 @@ async def create_relationship(
             owner_system_id=body.from_object_id,
         )
     if body.type == "owns" and body.from_type == "application" and body.to_type == "data_object":
-        await assert_data_entity_ownership_allowed(
+        await replace_entity_owner_assignment(
             db,
             workspace_id=ctx.workspace.id,
             org_id=ctx.org_id,
             entity_id=body.to_object_id,
-            owner_system_id=body.from_object_id,
+            system_id=body.from_object_id,
+            user_id=ctx.user_id,
         )
+        await add_data_link(
+            db,
+            ctx.workspace.id,
+            ctx.org_id,
+            "data_entity",
+            body.to_object_id,
+            "application",
+            body.from_object_id,
+            "managed_by",
+        )
+        await db.flush()
+        rel_result = await db.execute(
+            select(Relationship).where(
+                Relationship.workspace_id == ctx.workspace.id,
+                Relationship.org_id == ctx.org_id,
+                Relationship.type == "owns",
+                Relationship.from_object_id == body.from_object_id,
+                Relationship.from_type == "application",
+                Relationship.to_object_id == body.to_object_id,
+                Relationship.to_type == "data_object",
+            )
+        )
+        rel = rel_result.scalar_one()
+        await db.refresh(rel)
+        return rel
+
     if body.type == "belongs_to" and body.from_type == "data_object" and body.to_type == "data_domain":
         await assert_entity_domain_belongs_to_allowed(
             db,
