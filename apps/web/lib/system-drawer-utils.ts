@@ -17,6 +17,8 @@ const SYSTEM_LINK_TYPES = new Set<ObjectType>(["application", "solution", "techn
 const COMPONENT_LINK_TYPES = new Set<ObjectType>(["component"]);
 const PLATFORM_LINK_TYPES = new Set<ObjectType>(["cloud_service"]);
 const CAPABILITY_LINK_TYPES = new Set<ObjectType>(["capability"]);
+const API_LINK_TYPES = new Set<ObjectType>(["api"]);
+const EVENT_LINK_TYPES = new Set<ObjectType>(["event"]);
 
 function extractLinksForTypes(
   systemId: string,
@@ -87,6 +89,14 @@ export function systemObjectPlatformLinks(systemId: string, relationships: Relat
 
 export function systemObjectCapabilityLinks(systemId: string, relationships: Relationship[]) {
   return extractLinksForTypes(systemId, relationships, CAPABILITY_LINK_TYPES);
+}
+
+export function systemObjectApiLinks(systemId: string, relationships: Relationship[]) {
+  return extractLinksForTypes(systemId, relationships, API_LINK_TYPES);
+}
+
+export function systemObjectEventLinks(systemId: string, relationships: Relationship[]) {
+  return extractLinksForTypes(systemId, relationships, EVENT_LINK_TYPES);
 }
 
 /** All non-data object-link types shown on the relationship map preview. */

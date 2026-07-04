@@ -5,8 +5,10 @@ import { SystemDrawerSection } from "@/components/application/SystemDrawerSectio
 import { SystemFlowsSection } from "@/components/application/SystemFlowsSection";
 import { SystemLinkedObjectList } from "@/components/application/SystemLinkedObjectList";
 import {
+  systemObjectApiLinks,
   systemObjectCapabilityLinks,
   systemObjectComponentLinks,
+  systemObjectEventLinks,
   systemObjectPlatformLinks,
   systemObjectSystemLinks,
 } from "@/lib/system-drawer-utils";
@@ -23,6 +25,8 @@ interface Props {
   onAddComponent?: () => void;
   onAddPlatform?: () => void;
   onAddCapability?: () => void;
+  onAddApi?: () => void;
+  onAddEvent?: () => void;
   onAddFlow?: () => void;
   onOpenFlow?: (flowId: string) => void;
   onRemove?: (relationshipId: string) => void;
@@ -40,6 +44,8 @@ export function SystemObjectLinksTab({
   onAddComponent,
   onAddPlatform,
   onAddCapability,
+  onAddApi,
+  onAddEvent,
   onAddFlow,
   onOpenFlow,
   onRemove,
@@ -49,6 +55,8 @@ export function SystemObjectLinksTab({
   const componentLinks = systemObjectComponentLinks(system.id, relationships);
   const platformLinks = systemObjectPlatformLinks(system.id, relationships);
   const capabilityLinks = systemObjectCapabilityLinks(system.id, relationships);
+  const apiLinks = systemObjectApiLinks(system.id, relationships);
+  const eventLinks = systemObjectEventLinks(system.id, relationships);
   const relatedFlows = flowsForSystemObjectLinksTab(system.id, allFlows);
 
   return (
@@ -108,6 +116,36 @@ export function SystemObjectLinksTab({
           nameById={nameById}
           namesLoading={namesLoading}
           emptyLabel="No linked capabilities."
+          onRemove={canEdit ? onRemove : undefined}
+          isRemoving={isRemoving}
+        />
+      </SystemDrawerSection>
+
+      <SystemDrawerSection
+        title="APIs"
+        count={apiLinks.length}
+        onAdd={canEdit ? onAddApi : undefined}
+      >
+        <SystemLinkedObjectList
+          links={apiLinks}
+          nameById={nameById}
+          namesLoading={namesLoading}
+          emptyLabel="No linked APIs."
+          onRemove={canEdit ? onRemove : undefined}
+          isRemoving={isRemoving}
+        />
+      </SystemDrawerSection>
+
+      <SystemDrawerSection
+        title="Events"
+        count={eventLinks.length}
+        onAdd={canEdit ? onAddEvent : undefined}
+      >
+        <SystemLinkedObjectList
+          links={eventLinks}
+          nameById={nameById}
+          namesLoading={namesLoading}
+          emptyLabel="No linked events."
           onRemove={canEdit ? onRemove : undefined}
           isRemoving={isRemoving}
         />

@@ -373,6 +373,8 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
             onAddComponent={() => openRelForm("component")}
             onAddPlatform={() => openRelForm("cloud_service")}
             onAddCapability={() => openRelForm("capability")}
+            onAddApi={() => openRelForm("api")}
+            onAddEvent={() => openRelForm("event")}
             onAddFlow={openCreateFlow}
             onOpenFlow={openFlowDetail}
             onRemove={(id) => deleteRelMutation.mutate(id)}
