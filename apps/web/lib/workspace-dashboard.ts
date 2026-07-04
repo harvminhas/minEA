@@ -175,6 +175,20 @@ function metricVariant(subtext: string): MetricCardVariant {
   return "warn";
 }
 
+export function zeroStateMetricCardStates(): {
+  domains: MetricCardState;
+  capabilities: MetricCardState;
+  systems: MetricCardState;
+  products: MetricCardState;
+} {
+  return {
+    systems: { subtext: "start here", variant: "default" },
+    domains: { subtext: "none yet", variant: "default" },
+    capabilities: { subtext: "none yet", variant: "default" },
+    products: { subtext: "none yet", variant: "default" },
+  };
+}
+
 export function metricCardStates(metrics: WorkspaceMetrics): {
   domains: MetricCardState;
   capabilities: MetricCardState;
@@ -270,13 +284,14 @@ export function buildStructuralGaps(metrics: WorkspaceMetrics): StructuralGap[] 
     metrics.productCount === 0
   ) {
     gaps.push({
-      id: "map-not-started",
-      key: "map-not-started",
-      title: "Capability map not started",
-      subtitle: "Foundation · not started",
+      id: "no-systems",
+      key: "no-systems",
+      title: "No systems registered yet",
+      subtitle: "Application · start here",
       severity: "high",
       badgeLabel: "Start here",
-      description: "Add domains and capabilities from the capability map — most views build on this foundation.",
+      description:
+        "List the systems in your estate first. Group them into domains and capabilities once you can see the whole picture.",
     });
     return gaps;
   }
@@ -392,6 +407,15 @@ export function dashboardPrimaryCta(
   metrics: WorkspaceMetrics,
   basePath: string
 ): DashboardCta | null {
+  if (metrics.systemCount === 0) {
+    return {
+      message:
+        "List the systems in your estate first. Group them into domains and capabilities later, once you can see the whole picture.",
+      actionLabel: "Add systems",
+      actionHref: `${basePath}/application/applications`,
+    };
+  }
+
   if (metrics.capabilityCount > 0) return null;
 
   if (metrics.domainCount > 0) {
@@ -403,15 +427,42 @@ export function dashboardPrimaryCta(
     };
   }
 
-  return {
-    message:
-      "Set up your capability map first — domains and capabilities unlock heatmaps, portfolios, and richer insights.",
-    actionLabel: "Open capability map",
-    actionHref: `${basePath}/business/capabilities`,
-  };
+  return null;
 }
 
 const DASHBOARD_EXTRA_VIEWS: ViewConfig[] = [PROCESSES_VIEW];
+
+export function buildZeroStateViewCards(
+  basePath: string,
+  metrics: WorkspaceMetrics
+): DashboardViewCard[] {
+  const galleryHref = `${basePath}/views`;
+  const pick = (viewId: "products" | "capability-heatmap") => {
+    const view = NAV_VIEWS.find((v) => v.id === viewId)!;
+    const statusLabel =
+      viewId === "products"
+        ? metrics.systemCount === 0
+          ? "Needs systems"
+          : "Needs products"
+        : metrics.capabilityCount === 0
+          ? "Needs capabilities"
+          : "Needs data";
+    return {
+      id: view.id,
+      label: view.label,
+      description: view.description,
+      drawerDescription: view.drawerDescription,
+      href: `${basePath}/${view.segment}`,
+      galleryHref,
+      ready: false,
+      statusLabel,
+      statusTone: "needs" as ViewStatusTone,
+      iconColor: view.color,
+      icon: view.icon,
+    };
+  };
+  return [pick("products"), pick("capability-heatmap")];
+}
 
 export function buildDashboardViewCards(
   basePath: string,

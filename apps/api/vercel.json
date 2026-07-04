@@ -1,4 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "pip install -r requirements.txt"
+  "installCommand": "pip install -r requirements.txt",
+  "functions": {
+    "app/**": {
+      "excludeFiles": "{migrations/**,scripts/**,alembic/**,alembic.ini,CLOUD_SQL.md,.env.example,**/__pycache__/**,**/*.pyc,**/*.pyo,**/.pytest_cache/**,**/.mypy_cache/**,**/.ruff_cache/**}"
+    }
+  }
 }

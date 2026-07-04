@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useAppStore } from "@/lib/store";
 import { useTenancy } from "@/lib/tenancy";
@@ -14,7 +14,6 @@ import {
 import { ZeroStateDashboard } from "@/components/dashboard/ZeroStateDashboard";
 import { PopulatedStateDashboard } from "@/components/dashboard/PopulatedStateDashboard";
 import { ArchitectureInsightsPanel } from "@/components/insights/ArchitectureInsightsPanel";
-import { GetStartedModal } from "@/components/dashboard/GetStartedModal";
 import { HowItWorksModal } from "@/components/dashboard/HowItWorksModal";
 import { WorkspaceSnapshotRefreshBar } from "@/components/dashboard/WorkspaceSnapshotRefreshBar";
 
@@ -29,9 +28,8 @@ function formatUpdatedAgo(iso: string | null): string {
 export function WorkspaceDashboard() {
   const { user } = useAuth();
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
-  const { activeOrg } = useAppStore();
+  const { activeOrg, setViewMode } = useAppStore();
   const [insightsOpen, setInsightsOpen] = useState(false);
-  const [setupOpen, setSetupOpen] = useState(false);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
 
   const { data: dashboardState, isPending, isError, error, refetch } =
@@ -41,6 +39,11 @@ export function WorkspaceDashboard() {
 
   const greeting = useMemo(() => greetingForHour(new Date().getHours()), []);
   const userName = greetingName(user?.displayName, user?.email);
+  const empty = metrics ? isWorkspaceEmpty(metrics) : true;
+
+  useEffect(() => {
+    if (empty) setViewMode("repository");
+  }, [empty, setViewMode]);
 
   // Skeleton only on first load (no cached metrics yet)
   if (isPending) {
@@ -74,8 +77,6 @@ export function WorkspaceDashboard() {
     );
   }
 
-  const empty = metrics ? isWorkspaceEmpty(metrics) : true;
-
   return (
     <>
       <div className="px-8 py-9 min-h-full bg-gray-50/50">
@@ -94,8 +95,6 @@ export function WorkspaceDashboard() {
             greeting={greeting}
             userName={userName}
             metrics={metrics}
-            onGetStarted={() => setSetupOpen(true)}
-            onOpenHowItWorks={() => setHowItWorksOpen(true)}
           />
         ) : metrics ? (
           <PopulatedStateDashboard
@@ -123,14 +122,6 @@ export function WorkspaceDashboard() {
         isLoading={insightsState.isLoading}
         isGenerating={insightsState.isGenerating}
         onRefresh={insightsState.refresh}
-      />
-
-      <GetStartedModal
-        open={setupOpen}
-        onClose={() => setSetupOpen(false)}
-        orgSlug={orgSlug}
-        workspaceSlug={workspaceSlug}
-        workspaceName={activeOrg?.name ?? orgSlug}
       />
 
       <HowItWorksModal open={howItWorksOpen} onClose={() => setHowItWorksOpen(false)} />

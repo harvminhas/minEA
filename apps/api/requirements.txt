@@ -1,17 +1,14 @@
+# Runtime dependencies (installed on Vercel). For local dev + migrations use requirements-dev.txt
 fastapi==0.115.6
-uvicorn[standard]==0.32.1
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
-alembic==1.14.0
 pydantic==2.10.3
 pydantic-settings==2.7.0
 python-multipart==0.0.20
 google-genai>=1.0.0
-redis==5.2.1
 httpx==0.28.1
 firebase-admin==6.6.0
 resend==2.5.1
 stripe==11.4.1
 python-dotenv==1.0.1
-psycopg2-binary==2.9.10
 aiofiles==24.1.0

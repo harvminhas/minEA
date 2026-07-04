@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { orgsApi, workspacesApi } from "@/lib/api-client";
 import { apiBaseLabel, apiConfigHelpText } from "@/lib/api-base";
+import { useAppStore } from "@/lib/store";
 import { primaryViewPath } from "@/lib/tenancy";
 import { useAppBoot } from "@/lib/app-boot-context";
 
@@ -16,6 +17,7 @@ export default function HomePage() {
   const { getToken, isLoaded } = useAuth();
   const router = useRouter();
   const { setHomeStep } = useAppBoot();
+  const { setViewMode } = useAppStore();
   const [phase, setPhase] = useState<HomePhase>("orgs");
 
   const { data: orgs, isLoading, isError, error } = useQuery({
@@ -43,6 +45,7 @@ export default function HomePage() {
       const token = await getToken();
       const workspaces = await workspacesApi.list(org.slug, token!);
       setPhase("redirect");
+      setViewMode("repository");
       const ws = workspaces[0];
       if (ws) {
         router.replace(primaryViewPath(org.slug, ws.slug));
@@ -50,7 +53,7 @@ export default function HomePage() {
         router.replace(`/orgs/${org.slug}/settings`);
       }
     })();
-  }, [orgs, isLoading, isLoaded, isError, router, getToken]);
+  }, [orgs, isLoading, isLoaded, isError, router, getToken, setViewMode]);
 
   useEffect(() => {
     setHomeStep(phase === "orgs" ? 0 : phase === "workspaces" ? 1 : 2);

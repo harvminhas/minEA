@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     # App
     app_name: str = "minEA API"
     debug: bool = False
-    # Signs email-verification links; falls back to RESEND_API_KEY in DEBUG only.
+    # Signs email-verification links. Prefer a dedicated secret in production.
+    # Falls back to RESEND_API_KEY when unset (needed for sending anyway).
     app_secret: str = ""
 
     # Database

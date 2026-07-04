@@ -110,6 +110,16 @@ async def health() -> dict:
         firebase_error = (
             "Set FIREBASE_SERVICE_ACCOUNT_JSON on Vercel (paste full service account JSON)."
         )
+    app_secret_ok = bool(settings.app_secret.strip())
+    resend_ok = bool(settings.resend_api_key.strip())
+    email_signing_ok = app_secret_ok or resend_ok
+    email_verification_error: str | None = None
+    if not email_signing_ok:
+        email_verification_error = (
+            "Set APP_SECRET (recommended) or RESEND_API_KEY on the API project for verification links."
+        )
+    elif not resend_ok:
+        email_verification_error = "Set RESEND_API_KEY on the API project to send verification emails."
     return {
         "status": "ok" if db_ok else "degraded",
         "version": "0.1.0",
@@ -126,4 +136,8 @@ async def health() -> dict:
         "gemini_configured": is_configured(),
         "gemini_model": model_name(),
         "gemini_env_present": bool(os.getenv("GOOGLE_API_KEY")),
+        "app_secret_configured": app_secret_ok,
+        "resend_configured": resend_ok,
+        "email_verification_ready": email_signing_ok and resend_ok,
+        "email_verification_error": email_verification_error,
     }

@@ -16,9 +16,14 @@ _TOKEN_TTL_SECONDS = 60 * 60 * 24  # 24 hours
 def _signing_secret() -> str:
     if settings.app_secret.strip():
         return settings.app_secret.strip()
-    if settings.debug and settings.resend_api_key.strip():
+    # Fallback: RESEND_API_KEY is already required to send mail; avoids a separate
+    # production env var when APP_SECRET was not set during deploy.
+    if settings.resend_api_key.strip():
         return settings.resend_api_key.strip()
-    raise ValueError("APP_SECRET is not configured")
+    raise ValueError(
+        "APP_SECRET is not configured. On the API server, set APP_SECRET to a long "
+        "random string (recommended), or set RESEND_API_KEY so verification links can be signed."
+    )
 
 
 def _b64url_encode(data: bytes) -> str:

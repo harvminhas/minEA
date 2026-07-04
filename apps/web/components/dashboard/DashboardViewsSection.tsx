@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   buildDashboardViewCards,
+  buildZeroStateViewCards,
   buildViewRequirements,
   type DashboardViewCard,
   type ViewStatusTone,
@@ -81,11 +82,14 @@ function ViewCardButton({
 interface Props {
   basePath: string;
   metrics: WorkspaceMetrics;
+  emptyWorkspace?: boolean;
 }
 
-export function DashboardViewsSection({ basePath, metrics }: Props) {
+export function DashboardViewsSection({ basePath, metrics, emptyWorkspace = false }: Props) {
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
-  const viewCards = buildDashboardViewCards(basePath, metrics);
+  const viewCards = emptyWorkspace
+    ? buildZeroStateViewCards(basePath, metrics)
+    : buildDashboardViewCards(basePath, metrics);
   const selectedCard = viewCards.find((c) => c.id === selectedViewId) ?? null;
   const requirements = selectedCard
     ? buildViewRequirements(selectedCard.id, metrics, basePath)
@@ -104,7 +108,9 @@ export function DashboardViewsSection({ basePath, metrics }: Props) {
           </Link>
         </div>
         <p className="text-xs text-gray-400 mb-4">
-          Click a view to see what&apos;s needed before you open it.
+          {emptyWorkspace
+            ? "Views need systems and capabilities before they're useful — add systems first."
+            : "Click a view to see what's needed before you open it."}
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {viewCards.map((card) => (

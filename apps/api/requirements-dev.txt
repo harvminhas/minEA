@@ -1,0 +1,5 @@
+# Local dev / migrations only — not installed on Vercel
+-r requirements.txt
+uvicorn[standard]==0.32.1
+alembic==1.14.0
+psycopg2-binary==2.9.10

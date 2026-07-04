@@ -43,6 +43,7 @@ The proxy reads `API_URL` at **request time** (not build time), so set it on the
 | `DEBUG` | No | `false` |
 | `CORS_ORIGINS` | Optional | JSON array, e.g. `["https://your-web.vercel.app"]` |
 | `RESEND_API_KEY` | For verification + invites | Use a verified sender domain in Resend |
+| `APP_SECRET` | Recommended | Long random string for signing verification links. If omitted, `RESEND_API_KEY` is used as fallback. |
 | `EMAIL_FROM` | No | e.g. `minEA <noreply@yourdomain.com>` |
 | `GOOGLE_API_KEY` | For AI chat, insights, ingestion | From [Google AI Studio](https://aistudio.google.com/apikey) |
 | `GEMINI_MODEL` | No | `gemini-2.5-flash` (do not use retired `gemini-2.0-flash`) |
@@ -55,7 +56,7 @@ The proxy reads `API_URL` at **request time** (not build time), so set it on the
 Run migrations against production Postgres before going live:
 
 ```bash
-cd apps/api && npm run db:migrate
+cd apps/api && pip install -r requirements-dev.txt && npm run db:migrate
 ```
 
 **Paste Firebase JSON on Vercel:** Project → Settings → Environment Variables → `FIREBASE_SERVICE_ACCOUNT_JSON` → paste the entire contents of `fb_svc_acct.json` as one line (or use Vercel's multiline editor). Redeploy after saving.
@@ -139,6 +140,8 @@ vercel --prod
 | AI works locally but not on Vercel | Web proxies to API — Gemini keys must be on **minea-api**, not **minea-web** |
 | Build fails (web) | Monorepo install must run from repo root (`apps/web/vercel.json`) |
 | `auth/invalid-api-key` / verify-email prerender error | Set all `NEXT_PUBLIC_FIREBASE_*` on the **web** Vercel project, then redeploy |
+| 503 `APP_SECRET is not configured` on verify email | On **minea-api**, set `APP_SECRET` (recommended) and ensure `RESEND_API_KEY` is set. Redeploy API. Check `/health` for `email_verification_ready: true`. |
+| API deploy: bundle size exceeds 225–250 MB | Redeploy latest API (slim `requirements.txt` drops uvicorn, alembic, psycopg2, redis). If still over limit, add `VERCEL_SUPPORT_LARGE_FUNCTIONS=1` on **minea-api** and redeploy. |
 
 ---
 
