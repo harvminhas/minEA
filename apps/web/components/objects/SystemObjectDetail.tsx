@@ -6,32 +6,28 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Edit2, Trash2 } from "lucide-react";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
-import { formatCurrency, getObjectInitial } from "@/lib/utils";
+import { getObjectInitial } from "@/lib/utils";
 import {
   DetailPanel,
   DetailPanelCloseButton,
-  DetailSection,
 } from "@/components/ui/DetailPanel";
 import { DeleteSystemConfirmDialog } from "@/components/application/DeleteSystemConfirmDialog";
 import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
-import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
+import { SystemDrawerTabs, type SystemDrawerTabId } from "@/components/application/SystemDrawerTabs";
+import { SystemDetailsTab } from "@/components/application/SystemDetailsTab";
+import { SystemDataTab } from "@/components/application/SystemDataTab";
+import { SystemObjectLinksTab } from "@/components/application/SystemObjectLinksTab";
 import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
 import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { TechDebtHostKind } from "@minea/types";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { SystemDiagramModal, type NodeLayout } from "@/components/application/SystemDiagram";
-import { LinkProductDialog } from "@/components/application/LinkProductDialog";
-import { SystemRelationshipsTab } from "@/components/application/SystemRelationshipsTab";
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
-import { invalidateProductQueries } from "@/lib/product-queries";
-import { buildDetailPropertyRows } from "@/lib/object-property-display";
 import { excludeTechDebtRelationships } from "@/lib/relationship-display";
 import { invalidateSystemCaches } from "@/lib/system-capability-utils";
-import { systemStatusLabel, SYSTEM_STATUS_STYLE } from "@/lib/system-utils";
+import { useSystemLinkedNames } from "@/lib/use-system-linked-names";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
-import { cn } from "@/lib/utils";
 import { usePermissions } from "@/lib/use-permissions";
-import { systemCategoryDisplay } from "@/lib/system-category";
 import { type ApplicationProperties, type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
 
 interface Props {
@@ -46,12 +42,12 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const { canEdit, canDelete } = usePermissions();
-  const [activeTab, setActiveTab] = useState<ObjectDrawerTabId>("details");
+  const [activeTab, setActiveTab] = useState<SystemDrawerTabId>("details");
   const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(objectId);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRelForm, setShowRelForm] = useState(false);
-  const [showLinkProduct, setShowLinkProduct] = useState(false);
+  const [relFormTargetType, setRelFormTargetType] = useState<string | undefined>();
   const [showChart, setShowChart] = useState(false);
   const [liveSystem, setLiveSystem] = useState<MinEAObject | null>(null);
   const liveSystemRef = useRef<MinEAObject | null>(null);
@@ -107,32 +103,6 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
 
   const productLinks = productLinksData?.items ?? [];
 
-  const invalidateProductLinkQueries = () => {
-    queryClient.invalidateQueries({ queryKey: ["object-products", orgSlug, workspaceSlug, objectId] });
-    void invalidateProductQueries(queryClient, orgSlug, workspaceSlug);
-  };
-
-  const linkProductMutation = useMutation({
-    mutationFn: async (productId: string) => {
-      const token = await getToken();
-      if (!token) throw new Error("Not authenticated");
-      return objectsApi.linkProduct(orgSlug, workspaceSlug, objectId, productId, token);
-    },
-    onSuccess: () => {
-      setShowLinkProduct(false);
-      invalidateProductLinkQueries();
-    },
-  });
-
-  const unlinkProductMutation = useMutation({
-    mutationFn: async (productId: string) => {
-      const token = await getToken();
-      if (!token) throw new Error("Not authenticated");
-      return objectsApi.unlinkProduct(orgSlug, workspaceSlug, objectId, productId, token);
-    },
-    onSuccess: invalidateProductLinkQueries,
-  });
-
   const deleteRelMutation = useMutation({
     mutationFn: async (id: string) => {
       const token = await getToken();
@@ -140,7 +110,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["relationships"] });
-      refetch();
+      void refetch();
     },
   });
 
@@ -170,6 +140,8 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
 
   const allRels = [...(outRels ?? []), ...(inRels ?? [])];
   const drawerRels = excludeTechDebtRelationships(allRels);
+  const displaySystem = liveSystem ?? object;
+  const { nameById, isLoading: namesLoading } = useSystemLinkedNames(displaySystem, drawerRels);
 
   useEffect(() => {
     if (!object) return;
@@ -205,7 +177,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
       setLiveSystem(withLayout);
       liveSystemRef.current = withLayout;
     },
-    [getToken, orgSlug, workspaceSlug, objectId, queryClient]
+    [getToken, orgSlug, workspaceSlug, objectId, queryClient, object]
   );
 
   const handleResetLayout = useCallback(() => {
@@ -233,6 +205,16 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const linkedCapabilities =
     capabilitiesData?.items.filter((c) => supportedCapabilityIds.includes(c.id)) ?? [];
 
+  const openRelForm = (targetType?: string) => {
+    setRelFormTargetType(targetType);
+    setShowRelForm(true);
+  };
+
+  const closeRelForm = () => {
+    setShowRelForm(false);
+    setRelFormTargetType(undefined);
+  };
+
   if (isLoading || !object) {
     return (
       <DetailPanel
@@ -249,17 +231,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
     );
   }
 
-  const props = object.properties as Record<string, unknown>;
-  const appProps = object.properties as ApplicationProperties;
-  const platformName = appProps.platform?.platform_name;
-  const status = object.status ?? "planned";
   const layerLabel = OBJECT_TYPE_LABELS[object.type] ?? object.type;
-
-  const platformFromRel = (outRels ?? []).find(
-    (r) => r.type === "runs_on" && r.from_type === "application" && r.to_type === "cloud_service"
-  );
-  const categoryMeta = systemCategoryDisplay(appProps);
-  const detailPropertyRows = buildDetailPropertyRows(props, object.type);
 
   return (
     <>
@@ -306,42 +278,61 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
                 <DetailPanelCloseButton onClose={onClose} />
               </div>
             </div>
-            <ObjectDrawerTabs
+            <SystemDrawerTabs
               activeTab={activeTab}
               onTabChange={setActiveTab}
-              showRelationships
-              relationshipCount={drawerRels.length + productLinks.length}
               openDebtCount={techDebtSummary?.open_count ?? 0}
               className="mt-4"
             />
           </div>
         }
       >
-        {activeTab === "history" && (
-          <EntityHistoryPanel
-            entries={historyData?.entries ?? []}
-            isLoading={historyLoading}
-          />
-        )}
-
-        {activeTab === "relationships" && object && (
-          <SystemRelationshipsTab
-            system={liveSystem ?? object}
-            relationships={drawerRels}
+        {activeTab === "details" && displaySystem && (
+          <SystemDetailsTab
+            object={displaySystem}
+            layerLabel={layerLabel}
+            linkedCapabilities={linkedCapabilities}
             productLinks={productLinks}
             productLinksLoading={productLinksLoading}
+            relationships={drawerRels}
+            nameById={nameById}
             diagramRefreshing={diagramRefreshing}
             onExpandDiagram={() => setShowChart(true)}
-            onAdd={canEdit ? () => setShowRelForm(true) : undefined}
-            onLinkProduct={canEdit ? () => setShowLinkProduct(true) : undefined}
-            onRemove={canEdit ? (id) => deleteRelMutation.mutate(id) : undefined}
-            onUnlinkProduct={canEdit ? (id) => unlinkProductMutation.mutate(id) : undefined}
-            isRemoving={deleteRelMutation.isPending}
-            isUnlinkingProduct={unlinkProductMutation.isPending}
           />
         )}
 
-        {activeTab === "tech_debt" && object && (
+        {activeTab === "data" && displaySystem && (
+          <SystemDataTab
+            system={displaySystem}
+            relationships={drawerRels}
+            nameById={nameById}
+            namesLoading={namesLoading}
+            canEdit={canEdit}
+            onAddStore={() => openRelForm("data_store")}
+            onAddDomain={() => openRelForm("data_domain")}
+            onRemove={(id) => deleteRelMutation.mutate(id)}
+            isRemoving={deleteRelMutation.isPending}
+            onRefresh={() => void refreshObject()}
+          />
+        )}
+
+        {activeTab === "object_links" && displaySystem && (
+          <SystemObjectLinksTab
+            system={displaySystem}
+            relationships={drawerRels}
+            nameById={nameById}
+            namesLoading={namesLoading}
+            canEdit={canEdit}
+            onAddSystem={() => openRelForm("application")}
+            onAddComponent={() => openRelForm("component")}
+            onAddPlatform={() => openRelForm("cloud_service")}
+            onAddCapability={() => openRelForm("capability")}
+            onRemove={(id) => deleteRelMutation.mutate(id)}
+            isRemoving={deleteRelMutation.isPending}
+          />
+        )}
+
+        {activeTab === "tech_debt" && (
           <ObjectTechDebtTab
             objectId={object.id}
             objectName={object.name}
@@ -353,108 +344,11 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
           />
         )}
 
-        {activeTab === "details" && (
-          <>
-            {object.description && (
-              <DetailSection title="Description">
-                <p className="text-sm text-gray-700 px-6 pb-4">{object.description}</p>
-              </DetailSection>
-            )}
-
-            <DetailSection title="Properties">
-              <div className="px-6 pb-4 space-y-3 text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-gray-500">Owner</span>
-                  <span className="text-gray-900 font-medium">{object.owner ?? "Unassigned"}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-gray-500">Status</span>
-                  <span
-                    className={cn(
-                      "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize",
-                      SYSTEM_STATUS_STYLE[status] ?? SYSTEM_STATUS_STYLE.planned
-                    )}
-                  >
-                    {systemStatusLabel(status)}
-                  </span>
-                </div>
-                {(platformName || platformFromRel) && (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-gray-500">Built on platform</span>
-                    <span className="text-gray-900 font-medium">
-                      {platformName || "Linked platform"}
-                    </span>
-                  </div>
-                )}
-                {categoryMeta.label && (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-gray-500">Category</span>
-                    <span className="text-gray-900 font-medium text-right">
-                      {categoryMeta.label}
-                      {categoryMeta.needsReview && (
-                        <span className="block text-[11px] font-medium text-amber-700 mt-0.5">
-                          Needs review — pick a functional domain when editing
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                )}
-                {categoryMeta.isCustomBuilt && (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-gray-500">Custom-built</span>
-                    <span className="text-gray-900 font-medium">Yes — built in-house</span>
-                  </div>
-                )}
-                {props.vendor != null && props.vendor !== "" && (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-gray-500">Vendor</span>
-                    <span className="text-gray-900">{String(props.vendor)}</span>
-                  </div>
-                )}
-                {props.annual_cost !== undefined && (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-gray-500">Annual cost</span>
-                    <span className="text-gray-900">{formatCurrency(Number(props.annual_cost))}</span>
-                  </div>
-                )}
-              </div>
-            </DetailSection>
-
-            <DetailSection title={`Capabilities (${linkedCapabilities.length})`}>
-              <div className="px-6 pb-4">
-                {linkedCapabilities.length === 0 ? (
-                  <p className="text-sm text-gray-400">
-                    No capabilities linked. Edit this system to select capabilities it supports.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {linkedCapabilities.map((cap) => (
-                      <span
-                        key={cap.id}
-                        className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full"
-                      >
-                        {cap.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </DetailSection>
-
-            {detailPropertyRows.length > 0 && (
-              <DetailSection title={`${layerLabel} details`}>
-                <div className="px-6 pb-4 space-y-2 text-sm">
-                  {detailPropertyRows.map((row) => (
-                    <div key={row.key} className="flex items-center justify-between gap-3">
-                      <span className="text-gray-500">{row.label}</span>
-                      <span className="text-gray-900 font-medium text-right">{row.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </DetailSection>
-            )}
-
-          </>
+        {activeTab === "history" && (
+          <EntityHistoryPanel
+            entries={historyData?.entries ?? []}
+            isLoading={historyLoading}
+          />
         )}
       </DetailPanel>
 
@@ -484,35 +378,27 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
       {showRelForm && (
         <RelationshipForm
           fromObject={object}
-          onClose={() => setShowRelForm(false)}
+          initialTargetType={relFormTargetType}
+          onClose={closeRelForm}
           onSuccess={() => {
-            setShowRelForm(false);
+            closeRelForm();
             queryClient.invalidateQueries({ queryKey: ["relationships"] });
-            invalidateProductLinkQueries();
-            refreshObject();
+            void refreshObject();
           }}
         />
       )}
 
-      {showLinkProduct && (
-        <LinkProductDialog
-          linkedProductIds={productLinks.map((link) => link.id)}
-          onClose={() => setShowLinkProduct(false)}
-          onLink={(productId) => linkProductMutation.mutate(productId)}
-          isLinking={linkProductMutation.isPending}
-        />
-      )}
-
-      {showChart && object && (
+      {showChart && displaySystem && (
         <SystemDiagramModal
-          system={liveSystem ?? object}
+          system={displaySystem}
           relationships={drawerRels}
           onClose={() => setShowChart(false)}
           onLayoutSave={handleLayoutSave}
           onResetLayout={handleResetLayout}
           onAddConnection={() => {
             setShowChart(false);
-            setShowRelForm(true);
+            setActiveTab("object_links");
+            openRelForm();
           }}
         />
       )}

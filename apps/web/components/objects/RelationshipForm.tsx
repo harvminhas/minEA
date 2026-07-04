@@ -14,6 +14,8 @@ interface Props {
   fromObject: MinEAObject;
   onClose: () => void;
   onSuccess: () => void;
+  /** Pre-select target object type in the link picker (e.g. data_store). */
+  initialTargetType?: string;
 }
 
 type RelDirection = "outbound" | "inverse";
@@ -198,11 +200,11 @@ function buildRelationshipOptionGroupsForTarget(fromType: string, targetType: st
   return groups;
 }
 
-export function RelationshipForm({ fromObject, onClose, onSuccess }: Props) {
+export function RelationshipForm({ fromObject, onClose, onSuccess, initialTargetType }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const [targetSearch, setTargetSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState(initialTargetType ?? "");
   const [selectedTarget, setSelectedTarget] = useState<MinEAObject | null>(null);
   const [selectedOptionKey, setSelectedOptionKey] = useState("");
 
