@@ -2,6 +2,7 @@
 
 import type { MinEAObject, Relationship } from "@minea/types";
 import { SystemDrawerSection } from "@/components/application/SystemDrawerSection";
+import { SystemFlowsSection } from "@/components/application/SystemFlowsSection";
 import { SystemLinkedObjectList } from "@/components/application/SystemLinkedObjectList";
 import {
   systemObjectCapabilityLinks,
@@ -9,10 +10,12 @@ import {
   systemObjectPlatformLinks,
   systemObjectSystemLinks,
 } from "@/lib/system-drawer-utils";
+import { flowsForSystemObjectLinksTab } from "@/lib/flow-system-utils";
 
 interface Props {
   system: MinEAObject;
   relationships: Relationship[];
+  allFlows: MinEAObject[];
   nameById: Record<string, string>;
   namesLoading?: boolean;
   canEdit?: boolean;
@@ -20,6 +23,8 @@ interface Props {
   onAddComponent?: () => void;
   onAddPlatform?: () => void;
   onAddCapability?: () => void;
+  onAddFlow?: () => void;
+  onOpenFlow?: (flowId: string) => void;
   onRemove?: (relationshipId: string) => void;
   isRemoving?: boolean;
 }
@@ -27,6 +32,7 @@ interface Props {
 export function SystemObjectLinksTab({
   system,
   relationships,
+  allFlows,
   nameById,
   namesLoading,
   canEdit,
@@ -34,6 +40,8 @@ export function SystemObjectLinksTab({
   onAddComponent,
   onAddPlatform,
   onAddCapability,
+  onAddFlow,
+  onOpenFlow,
   onRemove,
   isRemoving,
 }: Props) {
@@ -41,6 +49,7 @@ export function SystemObjectLinksTab({
   const componentLinks = systemObjectComponentLinks(system.id, relationships);
   const platformLinks = systemObjectPlatformLinks(system.id, relationships);
   const capabilityLinks = systemObjectCapabilityLinks(system.id, relationships);
+  const relatedFlows = flowsForSystemObjectLinksTab(system.id, allFlows);
 
   return (
     <div className="space-y-8">
@@ -103,6 +112,14 @@ export function SystemObjectLinksTab({
           isRemoving={isRemoving}
         />
       </SystemDrawerSection>
+
+      <SystemFlowsSection
+        flows={relatedFlows}
+        emptyLabel="No system-to-system flows linked to this system."
+        canEdit={canEdit}
+        onAdd={onAddFlow}
+        onOpenFlow={onOpenFlow}
+      />
     </div>
   );
 }

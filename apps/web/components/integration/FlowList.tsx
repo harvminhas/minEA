@@ -23,26 +23,17 @@ import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { CreateFlowPanel } from "@/components/integration/CreateFlowPanel";
 import { FlowDetail } from "@/components/integration/FlowDetail";
 import { FlowTable } from "@/components/integration/FlowTable";
-import {
-  API_CRITICALITY_LABEL,
-  API_CRITICALITY_STYLE,
-  API_STATUS_STYLE,
-} from "@/lib/api-utils";
+import { API_STATUS_STYLE } from "@/lib/api-utils";
 import {
   filterFlows,
-  flowDestinationCount,
-  flowDirectionLabel,
   flowFilterOptions,
-  flowFrequencyLabel,
-  flowProtocolLabel,
-  flowSourceCount,
+  flowProps,
 } from "@/lib/flow-list-utils";
 import {
-  FLOW_AUTH_LABEL,
-  FLOW_CRITICALITY_LABEL,
-  FLOW_PROTOCOL_LABEL,
-  flowDestinationLine,
-  flowSourceLine,
+  FLOW_MECHANISM_LABEL,
+  flowFromLine,
+  flowMechanismLabel,
+  flowToLine,
   formatFlowSubtitle,
 } from "@/lib/flow-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
@@ -113,10 +104,9 @@ function PropertyRow({
 function FlowCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: () => void }) {
   const props = (item.properties ?? {}) as IntegrationFlowProperties;
   const status = item.status ?? "planned";
-  const criticality = props.criticality ?? "low";
-  const authLabel = props.auth ? (FLOW_AUTH_LABEL[props.auth] ?? props.auth) : "—";
-  const sourceLine = flowSourceLine(props);
-  const destLine = flowDestinationLine(props);
+  const fromLine = flowFromLine(props);
+  const toLine = flowToLine(props);
+  const mechanismLabel = flowMechanismLabel(props);
 
   return (
     <div
@@ -130,7 +120,9 @@ function FlowCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: () 
           </div>
           <div className="min-w-0">
             <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{item.name}</p>
-            <p className="text-xs text-gray-400 mt-0.5 truncate">{formatFlowSubtitle(props.protocol)}</p>
+            <p className="text-xs text-gray-400 mt-0.5 truncate">
+              {formatFlowSubtitle(undefined, props.mechanism)}
+            </p>
           </div>
         </div>
         <span
@@ -144,32 +136,9 @@ function FlowCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: () 
       </div>
 
       <div className="divide-y divide-gray-100 text-xs">
-        <PropertyRow
-          label="Source"
-          value={sourceLine}
-          valueClassName={sourceLine === "—" ? "font-normal text-gray-400" : undefined}
-        />
-        <PropertyRow
-          label="Destination"
-          value={destLine}
-          valueClassName={destLine === "—" ? "font-normal text-gray-400" : undefined}
-        />
-        <PropertyRow
-          label="Auth"
-          value={authLabel}
-          valueClassName={!props.auth ? "font-normal text-gray-400" : undefined}
-        />
-        <div className="flex items-center justify-between gap-2 py-2">
-          <span className="text-gray-400 flex-shrink-0">Criticality</span>
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize flex-shrink-0",
-              API_CRITICALITY_STYLE[criticality] ?? API_CRITICALITY_STYLE.low
-            )}
-          >
-            {FLOW_CRITICALITY_LABEL[criticality] ?? API_CRITICALITY_LABEL[criticality] ?? criticality}
-          </span>
-        </div>
+        <PropertyRow label="From" value={fromLine} />
+        <PropertyRow label="To" value={toLine} />
+        <PropertyRow label="Mechanism" value={mechanismLabel} />
       </div>
 
       <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">
@@ -196,7 +165,7 @@ export function FlowList() {
 
   const [viewLayout, setViewLayout] = useState<FlowViewLayout>("table");
   const [search, setSearch] = useState("");
-  const [protocolFilter, setProtocolFilter] = useState("all");
+  const [mechanismFilter, setMechanismFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
@@ -222,11 +191,11 @@ export function FlowList() {
     () =>
       filterFlows(items, {
         search,
-        protocol: protocolFilter,
+        mechanism: mechanismFilter,
         status: statusFilter,
         owner: ownerFilter,
       }),
-    [items, search, protocolFilter, statusFilter, ownerFilter]
+    [items, search, mechanismFilter, statusFilter, ownerFilter]
   );
 
   const refresh = () => {
@@ -234,30 +203,20 @@ export function FlowList() {
   };
 
   const exportCsv = () => {
-    const header = [
-      "Name",
-      "Protocol",
-      "Direction",
-      "Sources",
-      "Destinations",
-      "Frequency",
-      "Owner",
-      "Status",
-      "Updated by",
-      "Updated",
-    ];
-    const rows = filtered.map((item) => [
+    const header = ["Name", "From", "To", "Mechanism", "Owner", "Status", "Updated by", "Updated"];
+    const rows = filtered.map((item) => {
+      const props = flowProps(item);
+      return [
         item.name,
-        flowProtocolLabel(item),
-        flowDirectionLabel(item),
-        String(flowSourceCount(item)),
-        String(flowDestinationCount(item)),
-        flowFrequencyLabel(item),
+        flowFromLine(props),
+        flowToLine(props),
+        flowMechanismLabel(props),
         item.owner ?? "",
         getStatusLabel(item.status),
         item.updated_by_name ?? "",
         formatUpdatedAgo(item.updated_at),
-      ]);
+      ];
+    });
     const csv = [header, ...rows]
       .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
       .join("\n");
@@ -315,14 +274,14 @@ export function FlowList() {
           </div>
           <FilterDropdown
             icon={ArrowLeftRight}
-            label="Protocol"
-            value={protocolFilter}
-            onChange={setProtocolFilter}
+            label="Mechanism"
+            value={mechanismFilter}
+            onChange={setMechanismFilter}
             options={[
-              { value: "all", label: "All protocols" },
-              ...filterOpts.protocols.map((p) => ({
-                value: p,
-                label: FLOW_PROTOCOL_LABEL[p] ?? p,
+              { value: "all", label: "All mechanisms" },
+              ...filterOpts.mechanisms.map((m) => ({
+                value: m,
+                label: FLOW_MECHANISM_LABEL[m as keyof typeof FLOW_MECHANISM_LABEL] ?? m,
               })),
             ]}
           />

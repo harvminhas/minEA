@@ -370,7 +370,43 @@ export interface FlowCarrierRef {
   carrier_name: string;
 }
 
+export type FlowEndpointKind =
+  | "application"
+  | "solution"
+  | "technical_capability"
+  | "component"
+  | "data_object";
+
+export interface FlowEndpointRef {
+  endpoint_id: string;
+  endpoint_name: string;
+  endpoint_kind: FlowEndpointKind;
+  /** Shown in parentheses — vendor, hosting system, etc. */
+  context_label?: string;
+}
+
+export type FlowMechanism =
+  | "api_realtime"
+  | "event_driven"
+  | "batch_scheduled"
+  | "no_code_ipaas"
+  | "manual"
+  | "file_based";
+
+export type FlowManualTrigger = "per_transaction" | "scheduled" | "ad_hoc";
+
 export interface IntegrationFlowProperties {
+  /** v2 — single from/to endpoints (preferred). */
+  from?: FlowEndpointRef;
+  to?: FlowEndpointRef;
+  mechanism?: FlowMechanism;
+  manual_owner?: string;
+  manual_trigger?: FlowManualTrigger;
+  /** Batch / scheduled or file-based flows */
+  schedule?: string;
+  /** No-code / iPaaS platform name */
+  platform?: string;
+  /** Legacy multi-endpoint model */
   direction?: "one_way" | "bidirectional" | "inbound" | "outbound";
   protocol?: string;
   format?: string;

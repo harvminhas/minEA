@@ -3,6 +3,7 @@
 import { Maximize2 } from "lucide-react";
 import type { IntegrationFlowProperties, MinEAObject } from "@minea/types";
 import { FlowDiagramThumbnail } from "@/components/integration/FlowDiagram";
+import { flowHasV2Endpoints } from "@/lib/flow-utils";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -13,11 +14,12 @@ interface Props {
 
 export function FlowDiagramPreview({ flow, onExpand, disabled }: Props) {
   const props = (flow.properties ?? {}) as IntegrationFlowProperties;
+  const hasV2 = flowHasV2Endpoints(props);
   const srcCount =
     (props.sources?.systems.length ?? 0) + (props.sources?.entities.length ?? 0);
   const dstCount =
     (props.destinations?.systems.length ?? 0) + (props.destinations?.entities.length ?? 0);
-  const hasEndpoints = srcCount > 0 || dstCount > 0;
+  const hasEndpoints = hasV2 || srcCount > 0 || dstCount > 0;
 
   return (
     <button
@@ -38,7 +40,7 @@ export function FlowDiagramPreview({ flow, onExpand, disabled }: Props) {
       ) : (
         <div className="h-[160px] bg-gray-50 flex items-center justify-center px-4">
           <p className="text-xs text-gray-400 text-center">
-            Add source and destination systems to see the flow chart
+            Add From and To endpoints to see the flow chart
           </p>
         </div>
       )}

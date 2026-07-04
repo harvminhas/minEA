@@ -32,23 +32,17 @@ import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
 import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { HistoryEntry } from "@/components/shared/EntityHistory";
 import {
-  FLOW_AUTH,
-  FLOW_CRITICALITY,
-  FLOW_DIRECTIONS,
-  FLOW_FORMATS,
-  FLOW_FREQUENCIES,
-  FLOW_PROTOCOLS,
+  FLOW_MANUAL_TRIGGER_LABEL,
+  FLOW_MECHANISMS,
+  flowFromLine,
+  flowMechanismLabel,
+  flowToLine,
   formatFlowSubtitle,
 } from "@/lib/flow-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import { cn, getStatusColor, getStatusLabel } from "@/lib/utils";
 
-const PROTOCOL_LABEL = Object.fromEntries(FLOW_PROTOCOLS.map((p) => [p.value, p.label]));
-const FORMAT_LABEL = Object.fromEntries(FLOW_FORMATS.map((f) => [f.value, f.label]));
-const FREQ_LABEL = Object.fromEntries(FLOW_FREQUENCIES.map((f) => [f.value, f.label]));
-const AUTH_LABEL = Object.fromEntries(FLOW_AUTH.map((a) => [a.value, a.label]));
-const DIRECTION_LABEL = Object.fromEntries(FLOW_DIRECTIONS.map((d) => [d.value, d.label]));
-const CRITICALITY_LABEL = Object.fromEntries(FLOW_CRITICALITY.map((c) => [c.value, c.label]));
+const MECHANISM_LABEL = Object.fromEntries(FLOW_MECHANISMS.map((m) => [m.value, m.label]));
 
 function labelFor(map: Record<string, string>, value?: string) {
   if (!value) return undefined;
@@ -273,7 +267,9 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
                 </div>
                 <div className="min-w-0">
                   <h2 className="font-semibold text-gray-900 truncate">{liveFlow.name}</h2>
-                  <p className="text-sm text-gray-400">{formatFlowSubtitle(props.protocol)}</p>
+                  <p className="text-sm text-gray-400">
+                    {formatFlowSubtitle(props.protocol, props.mechanism)}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
@@ -354,24 +350,42 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
             <DetailSection title="Properties">
               <div className="space-y-2 text-sm">
                 <OwnershipDetailRow entity={liveFlow} />
+                {(props.from || props.to) && (
+                  <>
+                    <DetailRow label="From" value={flowFromLine(props)} />
+                    <DetailRow label="To" value={flowToLine(props)} />
+                  </>
+                )}
+                {props.mechanism && (
+                  <DetailRow label="Mechanism" value={flowMechanismLabel(props)} />
+                )}
+                {props.mechanism === "manual" && props.manual_owner && (
+                  <DetailRow label="Responsible owner" value={props.manual_owner} />
+                )}
+                {props.mechanism === "manual" && props.manual_trigger && (
+                  <DetailRow
+                    label="Trigger"
+                    value={FLOW_MANUAL_TRIGGER_LABEL[props.manual_trigger] ?? props.manual_trigger}
+                  />
+                )}
+                {(props.mechanism === "batch_scheduled" || props.mechanism === "file_based") &&
+                  props.schedule && <DetailRow label="Schedule" value={props.schedule} />}
+                {props.mechanism === "no_code_ipaas" && props.platform && (
+                  <DetailRow label="Platform" value={props.platform} />
+                )}
                 {props.protocol && (
-                  <DetailRow label="Protocol" value={labelFor(PROTOCOL_LABEL, props.protocol)} />
+                  <DetailRow label="Protocol" value={labelFor(MECHANISM_LABEL, props.protocol)} />
                 )}
-                {props.format && (
-                  <DetailRow label="Format" value={labelFor(FORMAT_LABEL, props.format)} />
-                )}
+                {props.format && <DetailRow label="Format" value={props.format} />}
                 {props.frequency && (
-                  <DetailRow label="Frequency" value={labelFor(FREQ_LABEL, props.frequency)} />
+                  <DetailRow label="Frequency" value={props.frequency.replace(/_/g, " ")} />
                 )}
-                {props.auth && <DetailRow label="Auth" value={labelFor(AUTH_LABEL, props.auth)} />}
+                {props.auth && <DetailRow label="Auth" value={props.auth.replace(/_/g, " ")} />}
                 {props.direction && (
-                  <DetailRow label="Direction" value={labelFor(DIRECTION_LABEL, props.direction)} />
+                  <DetailRow label="Direction" value={props.direction.replace(/_/g, " ")} />
                 )}
                 {props.criticality && (
-                  <DetailRow
-                    label="Criticality"
-                    value={labelFor(CRITICALITY_LABEL, props.criticality)}
-                  />
+                  <DetailRow label="Criticality" value={props.criticality} />
                 )}
                 {props.data_classification && (
                   <DetailRow label="Classification" value={props.data_classification} />

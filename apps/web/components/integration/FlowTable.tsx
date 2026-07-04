@@ -4,16 +4,12 @@ import { useMemo, useState } from "react";
 import { ArrowLeftRight, ArrowUpDown } from "lucide-react";
 import { API_STATUS_STYLE } from "@/lib/api-utils";
 import {
-  flowDestinationCount,
-  flowDirectionLabel,
-  flowFrequencyLabel,
   flowProps,
   flowProtocolLabel,
-  flowSourceCount,
   sortFlows,
   type FlowSortKey,
 } from "@/lib/flow-list-utils";
-import { flowDestinationLine, flowSourceLine, INTEGRATION_LAYER_COLOR } from "@/lib/flow-utils";
+import { flowFromLine, flowToLine, INTEGRATION_LAYER_COLOR } from "@/lib/flow-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import type { MinEAObject } from "@minea/types";
 import { cn, getStatusLabel } from "@/lib/utils";
@@ -78,15 +74,13 @@ export function FlowTable({
         <thead>
           <tr>
             <SortHeader label="Name" active={sortKey === "name"} onClick={() => toggleSort("name")} />
-            <SortHeader label="Protocol" active={sortKey === "protocol"} onClick={() => toggleSort("protocol")} />
-            <SortHeader label="Direction" active={sortKey === "direction"} onClick={() => toggleSort("direction")} />
-            <SortHeader label="Sources" active={sortKey === "sources"} onClick={() => toggleSort("sources")} />
+            <SortHeader label="From" active={sortKey === "from"} onClick={() => toggleSort("from")} />
+            <SortHeader label="To" active={sortKey === "to"} onClick={() => toggleSort("to")} />
             <SortHeader
-              label="Destinations"
-              active={sortKey === "destinations"}
-              onClick={() => toggleSort("destinations")}
+              label="Mechanism"
+              active={sortKey === "mechanism"}
+              onClick={() => toggleSort("mechanism")}
             />
-            <SortHeader label="Frequency" active={sortKey === "frequency"} onClick={() => toggleSort("frequency")} />
             <SortHeader label="Owner" active={sortKey === "owner"} onClick={() => toggleSort("owner")} />
             <SortHeader label="Status" active={sortKey === "status"} onClick={() => toggleSort("status")} />
             <SortHeader label="Updated" active={sortKey === "updated"} onClick={() => toggleSort("updated")} />
@@ -96,8 +90,6 @@ export function FlowTable({
           {sorted.map((item) => {
             const props = flowProps(item);
             const status = item.status ?? "planned";
-            const srcCount = flowSourceCount(item);
-            const dstCount = flowDestinationCount(item);
 
             return (
               <tr
@@ -116,19 +108,13 @@ export function FlowTable({
                     <span className="font-medium text-gray-900 truncate">{item.name}</span>
                   </div>
                 </td>
+                <td className="px-4 py-3 text-gray-600 text-xs max-w-[140px] truncate">
+                  {flowFromLine(props)}
+                </td>
+                <td className="px-4 py-3 text-gray-600 text-xs max-w-[140px] truncate">
+                  {flowToLine(props)}
+                </td>
                 <td className="px-4 py-3 text-gray-600 text-xs">{flowProtocolLabel(item) || "—"}</td>
-                <td className="px-4 py-3 text-gray-600 text-xs capitalize">
-                  {flowDirectionLabel(item) || "—"}
-                </td>
-                <td className="px-4 py-3 text-gray-600 text-xs">
-                  {srcCount > 0 ? flowSourceLine(props) : "—"}
-                </td>
-                <td className="px-4 py-3 text-gray-600 text-xs">
-                  {dstCount > 0 ? flowDestinationLine(props) : "—"}
-                </td>
-                <td className="px-4 py-3 text-gray-600 text-xs">
-                  {flowFrequencyLabel(item) || "—"}
-                </td>
                 <td className="px-4 py-3 text-gray-600 text-xs truncate max-w-[120px]">
                   {item.owner || "—"}
                 </td>

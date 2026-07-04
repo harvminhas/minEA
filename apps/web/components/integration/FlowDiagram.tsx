@@ -27,6 +27,7 @@ import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
 import { DiagramExportButton } from "@/components/shared/DiagramExportButton";
 import { toast } from "@/hooks/use-toast";
 import type { FlowArchitectureUpdate } from "@/lib/flow-relationship-utils";
+import { flowConnectorEdgeStyle, flowHasV2Endpoints, flowUsesDashedConnector, formatFlowEndpointLabel } from "@/lib/flow-utils";
 import { cn } from "@/lib/utils";
 import type { FlowEndpointSide, IntegrationFlowProperties, MinEAObject } from "@minea/types";
 
@@ -192,6 +193,10 @@ export function buildFlowGraph(
   savedLayout?: NodeLayout
 ): { nodes: Node[]; edges: Edge[] } {
   const props = (flow.properties ?? {}) as IntegrationFlowProperties;
+  if (flowHasV2Endpoints(props) && props.from && props.to) {
+    return buildFlowGraphV2(flow, props, savedLayout);
+  }
+
   const srcs = props.sources ?? { systems: [], entities: [] };
   const dsts = props.destinations ?? { systems: [], entities: [] };
 
@@ -222,7 +227,7 @@ export function buildFlowGraph(
   const dstPos = autoPositions(dstItems.length, DST_X);
   const nodes: Node[] = [];
   const edges: Edge[] = [];
-  const edgeStyle = { stroke: "#14b8a6", strokeWidth: 1.5 };
+  const edgeStyle = flowConnectorEdgeStyle(props.mechanism);
   const marker = { type: MarkerType.ArrowClosed, color: "#14b8a6", width: 14, height: 14 };
 
   if (srcItems.length === 0) {
@@ -244,6 +249,88 @@ export function buildFlowGraph(
       edges.push({ id: `e-${item.id}`, source: "flow-center", target: item.id, type: "smoothstep", animated: true, style: edgeStyle, markerEnd: marker });
     });
   }
+
+  return { nodes, edges };
+}
+
+function buildFlowGraphV2(
+  flow: MinEAObject,
+  props: IntegrationFlowProperties,
+  savedLayout?: NodeLayout
+): { nodes: Node[]; edges: Edge[] } {
+  const from = props.from!;
+  const to = props.to!;
+  const edgeStyle = flowConnectorEdgeStyle(props.mechanism);
+  const marker = { type: MarkerType.ArrowClosed, color: "#14b8a6", width: 14, height: 14 };
+
+  function pos(id: string, auto: { x: number; y: number }) {
+    return savedLayout?.[id] ?? auto;
+  }
+
+  const fromId = `from-${from.endpoint_id}`;
+  const toId = `to-${to.endpoint_id}`;
+  const fromNodeType =
+    from.endpoint_kind === "data_object"
+      ? "entityNode"
+      : from.endpoint_kind === "component"
+        ? "entityNode"
+        : "systemNode";
+  const toNodeType =
+    to.endpoint_kind === "data_object"
+      ? "entityNode"
+      : to.endpoint_kind === "component"
+        ? "entityNode"
+        : "systemNode";
+
+  const nodes: Node[] = [
+    {
+      id: fromId,
+      type: fromNodeType,
+      position: pos(fromId, { x: 0, y: -20 }),
+      data: {
+        name: formatFlowEndpointLabel(from),
+        side: "source",
+        systemName: from.context_label,
+      },
+    },
+    {
+      id: "flow-center",
+      type: "flowCenterNode",
+      position: pos("flow-center", { x: 320, y: -60 }),
+      data: { flow, props },
+    },
+    {
+      id: toId,
+      type: toNodeType,
+      position: pos(toId, { x: 590, y: -20 }),
+      data: {
+        name: formatFlowEndpointLabel(to),
+        side: "dest",
+        systemName: to.context_label,
+      },
+    },
+  ];
+
+  const edges: Edge[] = [
+    {
+      id: `e-${fromId}`,
+      source: fromId,
+      target: "flow-center",
+      type: "smoothstep",
+      animated: !flowUsesDashedConnector(props.mechanism),
+      style: edgeStyle,
+      markerEnd: marker,
+    },
+    {
+      id: `e-${toId}`,
+      source: "flow-center",
+      target: toId,
+      type: "smoothstep",
+      animated: !flowUsesDashedConnector(props.mechanism),
+      style: edgeStyle,
+      markerEnd: marker,
+    },
+  ];
 
   return { nodes, edges };
 }

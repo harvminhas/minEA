@@ -2,13 +2,95 @@ import type {
   FlowCarrierRef,
   FlowEndpointCatalog,
   FlowEndpointEntity,
+  FlowEndpointKind,
+  FlowEndpointRef,
   FlowEndpointSide,
   FlowEntitySelection,
+  FlowMechanism,
+  FlowManualTrigger,
   FlowSystemSelection,
   IntegrationFlowProperties,
 } from "@minea/types";
 
 export const INTEGRATION_LAYER_COLOR = "#14b8a6";
+
+export const FLOW_MECHANISMS: { value: FlowMechanism; label: string }[] = [
+  { value: "api_realtime", label: "API (real-time)" },
+  { value: "event_driven", label: "Event-driven" },
+  { value: "batch_scheduled", label: "Batch / scheduled" },
+  { value: "no_code_ipaas", label: "No-code / iPaaS (Zapier, Make, etc.)" },
+  { value: "manual", label: "Manual (human-executed)" },
+  { value: "file_based", label: "File-based" },
+];
+
+export const FLOW_MANUAL_TRIGGERS: { value: FlowManualTrigger; label: string }[] = [
+  { value: "per_transaction", label: "Per transaction" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "ad_hoc", label: "Ad hoc" },
+];
+
+export const FLOW_MECHANISM_LABEL = Object.fromEntries(
+  FLOW_MECHANISMS.map((m) => [m.value, m.label])
+) as Record<FlowMechanism, string>;
+
+export const FLOW_MANUAL_TRIGGER_LABEL = Object.fromEntries(
+  FLOW_MANUAL_TRIGGERS.map((t) => [t.value, t.label])
+) as Record<FlowManualTrigger, string>;
+
+export function flowUsesDashedConnector(mechanism?: FlowMechanism): boolean {
+  return mechanism === "manual" || mechanism === "no_code_ipaas";
+}
+
+export function flowConnectorEdgeStyle(mechanism?: FlowMechanism) {
+  return {
+    stroke: "#14b8a6",
+    strokeWidth: 1.5,
+    ...(flowUsesDashedConnector(mechanism) ? { strokeDasharray: "6 4" } : {}),
+  };
+}
+
+export function formatFlowEndpointLabel(ref?: FlowEndpointRef | null): string {
+  if (!ref) return "—";
+  if (ref.context_label?.trim()) {
+    return `${ref.endpoint_name} (${ref.context_label.trim()})`;
+  }
+  return ref.endpoint_name;
+}
+
+export function flowFromLine(props: IntegrationFlowProperties): string {
+  if (props.from) return formatFlowEndpointLabel(props.from);
+  return flowSourceLine(props);
+}
+
+export function flowToLine(props: IntegrationFlowProperties): string {
+  if (props.to) return formatFlowEndpointLabel(props.to);
+  return flowDestinationLine(props);
+}
+
+export function flowMechanismLabel(props: IntegrationFlowProperties): string {
+  if (props.mechanism) return FLOW_MECHANISM_LABEL[props.mechanism] ?? props.mechanism;
+  if (props.protocol) return FLOW_PROTOCOL_LABEL[props.protocol] ?? props.protocol;
+  return "—";
+}
+
+export function flowHasV2Endpoints(props: IntegrationFlowProperties): boolean {
+  return Boolean(props.from && props.to);
+}
+
+export function encodeFlowEndpointOption(ref: FlowEndpointRef): string {
+  return `${ref.endpoint_kind}|${ref.endpoint_id}`;
+}
+
+export function decodeFlowEndpointOption(
+  value: string,
+  options: FlowEndpointRef[]
+): FlowEndpointRef | null {
+  return options.find((o) => encodeFlowEndpointOption(o) === value) ?? null;
+}
+
+export function isFlowSystemEndpointKind(kind: FlowEndpointKind): boolean {
+  return kind === "application" || kind === "solution" || kind === "technical_capability";
+}
 
 export const FLOW_PROTOCOLS = [
   { value: "rest_api", label: "REST API" },
@@ -63,8 +145,12 @@ export const FLOW_PROTOCOL_LABEL = Object.fromEntries(FLOW_PROTOCOLS.map((p) => 
 export const FLOW_AUTH_LABEL = Object.fromEntries(FLOW_AUTH.map((a) => [a.value, a.label]));
 export const FLOW_CRITICALITY_LABEL = Object.fromEntries(FLOW_CRITICALITY.map((c) => [c.value, c.label]));
 
-export function formatFlowSubtitle(protocol?: string): string {
-  const label = protocol ? (FLOW_PROTOCOL_LABEL[protocol] ?? protocol) : null;
+export function formatFlowSubtitle(protocolOrMechanism?: string, mechanism?: FlowMechanism): string {
+  if (mechanism) {
+    const label = FLOW_MECHANISM_LABEL[mechanism];
+    return label ? `Flow · ${label}` : "Flow";
+  }
+  const label = protocolOrMechanism ? (FLOW_PROTOCOL_LABEL[protocolOrMechanism] ?? protocolOrMechanism) : null;
   return label ? `Flow · ${label}` : "Flow";
 }
 

@@ -119,7 +119,7 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
       {
         label: "Flows",
         segment: "integration/flows",
-        hidden: true,
+        badge: "new",
         countSource: { kind: "objects", type: "integration_flow" },
       },
     ],

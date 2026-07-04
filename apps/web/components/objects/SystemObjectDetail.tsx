@@ -20,6 +20,8 @@ import { SystemObjectLinksTab } from "@/components/application/SystemObjectLinks
 import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
 import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { TechDebtHostKind } from "@minea/types";
+import { CreateFlowPanel } from "@/components/integration/CreateFlowPanel";
+import { FlowDetail } from "@/components/integration/FlowDetail";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { SystemDiagramModal, type NodeLayout } from "@/components/application/SystemDiagram";
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
@@ -28,7 +30,7 @@ import { invalidateSystemCaches } from "@/lib/system-capability-utils";
 import { useSystemLinkedNames } from "@/lib/use-system-linked-names";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { usePermissions } from "@/lib/use-permissions";
-import { type ApplicationProperties, type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
+import { type ApplicationProperties, type FlowEndpointRef, type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
 
 interface Props {
   objectId: string;
@@ -49,6 +51,9 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const [showRelForm, setShowRelForm] = useState(false);
   const [relFormTargetType, setRelFormTargetType] = useState<string | undefined>();
   const [showChart, setShowChart] = useState(false);
+  const [showCreateFlow, setShowCreateFlow] = useState(false);
+  const [createFlowPresetFrom, setCreateFlowPresetFrom] = useState<FlowEndpointRef | null>(null);
+  const [selectedFlow, setSelectedFlow] = useState<MinEAObject | null>(null);
   const [liveSystem, setLiveSystem] = useState<MinEAObject | null>(null);
   const liveSystemRef = useRef<MinEAObject | null>(null);
 
@@ -102,6 +107,18 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   });
 
   const productLinks = productLinksData?.items ?? [];
+
+  const { data: flowsData } = useQuery({
+    queryKey: ["objects", orgSlug, workspaceSlug, "integration_flow"],
+    enabled: !!object && (activeTab === "data" || activeTab === "object_links"),
+    queryFn: async () => {
+      const token = await getToken();
+      return objectsApi.list(orgSlug, workspaceSlug, { type: "integration_flow" }, token!);
+    },
+    staleTime: 0,
+  });
+
+  const allFlows = flowsData?.items ?? [];
 
   const deleteRelMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -215,6 +232,31 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
     setRelFormTargetType(undefined);
   };
 
+  const systemFlowEndpoint = (system: MinEAObject): FlowEndpointRef => {
+    const vendor = (system.properties as ApplicationProperties)?.vendor?.trim();
+    return {
+      endpoint_id: system.id,
+      endpoint_name: system.name,
+      endpoint_kind:
+        system.type === "solution" || system.type === "technical_capability"
+          ? system.type
+          : "application",
+      context_label: vendor || undefined,
+    };
+  };
+
+  const openCreateFlow = () => {
+    if (displaySystem) {
+      setCreateFlowPresetFrom(systemFlowEndpoint(displaySystem));
+    }
+    setShowCreateFlow(true);
+  };
+
+  const openFlowDetail = (flowId: string) => {
+    const flow = allFlows.find((f) => f.id === flowId) ?? null;
+    if (flow) setSelectedFlow(flow);
+  };
+
   if (isLoading || !object) {
     return (
       <DetailPanel
@@ -305,11 +347,14 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
           <SystemDataTab
             system={displaySystem}
             relationships={drawerRels}
+            allFlows={allFlows}
             nameById={nameById}
             namesLoading={namesLoading}
             canEdit={canEdit}
             onAddStore={() => openRelForm("data_store")}
             onAddDomain={() => openRelForm("data_domain")}
+            onAddFlow={openCreateFlow}
+            onOpenFlow={openFlowDetail}
             onRemove={(id) => deleteRelMutation.mutate(id)}
             isRemoving={deleteRelMutation.isPending}
             onRefresh={() => void refreshObject()}
@@ -320,6 +365,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
           <SystemObjectLinksTab
             system={displaySystem}
             relationships={drawerRels}
+            allFlows={allFlows}
             nameById={nameById}
             namesLoading={namesLoading}
             canEdit={canEdit}
@@ -327,6 +373,8 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
             onAddComponent={() => openRelForm("component")}
             onAddPlatform={() => openRelForm("cloud_service")}
             onAddCapability={() => openRelForm("capability")}
+            onAddFlow={openCreateFlow}
+            onOpenFlow={openFlowDetail}
             onRemove={(id) => deleteRelMutation.mutate(id)}
             isRemoving={deleteRelMutation.isPending}
           />
@@ -399,6 +447,41 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
             setShowChart(false);
             setActiveTab("object_links");
             openRelForm();
+          }}
+        />
+      )}
+
+      {showCreateFlow && (
+        <CreateFlowPanel
+          initialFrom={createFlowPresetFrom}
+          onClose={() => {
+            setShowCreateFlow(false);
+            setCreateFlowPresetFrom(null);
+          }}
+          onSuccess={() => {
+            setShowCreateFlow(false);
+            setCreateFlowPresetFrom(null);
+            queryClient.invalidateQueries({
+              queryKey: ["objects", orgSlug, workspaceSlug, "integration_flow"],
+            });
+          }}
+        />
+      )}
+
+      {selectedFlow && (
+        <FlowDetail
+          flow={selectedFlow}
+          onClose={() => setSelectedFlow(null)}
+          onDelete={() => {
+            setSelectedFlow(null);
+            queryClient.invalidateQueries({
+              queryKey: ["objects", orgSlug, workspaceSlug, "integration_flow"],
+            });
+          }}
+          onUpdate={() => {
+            queryClient.invalidateQueries({
+              queryKey: ["objects", orgSlug, workspaceSlug, "integration_flow"],
+            });
           }}
         />
       )}
