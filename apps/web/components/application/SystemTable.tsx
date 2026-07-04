@@ -9,9 +9,11 @@ import {
   systemAnnualCost,
   systemAvatarColor,
   systemCategory,
+  systemProps,
   systemVendor,
   type SystemSortKey,
 } from "@/lib/system-list-utils";
+import { systemCategoryDisplay } from "@/lib/system-category";
 import { formatUpdatedAgo, SYSTEM_STATUS_STYLE, systemStatusLabel } from "@/lib/system-utils";
 import { cn, formatCurrency, getObjectInitial } from "@/lib/utils";
 
@@ -134,6 +136,7 @@ export function SystemTable({
               const status = item.status ?? "planned";
               const cost = systemAnnualCost(item);
               const category = systemCategory(item);
+              const categoryMeta = systemCategoryDisplay(systemProps(item));
               const vendor = systemVendor(item);
               const updatedLabel = [
                 item.updated_by_name?.trim(),
@@ -165,7 +168,17 @@ export function SystemTable({
                     </button>
                   </td>
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{vendor || "—"}</td>
-                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{category || "—"}</td>
+                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                    <div className="flex flex-col gap-0.5">
+                      <span>{categoryMeta.label || category || "—"}</span>
+                      {categoryMeta.needsReview && (
+                        <span className="text-[10px] font-medium text-amber-700">Needs review</span>
+                      )}
+                      {categoryMeta.isCustomBuilt && (
+                        <span className="text-[10px] font-medium text-gray-500">Custom-built</span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-gray-700 whitespace-nowrap tabular-nums">
                     {cost != null ? formatCurrency(cost) : "—"}
                   </td>

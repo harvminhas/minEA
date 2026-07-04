@@ -1,23 +1,9 @@
 import type { ApplicationProperties, MinEAObject } from "@minea/types";
+import { formatSystemCategoryLabel, mergeCategoryOptions } from "@/lib/system-category";
 
 const AVATAR_COLORS = ["#3b82f6", "#f97316", "#16a34a", "#8b5cf6", "#0ea5e9", "#6b7280"];
 
-export const SYSTEM_CATEGORY_PRESETS = [
-  "ERP",
-  "CRM",
-  "CX",
-  "Integration",
-  "Analytics",
-  "Collaboration",
-  "Infrastructure",
-  "HR",
-  "Finance",
-];
-
-export function mergeCategoryOptions(existing: string[]): string[] {
-  const merged = new Set([...SYSTEM_CATEGORY_PRESETS, ...existing]);
-  return [...merged].sort((a, b) => a.localeCompare(b));
-}
+export { mergeCategoryOptions };
 
 export type SystemSortKey =
   | "name"
@@ -38,7 +24,8 @@ export function systemVendor(object: MinEAObject): string {
 }
 
 export function systemCategory(object: MinEAObject): string {
-  return systemProps(object).category?.trim() ?? "";
+  const props = systemProps(object);
+  return formatSystemCategoryLabel(props.category, props);
 }
 
 export function systemAnnualCost(object: MinEAObject): number | null {

@@ -9,6 +9,11 @@ from app.services.capability_map import (
     domain_name_exists,
     get_domain,
 )
+from app.services.system_properties import (
+    is_system_object_type,
+    normalize_system_properties,
+    validate_system_properties,
+)
 
 
 async def validate_object_write(
@@ -34,6 +39,22 @@ async def validate_object_write(
             existing_properties=existing_properties or {},
             existing_name=existing_name,
         )
+    elif is_system_object_type(object_type):
+        _validate_system(body, existing_properties=existing_properties or {})
+
+
+def _validate_system(
+    body: ObjectCreate | ObjectUpdate,
+    *,
+    existing_properties: dict,
+) -> None:
+    incoming = body.properties or {}
+    normalized = normalize_system_properties(incoming, existing=existing_properties)
+    validate_system_properties(normalized)
+    if isinstance(body, ObjectCreate):
+        body.properties = normalized
+    elif body.properties is not None:
+        body.properties = normalized
 
 
 async def _validate_domain(

@@ -25,6 +25,7 @@ import { ObjectForm } from "@/components/objects/ObjectForm";
 import { SystemTable } from "@/components/application/SystemTable";
 import { APPLICATION_LAYER_COLOR } from "@/lib/component-utils";
 import { usePermissions } from "@/lib/use-permissions";
+import { mergeCategoryOptions } from "@/lib/system-category";
 import {
   filterSystems,
   systemAnnualCost,
@@ -108,6 +109,10 @@ export function SystemList() {
   const items = data?.items ?? [];
 
   const filterOpts = useMemo(() => systemFilterOptions(items), [items]);
+  const categoryFilterOptions = useMemo(
+    () => mergeCategoryOptions(filterOpts.categories),
+    [filterOpts.categories]
+  );
 
   const filtered = useMemo(
     () =>
@@ -215,7 +220,7 @@ export function SystemList() {
             onChange={setCategoryFilter}
             options={[
               { value: "all", label: "All categories" },
-              ...filterOpts.categories.map((c) => ({ value: c, label: c })),
+              ...categoryFilterOptions.map((c) => ({ value: c, label: c })),
             ]}
           />
           <FilterDropdown

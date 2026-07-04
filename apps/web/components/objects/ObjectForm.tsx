@@ -31,6 +31,10 @@ import { FormDrawer, FormField, FormSection, formFieldClass } from "@/components
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { AiRoleField } from "@/components/ui/AiRoleField";
+import {
+  readSystemCategoryFields,
+  SystemCategoryFields,
+} from "@/components/application/SystemCategoryFields";
 import { aiRoleForProperties, aiRoleFromProperties, SYSTEM_OBJECT_TYPES } from "@/lib/ai-role-utils";
 import type { AiRole } from "@minea/types";
 
@@ -51,7 +55,6 @@ const TYPE_FIELDS: Record<
   ],
   application: [
     { key: "vendor", label: "Vendor", type: "text" },
-    { key: "category", label: "Category", type: "text" },
     {
       key: "hosting_model",
       label: "Hosting Model",
@@ -140,11 +143,15 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
   const enabled = useAuthQueryEnabled();
   const isEdit = !!initialValues;
   const isApplication = objectType === "application";
+  const isSystemApp = SYSTEM_OBJECT_TYPES.has(objectType);
 
   const initAppProps = (initialValues?.properties ?? {}) as ApplicationProperties;
+  const initCategoryFields = readSystemCategoryFields(initAppProps);
   const [platformId, setPlatformId] = useState(initAppProps.platform?.platform_id ?? "");
   const [selectedCapabilityIds, setSelectedCapabilityIds] = useState<string[]>([]);
   const [capSearch, setCapSearch] = useState("");
+  const [category, setCategory] = useState(initCategoryFields.category);
+  const [isCustomBuilt, setIsCustomBuilt] = useState(initCategoryFields.isCustomBuilt);
 
   const ownership = useOwnershipForm(initialValues);
 
@@ -271,6 +278,11 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       }
       const storedAiRole = aiRoleForProperties(aiRole);
       if (storedAiRole) props.ai_role = storedAiRole;
+      if (isSystemApp) {
+        if (category.trim()) props.category = category.trim();
+        else delete props.category;
+        props.is_custom_built = isCustomBuilt;
+      }
       if (isApplication) {
         props.platform = selectedPlatform;
       }
@@ -365,6 +377,17 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       </FormField>
 
       <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
+
+      {isSystemApp && (
+        <SystemCategoryFields
+          category={category}
+          onCategoryChange={setCategory}
+          isCustomBuilt={isCustomBuilt}
+          onCustomBuiltChange={setIsCustomBuilt}
+          reviewRequired={initCategoryFields.reviewRequired}
+          legacyCategory={initCategoryFields.legacyCategory}
+        />
+      )}
 
       {isApplication && (
         <>

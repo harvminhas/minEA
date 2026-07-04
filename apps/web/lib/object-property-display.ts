@@ -15,10 +15,21 @@ const PROPERTY_LABELS: Record<string, string> = {
   annual_cost: "Annual cost",
   eu_ai_act_risk_class: "EU AI Act risk class",
   autonomy_level: "Autonomy level",
+  is_custom_built: "Custom-built",
+  category_legacy: "Previous category",
+  category_review_required: "Category review",
 };
 
 /** Shown elsewhere in the system drawer or stored only for sync. */
-const HIDDEN_DETAIL_KEYS = new Set(["vendor", "annual_cost", "platform"]);
+const HIDDEN_DETAIL_KEYS = new Set([
+  "vendor",
+  "annual_cost",
+  "platform",
+  "category",
+  "category_legacy",
+  "category_review_required",
+  "is_custom_built",
+]);
 
 function titleCaseEnum(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -56,6 +67,10 @@ export function formatPropertyDisplayValue(
       ) {
         return APPLICATION_HOSTING_LABEL[String(value)] ?? titleCaseEnum(String(value));
       }
+      return titleCaseEnum(String(value));
+    case "is_custom_built":
+      return value ? "Yes — built in-house" : "No";
+    case "category":
       return titleCaseEnum(String(value));
     default:
       if (typeof value === "object") return null;

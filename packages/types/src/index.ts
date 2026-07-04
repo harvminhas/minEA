@@ -220,6 +220,24 @@ export interface CapabilityProperties {
   order_index?: number;
 }
 
+/** Functional domain categories for application-layer systems (not build origin). */
+export const SYSTEM_CATEGORY_VALUES = [
+  "Analytics",
+  "Collaboration",
+  "Commerce",
+  "CRM",
+  "CX",
+  "ERP",
+  "Finance",
+  "HR",
+  "Infrastructure",
+  "Integration",
+  "Supply Chain",
+  "Other",
+] as const;
+
+export type SystemCategory = (typeof SYSTEM_CATEGORY_VALUES)[number];
+
 export interface PlatformRef {
   platform_id: string;
   platform_name: string;
@@ -227,7 +245,14 @@ export interface PlatformRef {
 
 export interface ApplicationProperties {
   vendor?: string;
-  category?: string;
+  /** Functional domain — independent of whether the system is custom-built. */
+  category?: SystemCategory | string;
+  /** Set by migration when category was not in the allowed enum; original value preserved. */
+  category_legacy?: string;
+  /** When true, UI should prompt to pick a valid functional category. */
+  category_review_required?: boolean;
+  /** In-house / no-vendor systems — orthogonal to category (e.g. custom ERP → category ERP + is_custom_built). */
+  is_custom_built?: boolean;
   hosting_model?: "cloud" | "on_premise" | "hybrid" | "saas";
   annual_cost?: number;
   /** Enterprise platform this system is built on (synced via runs_on relationship). */

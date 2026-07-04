@@ -9,6 +9,7 @@ import {
   SYSTEM_STATUS_STYLE,
 } from "@/lib/system-utils";
 import { supportsTechDebtTab } from "@/lib/object-tech-debt";
+import { systemCategoryDisplay } from "@/lib/system-category";
 import { formatCurrency, getObjectInitial, cn } from "@/lib/utils";
 
 interface Props {
@@ -42,7 +43,7 @@ function SystemCard({
   const appProps = object.properties as ApplicationProperties;
   const platformName = appProps.platform?.platform_name ?? null;
   const vendor = props.vendor ? String(props.vendor) : null;
-  const category = props.category ? String(props.category) : null;
+  const categoryMeta = systemCategoryDisplay(appProps);
   const annualCost = props.annual_cost != null && Number(props.annual_cost) > 0
     ? Number(props.annual_cost)
     : null;
@@ -89,7 +90,17 @@ function SystemCard({
 
       {/* Key-value rows */}
       <div className="space-y-1.5 text-xs">
-        {category && <PropertyRow label="Category" value={category} />}
+        {categoryMeta.label && (
+          <PropertyRow
+            label="Category"
+            value={
+              categoryMeta.needsReview ? `${categoryMeta.label} (needs review)` : categoryMeta.label
+            }
+          />
+        )}
+        {categoryMeta.isCustomBuilt && (
+          <PropertyRow label="Custom-built" value="Yes — built in-house" />
+        )}
         {platformName && <PropertyRow label="Platform" value={platformName} />}
         {annualCost != null && (
           <PropertyRow label="Annual cost" value={formatCurrency(annualCost)} />

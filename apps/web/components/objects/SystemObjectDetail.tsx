@@ -31,6 +31,7 @@ import { systemStatusLabel, SYSTEM_STATUS_STYLE } from "@/lib/system-utils";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/lib/use-permissions";
+import { systemCategoryDisplay } from "@/lib/system-category";
 import { type ApplicationProperties, type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
 
 interface Props {
@@ -257,6 +258,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const platformFromRel = (outRels ?? []).find(
     (r) => r.type === "runs_on" && r.from_type === "application" && r.to_type === "cloud_service"
   );
+  const categoryMeta = systemCategoryDisplay(appProps);
   const detailPropertyRows = buildDetailPropertyRows(props, object.type);
 
   return (
@@ -382,6 +384,25 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
                     <span className="text-gray-900 font-medium">
                       {platformName || "Linked platform"}
                     </span>
+                  </div>
+                )}
+                {categoryMeta.label && (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-500">Category</span>
+                    <span className="text-gray-900 font-medium text-right">
+                      {categoryMeta.label}
+                      {categoryMeta.needsReview && (
+                        <span className="block text-[11px] font-medium text-amber-700 mt-0.5">
+                          Needs review — pick a functional domain when editing
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+                {categoryMeta.isCustomBuilt && (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-500">Custom-built</span>
+                    <span className="text-gray-900 font-medium">Yes — built in-house</span>
                   </div>
                 )}
                 {props.vendor != null && props.vendor !== "" && (
