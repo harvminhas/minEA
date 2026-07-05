@@ -2,14 +2,16 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Handle, MarkerType, Position, type Edge, type Node, type NodeProps, type NodeTypes } from "reactflow";
-import { Box, Braces, Layers, Plus, Server, X } from "lucide-react";
+import { Plus, Server, X } from "lucide-react";
 import { AddConsumerDialog } from "@/components/integration/AddConsumerDialog";
 import { PickProviderDialog } from "@/components/integration/PickProviderDialog";
 import type { ApiArchitectureUpdate } from "@/lib/api-relationship-utils";
 import { toast } from "@/hooks/use-toast";
-import type { ApiConsumerRef, ApiProviderRef } from "@minea/types";
+import type { ApiConsumerRef, ApiProviderRef, ObjectType } from "@minea/types";
+import { DiagramApiCenterNode, DiagramEndpointNode } from "@/components/shared/DiagramNodes";
 import { EntityFlowCanvas, type NodeLayout } from "@/components/shared/EntityFlowCanvas";
 import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
+import { apiDiagramNodeMeta } from "@/lib/diagram-node-styles";
 import {
   API_AUTH_LABEL,
   API_STYLE_LABEL,
@@ -37,28 +39,20 @@ function withEdgeLabel(
   };
 }
 
+function providerObjectType(kind: string): ObjectType {
+  if (kind === "component") return "component";
+  return "application";
+}
+
 function ProviderNode({ data, compact }: { data: { name: string; kind: string }; compact?: boolean }) {
-  if (compact) {
-    return (
-      <div className="bg-teal-50 border border-teal-200 rounded px-1.5 py-1 min-w-[72px] max-w-[88px]">
-        <Handle type="source" position={Position.Right} className="!opacity-0 !w-1 !h-1" />
-        <p className="text-[8px] font-medium text-teal-800 truncate">{data.name}</p>
-      </div>
-    );
-  }
   return (
-    <div className="bg-white border-2 border-teal-300 rounded-lg shadow-sm min-w-[160px]">
-      <Handle type="source" position={Position.Right} style={{ background: INTEGRATION_LAYER_COLOR }} />
-      <div className="px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <div className="h-5 w-5 rounded bg-teal-50 flex items-center justify-center flex-shrink-0">
-            {data.kind === "component" ? <Box size={11} className="text-teal-600" /> : <Layers size={11} className="text-teal-600" />}
-          </div>
-          <p className="text-xs font-semibold text-gray-900 truncate">{data.name}</p>
-        </div>
-        <p className="text-[9px] text-teal-600 font-medium pl-7 mt-0.5 capitalize">Provider</p>
-      </div>
-    </div>
+    <DiagramEndpointNode
+      name={data.name}
+      objectType={providerObjectType(data.kind)}
+      roleLabel="Provider"
+      compact={compact}
+      side="source"
+    />
   );
 }
 
@@ -67,45 +61,11 @@ function ApiCenterNode({ data, compact }: { data: { api: MinEAObject; props: Api
   const style = API_STYLE_LABEL[props.protocol ?? ""] ?? props.protocol ?? "API";
   const auth = props.auth ? API_AUTH_LABEL[props.auth] ?? props.auth : null;
 
-  if (compact) {
-    return (
-      <div className="bg-white border-2 border-gray-800 rounded-md overflow-hidden min-w-[68px] max-w-[80px]">
-        <Handle type="target" position={Position.Left} id="left" className="!opacity-0 !w-1 !h-1" />
-        <Handle type="target" position={Position.Right} id="right" className="!opacity-0 !w-1 !h-1" />
-        <Handle type="target" position={Position.Top} id="top" className="!opacity-0 !w-1 !h-1" />
-        <div className="h-1 bg-teal-500" />
-        <p className="text-[8px] font-bold text-gray-900 px-1 py-1 truncate text-center">{style}</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-white rounded-xl shadow-xl border-2 border-gray-800 overflow-hidden w-[220px]">
-      <Handle type="target" position={Position.Left} id="left" style={{ background: INTEGRATION_LAYER_COLOR }} />
-      <Handle type="target" position={Position.Right} id="right" style={{ background: INTEGRATION_LAYER_COLOR }} />
-      <Handle type="target" position={Position.Top} id="top" style={{ background: INTEGRATION_LAYER_COLOR }} />
-      <div className="h-1 bg-teal-500" />
-      <div className="px-4 py-3 space-y-2">
-        <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded bg-teal-50 flex items-center justify-center flex-shrink-0">
-            <Braces size={12} className="text-teal-600" />
-          </div>
-          <p className="text-sm font-bold text-gray-900 truncate">{api.name}</p>
-        </div>
-        <div className="flex flex-wrap gap-1">
-          <span className="text-[10px] bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded-full font-medium">
-            {style}
-            {props.version ? ` ${props.version}` : ""}
-          </span>
-          {auth && (
-            <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{auth}</span>
-          )}
-        </div>
-        {props.audience && (
-          <p className="text-[9px] text-gray-400 capitalize">Audience: {props.audience}</p>
-        )}
-      </div>
-    </div>
+    <DiagramApiCenterNode
+      meta={apiDiagramNodeMeta(api, style, auth)}
+      compact={compact}
+    />
   );
 }
 

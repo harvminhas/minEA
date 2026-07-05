@@ -9,6 +9,7 @@ import {
   flowProtocolLabel,
   flowSourceCount,
 } from "@/lib/flow-list-utils";
+import { flowEndpointChipLabels } from "@/lib/flow-utils";
 import { flowRelatedNameOverrides } from "@/lib/flow-relationship-utils";
 
 interface Props {
@@ -36,24 +37,7 @@ export function FlowRelationshipsTab({
     .filter(Boolean)
     .join(" · ");
 
-  const chips = [
-    ...(props.sources?.systems ?? []).map((s) => ({
-      key: `src-sys-${s.system_id}`,
-      label: s.system_name,
-    })),
-    ...(props.sources?.entities ?? []).map((e) => ({
-      key: `src-ent-${e.entity_id}`,
-      label: e.entity_name,
-    })),
-    ...(props.destinations?.systems ?? []).map((s) => ({
-      key: `dst-sys-${s.system_id}`,
-      label: s.system_name,
-    })),
-    ...(props.destinations?.entities ?? []).map((e) => ({
-      key: `dst-ent-${e.entity_id}`,
-      label: e.entity_name,
-    })),
-  ];
+  const chips = flowEndpointChipLabels(props);
 
   return (
     <EntityArchitectureRelationshipsTab

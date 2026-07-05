@@ -21,7 +21,10 @@ interface Props {
   canEdit?: boolean;
   onAddStore?: () => void;
   onAddDomain?: () => void;
-  onAddFlow?: () => void;
+  onCreateFlow?: (name: string) => void;
+  onFlowLinked?: () => void;
+  onUnlinkFlow?: (flowId: string) => void;
+  isUnlinkingFlow?: boolean;
   onOpenFlow?: (flowId: string) => void;
   onRemove?: (relationshipId: string) => void;
   isRemoving?: boolean;
@@ -37,7 +40,10 @@ export function SystemDataTab({
   canEdit,
   onAddStore,
   onAddDomain,
-  onAddFlow,
+  onCreateFlow,
+  onFlowLinked,
+  onUnlinkFlow,
+  isUnlinkingFlow,
   onOpenFlow,
   onRemove,
   isRemoving,
@@ -103,9 +109,15 @@ export function SystemDataTab({
 
       <SystemFlowsSection
         flows={relatedFlows}
+        allFlows={allFlows}
+        linkedFlowIds={relatedFlows.map((flow) => flow.id)}
         emptyLabel="No flows involving data entities for this system."
         canEdit={canEdit}
-        onAdd={onAddFlow}
+        system={system}
+        onFlowLinked={onFlowLinked}
+        onCreateFlow={onCreateFlow}
+        onUnlinkFlow={onUnlinkFlow}
+        isUnlinking={isUnlinkingFlow}
         onOpenFlow={onOpenFlow}
       />
     </div>

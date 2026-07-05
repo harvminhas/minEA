@@ -45,6 +45,8 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   initialValues?: MinEAObject;
+  initialName?: string;
+  initialProducer?: EventProducerRef | null;
   onClose: () => void;
   onSuccess: (event: MinEAObject) => void;
 }
@@ -126,7 +128,13 @@ function subscriberChipClass(sub: EventSubscriberRef) {
   return "bg-teal-50 text-teal-700 border-teal-100";
 }
 
-export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
+export function CreateEventPanel({
+  initialValues,
+  initialName = "",
+  initialProducer = null,
+  onClose,
+  onSuccess,
+}: Props) {
   const isEdit = !!initialValues;
   const init = initFromEvent(initialValues);
 
@@ -137,14 +145,16 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
   const eventsQueryKey = ["objects", orgSlug, workspaceSlug, "event"] as const;
   const [mounted, setMounted] = useState(false);
 
-  const [name, setName] = useState(init.name);
+  const [name, setName] = useState(isEdit ? init.name : initialName || init.name);
   const [description, setDescription] = useState(init.description);
   const [tags, setTags] = useState(init.tags);
   const [topic, setTopic] = useState(init.topic);
   const [version, setVersion] = useState(init.version);
   const [schemaRef, setSchemaRef] = useState(init.schemaRef);
   const [delivery, setDelivery] = useState<string>(init.delivery);
-  const [producer, setProducer] = useState<EventProducerRef | null>(init.producer);
+  const [producer, setProducer] = useState<EventProducerRef | null>(
+    isEdit ? init.producer : initialProducer ?? init.producer
+  );
   const [subscribers, setSubscribers] = useState<EventSubscriberRef[]>(init.subscribers);
   const [brokerKey, setBrokerKey] = useState(init.brokerKey);
   const [audience, setAudience] = useState<string>(init.audience);
@@ -235,33 +245,37 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
   );
 
   const canSubmit =
-    name.trim().length > 0 && topic.trim().length > 0 && !!producer && !!selectedBroker && ownership.isValid;
+    name.trim().length > 0 && topic.trim().length > 0 && !!producer && ownership.isValid;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
       if (!producer) throw new Error("Producer is required");
-      const broker = normalizeEventBrokerRef(selectedBroker);
-      if (!broker) throw new Error("Broker is required");
+
+      const broker = selectedBroker ? normalizeEventBrokerRef(selectedBroker) : null;
 
       const previousBrokerId = isEdit
         ? (((initialValues?.properties ?? {}) as EventProperties).broker?.broker_id ?? null)
         : null;
 
       const existingLayout = ((initialValues?.properties ?? {}) as EventProperties).node_layout;
-      const properties: EventProperties = {
+      const properties: Record<string, unknown> = {
         topic: topic.trim(),
         version: version.trim() || undefined,
         schema_ref: schemaRef.trim() || undefined,
         delivery: delivery as EventProperties["delivery"],
         producer,
         subscribers,
-        broker,
         audience: audience as EventProperties["audience"],
         criticality: criticality as EventProperties["criticality"],
         node_layout: Object.keys(draftLayout).length > 0 ? draftLayout : existingLayout,
       };
+      if (broker) {
+        properties.broker = broker;
+      } else if (isEdit) {
+        properties.broker = null;
+      }
 
       const body = {
         name: name.trim(),
@@ -540,16 +554,16 @@ export function CreateEventPanel({ initialValues, onClose, onSuccess }: Props) {
             <section>
               <SectionHeader>Infrastructure</SectionHeader>
               <div>
-                <FieldLabel required>Broker / transport</FieldLabel>
+                <FieldLabel>Broker / transport</FieldLabel>
                 <div className="relative">
                   <select
                     value={brokerKey}
                     onChange={(e) => setBrokerKey(e.target.value)}
                     className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 pr-8"
                   >
-                    <option value="" disabled={registeredBrokers.length === 0}>
+                    <option value="">
                       {registeredBrokers.length > 0
-                        ? "Select integration infrastructure…"
+                        ? "Not set"
                         : "No event infrastructure available"}
                     </option>
                     {registeredBrokers.length > 0 && (

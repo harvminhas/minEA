@@ -1,19 +1,27 @@
 "use client";
 
 import { Info, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface DetailPanelProps {
   onClose: () => void;
   header: React.ReactNode;
   footer?: React.ReactNode;
   children: React.ReactNode;
+  /** default: 480px — wide: up to ~840px / 60vw for rich tabs (system drawer, etc.) */
+  size?: "default" | "wide";
 }
 
-export function DetailPanel({ onClose, header, footer, children }: DetailPanelProps) {
+export function DetailPanel({ onClose, header, footer, children, size = "default" }: DetailPanelProps) {
   return (
     <>
       <div className="fixed inset-0 bg-black/20 z-[80]" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full w-[480px] bg-white shadow-xl z-[90] flex flex-col overflow-hidden">
+      <div
+        className={cn(
+          "fixed right-0 top-0 h-full bg-white shadow-xl z-[90] flex flex-col overflow-hidden",
+          size === "wide" ? "w-[min(840px,60vw)] max-w-[95vw]" : "w-[480px]"
+        )}
+      >
         {header}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">{children}</div>
         {footer}

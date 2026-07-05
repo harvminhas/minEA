@@ -166,12 +166,16 @@ export async function persistFlowArchitecture(
   const destinations = updates.destinations ?? currentProps.destinations ?? { systems: [], entities: [] };
   const carrier = updates.carrier !== undefined ? updates.carrier : (currentProps.carrier ?? null);
 
-  const properties: IntegrationFlowProperties = {
+  const properties: Record<string, unknown> = {
     ...currentProps,
     sources,
     destinations,
-    carrier: carrier ?? undefined,
   };
+  if (carrier?.carrier_id) {
+    properties.carrier = carrier;
+  } else {
+    properties.carrier = null;
+  }
 
   await syncFlowCarrierRelationship(orgSlug, workspaceSlug, flow.id, carrier, token);
 
@@ -197,6 +201,8 @@ export async function persistFlowArchitecture(
 export function flowRelatedNameOverrides(flow: MinEAObject): Record<string, string> {
   const props = (flow.properties ?? {}) as IntegrationFlowProperties;
   const names: Record<string, string> = {};
+  if (props.from) names[props.from.endpoint_id] = props.from.endpoint_name;
+  if (props.to) names[props.to.endpoint_id] = props.to.endpoint_name;
   for (const s of props.sources?.systems ?? []) names[s.system_id] = s.system_name;
   for (const e of props.sources?.entities ?? []) names[e.entity_id] = e.entity_name;
   for (const s of props.destinations?.systems ?? []) names[s.system_id] = s.system_name;

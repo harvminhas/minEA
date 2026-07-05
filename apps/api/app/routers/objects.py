@@ -282,6 +282,9 @@ async def update_object(
     for field, value in updates.items():
         if field == "properties":
             merged = {**(obj.properties or {}), **value}
+            for key, val in value.items():
+                if val is None:
+                    merged.pop(key, None)
             if merged != (obj.properties or {}):
                 field_changes["properties"] = {"old": obj.properties, "new": merged}
             obj.properties = merged

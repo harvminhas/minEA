@@ -3,7 +3,7 @@
 import { Maximize2 } from "lucide-react";
 import type { IntegrationFlowProperties, MinEAObject } from "@minea/types";
 import { FlowDiagramThumbnail } from "@/components/integration/FlowDiagram";
-import { flowHasV2Endpoints } from "@/lib/flow-utils";
+import { flowHasConfiguredEndpoints } from "@/lib/flow-utils";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -14,12 +14,7 @@ interface Props {
 
 export function FlowDiagramPreview({ flow, onExpand, disabled }: Props) {
   const props = (flow.properties ?? {}) as IntegrationFlowProperties;
-  const hasV2 = flowHasV2Endpoints(props);
-  const srcCount =
-    (props.sources?.systems.length ?? 0) + (props.sources?.entities.length ?? 0);
-  const dstCount =
-    (props.destinations?.systems.length ?? 0) + (props.destinations?.entities.length ?? 0);
-  const hasEndpoints = hasV2 || srcCount > 0 || dstCount > 0;
+  const hasEndpoints = flowHasConfiguredEndpoints(props);
 
   return (
     <button

@@ -2,6 +2,7 @@
 
 import type { MinEAObject, Relationship } from "@minea/types";
 import { SystemDrawerSection } from "@/components/application/SystemDrawerSection";
+import { SystemIntegrationLinkSection } from "@/components/application/SystemIntegrationLinkSection";
 import { SystemFlowsSection } from "@/components/application/SystemFlowsSection";
 import { SystemLinkedObjectList } from "@/components/application/SystemLinkedObjectList";
 import {
@@ -12,7 +13,7 @@ import {
   systemObjectPlatformLinks,
   systemObjectSystemLinks,
 } from "@/lib/system-drawer-utils";
-import { flowsForSystemObjectLinksTab } from "@/lib/flow-system-utils";
+import { flowIdsLinkedToSystem, flowsForSystemObjectLinksTab } from "@/lib/flow-system-utils";
 
 interface Props {
   system: MinEAObject;
@@ -25,9 +26,13 @@ interface Props {
   onAddComponent?: () => void;
   onAddPlatform?: () => void;
   onAddCapability?: () => void;
-  onAddApi?: () => void;
-  onAddEvent?: () => void;
-  onAddFlow?: () => void;
+  onCreateApi?: (name: string) => void;
+  onCreateEvent?: (name: string) => void;
+  onIntegrationLinked?: () => void;
+  onCreateFlow?: (name: string) => void;
+  onFlowLinked?: () => void;
+  onUnlinkFlow?: (flowId: string) => void;
+  isUnlinkingFlow?: boolean;
   onOpenFlow?: (flowId: string) => void;
   onRemove?: (relationshipId: string) => void;
   isRemoving?: boolean;
@@ -44,9 +49,13 @@ export function SystemObjectLinksTab({
   onAddComponent,
   onAddPlatform,
   onAddCapability,
-  onAddApi,
-  onAddEvent,
-  onAddFlow,
+  onCreateApi,
+  onCreateEvent,
+  onIntegrationLinked,
+  onCreateFlow,
+  onFlowLinked,
+  onUnlinkFlow,
+  isUnlinkingFlow,
   onOpenFlow,
   onRemove,
   isRemoving,
@@ -121,41 +130,49 @@ export function SystemObjectLinksTab({
         />
       </SystemDrawerSection>
 
-      <SystemDrawerSection
+      <SystemIntegrationLinkSection
         title="APIs"
-        count={apiLinks.length}
-        onAdd={canEdit ? onAddApi : undefined}
-      >
-        <SystemLinkedObjectList
-          links={apiLinks}
-          nameById={nameById}
-          namesLoading={namesLoading}
-          emptyLabel="No linked APIs."
-          onRemove={canEdit ? onRemove : undefined}
-          isRemoving={isRemoving}
-        />
-      </SystemDrawerSection>
+        kind="api"
+        links={apiLinks}
+        linkedObjectIds={apiLinks.map((link) => link.objectId)}
+        nameById={nameById}
+        namesLoading={namesLoading}
+        emptyLabel="No linked APIs."
+        canEdit={canEdit}
+        system={system}
+        onLinked={onIntegrationLinked}
+        onCreateNew={onCreateApi}
+        onRemove={onRemove}
+        isRemoving={isRemoving}
+      />
 
-      <SystemDrawerSection
+      <SystemIntegrationLinkSection
         title="Events"
-        count={eventLinks.length}
-        onAdd={canEdit ? onAddEvent : undefined}
-      >
-        <SystemLinkedObjectList
-          links={eventLinks}
-          nameById={nameById}
-          namesLoading={namesLoading}
-          emptyLabel="No linked events."
-          onRemove={canEdit ? onRemove : undefined}
-          isRemoving={isRemoving}
-        />
-      </SystemDrawerSection>
+        kind="event"
+        links={eventLinks}
+        linkedObjectIds={eventLinks.map((link) => link.objectId)}
+        nameById={nameById}
+        namesLoading={namesLoading}
+        emptyLabel="No linked events."
+        canEdit={canEdit}
+        system={system}
+        onLinked={onIntegrationLinked}
+        onCreateNew={onCreateEvent}
+        onRemove={onRemove}
+        isRemoving={isRemoving}
+      />
 
       <SystemFlowsSection
         flows={relatedFlows}
+        allFlows={allFlows}
+        linkedFlowIds={flowIdsLinkedToSystem(system.id, allFlows)}
         emptyLabel="No system-to-system flows linked to this system."
         canEdit={canEdit}
-        onAdd={onAddFlow}
+        system={system}
+        onFlowLinked={onFlowLinked}
+        onCreateFlow={onCreateFlow}
+        onUnlinkFlow={onUnlinkFlow}
+        isUnlinking={isUnlinkingFlow}
         onOpenFlow={onOpenFlow}
       />
     </div>

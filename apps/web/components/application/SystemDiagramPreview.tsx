@@ -1,15 +1,16 @@
 "use client";
 
 import { Maximize2 } from "lucide-react";
-import type { MinEAObject, Relationship } from "@minea/types";
 import { SystemArchitectureGraph } from "@/components/application/SystemDiagram";
-import { extractSystemDiagramLinks } from "@/lib/system-relationship-utils";
+import { extractSystemDiagramFlows, extractSystemDiagramLinks } from "@/lib/system-relationship-utils";
+import type { MinEAObject, Relationship } from "@minea/types";
 import { cn } from "@/lib/utils";
 
 interface Props {
   system: MinEAObject;
   relationships: Relationship[];
   nameById: Record<string, string>;
+  flows?: MinEAObject[];
   onExpand: () => void;
   disabled?: boolean;
   accentColor?: string;
@@ -20,12 +21,15 @@ export function SystemDiagramPreview({
   system,
   relationships,
   nameById,
+  flows = [],
   onExpand,
   disabled,
   accentColor,
   emptyHint = "No linked objects yet. Expand to add systems, components, data objects, and technology.",
 }: Props) {
-  const hasLinks = extractSystemDiagramLinks(system.id, relationships, nameById).length > 0;
+  const hasLinks =
+    extractSystemDiagramLinks(system.id, relationships, nameById).length > 0 ||
+    extractSystemDiagramFlows(system.id, flows).length > 0;
 
   return (
     <button
@@ -48,6 +52,7 @@ export function SystemDiagramPreview({
             system={system}
             relationships={relationships}
             nameById={nameById}
+            flows={flows}
             compact
             accentColor={accentColor}
           />

@@ -10,8 +10,9 @@ import {
   type NodeProps,
   type NodeTypes,
 } from "reactflow";
-import { ArrowLeftRight, ArrowRight, Braces, Box, Layers, Link2, X, Zap } from "lucide-react";
+import { ArrowLeftRight, X } from "lucide-react";
 import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
+import { DiagramLinkedObjectNode } from "@/components/shared/DiagramNodes";
 import { EntityFlowCanvas, type NodeLayout } from "@/components/shared/EntityFlowCanvas";
 
 export type { NodeLayout };
@@ -37,40 +38,6 @@ function withEdgeLabel(
     labelBgPadding: compact ? ([2, 1] as [number, number]) : ([4, 2] as [number, number]),
     labelBgBorderRadius: compact ? 2 : 4,
   };
-}
-
-function nodeAccent(type: ObjectType): { border: string; bg: string; text: string } {
-  switch (type) {
-    case "api":
-      return { border: "border-teal-300", bg: "bg-teal-50", text: "text-teal-700" };
-    case "event":
-      return { border: "border-amber-300", bg: "bg-amber-50", text: "text-amber-700" };
-    case "integration_flow":
-      return { border: "border-indigo-300", bg: "bg-indigo-50", text: "text-indigo-700" };
-    case "application":
-      return { border: "border-indigo-200", bg: "bg-indigo-50", text: "text-indigo-700" };
-    case "component":
-      return { border: "border-violet-200", bg: "bg-violet-50", text: "text-violet-700" };
-    default:
-      return { border: "border-gray-300", bg: "bg-gray-50", text: "text-gray-700" };
-  }
-}
-
-function LinkedObjectIcon({ type, size = 11 }: { type: ObjectType; size?: number }) {
-  switch (type) {
-    case "api":
-      return <Braces size={size} className="text-teal-600" />;
-    case "event":
-      return <Zap size={size} className="text-amber-600" />;
-    case "integration_flow":
-      return <ArrowRight size={size} className="text-indigo-600" />;
-    case "application":
-      return <Layers size={size} className="text-indigo-600" />;
-    case "component":
-      return <Box size={size} className="text-violet-600" />;
-    default:
-      return <Link2 size={size} className="text-gray-500" />;
-  }
 }
 
 function InfraCenterNode({
@@ -119,43 +86,13 @@ function LinkedObjectNode({
   data: { link: InfraDiagramLink };
   compact?: boolean;
 }) {
-  const accent = nodeAccent(data.link.objectType);
-  if (compact) {
-    return (
-      <div className={cn("rounded px-1.5 py-1 min-w-[68px] max-w-[84px] border", accent.bg, accent.border)}>
-        <Handle type="target" position={Position.Left} className="!opacity-0 !w-1 !h-1" />
-        <Handle type="source" position={Position.Right} className="!opacity-0 !w-1 !h-1" />
-        <p className={cn("text-[8px] font-medium truncate", accent.text)}>{data.link.name}</p>
-      </div>
-    );
-  }
-
   return (
-    <div className={cn("rounded-lg shadow-sm min-w-[150px] border-2 bg-white", accent.border)}>
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="left"
-        style={{ background: TECHNOLOGY_LAYER_COLOR }}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="right"
-        style={{ background: TECHNOLOGY_LAYER_COLOR }}
-      />
-      <div className="px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <div className={cn("h-5 w-5 rounded flex items-center justify-center flex-shrink-0", accent.bg)}>
-            <LinkedObjectIcon type={data.link.objectType} />
-          </div>
-          <p className="text-xs font-semibold text-gray-900 truncate">{data.link.name}</p>
-        </div>
-        <p className={cn("text-[9px] font-medium pl-7 mt-0.5 capitalize", accent.text)}>
-          {data.link.objectType.replace(/_/g, " ")}
-        </p>
-      </div>
-    </div>
+    <DiagramLinkedObjectNode
+      name={data.link.name}
+      objectType={data.link.objectType}
+      compact={compact}
+      handleColor={TECHNOLOGY_LAYER_COLOR}
+    />
   );
 }
 

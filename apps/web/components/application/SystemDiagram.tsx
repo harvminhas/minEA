@@ -17,28 +17,29 @@ import {
 } from "reactflow";
 import {
   Box,
-  Braces,
-  Cpu,
   Database,
   Layers,
-  Link2,
   Plus,
-  Server,
-  Target,
   X,
-  Zap,
 } from "lucide-react";
 import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
+import { DiagramFlowNode, DiagramLinkedObjectNode } from "@/components/shared/DiagramNodes";
 import { EntityFlowCanvas, type NodeLayout } from "@/components/shared/EntityFlowCanvas";
+import { flowDiagramNodeMeta } from "@/lib/diagram-node-styles";
 import { APPLICATION_LAYER_COLOR } from "@/lib/component-utils";
 import {
+  extractSystemDiagramFlows,
   extractSystemDiagramLinks,
   mergeSystemDiagramLinks,
   mergedSystemDiagramEdgeLabel,
+  systemDiagramFlowNodeId,
   systemDiagramNodeId,
+  systemDiagramPeerNodeId,
   type MergedSystemDiagramLink,
+  type SystemDiagramFlowLink,
 } from "@/lib/system-relationship-utils";
-import { OBJECT_TYPE_LABELS, type ApplicationProperties, type MinEAObject, type ObjectType, type Relationship } from "@minea/types";
+import { flowUsesDashedConnector } from "@/lib/flow-utils";
+import { OBJECT_TYPE_LABELS, type ApplicationProperties, type FlowMechanism, type MinEAObject, type ObjectType, type Relationship } from "@minea/types";
 import { cn } from "@/lib/utils";
 
 export type { NodeLayout };
@@ -57,61 +58,12 @@ function withEdgeLabel(
   };
 }
 
-function nodeAccent(type: ObjectType): { border: string; bg: string; text: string } {
-  switch (type) {
-    case "api":
-      return { border: "border-teal-300", bg: "bg-teal-50", text: "text-teal-700" };
-    case "event":
-      return { border: "border-amber-300", bg: "bg-amber-50", text: "text-amber-700" };
-    case "application":
-    case "solution":
-    case "technical_capability":
-      return { border: "border-indigo-300", bg: "bg-indigo-50", text: "text-indigo-700" };
-    case "component":
-      return { border: "border-violet-300", bg: "bg-violet-50", text: "text-violet-700" };
-    case "data_object":
-    case "data_store":
-    case "data_domain":
-      return { border: "border-amber-200", bg: "bg-amber-50", text: "text-amber-800" };
-    case "cloud_service":
-    case "model":
-    case "tool":
-    case "message_broker":
-      return { border: "border-slate-300", bg: "bg-slate-50", text: "text-slate-700" };
-    case "capability":
-      return { border: "border-blue-300", bg: "bg-blue-50", text: "text-blue-700" };
-    default:
-      return { border: "border-gray-300", bg: "bg-gray-50", text: "text-gray-700" };
-  }
-}
-
-function LinkedObjectIcon({ type, size = 11 }: { type: ObjectType; size?: number }) {
-  switch (type) {
-    case "api":
-      return <Braces size={size} className="text-teal-600" />;
-    case "event":
-      return <Zap size={size} className="text-amber-600" />;
-    case "application":
-    case "solution":
-    case "technical_capability":
-      return <Layers size={size} className="text-indigo-600" />;
-    case "component":
-      return <Box size={size} className="text-violet-600" />;
-    case "data_object":
-    case "data_store":
-    case "data_domain":
-      return <Database size={size} className="text-amber-700" />;
-    case "cloud_service":
-      return <Server size={size} className="text-slate-600" />;
-    case "model":
-    case "tool":
-    case "message_broker":
-      return <Cpu size={size} className="text-slate-600" />;
-    case "capability":
-      return <Target size={size} className="text-blue-600" />;
-    default:
-      return <Link2 size={size} className="text-gray-500" />;
-  }
+function flowEdgeStyle(mechanism?: FlowMechanism, compact?: boolean) {
+  return {
+    stroke: "#64748b",
+    strokeWidth: compact ? 1 : 1.5,
+    ...(flowUsesDashedConnector(mechanism) ? { strokeDasharray: "6 4" } : {}),
+  };
 }
 
 function SystemCenterNode({
@@ -135,6 +87,7 @@ function SystemCenterNode({
         <Handle type="source" position={Position.Left} id="left" className="!opacity-0 !w-1 !h-1" />
         <Handle type="source" position={Position.Bottom} id="bottom" className="!opacity-0 !w-1 !h-1" />
         <Handle type="target" position={Position.Top} id="top" className="!opacity-0 !w-1 !h-1" />
+        <Handle type="target" position={Position.Left} id="left-in" className="!opacity-0 !w-1 !h-1" />
         <div className="h-1" style={{ backgroundColor: data.accentColor }} />
         <p className="text-[8px] font-bold text-gray-900 px-1 py-1 truncate text-center">{data.system.name}</p>
       </div>
@@ -150,6 +103,7 @@ function SystemCenterNode({
       <Handle type="source" position={Position.Left} id="left" style={{ background: data.accentColor }} />
       <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: data.accentColor }} />
       <Handle type="target" position={Position.Top} id="top" style={{ background: data.accentColor }} />
+      <Handle type="target" position={Position.Left} id="left-in" style={{ background: data.accentColor }} />
       <div className="h-1" style={{ backgroundColor: data.accentColor }} />
       <div className="px-4 py-3 space-y-2">
         <div className="flex items-center gap-2">
@@ -164,6 +118,16 @@ function SystemCenterNode({
   );
 }
 
+function FlowLinkedNode({
+  data,
+  compact,
+}: {
+  data: { flow: MinEAObject };
+  compact?: boolean;
+}) {
+  return <DiagramFlowNode meta={flowDiagramNodeMeta(data.flow)} compact={compact} />;
+}
+
 function LinkedObjectNode({
   data,
   compact,
@@ -171,33 +135,13 @@ function LinkedObjectNode({
   data: { link: MergedSystemDiagramLink };
   compact?: boolean;
 }) {
-  const accent = nodeAccent(data.link.objectType);
-  const typeLabel = OBJECT_TYPE_LABELS[data.link.objectType] ?? data.link.objectType.replace(/_/g, " ");
-
-  if (compact) {
-    return (
-      <div className={cn("rounded px-1.5 py-1 min-w-[68px] max-w-[84px] border", accent.bg, accent.border)}>
-        <Handle type="target" position={Position.Left} className="!opacity-0 !w-1 !h-1" />
-        <Handle type="source" position={Position.Right} className="!opacity-0 !w-1 !h-1" />
-        <p className={cn("text-[8px] font-medium truncate", accent.text)}>{data.link.name}</p>
-      </div>
-    );
-  }
-
   return (
-    <div className={cn("rounded-lg shadow-sm min-w-[150px] border-2 bg-white", accent.border)}>
-      <Handle type="target" position={Position.Left} id="left" style={{ background: APPLICATION_LAYER_COLOR }} />
-      <Handle type="source" position={Position.Right} id="right" style={{ background: APPLICATION_LAYER_COLOR }} />
-      <div className="px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <div className={cn("h-5 w-5 rounded flex items-center justify-center flex-shrink-0", accent.bg)}>
-            <LinkedObjectIcon type={data.link.objectType} />
-          </div>
-          <p className="text-xs font-semibold text-gray-900 truncate">{data.link.name}</p>
-        </div>
-        <p className={cn("text-[9px] font-medium pl-7 mt-0.5", accent.text)}>{typeLabel}</p>
-      </div>
-    </div>
+    <DiagramLinkedObjectNode
+      name={data.link.name}
+      objectType={data.link.objectType}
+      compact={compact}
+      handleColor={APPLICATION_LAYER_COLOR}
+    />
   );
 }
 
@@ -213,15 +157,23 @@ const LinkedObjectNodeCompact = memo((props: NodeProps) => (
   <LinkedObjectNode data={props.data} compact />
 ));
 LinkedObjectNodeCompact.displayName = "LinkedObjectNodeCompact";
+const FlowLinkedNodeFull = memo((props: NodeProps) => <FlowLinkedNode data={props.data} />);
+FlowLinkedNodeFull.displayName = "FlowLinkedNodeFull";
+const FlowLinkedNodeCompact = memo((props: NodeProps) => (
+  <FlowLinkedNode data={props.data} compact />
+));
+FlowLinkedNodeCompact.displayName = "FlowLinkedNodeCompact";
 
 export const SYSTEM_NODE_TYPES: NodeTypes = {
   systemCenterNode: SystemCenterNodeFull,
   systemLinkedNode: LinkedObjectNodeFull,
+  systemFlowNode: FlowLinkedNodeFull,
 };
 
 export const SYSTEM_NODE_TYPES_COMPACT: NodeTypes = {
   systemCenterNode: SystemCenterNodeCompact,
   systemLinkedNode: LinkedObjectNodeCompact,
+  systemFlowNode: FlowLinkedNodeCompact,
 };
 
 function autoColumn(count: number, x: number, startY: number, step: number) {
@@ -245,6 +197,7 @@ export function buildSystemGraph(
   system: MinEAObject,
   relationships: Relationship[],
   nameById: Record<string, string>,
+  flows: MinEAObject[] = [],
   compact?: boolean,
   savedLayout?: NodeLayout,
   accentColor: string = APPLICATION_LAYER_COLOR
@@ -252,6 +205,8 @@ export function buildSystemGraph(
   const links = mergeSystemDiagramLinks(
     extractSystemDiagramLinks(system.id, relationships, nameById)
   );
+  const flowLinks = extractSystemDiagramFlows(system.id, flows);
+  const flowById = new Map(flows.map((flow) => [flow.id, flow]));
 
   const NODE_H = compact ? 32 : 68;
   const GAP = compact ? 10 : 22;
@@ -260,6 +215,8 @@ export function buildSystemGraph(
   const CENTER_Y = compact ? 48 : 0;
   const RIGHT_X = compact ? 210 : 560;
   const LEFT_X = compact ? -16 : 40;
+  const PEER_X = compact ? 300 : 820;
+  const FLOW_PEER_LEFT_X = compact ? 96 : 180;
   const BOTTOM_Y = compact ? 118 : 180;
 
   function pos(nodeId: string, objectId: string, auto: { x: number; y: number }) {
@@ -293,6 +250,46 @@ export function buildSystemGraph(
   const marker = compact
     ? undefined
     : { type: MarkerType.ArrowClosed, color: accentColor, width: 12, height: 12 };
+
+  const flowMarker = compact
+    ? undefined
+    : { type: MarkerType.ArrowClosed, color: "#64748b", width: 12, height: 12 };
+
+  function findLinkedNodeId(objectId: string): string | null {
+    const match = nodes.find(
+      (node) => node.id === systemDiagramNodeId({ objectId, direction: "outbound" }) ||
+        node.id === systemDiagramNodeId({ objectId, direction: "inbound" }) ||
+        node.id === systemDiagramPeerNodeId(objectId)
+    );
+    return match?.id ?? null;
+  }
+
+  function ensurePeerNode(
+    peer: NonNullable<SystemDiagramFlowLink["peer"]>,
+    position: { x: number; y: number }
+  ): string {
+    const existing = findLinkedNodeId(peer.objectId);
+    if (existing) return existing;
+
+    const nodeId = systemDiagramPeerNodeId(peer.objectId);
+    if (nodes.some((node) => node.id === nodeId)) return nodeId;
+
+    nodes.push({
+      id: nodeId,
+      type: "systemLinkedNode",
+      position: pos(nodeId, peer.objectId, position),
+      data: {
+        link: {
+          objectId: peer.objectId,
+          name: peer.name,
+          objectType: peer.objectType,
+          direction: "outbound",
+          relationshipTypes: [],
+        } satisfies MergedSystemDiagramLink,
+      },
+    });
+    return nodeId;
+  }
 
   function addLinkedNodes(
     group: MergedSystemDiagramLink[],
@@ -345,10 +342,18 @@ export function buildSystemGraph(
 
   const rightOutbound = outbound.filter((l) => !DATA_TECH_TYPES.has(l.objectType));
   const bottomOutbound = outbound.filter((l) => DATA_TECH_TYPES.has(l.objectType));
+  const fromFlows = flowLinks.filter((f) => f.centerRole === "from");
+  const rightColumnCount = rightOutbound.length + fromFlows.length;
+  const rightPositions = autoColumn(
+    Math.max(rightColumnCount, 1),
+    RIGHT_X,
+    CENTER_Y - ((Math.max(rightColumnCount, 1) - 1) * step) / 2,
+    step
+  );
 
   addLinkedNodes(
     rightOutbound,
-    autoColumn(rightOutbound.length, RIGHT_X, CENTER_Y - ((rightOutbound.length - 1) * step) / 2, step),
+    rightPositions.slice(0, rightOutbound.length),
     "right",
     "left",
     true
@@ -373,6 +378,113 @@ export function buildSystemGraph(
     true
   );
 
+  let rightSlot = rightOutbound.length;
+
+  for (const flowLink of fromFlows) {
+    const flow = flowById.get(flowLink.flowId);
+    if (!flow) continue;
+    const nodeId = systemDiagramFlowNodeId(flowLink.flowId);
+    const position = rightPositions[rightSlot] ?? rightPositions[rightPositions.length - 1] ?? { x: RIGHT_X, y: 0 };
+    rightSlot += 1;
+
+    nodes.push({
+      id: nodeId,
+      type: "systemFlowNode",
+      position: pos(nodeId, flowLink.flowId, position),
+      data: { flow },
+    });
+
+    const style = flowEdgeStyle(flowLink.mechanism, compact);
+    edges.push({
+      id: `e-${nodeId}-from-center`,
+      source: "system-center",
+      sourceHandle: "right",
+      target: nodeId,
+      targetHandle: "left",
+      type: "smoothstep",
+      style,
+      markerEnd: flowMarker,
+      ...withEdgeLabel("sends", compact),
+    });
+
+    if (flowLink.peer) {
+      const peerNodeId = ensurePeerNode(flowLink.peer, {
+        x: PEER_X,
+        y: position.y,
+      });
+      edges.push({
+        id: `e-${nodeId}-to-peer`,
+        source: nodeId,
+        sourceHandle: "right",
+        target: peerNodeId,
+        targetHandle: "left",
+        type: "smoothstep",
+        style,
+        markerEnd: flowMarker,
+        ...withEdgeLabel("updates", compact),
+      });
+    }
+  }
+
+  const inboundFlowCount = flowLinks.filter((f) => f.centerRole === "to").length;
+  const leftFlowPositions = autoColumn(
+    Math.max(inboundFlowCount, 1),
+    FLOW_PEER_LEFT_X,
+    CENTER_Y - ((Math.max(inboundFlowCount, 1) - 1) * step) / 2,
+    step
+  );
+
+  flowLinks
+    .filter((f) => f.centerRole === "to")
+    .forEach((flowLink, i) => {
+      const flow = flowById.get(flowLink.flowId);
+      if (!flow) return;
+      const nodeId = systemDiagramFlowNodeId(flowLink.flowId);
+      const position = leftFlowPositions[i] ?? leftFlowPositions[leftFlowPositions.length - 1] ?? {
+        x: FLOW_PEER_LEFT_X,
+        y: 0,
+      };
+
+      nodes.push({
+        id: nodeId,
+        type: "systemFlowNode",
+        position: pos(nodeId, flowLink.flowId, position),
+        data: { flow },
+      });
+
+      const style = flowEdgeStyle(flowLink.mechanism, compact);
+
+      if (flowLink.peer) {
+        const peerNodeId = ensurePeerNode(flowLink.peer, {
+          x: LEFT_X,
+          y: position.y,
+        });
+        edges.push({
+          id: `e-${peerNodeId}-to-${nodeId}`,
+          source: peerNodeId,
+          sourceHandle: "right",
+          target: nodeId,
+          targetHandle: "left",
+          type: "smoothstep",
+          style,
+          markerEnd: flowMarker,
+          ...withEdgeLabel("sends", compact),
+        });
+      }
+
+      edges.push({
+        id: `e-${nodeId}-to-center`,
+        source: nodeId,
+        sourceHandle: "right",
+        target: "system-center",
+        targetHandle: "left-in",
+        type: "smoothstep",
+        style,
+        markerEnd: flowMarker,
+        ...withEdgeLabel("updates", compact),
+      });
+    });
+
   return { nodes, edges };
 }
 
@@ -380,6 +492,7 @@ interface GraphProps {
   system: MinEAObject;
   relationships: Relationship[];
   nameById: Record<string, string>;
+  flows?: MinEAObject[];
   className?: string;
   compact?: boolean;
   accentColor?: string;
@@ -393,6 +506,7 @@ export function SystemArchitectureGraph({
   system,
   relationships,
   nameById,
+  flows = [],
   className,
   compact,
   accentColor = APPLICATION_LAYER_COLOR,
@@ -406,8 +520,17 @@ export function SystemArchitectureGraph({
   const hasCustomLayout = !!(savedLayout && Object.keys(savedLayout).length > 0);
 
   const { nodes, edges } = useMemo(
-    () => buildSystemGraph(system, relationships, nameById, compact, compact ? undefined : savedLayout, accentColor),
-    [system, relationships, nameById, compact, savedLayout, accentColor]
+    () =>
+      buildSystemGraph(
+        system,
+        relationships,
+        nameById,
+        flows,
+        compact,
+        compact ? undefined : savedLayout,
+        accentColor
+      ),
+    [system, relationships, nameById, flows, compact, savedLayout, accentColor]
   );
 
   return (
@@ -434,6 +557,7 @@ export function SystemArchitectureGraph({
 export function SystemDiagramModal({
   system,
   relationships,
+  flows = [],
   onClose,
   onLayoutSave,
   onResetLayout,
@@ -444,6 +568,7 @@ export function SystemDiagramModal({
 }: {
   system: MinEAObject;
   relationships: Relationship[];
+  flows?: MinEAObject[];
   onClose: () => void;
   onLayoutSave?: (layout: NodeLayout) => void | Promise<void>;
   onResetLayout?: () => void | Promise<void>;
@@ -489,7 +614,9 @@ export function SystemDiagramModal({
   }, [nameQueries, system.id, system.name]);
 
   const props = (liveSystem.properties ?? {}) as ApplicationProperties;
-  const linkCount = extractSystemDiagramLinks(liveSystem.id, relationships, nameById).length;
+  const linkCount =
+    extractSystemDiagramLinks(liveSystem.id, relationships, nameById).length +
+    extractSystemDiagramFlows(liveSystem.id, flows).length;
   const hasCustomLayout = !!(props.node_layout && Object.keys(props.node_layout).length > 0);
 
   const handleLayoutSave = async (layout: NodeLayout) => {
@@ -569,6 +696,7 @@ export function SystemDiagramModal({
             system={liveSystem}
             relationships={relationships}
             nameById={nameById}
+            flows={flows}
             accentColor={accentColor}
             onLayoutSave={handleLayoutSave}
             onResetLayout={handleResetLayout}

@@ -236,12 +236,16 @@ export async function persistEventArchitecture(
     updates.broker !== undefined ? updates.broker : (currentProps.broker ?? null)
   );
 
-  const properties: EventProperties = {
+  const properties: Record<string, unknown> = {
     ...currentProps,
     producer: producer ?? undefined,
     subscribers,
-    broker: broker ?? undefined,
   };
+  if (broker) {
+    properties.broker = broker;
+  } else {
+    properties.broker = null;
+  }
 
   await syncEventRelationships(
     orgSlug,
@@ -265,9 +269,9 @@ export async function persistEventArchitecture(
     ...updated,
     properties: {
       ...(updated.properties ?? {}),
-      producer: properties.producer,
-      subscribers: properties.subscribers,
-      broker: properties.broker,
+      producer: properties.producer as EventProperties["producer"],
+      subscribers: properties.subscribers as EventProperties["subscribers"],
+      broker: broker ?? undefined,
     },
   };
 }

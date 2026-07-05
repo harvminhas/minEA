@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Edit2, Trash2 } from "lucide-react";
@@ -20,13 +20,21 @@ import { SystemObjectLinksTab } from "@/components/application/SystemObjectLinks
 import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
 import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { TechDebtHostKind } from "@minea/types";
+import { CreateApiPanel } from "@/components/integration/CreateApiPanel";
+import { CreateEventPanel } from "@/components/integration/CreateEventPanel";
 import { CreateFlowPanel } from "@/components/integration/CreateFlowPanel";
 import { FlowDetail } from "@/components/integration/FlowDetail";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { SystemDiagramModal, type NodeLayout } from "@/components/application/SystemDiagram";
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
 import { excludeTechDebtRelationships } from "@/lib/relationship-display";
+import { systemFlowEndpoint, unlinkFlowFromSystem } from "@/lib/flow-system-utils";
+import {
+  systemApiProviderRef,
+  systemEventProducerRef,
+} from "@/lib/system-integration-link-utils";
 import { invalidateSystemCaches } from "@/lib/system-capability-utils";
+import { systemDataEntityLinks } from "@/lib/system-drawer-utils";
 import { useSystemLinkedNames } from "@/lib/use-system-linked-names";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { usePermissions } from "@/lib/use-permissions";
@@ -52,7 +60,12 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const [relFormTargetType, setRelFormTargetType] = useState<string | undefined>();
   const [showChart, setShowChart] = useState(false);
   const [showCreateFlow, setShowCreateFlow] = useState(false);
+  const [createFlowName, setCreateFlowName] = useState("");
   const [createFlowPresetFrom, setCreateFlowPresetFrom] = useState<FlowEndpointRef | null>(null);
+  const [showCreateApi, setShowCreateApi] = useState(false);
+  const [createApiName, setCreateApiName] = useState("");
+  const [showCreateEvent, setShowCreateEvent] = useState(false);
+  const [createEventName, setCreateEventName] = useState("");
   const [selectedFlow, setSelectedFlow] = useState<MinEAObject | null>(null);
   const [liveSystem, setLiveSystem] = useState<MinEAObject | null>(null);
   const liveSystemRef = useRef<MinEAObject | null>(null);
@@ -110,10 +123,15 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
 
   const { data: flowsData } = useQuery({
     queryKey: ["objects", orgSlug, workspaceSlug, "integration_flow"],
-    enabled: !!object && (activeTab === "data" || activeTab === "object_links"),
+    enabled: !!object,
     queryFn: async () => {
       const token = await getToken();
-      return objectsApi.list(orgSlug, workspaceSlug, { type: "integration_flow" }, token!);
+      return objectsApi.list(
+        orgSlug,
+        workspaceSlug,
+        { type: "integration_flow", page_size: 200 },
+        token!
+      );
     },
     staleTime: 0,
   });
@@ -232,25 +250,72 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
     setRelFormTargetType(undefined);
   };
 
-  const systemFlowEndpoint = (system: MinEAObject): FlowEndpointRef => {
-    const vendor = (system.properties as ApplicationProperties)?.vendor?.trim();
-    return {
-      endpoint_id: system.id,
-      endpoint_name: system.name,
-      endpoint_kind:
-        system.type === "solution" || system.type === "technical_capability"
-          ? system.type
-          : "application",
-      context_label: vendor || undefined,
-    };
-  };
+  const linkedEntityIds = useMemo(
+    () => systemDataEntityLinks(objectId, drawerRels).map((link) => link.objectId),
+    [objectId, drawerRels]
+  );
 
-  const openCreateFlow = () => {
+  const openCreateFlow = (name: string) => {
     if (displaySystem) {
       setCreateFlowPresetFrom(systemFlowEndpoint(displaySystem));
     }
+    setCreateFlowName(name);
     setShowCreateFlow(true);
   };
+
+  const closeCreateFlow = () => {
+    setShowCreateFlow(false);
+    setCreateFlowName("");
+    setCreateFlowPresetFrom(null);
+  };
+
+  const handleFlowLinked = () => {
+    queryClient.invalidateQueries({
+      queryKey: ["objects", orgSlug, workspaceSlug, "integration_flow"],
+    });
+  };
+
+  const handleIntegrationLinked = () => {
+    queryClient.invalidateQueries({ queryKey: ["relationships"] });
+    queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, "api"] });
+    queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, "event"] });
+  };
+
+  const openCreateApi = (name: string) => {
+    setCreateApiName(name);
+    setShowCreateApi(true);
+  };
+
+  const closeCreateApi = () => {
+    setShowCreateApi(false);
+    setCreateApiName("");
+  };
+
+  const openCreateEvent = (name: string) => {
+    setCreateEventName(name);
+    setShowCreateEvent(true);
+  };
+
+  const closeCreateEvent = () => {
+    setShowCreateEvent(false);
+    setCreateEventName("");
+  };
+
+  const unlinkFlowMutation = useMutation({
+    mutationFn: async (flowId: string) => {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const flow = allFlows.find((item) => item.id === flowId);
+      if (!flow) throw new Error("Flow not found");
+      return unlinkFlowFromSystem(orgSlug, workspaceSlug, flow, objectId, token);
+    },
+    onSuccess: () => {
+      handleFlowLinked();
+    },
+    onError: (err) => {
+      console.error("Failed to unlink flow:", err);
+    },
+  });
 
   const openFlowDetail = (flowId: string) => {
     const flow = allFlows.find((f) => f.id === flowId) ?? null;
@@ -260,6 +325,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   if (isLoading || !object) {
     return (
       <DetailPanel
+        size="wide"
         onClose={onClose}
         header={
           <div className="flex items-center justify-between p-6 border-b border-gray-100">
@@ -278,6 +344,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   return (
     <>
       <DetailPanel
+        size="wide"
         onClose={onClose}
         header={
           <div className="border-b border-gray-100">
@@ -338,6 +405,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
             productLinksLoading={productLinksLoading}
             relationships={drawerRels}
             nameById={nameById}
+            flows={allFlows}
             diagramRefreshing={diagramRefreshing}
             onExpandDiagram={() => setShowChart(true)}
           />
@@ -353,7 +421,10 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
             canEdit={canEdit}
             onAddStore={() => openRelForm("data_store")}
             onAddDomain={() => openRelForm("data_domain")}
-            onAddFlow={openCreateFlow}
+            onCreateFlow={openCreateFlow}
+            onFlowLinked={handleFlowLinked}
+            onUnlinkFlow={(flowId) => unlinkFlowMutation.mutate(flowId)}
+            isUnlinkingFlow={unlinkFlowMutation.isPending}
             onOpenFlow={openFlowDetail}
             onRemove={(id) => deleteRelMutation.mutate(id)}
             isRemoving={deleteRelMutation.isPending}
@@ -373,9 +444,13 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
             onAddComponent={() => openRelForm("component")}
             onAddPlatform={() => openRelForm("cloud_service")}
             onAddCapability={() => openRelForm("capability")}
-            onAddApi={() => openRelForm("api")}
-            onAddEvent={() => openRelForm("event")}
-            onAddFlow={openCreateFlow}
+            onCreateApi={openCreateApi}
+            onCreateEvent={openCreateEvent}
+            onIntegrationLinked={handleIntegrationLinked}
+            onCreateFlow={openCreateFlow}
+            onFlowLinked={handleFlowLinked}
+            onUnlinkFlow={(flowId) => unlinkFlowMutation.mutate(flowId)}
+            isUnlinkingFlow={unlinkFlowMutation.isPending}
             onOpenFlow={openFlowDetail}
             onRemove={(id) => deleteRelMutation.mutate(id)}
             isRemoving={deleteRelMutation.isPending}
@@ -442,6 +517,7 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
         <SystemDiagramModal
           system={displaySystem}
           relationships={drawerRels}
+          flows={allFlows}
           onClose={() => setShowChart(false)}
           onLayoutSave={handleLayoutSave}
           onResetLayout={handleResetLayout}
@@ -456,16 +532,35 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
       {showCreateFlow && (
         <CreateFlowPanel
           initialFrom={createFlowPresetFrom}
-          onClose={() => {
-            setShowCreateFlow(false);
-            setCreateFlowPresetFrom(null);
-          }}
+          initialName={createFlowName}
+          onClose={closeCreateFlow}
           onSuccess={() => {
-            setShowCreateFlow(false);
-            setCreateFlowPresetFrom(null);
-            queryClient.invalidateQueries({
-              queryKey: ["objects", orgSlug, workspaceSlug, "integration_flow"],
-            });
+            closeCreateFlow();
+            handleFlowLinked();
+          }}
+        />
+      )}
+
+      {showCreateApi && displaySystem && (
+        <CreateApiPanel
+          initialName={createApiName}
+          initialProvider={systemApiProviderRef(displaySystem)}
+          onClose={closeCreateApi}
+          onSuccess={() => {
+            closeCreateApi();
+            handleIntegrationLinked();
+          }}
+        />
+      )}
+
+      {showCreateEvent && displaySystem && (
+        <CreateEventPanel
+          initialName={createEventName}
+          initialProducer={systemEventProducerRef(displaySystem)}
+          onClose={closeCreateEvent}
+          onSuccess={() => {
+            closeCreateEvent();
+            handleIntegrationLinked();
           }}
         />
       )}

@@ -21,15 +21,17 @@ import {
   type NodeTypes,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { Layers, Monitor, Plus, RotateCcw, X } from "lucide-react";
+import { Plus, RotateCcw, X } from "lucide-react";
 import { AddFlowEndpointDialog } from "@/components/integration/AddFlowEndpointDialog";
 import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
 import { DiagramExportButton } from "@/components/shared/DiagramExportButton";
+import { DiagramEndpointNode, DiagramFlowNode } from "@/components/shared/DiagramNodes";
+import { flowDiagramNodeMeta } from "@/lib/diagram-node-styles";
 import { toast } from "@/hooks/use-toast";
 import type { FlowArchitectureUpdate } from "@/lib/flow-relationship-utils";
-import { flowConnectorEdgeStyle, flowHasV2Endpoints, flowUsesDashedConnector, formatFlowEndpointLabel } from "@/lib/flow-utils";
+import { flowConnectorEdgeStyle, flowDiagramEndpointSides, flowHasV2Endpoints, flowMechanismLabel, flowUsesDashedConnector, formatFlowEndpointLabel, isFlowSystemEndpointKind } from "@/lib/flow-utils";
 import { cn } from "@/lib/utils";
-import type { FlowEndpointSide, IntegrationFlowProperties, MinEAObject } from "@minea/types";
+import type { FlowEndpointKind, FlowEndpointSide, IntegrationFlowProperties, MinEAObject, ObjectType } from "@minea/types";
 
 export type NodeLayout = Record<string, { x: number; y: number }>;
 
@@ -64,125 +66,39 @@ const CRITICALITY_COLOR: Record<string, string> = {
 
 // ─── Custom React Flow node types ─────────────────────────────────────────────
 
-const SystemNode = memo(({ data }: NodeProps) => (
-  <div className="bg-white border-2 border-teal-300 rounded-lg shadow-sm" style={{ minWidth: 160 }}>
-    {data.side === "source" && (
-      <Handle type="source" position={Position.Right} style={{ background: "#14b8a6" }} />
-    )}
-    {data.side === "dest" && (
-      <Handle type="target" position={Position.Left} style={{ background: "#14b8a6" }} />
-    )}
-    <div className="px-3 py-2.5">
-      <div className="flex items-center gap-2 mb-1">
-        <div className="h-5 w-5 rounded bg-teal-50 flex items-center justify-center flex-shrink-0">
-          <Monitor size={11} className="text-teal-600" />
-        </div>
-        <p className="text-xs font-semibold text-gray-900 leading-tight truncate">{data.name}</p>
-      </div>
-      <p className="text-[9px] text-teal-600 font-medium pl-7">All entities · wildcard</p>
-    </div>
-  </div>
+function endpointObjectType(kind: FlowEndpointKind): ObjectType {
+  if (kind === "data_object") return "data_object";
+  if (kind === "component") return "component";
+  if (kind === "data_store") return "data_store";
+  if (kind === "data_domain") return "data_domain";
+  return "application";
+}
+
+const EndpointNode = memo(({ data }: NodeProps) => (
+  <DiagramEndpointNode
+    name={data.name}
+    objectType={data.objectType}
+    roleLabel={data.roleLabel}
+    subtitle={data.subtitle}
+    side={data.side}
+  />
 ));
-SystemNode.displayName = "SystemNode";
+EndpointNode.displayName = "EndpointNode";
 
-const EntityNode = memo(({ data }: NodeProps) => (
-  <div className="bg-gray-50 border border-gray-300 rounded-md shadow-sm px-3 py-2" style={{ minWidth: 140 }}>
-    {data.side === "source" && <Handle type="source" position={Position.Right} />}
-    {data.side === "dest" && <Handle type="target" position={Position.Left} />}
-    <div className="flex items-center gap-1.5">
-      <Layers size={10} className="text-gray-400 flex-shrink-0" />
-      <p className="text-xs font-medium text-gray-800 truncate">{data.name}</p>
-    </div>
-    {data.systemName && (
-      <p className="text-[9px] text-gray-400 pl-4 truncate">{data.systemName}</p>
-    )}
-  </div>
+const FlowCenterNode = memo(({ data }: NodeProps) => (
+  <DiagramFlowNode
+    meta={flowDiagramNodeMeta(data.flow as MinEAObject)}
+    variant="center"
+    targetHandles={["left"]}
+    sourceHandles={["right"]}
+  />
 ));
-EntityNode.displayName = "EntityNode";
-
-const FlowCenterNode = memo(({ data }: NodeProps) => {
-  const { flow, props } = data as { flow: MinEAObject; props: IntegrationFlowProperties };
-  const cls = props.data_classification ?? "";
-  const clsColor =
-    cls === "restricted" || cls === "pii"
-      ? "bg-red-50 text-red-700 border-red-100"
-      : cls === "confidential"
-        ? "bg-amber-50 text-amber-700 border-amber-100"
-        : "bg-gray-100 text-gray-600 border-gray-200";
-
-  return (
-    <div className="bg-white rounded-xl shadow-xl border-2 border-gray-800 overflow-hidden" style={{ width: 230 }}>
-      <Handle type="target" position={Position.Left} />
-      <Handle type="source" position={Position.Right} />
-      <div className="h-1 bg-teal-500" />
-      <div className="px-4 py-3 space-y-2.5">
-        <p className="text-sm font-bold text-gray-900 leading-tight">{flow.name}</p>
-        {(props.protocol || props.format) && (
-          <div className="flex items-center gap-1.5 bg-teal-50 border border-teal-100 rounded-md px-2.5 py-1.5">
-            <span className="text-[10px] font-semibold text-teal-700">
-              {PROTOCOL_LABEL[props.protocol ?? ""] ?? props.protocol ?? ""}
-            </span>
-            {props.format && (
-              <>
-                <span className="text-teal-300 text-[10px]">·</span>
-                <span className="text-[10px] text-teal-600 uppercase">{props.format}</span>
-              </>
-            )}
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-1.5">
-          {props.frequency && (
-            <div className="bg-gray-50 border border-gray-100 rounded px-2 py-1.5">
-              <p className="text-[8px] text-gray-400 uppercase tracking-wide">Frequency</p>
-              <p className="text-[10px] font-medium text-gray-700 mt-0.5">
-                {FREQ_LABEL[props.frequency] ?? props.frequency}
-              </p>
-            </div>
-          )}
-          {props.auth && (
-            <div className="bg-gray-50 border border-gray-100 rounded px-2 py-1.5">
-              <p className="text-[8px] text-gray-400 uppercase tracking-wide">Auth</p>
-              <p className="text-[10px] font-medium text-gray-700 mt-0.5">
-                {AUTH_LABEL[props.auth] ?? props.auth}
-              </p>
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-1">
-          {props.direction && (
-            <span className="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-1.5 py-0.5 rounded-full font-medium capitalize">
-              {props.direction.replace(/_/g, " ")}
-            </span>
-          )}
-          {props.criticality && (
-            <span className={cn(
-              "text-[9px] px-1.5 py-0.5 rounded-full font-medium capitalize border",
-              CRITICALITY_COLOR[props.criticality] ?? "bg-gray-100 text-gray-600 border-gray-200"
-            )}>
-              {props.criticality}
-            </span>
-          )}
-          {cls && (
-            <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full font-medium capitalize border", clsColor)}>
-              {cls}
-            </span>
-          )}
-        </div>
-        {flow.owner && (
-          <p className="text-[9px] text-gray-400 border-t border-gray-100 pt-1.5 truncate">
-            Owner: {flow.owner}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-});
 FlowCenterNode.displayName = "FlowCenterNode";
 
 // Stable reference — defined outside any component so React Flow never remounts nodes
 export const FLOW_NODE_TYPES: NodeTypes = {
-  systemNode: SystemNode,
-  entityNode: EntityNode,
+  systemNode: EndpointNode,
+  entityNode: EndpointNode,
   flowCenterNode: FlowCenterNode,
 };
 
@@ -200,15 +116,53 @@ export function buildFlowGraph(
   const srcs = props.sources ?? { systems: [], entities: [] };
   const dsts = props.destinations ?? { systems: [], entities: [] };
 
-  type Item = { id: string; label: string; nodeType: string; side: "source" | "dest"; systemName?: string };
+  type Item = {
+    id: string;
+    label: string;
+    nodeType: string;
+    side: "source" | "dest";
+    objectType: ObjectType;
+    roleLabel: string;
+    subtitle?: string;
+  };
 
   const srcItems: Item[] = [
-    ...srcs.systems.map((s) => ({ id: `src-sys-${s.system_id}`, label: s.system_name, nodeType: "systemNode", side: "source" as const })),
-    ...srcs.entities.map((e) => ({ id: `src-ent-${e.entity_id}`, label: e.entity_name, nodeType: "entityNode", side: "source" as const, systemName: e.system_name ?? undefined })),
+    ...srcs.systems.map((s) => ({
+      id: `src-sys-${s.system_id}`,
+      label: s.system_name,
+      nodeType: "systemNode",
+      side: "source" as const,
+      objectType: "application" as ObjectType,
+      roleLabel: "Source",
+    })),
+    ...srcs.entities.map((e) => ({
+      id: `src-ent-${e.entity_id}`,
+      label: e.entity_name,
+      nodeType: "entityNode",
+      side: "source" as const,
+      objectType: "data_object" as ObjectType,
+      roleLabel: "Source",
+      subtitle: e.system_name ?? undefined,
+    })),
   ];
   const dstItems: Item[] = [
-    ...dsts.systems.map((s) => ({ id: `dst-sys-${s.system_id}`, label: s.system_name, nodeType: "systemNode", side: "dest" as const })),
-    ...dsts.entities.map((e) => ({ id: `dst-ent-${e.entity_id}`, label: e.entity_name, nodeType: "entityNode", side: "dest" as const, systemName: e.system_name ?? undefined })),
+    ...dsts.systems.map((s) => ({
+      id: `dst-sys-${s.system_id}`,
+      label: s.system_name,
+      nodeType: "systemNode",
+      side: "dest" as const,
+      objectType: "application" as ObjectType,
+      roleLabel: "Destination",
+    })),
+    ...dsts.entities.map((e) => ({
+      id: `dst-ent-${e.entity_id}`,
+      label: e.entity_name,
+      nodeType: "entityNode",
+      side: "dest" as const,
+      objectType: "data_object" as ObjectType,
+      roleLabel: "Destination",
+      subtitle: e.system_name ?? undefined,
+    })),
   ];
 
   const NODE_H = 72, GAP = 24, CENTER_X = 320, DST_X = CENTER_X + 270;
@@ -228,13 +182,24 @@ export function buildFlowGraph(
   const nodes: Node[] = [];
   const edges: Edge[] = [];
   const edgeStyle = flowConnectorEdgeStyle(props.mechanism);
-  const marker = { type: MarkerType.ArrowClosed, color: "#14b8a6", width: 14, height: 14 };
+  const marker = { type: MarkerType.ArrowClosed, color: "#64748b", width: 14, height: 14 };
 
   if (srcItems.length === 0) {
     nodes.push({ id: "src-placeholder", type: "default", position: pos("src-placeholder", srcPos[0]!), data: { label: "No sources" }, style: { opacity: 0.4, fontSize: 11, width: 160 } });
   } else {
     srcItems.forEach((item, i) => {
-      nodes.push({ id: item.id, type: item.nodeType, position: pos(item.id, srcPos[i]!), data: { name: item.label, side: "source", systemName: item.systemName } });
+      nodes.push({
+        id: item.id,
+        type: item.nodeType,
+        position: pos(item.id, srcPos[i]!),
+        data: {
+          name: item.label,
+          side: item.side,
+          objectType: item.objectType,
+          roleLabel: item.roleLabel,
+          subtitle: item.subtitle,
+        },
+      });
       edges.push({ id: `e-${item.id}`, source: item.id, target: "flow-center", type: "smoothstep", animated: true, style: edgeStyle, markerEnd: marker });
     });
   }
@@ -245,7 +210,18 @@ export function buildFlowGraph(
     nodes.push({ id: "dst-placeholder", type: "default", position: pos("dst-placeholder", dstPos[0]!), data: { label: "No destinations" }, style: { opacity: 0.4, fontSize: 11, width: 160 } });
   } else {
     dstItems.forEach((item, i) => {
-      nodes.push({ id: item.id, type: item.nodeType, position: pos(item.id, dstPos[i]!), data: { name: item.label, side: "dest", systemName: item.systemName } });
+      nodes.push({
+        id: item.id,
+        type: item.nodeType,
+        position: pos(item.id, dstPos[i]!),
+        data: {
+          name: item.label,
+          side: item.side,
+          objectType: item.objectType,
+          roleLabel: item.roleLabel,
+          subtitle: item.subtitle,
+        },
+      });
       edges.push({ id: `e-${item.id}`, source: "flow-center", target: item.id, type: "smoothstep", animated: true, style: edgeStyle, markerEnd: marker });
     });
   }
@@ -261,7 +237,7 @@ function buildFlowGraphV2(
   const from = props.from!;
   const to = props.to!;
   const edgeStyle = flowConnectorEdgeStyle(props.mechanism);
-  const marker = { type: MarkerType.ArrowClosed, color: "#14b8a6", width: 14, height: 14 };
+  const marker = { type: MarkerType.ArrowClosed, color: "#64748b", width: 14, height: 14 };
 
   function pos(id: string, auto: { x: number; y: number }) {
     return savedLayout?.[id] ?? auto;
@@ -290,14 +266,16 @@ function buildFlowGraphV2(
       data: {
         name: formatFlowEndpointLabel(from),
         side: "source",
-        systemName: from.context_label,
+        objectType: endpointObjectType(from.endpoint_kind),
+        roleLabel: "From",
+        subtitle: from.context_label,
       },
     },
     {
       id: "flow-center",
       type: "flowCenterNode",
       position: pos("flow-center", { x: 320, y: -60 }),
-      data: { flow, props },
+      data: { flow },
     },
     {
       id: toId,
@@ -306,7 +284,9 @@ function buildFlowGraphV2(
       data: {
         name: formatFlowEndpointLabel(to),
         side: "dest",
-        systemName: to.context_label,
+        objectType: endpointObjectType(to.endpoint_kind),
+        roleLabel: "To",
+        subtitle: to.context_label,
       },
     },
   ];
@@ -339,14 +319,7 @@ function buildFlowGraphV2(
 
 export function FlowDiagramThumbnail({ flow }: { flow: MinEAObject }) {
   const props = (flow.properties ?? {}) as IntegrationFlowProperties;
-  const srcs = [
-    ...(props.sources?.systems ?? []).map((s) => ({ label: s.system_name, isSystem: true })),
-    ...(props.sources?.entities ?? []).map((e) => ({ label: e.entity_name, isSystem: false })),
-  ];
-  const dsts = [
-    ...(props.destinations?.systems ?? []).map((s) => ({ label: s.system_name, isSystem: true })),
-    ...(props.destinations?.entities ?? []).map((e) => ({ label: e.entity_name, isSystem: false })),
-  ];
+  const { sources: srcs, destinations: dsts } = flowDiagramEndpointSides(props);
 
   const MAX = 3;
   const srcShow = srcs.slice(0, MAX);
@@ -367,7 +340,7 @@ export function FlowDiagramThumbnail({ flow }: { flow: MinEAObject }) {
   function midY(idx: number, total: number) { return getBoxY(idx, total) + BH / 2; }
 
   const cMidY = CY + CH / 2;
-  const protocol = PROTOCOL_LABEL[props.protocol ?? ""] ?? props.protocol ?? "FLOW";
+  const centerLabel = flowMechanismLabel(props);
   const freq = FREQ_LABEL[props.frequency ?? ""] ?? (props.frequency ?? "");
 
   if (srcs.length === 0 && dsts.length === 0) {
@@ -407,7 +380,7 @@ export function FlowDiagramThumbnail({ flow }: { flow: MinEAObject }) {
       })()}
       <rect x={CX} y={CY} width={CW} height={CH} rx={5} fill="white" stroke="#1f2937" strokeWidth={1.5} />
       <rect x={CX} y={CY} width={CW} height={5} rx={3} fill="#14b8a6" />
-      <text x={CX + CW / 2} y={CY + 15} fontSize="7" textAnchor="middle" fill="#111827" fontWeight="bold">{protocol.length > 10 ? protocol.slice(0, 9) + "…" : protocol}</text>
+      <text x={CX + CW / 2} y={CY + 15} fontSize="7" textAnchor="middle" fill="#111827" fontWeight="bold">{centerLabel.length > 10 ? centerLabel.slice(0, 9) + "…" : centerLabel}</text>
       {freq && <text x={CX + CW / 2} y={CY + 25} fontSize="6" textAnchor="middle" fill="#6b7280">{freq.length > 12 ? freq.slice(0, 11) + "…" : freq}</text>}
       {dstShow.map((item, i) => {
         const by = getBoxY(i, dstRows), my = midY(i, dstRows);

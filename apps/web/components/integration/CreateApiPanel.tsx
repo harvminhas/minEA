@@ -45,6 +45,8 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   initialValues?: MinEAObject;
+  initialName?: string;
+  initialProvider?: ApiProviderRef | null;
   onClose: () => void;
   onSuccess: (apiId: string) => void;
 }
@@ -137,7 +139,13 @@ function consumerChipClass(consumer: ApiConsumerRef) {
   return "bg-teal-50 text-teal-700 border-teal-100";
 }
 
-export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
+export function CreateApiPanel({
+  initialValues,
+  initialName = "",
+  initialProvider = null,
+  onClose,
+  onSuccess,
+}: Props) {
   const isEdit = !!initialValues;
   const init = initFromApi(initialValues);
 
@@ -147,14 +155,16 @@ export function CreateApiPanel({ initialValues, onClose, onSuccess }: Props) {
   const enabled = useAuthQueryEnabled();
   const [mounted, setMounted] = useState(false);
 
-  const [name, setName] = useState(init.name);
+  const [name, setName] = useState(isEdit ? init.name : initialName || init.name);
   const [description, setDescription] = useState(init.description);
   const [tags, setTags] = useState(init.tags);
   const [protocol, setProtocol] = useState<string>(init.protocol);
   const [version, setVersion] = useState(init.version);
   const [baseUrl, setBaseUrl] = useState(init.baseUrl);
   const [auth, setAuth] = useState<string>(init.auth);
-  const [provider, setProvider] = useState<ApiProviderRef | null>(init.provider);
+  const [provider, setProvider] = useState<ApiProviderRef | null>(
+    isEdit ? init.provider : initialProvider ?? init.provider
+  );
   const [consumers, setConsumers] = useState<ApiConsumerRef[]>(init.consumers);
   const [gatewayKey, setGatewayKey] = useState(init.gatewayKey);
   const [audience, setAudience] = useState<string>(init.audience);

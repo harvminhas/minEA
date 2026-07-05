@@ -10,6 +10,7 @@ import type {
   FlowManualTrigger,
   FlowSystemSelection,
   IntegrationFlowProperties,
+  MinEAObject,
 } from "@minea/types";
 
 export const INTEGRATION_LAYER_COLOR = "#14b8a6";
@@ -43,7 +44,7 @@ export function flowUsesDashedConnector(mechanism?: FlowMechanism): boolean {
 
 export function flowConnectorEdgeStyle(mechanism?: FlowMechanism) {
   return {
-    stroke: "#14b8a6",
+    stroke: "#64748b",
     strokeWidth: 1.5,
     ...(flowUsesDashedConnector(mechanism) ? { strokeDasharray: "6 4" } : {}),
   };
@@ -67,6 +68,12 @@ export function flowToLine(props: IntegrationFlowProperties): string {
   return flowDestinationLine(props);
 }
 
+export function flowManualOwnerCaption(flow: MinEAObject): string | null {
+  const props = (flow.properties ?? {}) as IntegrationFlowProperties;
+  if (props.mechanism !== "manual") return null;
+  return props.manual_owner?.trim() || flow.owner?.trim() || null;
+}
+
 export function flowMechanismLabel(props: IntegrationFlowProperties): string {
   if (props.mechanism) return FLOW_MECHANISM_LABEL[props.mechanism] ?? props.mechanism;
   if (props.protocol) return FLOW_PROTOCOL_LABEL[props.protocol] ?? props.protocol;
@@ -75,6 +82,82 @@ export function flowMechanismLabel(props: IntegrationFlowProperties): string {
 
 export function flowHasV2Endpoints(props: IntegrationFlowProperties): boolean {
   return Boolean(props.from && props.to);
+}
+
+export type FlowDiagramEndpointItem = {
+  label: string;
+  isSystem: boolean;
+};
+
+export function flowDiagramEndpointItem(ref: FlowEndpointRef): FlowDiagramEndpointItem {
+  return {
+    label: formatFlowEndpointLabel(ref),
+    isSystem:
+      isFlowSystemEndpointKind(ref.endpoint_kind) || ref.endpoint_kind === "component",
+  };
+}
+
+/** Normalized source/destination lists for diagrams (v2 from/to or legacy sides). */
+export function flowDiagramEndpointSides(props: IntegrationFlowProperties): {
+  sources: FlowDiagramEndpointItem[];
+  destinations: FlowDiagramEndpointItem[];
+} {
+  if (props.from || props.to) {
+    return {
+      sources: props.from ? [flowDiagramEndpointItem(props.from)] : [],
+      destinations: props.to ? [flowDiagramEndpointItem(props.to)] : [],
+    };
+  }
+
+  return {
+    sources: [
+      ...(props.sources?.systems ?? []).map((s) => ({ label: s.system_name, isSystem: true })),
+      ...(props.sources?.entities ?? []).map((e) => ({ label: e.entity_name, isSystem: false })),
+    ],
+    destinations: [
+      ...(props.destinations?.systems ?? []).map((s) => ({ label: s.system_name, isSystem: true })),
+      ...(props.destinations?.entities ?? []).map((e) => ({ label: e.entity_name, isSystem: false })),
+    ],
+  };
+}
+
+export function flowHasConfiguredEndpoints(props: IntegrationFlowProperties): boolean {
+  const { sources, destinations } = flowDiagramEndpointSides(props);
+  return sources.length > 0 || destinations.length > 0;
+}
+
+export function flowEndpointChipLabels(
+  props: IntegrationFlowProperties
+): { key: string; label: string }[] {
+  if (props.from || props.to) {
+    return [
+      ...(props.from
+        ? [{ key: `from-${props.from.endpoint_id}`, label: formatFlowEndpointLabel(props.from) }]
+        : []),
+      ...(props.to
+        ? [{ key: `to-${props.to.endpoint_id}`, label: formatFlowEndpointLabel(props.to) }]
+        : []),
+    ];
+  }
+
+  return [
+    ...(props.sources?.systems ?? []).map((s) => ({
+      key: `src-sys-${s.system_id}`,
+      label: s.system_name,
+    })),
+    ...(props.sources?.entities ?? []).map((e) => ({
+      key: `src-ent-${e.entity_id}`,
+      label: e.entity_name,
+    })),
+    ...(props.destinations?.systems ?? []).map((s) => ({
+      key: `dst-sys-${s.system_id}`,
+      label: s.system_name,
+    })),
+    ...(props.destinations?.entities ?? []).map((e) => ({
+      key: `dst-ent-${e.entity_id}`,
+      label: e.entity_name,
+    })),
+  ];
 }
 
 export function encodeFlowEndpointOption(ref: FlowEndpointRef): string {

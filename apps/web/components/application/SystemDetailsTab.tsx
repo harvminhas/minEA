@@ -18,6 +18,7 @@ interface Props {
   productLinksLoading?: boolean;
   relationships: Relationship[];
   nameById: Record<string, string>;
+  flows?: MinEAObject[];
   diagramRefreshing?: boolean;
   onExpandDiagram: () => void;
   onEdit?: () => void;
@@ -31,6 +32,7 @@ export function SystemDetailsTab({
   productLinksLoading = false,
   relationships,
   nameById,
+  flows = [],
   diagramRefreshing = false,
   onExpandDiagram,
 }: Props) {
@@ -161,6 +163,7 @@ export function SystemDetailsTab({
             system={object}
             relationships={relationships}
             nameById={nameById}
+            flows={flows}
             onExpand={onExpandDiagram}
             disabled={diagramRefreshing}
             emptyHint="No linked objects yet. Add connections from the Data and Object links tabs."

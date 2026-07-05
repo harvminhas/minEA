@@ -48,7 +48,7 @@ function HistoryEntryRow({ entry }: { entry: HistoryEntry }) {
           <span className="font-medium">{entry.actor_name}</span> {entry.action}
         </p>
         {entry.detail && (
-          <p className="text-xs text-gray-500 mt-0.5 truncate">+ {entry.detail}</p>
+          <p className="text-xs text-gray-500 mt-0.5 whitespace-normal break-words">{entry.detail}</p>
         )}
       </div>
       <div className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">

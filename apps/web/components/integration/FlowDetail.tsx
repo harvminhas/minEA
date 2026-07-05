@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/DetailPanel";
 import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
 import { usePermissions } from "@/lib/use-permissions";
-import { ObjectForm } from "@/components/objects/ObjectForm";
+import { CreateFlowPanel } from "@/components/integration/CreateFlowPanel";
 import { FlowDiagramModal, type NodeLayout } from "@/components/integration/FlowDiagram";
 import { FlowRelationshipsTab } from "@/components/integration/FlowRelationshipsTab";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
@@ -373,6 +373,9 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
                 {props.mechanism === "no_code_ipaas" && props.platform && (
                   <DetailRow label="Platform" value={props.platform} />
                 )}
+                {props.carrier?.carrier_name && (
+                  <DetailRow label="Infrastructure" value={props.carrier.carrier_name} />
+                )}
                 {props.protocol && (
                   <DetailRow label="Protocol" value={labelFor(MECHANISM_LABEL, props.protocol)} />
                 )}
@@ -417,8 +420,7 @@ export function FlowDetail({ flow, onClose, onDelete, onUpdate }: Props) {
       )}
 
       {canEdit && showEditForm && (
-        <ObjectForm
-          objectType="integration_flow"
+        <CreateFlowPanel
           initialValues={liveFlow}
           onClose={() => setShowEditForm(false)}
           onSuccess={() => {

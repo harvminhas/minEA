@@ -3,11 +3,13 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Handle, MarkerType, Position, type Edge, type Node, type NodeProps, type NodeTypes } from "reactflow";
-import { Box, Database, Layers, Plus, Radio, X, Zap } from "lucide-react";
+import { Plus, Radio, X } from "lucide-react";
 import { AddSubscriberDialog } from "@/components/integration/AddSubscriberDialog";
 import { PickProducerDialog } from "@/components/integration/PickProducerDialog";
+import { DiagramEndpointNode, DiagramEventCenterNode } from "@/components/shared/DiagramNodes";
 import { EntityFlowCanvas, type NodeLayout } from "@/components/shared/EntityFlowCanvas";
 import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
+import { eventDiagramNodeMeta } from "@/lib/diagram-node-styles";
 import { objectsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import type { EventArchitectureUpdate } from "@/lib/event-relationship-utils";
@@ -34,72 +36,39 @@ import type {
   EventProperties,
   EventSubscriberRef,
   MinEAObject,
+  ObjectType,
 } from "@minea/types";
 import { cn } from "@/lib/utils";
 
 export type { NodeLayout };
 
+function producerObjectType(kind: string): ObjectType {
+  if (kind === "component") return "component";
+  if (kind === "data_object") return "data_object";
+  return "application";
+}
+
 function ProducerNode({ data, compact }: { data: { name: string; kind: string }; compact?: boolean }) {
-  if (compact) {
-    return (
-      <div className="bg-teal-50 border border-teal-200 rounded px-1.5 py-1 min-w-[72px] max-w-[88px]">
-        <Handle type="source" position={Position.Right} className="!opacity-0 !w-1 !h-1" />
-        <p className="text-[8px] font-medium text-teal-800 truncate">{data.name}</p>
-      </div>
-    );
-  }
-  const Icon = data.kind === "component" ? Box : data.kind === "data_object" ? Database : Layers;
   return (
-    <div className="bg-white border-2 border-teal-300 rounded-lg shadow-sm min-w-[160px]">
-      <Handle type="source" position={Position.Right} style={{ background: INTEGRATION_LAYER_COLOR }} />
-      <div className="px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <div className="h-5 w-5 rounded bg-teal-50 flex items-center justify-center flex-shrink-0">
-            <Icon size={11} className="text-teal-600" />
-          </div>
-          <p className="text-xs font-semibold text-gray-900 truncate">{data.name}</p>
-        </div>
-        <p className="text-[9px] text-teal-600 font-medium pl-7 mt-0.5">Producer</p>
-      </div>
-    </div>
+    <DiagramEndpointNode
+      name={data.name}
+      objectType={producerObjectType(data.kind)}
+      roleLabel="Producer"
+      compact={compact}
+      side="source"
+    />
   );
 }
 
 function EventCenterNode({ data, compact }: { data: { event: MinEAObject; props: EventProperties }; compact?: boolean }) {
   const { event, props } = data;
-  const topic = props.topic ?? event.name;
   const delivery = props.delivery ? EVENT_DELIVERY_LABEL[props.delivery] ?? props.delivery : null;
 
-  if (compact) {
-    return (
-      <div className="bg-white border-2 border-gray-800 rounded-md overflow-hidden min-w-[68px] max-w-[80px]">
-        <Handle type="target" position={Position.Left} className="!opacity-0 !w-1 !h-1" />
-        <Handle type="source" position={Position.Right} className="!opacity-0 !w-1 !h-1" />
-        <div className="h-1 bg-teal-500" />
-        <p className="text-[8px] font-bold text-gray-900 px-1 py-1 truncate text-center">{topic}</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-white rounded-xl shadow-xl border-2 border-gray-800 overflow-hidden w-[220px]">
-      <Handle type="target" position={Position.Left} />
-      <Handle type="source" position={Position.Right} />
-      <div className="h-1 bg-teal-500" />
-      <div className="px-4 py-3 space-y-2">
-        <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded bg-teal-50 flex items-center justify-center flex-shrink-0">
-            <Zap size={12} className="text-teal-600" />
-          </div>
-          <p className="text-sm font-bold text-gray-900 truncate">{event.name}</p>
-        </div>
-        <span className="inline-block text-[10px] bg-teal-50 text-teal-700 border border-teal-100 px-2 py-0.5 rounded-full font-medium font-mono">
-          {topic}
-          {props.version ? ` · ${props.version}` : ""}
-        </span>
-        {delivery && <p className="text-[9px] text-gray-400">{delivery}</p>}
-      </div>
-    </div>
+    <DiagramEventCenterNode
+      meta={eventDiagramNodeMeta(event, delivery)}
+      compact={compact}
+    />
   );
 }
 

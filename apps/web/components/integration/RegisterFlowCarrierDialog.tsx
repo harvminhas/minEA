@@ -12,7 +12,7 @@ import { buildIntegrationInfraProperties, INFRA_KINDS } from "@/lib/integration-
 
 interface Props {
   onClose: () => void;
-  onCreated: (carrierId: string) => void;
+  onCreated: (carrier: { id: string; name: string }) => void;
 }
 
 export function RegisterFlowCarrierDialog({ onClose, onCreated }: Props) {
@@ -69,7 +69,7 @@ export function RegisterFlowCarrierDialog({ onClose, onCreated }: Props) {
       queryClient.invalidateQueries({
         queryKey: integrationInfraToolsQueryKey(orgSlug, workspaceSlug),
       });
-      onCreated(carrier.id);
+      onCreated({ id: carrier.id, name: carrier.name });
     },
     onError: (err) =>
       setError(err instanceof Error ? err.message : "Could not create integration infrastructure"),
