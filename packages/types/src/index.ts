@@ -238,6 +238,15 @@ export const SYSTEM_CATEGORY_VALUES = [
 
 export type SystemCategory = (typeof SYSTEM_CATEGORY_VALUES)[number];
 
+/** IT governance posture — independent of functional category and build origin. */
+export const SYSTEM_GOVERNANCE_STATUS_VALUES = [
+  "sanctioned",
+  "shadow",
+  "unknown_provenance",
+] as const;
+
+export type SystemGovernanceStatus = (typeof SYSTEM_GOVERNANCE_STATUS_VALUES)[number];
+
 export interface PlatformRef {
   platform_id: string;
   platform_name: string;
@@ -253,9 +262,13 @@ export interface ApplicationProperties {
   category_review_required?: boolean;
   /** In-house / no-vendor systems — orthogonal to category (e.g. custom ERP → category ERP + is_custom_built). */
   is_custom_built?: boolean;
+  /** Whether IT formally knows about and governs this system. Defaults to sanctioned when omitted. */
+  governance_status?: SystemGovernanceStatus;
+  /** How this system entered the repository — provenance metadata, not tech debt. */
+  discovery?: string;
   hosting_model?: "cloud" | "on_premise" | "hybrid" | "saas";
   annual_cost?: number;
-  /** Enterprise platform this system is built on (synced via runs_on relationship). */
+  /** Enterprise platform this system is built on (synced via built_on relationship). */
   platform?: PlatformRef | null;
   /** How this entity relates to AI workloads. Omitted or "none" = not AI-related. */
   ai_role?: AiRole;

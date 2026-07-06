@@ -41,6 +41,14 @@ PROPERTY_LABELS: dict[str, str] = {
     "platform": "Platform",
     "vendor": "Vendor",
     "category": "Category",
+    "governance_status": "Governance status",
+    "discovery": "Discovery",
+}
+
+GOVERNANCE_STATUS_LABELS = {
+    "sanctioned": "Sanctioned",
+    "shadow": "Shadow / informal",
+    "unknown_provenance": "Unknown provenance",
 }
 
 OBJECT_TYPE_NOUN: dict[str, str] = {
@@ -86,7 +94,9 @@ def _format_property_value(key: str, value: Any) -> str | None:
         stripped = value.strip()
         if not stripped:
             return None
-        if "_" in stripped and key not in ("topic", "name", "description"):
+        if key == "governance_status":
+            return GOVERNANCE_STATUS_LABELS.get(stripped, stripped.replace("_", " ").title())
+        if "_" in stripped and key not in ("topic", "name", "description", "discovery"):
             return stripped.replace("_", " ").title()
         return stripped
     if isinstance(value, dict):

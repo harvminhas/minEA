@@ -1,9 +1,31 @@
-import type { CloudServiceProperties, MinEAObject, PlatformRef } from "@minea/types";
+import type { CloudServiceProperties, MinEAObject, ObjectType, PlatformRef, Relationship } from "@minea/types";
 import { relationshipsApi } from "@/lib/api-client";
 import { isEnterprisePlatform } from "@/lib/platform-utils";
 
-export const SYSTEM_PLATFORM_REL = "runs_on" as const;
+/** System → enterprise platform (sys built on platform). */
+export const SYSTEM_PLATFORM_REL = "built_on" as const;
+/** Component → enterprise platform. */
 export const COMPONENT_PLATFORM_REL = "built_on" as const;
+
+/** @deprecated Legacy rel type before system platforms used built_on. */
+export const LEGACY_SYSTEM_PLATFORM_REL = "runs_on" as const;
+
+export const SYSTEM_OBJECT_TYPES = new Set<ObjectType>([
+  "application",
+  "solution",
+  "technical_capability",
+]);
+
+export function isSystemObjectType(type: ObjectType | string): boolean {
+  return SYSTEM_OBJECT_TYPES.has(type as ObjectType);
+}
+
+export function isSystemPlatformRelationship(rel: Relationship, systemId: string): boolean {
+  if (rel.from_object_id !== systemId || rel.to_type !== "cloud_service") return false;
+  if (!isSystemObjectType(rel.from_type)) return false;
+  if (rel.type === SYSTEM_PLATFORM_REL) return true;
+  return rel.type === LEGACY_SYSTEM_PLATFORM_REL;
+}
 
 export function filterEnterprisePlatforms(items: MinEAObject[]): MinEAObject[] {
   return items.filter((item) =>
@@ -27,12 +49,7 @@ export async function loadSystemPlatformRef(
     { from_object_id: systemId },
     token
   );
-  const rel = rels.find(
-    (r) =>
-      r.type === SYSTEM_PLATFORM_REL &&
-      r.from_type === "application" &&
-      r.to_type === "cloud_service"
-  );
+  const rel = rels.find((r) => isSystemPlatformRelationship(r, systemId));
   if (!rel) return null;
   return { platform_id: rel.to_object_id, platform_name: "" };
 }
@@ -63,6 +80,7 @@ export async function syncSystemPlatformRelation(
   orgSlug: string,
   workspaceSlug: string,
   systemId: string,
+  systemType: ObjectType,
   platform: PlatformRef | null,
   token: string
 ): Promise<void> {
@@ -74,11 +92,7 @@ export async function syncSystemPlatformRelation(
   );
 
   for (const rel of existing) {
-    if (
-      rel.from_type === "application" &&
-      rel.type === SYSTEM_PLATFORM_REL &&
-      rel.to_type === "cloud_service"
-    ) {
+    if (isSystemPlatformRelationship(rel, systemId)) {
       await relationshipsApi.delete(orgSlug, workspaceSlug, rel.id, token);
     }
   }
@@ -90,7 +104,7 @@ export async function syncSystemPlatformRelation(
       {
         type: SYSTEM_PLATFORM_REL,
         from_object_id: systemId,
-        from_type: "application",
+        from_type: systemType,
         to_object_id: platform.platform_id,
         to_type: "cloud_service",
       },

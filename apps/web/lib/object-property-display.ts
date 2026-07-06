@@ -1,5 +1,6 @@
 import type { AiRole, ObjectType, PlatformRef } from "@minea/types";
 import { aiRoleLabel } from "@/lib/ai-role-utils";
+import { SYSTEM_GOVERNANCE_STATUS_LABELS } from "@/lib/system-governance";
 import { formatCurrency } from "@/lib/utils";
 
 const APPLICATION_HOSTING_LABEL: Record<string, string> = {
@@ -18,6 +19,8 @@ const PROPERTY_LABELS: Record<string, string> = {
   is_custom_built: "Custom-built",
   category_legacy: "Previous category",
   category_review_required: "Category review",
+  governance_status: "Governance status",
+  discovery: "Discovery",
 };
 
 /** Shown elsewhere in the system drawer or stored only for sync. */
@@ -29,6 +32,8 @@ const HIDDEN_DETAIL_KEYS = new Set([
   "category_legacy",
   "category_review_required",
   "is_custom_built",
+  "governance_status",
+  "discovery",
 ]);
 
 function titleCaseEnum(value: string): string {
@@ -72,6 +77,10 @@ export function formatPropertyDisplayValue(
       return value ? "Yes — built in-house" : "No";
     case "category":
       return titleCaseEnum(String(value));
+    case "governance_status":
+      return SYSTEM_GOVERNANCE_STATUS_LABELS[value as keyof typeof SYSTEM_GOVERNANCE_STATUS_LABELS] ?? titleCaseEnum(String(value));
+    case "discovery":
+      return String(value);
     default:
       if (typeof value === "object") return null;
       if (typeof value === "boolean") return value ? "Yes" : "No";

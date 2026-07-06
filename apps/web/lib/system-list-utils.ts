@@ -1,5 +1,10 @@
 import type { ApplicationProperties, MinEAObject } from "@minea/types";
 import { formatSystemCategoryLabel, mergeCategoryOptions } from "@/lib/system-category";
+import {
+  systemDiscovery,
+  systemGovernanceLabel,
+  systemGovernanceStatus,
+} from "@/lib/system-governance";
 
 const AVATAR_COLORS = ["#3b82f6", "#f97316", "#16a34a", "#8b5cf6", "#0ea5e9", "#6b7280"];
 
@@ -9,6 +14,7 @@ export type SystemSortKey =
   | "name"
   | "vendor"
   | "category"
+  | "governance"
   | "cost"
   | "capabilities"
   | "owner"
@@ -26,6 +32,18 @@ export function systemVendor(object: MinEAObject): string {
 export function systemCategory(object: MinEAObject): string {
   const props = systemProps(object);
   return formatSystemCategoryLabel(props.category, props);
+}
+
+export function systemGovernance(object: MinEAObject): string {
+  return systemGovernanceLabel(systemProps(object));
+}
+
+export function systemGovernanceValue(object: MinEAObject): ReturnType<typeof systemGovernanceStatus> {
+  return systemGovernanceStatus(systemProps(object));
+}
+
+export function systemDiscoveryNote(object: MinEAObject): string {
+  return systemDiscovery(systemProps(object));
 }
 
 export function systemAnnualCost(object: MinEAObject): number | null {
@@ -47,6 +65,7 @@ export function filterSystems(
   opts: {
     search: string;
     category: string;
+    governance: string;
     status: string;
     owner: string;
   }
@@ -56,13 +75,24 @@ export function filterSystems(
     if (q) {
       const vendor = systemVendor(item).toLowerCase();
       const category = systemCategory(item).toLowerCase();
-      if (!item.name.toLowerCase().includes(q) && !vendor.includes(q) && !category.includes(q)) {
+      const governance = systemGovernance(item).toLowerCase();
+      const discovery = systemDiscoveryNote(item).toLowerCase();
+      if (
+        !item.name.toLowerCase().includes(q) &&
+        !vendor.includes(q) &&
+        !category.includes(q) &&
+        !governance.includes(q) &&
+        !discovery.includes(q)
+      ) {
         return false;
       }
     }
     if (opts.category !== "all") {
       const cat = systemCategory(item);
       if (cat !== opts.category) return false;
+    }
+    if (opts.governance !== "all") {
+      if (systemGovernanceValue(item) !== opts.governance) return false;
     }
     if (opts.status !== "all" && (item.status ?? "planned") !== opts.status) return false;
     if (opts.owner !== "all") {
@@ -90,6 +120,9 @@ export function sortSystems(
         break;
       case "category":
         cmp = systemCategory(a).localeCompare(systemCategory(b));
+        break;
+      case "governance":
+        cmp = systemGovernance(a).localeCompare(systemGovernance(b));
         break;
       case "cost":
         cmp = (systemAnnualCost(a) ?? 0) - (systemAnnualCost(b) ?? 0);

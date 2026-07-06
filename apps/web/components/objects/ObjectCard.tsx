@@ -10,6 +10,12 @@ import {
 } from "@/lib/system-utils";
 import { supportsTechDebtTab } from "@/lib/object-tech-debt";
 import { systemCategoryDisplay } from "@/lib/system-category";
+import {
+  governanceStatusBadgeClass,
+  systemDiscovery,
+  systemGovernanceLabel,
+  systemGovernanceStatus,
+} from "@/lib/system-governance";
 import { formatCurrency, getObjectInitial, cn } from "@/lib/utils";
 
 interface Props {
@@ -44,6 +50,8 @@ function SystemCard({
   const platformName = appProps.platform?.platform_name ?? null;
   const vendor = props.vendor ? String(props.vendor) : null;
   const categoryMeta = systemCategoryDisplay(appProps);
+  const governance = systemGovernanceStatus(appProps);
+  const discoveryNote = systemDiscovery(appProps);
   const annualCost = props.annual_cost != null && Number(props.annual_cost) > 0
     ? Number(props.annual_cost)
     : null;
@@ -72,6 +80,16 @@ function SystemCard({
           </div>
         </div>
         <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          {governance !== "sanctioned" && (
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] font-semibold border",
+                governanceStatusBadgeClass(governance)
+              )}
+            >
+              {systemGovernanceLabel(appProps)}
+            </span>
+          )}
           {openDebt > 0 && (
             <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold bg-red-50 text-red-700 border border-red-100">
               {openDebt} debt
@@ -90,6 +108,10 @@ function SystemCard({
 
       {/* Key-value rows */}
       <div className="space-y-1.5 text-xs">
+        {governance !== "sanctioned" && (
+          <PropertyRow label="Governance" value={systemGovernanceLabel(appProps)} />
+        )}
+        {discoveryNote && <PropertyRow label="Discovery" value={discoveryNote} />}
         {categoryMeta.label && (
           <PropertyRow
             label="Category"

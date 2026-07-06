@@ -50,6 +50,7 @@ function mapSnapshotToState(snapshot: {
     capabilities_without_system_count?: number;
     products_without_capabilities_count?: number;
     capabilities_without_owner_count?: number;
+    shadow_system_count?: number;
   };
 }): WorkspaceDashboardState {
   const m = snapshot.metrics;
@@ -70,6 +71,7 @@ function mapSnapshotToState(snapshot: {
       capabilitiesWithoutSystemCount: m.capabilities_without_system_count ?? 0,
       productsWithoutCapabilitiesCount: m.products_without_capabilities_count ?? 0,
       capabilitiesWithoutOwnerCount: m.capabilities_without_owner_count ?? 0,
+      shadowSystemCount: m.shadow_system_count ?? 0,
     },
   };
 }

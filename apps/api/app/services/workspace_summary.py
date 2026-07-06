@@ -56,6 +56,22 @@ async def _count_table(
     return int(result.scalar_one() or 0)
 
 
+async def _count_shadow_systems(
+    db: AsyncSession, workspace_id: UUID, org_id: UUID
+) -> int:
+    result = await db.execute(
+        select(func.count())
+        .select_from(MinEAObject)
+        .where(
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.org_id == org_id,
+            MinEAObject.type.in_(SYSTEM_TYPES),
+            MinEAObject.properties["governance_status"].astext == "shadow",
+        )
+    )
+    return int(result.scalar_one() or 0)
+
+
 async def _gap_counts(
     db: AsyncSession, workspace_id: UUID, org_id: UUID
 ) -> tuple[int, int, int, int]:
@@ -118,6 +134,7 @@ async def fetch_workspace_summary(
         process_count,
         journey_count,
         gap_counts,
+        shadow_system_count,
     ) = await asyncio.gather(
         _count_objects(db, workspace_id, org_id, object_type="business_domain"),
         _count_objects(db, workspace_id, org_id, object_type="capability"),
@@ -127,6 +144,7 @@ async def fetch_workspace_summary(
         _count_table(db, Process, workspace_id, org_id),
         _count_table(db, CustomerJourney, workspace_id, org_id),
         _gap_counts(db, workspace_id, org_id),
+        _count_shadow_systems(db, workspace_id, org_id),
     )
 
     (
@@ -149,4 +167,5 @@ async def fetch_workspace_summary(
         capabilities_without_system_count=capabilities_without_system_count,
         products_without_capabilities_count=products_without_capabilities_count,
         capabilities_without_owner_count=capabilities_without_owner_count,
+        shadow_system_count=shadow_system_count,
     )

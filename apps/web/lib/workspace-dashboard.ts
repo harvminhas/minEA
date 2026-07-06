@@ -16,6 +16,7 @@ export interface WorkspaceMetrics {
   capabilitiesWithoutSystemCount: number;
   productsWithoutCapabilitiesCount: number;
   capabilitiesWithoutOwnerCount: number;
+  shadowSystemCount: number;
 }
 
 export type ViewStatusTone = "healthy" | "action" | "needs";
@@ -212,9 +213,11 @@ export function metricCardStates(metrics: WorkspaceMetrics): {
   const systemsSubtext =
     metrics.systemCount === 0
       ? "none yet"
-      : metrics.capabilitiesWithoutSystemCount > 0
-        ? `${metrics.capabilitiesWithoutSystemCount} capability ${plural(metrics.capabilitiesWithoutSystemCount, "gap")}`
-        : "all connected";
+      : metrics.shadowSystemCount > 0
+        ? `${metrics.shadowSystemCount} shadow ${plural(metrics.shadowSystemCount, "system")}`
+        : metrics.capabilitiesWithoutSystemCount > 0
+          ? `${metrics.capabilitiesWithoutSystemCount} capability ${plural(metrics.capabilitiesWithoutSystemCount, "gap")}`
+          : "all connected";
 
   const productsSubtext =
     metrics.productCount === 0
@@ -253,6 +256,7 @@ export function gapDedupeKey(title: string): string {
   if (t.includes("capabilit") && t.includes("system")) return "capabilities-without-system";
   if (t.includes("capabilit") && t.includes("owner")) return "capabilities-without-owner";
   if (t.includes("product") && t.includes("capabilit")) return "products-without-capabilities";
+  if (t.includes("shadow") && t.includes("system")) return "shadow-systems";
   if (t.includes("investment") && t.includes("unlink")) return "investments-unlinked";
   if (t.includes("capability map not started")) return "map-not-started";
   if (t.includes("no capabilities defined")) return "no-capabilities";
@@ -340,6 +344,19 @@ export function buildStructuralGaps(metrics: WorkspaceMetrics): StructuralGap[] 
     });
   }
 
+  if (metrics.shadowSystemCount > 0) {
+    gaps.push({
+      id: "shadow-systems",
+      key: "shadow-systems",
+      title: `${metrics.shadowSystemCount} shadow ${plural(metrics.shadowSystemCount, "system")} not formally tracked by IT`,
+      subtitle: "Governance · ghost IT",
+      severity: "medium",
+      badgeLabel: `${metrics.shadowSystemCount} shadow ${plural(metrics.shadowSystemCount, "system")}`,
+      description:
+        "Systems discovered outside IT's sanctioned inventory — review and classify when ready.",
+    });
+  }
+
   return gaps;
 }
 
@@ -365,6 +382,11 @@ export function buildStructuralSummary(metrics: WorkspaceMetrics): string | null
   if (metrics.productsWithoutCapabilitiesCount > 0) {
     parts.push(
       `${metrics.productsWithoutCapabilitiesCount} ${plural(metrics.productsWithoutCapabilitiesCount, "product")} without capability links`
+    );
+  }
+  if (metrics.shadowSystemCount > 0) {
+    parts.push(
+      `${metrics.shadowSystemCount} shadow ${plural(metrics.shadowSystemCount, "system")} in the estate`
     );
   }
 

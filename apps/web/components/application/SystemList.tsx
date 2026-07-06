@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   CheckCircle2,
@@ -11,6 +12,7 @@ import {
   Loader2,
   Plus,
   Search,
+  Shield,
   Tag,
   User,
 } from "lucide-react";
@@ -26,10 +28,12 @@ import { SystemTable } from "@/components/application/SystemTable";
 import { APPLICATION_LAYER_COLOR } from "@/lib/component-utils";
 import { usePermissions } from "@/lib/use-permissions";
 import { mergeCategoryOptions } from "@/lib/system-category";
+import { governanceFilterOptions } from "@/lib/system-governance";
 import {
   filterSystems,
   systemAnnualCost,
   systemCategory,
+  systemGovernance,
   systemFilterOptions,
   systemVendor,
 } from "@/lib/system-list-utils";
@@ -58,11 +62,26 @@ function FilterDropdown({
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
 }) {
+  const selected = options.find((o) => o.value === value);
+  const isActive = value !== "all";
+  const displayText = isActive && selected ? selected.label : label;
+
   return (
-    <label className="relative inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white pl-2.5 pr-2 py-1.5 cursor-pointer hover:border-gray-300 hover:bg-gray-50/80 transition-colors">
-      <Icon size={14} className="text-gray-500 shrink-0" />
-      <span className="text-sm font-medium text-gray-700">{label}</span>
-      <ChevronDown size={14} className="text-gray-400 shrink-0" />
+    <label
+      className={cn(
+        "relative inline-flex items-center gap-1.5 rounded-full border pl-2.5 pr-2 py-1.5 cursor-pointer transition-colors",
+        isActive
+          ? "border-indigo-300 bg-indigo-50/70 hover:bg-indigo-50"
+          : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/80"
+      )}
+    >
+      <Icon size={14} className={cn("shrink-0", isActive ? "text-indigo-600" : "text-gray-500")} />
+      <span
+        className={cn("text-sm font-medium", isActive ? "text-indigo-800" : "text-gray-700")}
+      >
+        {displayText}
+      </span>
+      <ChevronDown size={14} className={cn("shrink-0", isActive ? "text-indigo-400" : "text-gray-400")} />
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -80,6 +99,25 @@ function FilterDropdown({
 }
 
 export function SystemList() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="animate-spin text-indigo-500" size={28} />
+        </div>
+      }
+    >
+      <SystemListContent />
+    </Suspense>
+  );
+}
+
+function SystemListContent() {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const initialGovernance = searchParams.get("governance") ?? "all";
+
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
@@ -89,6 +127,12 @@ export function SystemList() {
   const [viewLayout, setViewLayout] = useState<SystemViewLayout>("table");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [governanceFilter, setGovernanceFilter] = useState(
+    initialGovernance === "all" ||
+      governanceFilterOptions().some((o) => o.value === initialGovernance)
+      ? initialGovernance
+      : "all"
+  );
   const [statusFilter, setStatusFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [selectedObject, setSelectedObject] = useState<MinEAObject | null>(null);
@@ -119,10 +163,28 @@ export function SystemList() {
       filterSystems(items, {
         search,
         category: categoryFilter,
+        governance: governanceFilter,
         status: statusFilter,
         owner: ownerFilter,
       }),
-    [items, search, categoryFilter, statusFilter, ownerFilter]
+    [items, search, categoryFilter, governanceFilter, statusFilter, ownerFilter]
+  );
+
+  const activeGovernanceLabel = useMemo(() => {
+    if (governanceFilter === "all") return null;
+    return governanceFilterOptions().find((o) => o.value === governanceFilter)?.label ?? null;
+  }, [governanceFilter]);
+
+  const setGovernanceFilterWithUrl = useCallback(
+    (value: string) => {
+      setGovernanceFilter(value);
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === "all") params.delete("governance");
+      else params.set("governance", value);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams]
   );
 
   const refresh = () => {
@@ -133,6 +195,7 @@ export function SystemList() {
   const exportCsv = () => {
     const header = [
       "Name",
+      "Governance",
       "Vendor",
       "Category",
       "Cost/yr",
@@ -144,6 +207,7 @@ export function SystemList() {
     ];
     const rows = filtered.map((item) => [
       item.name,
+      systemGovernance(item),
       systemVendor(item),
       systemCategory(item),
       systemAnnualCost(item) != null ? formatCurrency(systemAnnualCost(item)!) : "",
@@ -174,8 +238,9 @@ export function SystemList() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Systems</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Application layer · {data?.total ?? items.length} system
+              Application layer · {filtered.length} of {data?.total ?? items.length} system
               {(data?.total ?? items.length) === 1 ? "" : "s"}
+              {activeGovernanceLabel ? ` · ${activeGovernanceLabel}` : ""}
             </p>
           </div>
           <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5 shrink-0">
@@ -213,6 +278,13 @@ export function SystemList() {
               className="w-full pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
+          <FilterDropdown
+            icon={Shield}
+            label="Governance"
+            value={governanceFilter}
+            onChange={setGovernanceFilterWithUrl}
+            options={governanceFilterOptions()}
+          />
           <FilterDropdown
             icon={Tag}
             label="Category"

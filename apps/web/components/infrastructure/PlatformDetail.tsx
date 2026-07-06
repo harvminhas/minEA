@@ -24,7 +24,11 @@ import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { HistoryEntry } from "@/components/shared/EntityHistory";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { PlatformLinkDialog } from "@/components/infrastructure/PlatformLinkDialog";
-import { COMPONENT_PLATFORM_REL, SYSTEM_PLATFORM_REL } from "@/lib/platform-relationship-utils";
+import {
+  COMPONENT_PLATFORM_REL,
+  isSystemObjectType,
+  SYSTEM_PLATFORM_REL,
+} from "@/lib/platform-relationship-utils";
 import {
   formatPlatformSubtitle,
   PLATFORM_CRITICALITY_LABEL,
@@ -91,14 +95,20 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
     queryKey: ["platform-linked", orgSlug, workspaceSlug, platform.id],
     queryFn: async () => {
       const token = await getToken();
-      const [rels, apps, components] = await Promise.all([
+      const [rels, apps, solutions, techCaps, components] = await Promise.all([
         relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: platform.id }, token!),
         objectsApi.list(orgSlug, workspaceSlug, { type: "application" }, token!),
+        objectsApi.list(orgSlug, workspaceSlug, { type: "solution" }, token!),
+        objectsApi.list(orgSlug, workspaceSlug, { type: "technical_capability" }, token!),
         objectsApi.list(orgSlug, workspaceSlug, { type: "component" }, token!),
       ]);
       const systemIds = new Set(
         rels
-          .filter((r) => r.type === SYSTEM_PLATFORM_REL && r.from_type === "application")
+          .filter(
+            (r) =>
+              (r.type === SYSTEM_PLATFORM_REL || r.type === "runs_on") &&
+              isSystemObjectType(r.from_type)
+          )
           .map((r) => r.from_object_id)
       );
       const componentIds = new Set(
@@ -106,8 +116,9 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
           .filter((r) => r.type === COMPONENT_PLATFORM_REL && r.from_type === "component")
           .map((r) => r.from_object_id)
       );
+      const allSystems = [...apps.items, ...solutions.items, ...techCaps.items];
       return {
-        systems: apps.items.filter((item) => systemIds.has(item.id)),
+        systems: allSystems.filter((item) => systemIds.has(item.id)),
         components: components.items.filter((item) => componentIds.has(item.id)),
       };
     },

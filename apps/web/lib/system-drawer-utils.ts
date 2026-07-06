@@ -1,3 +1,4 @@
+import { LEGACY_SYSTEM_PLATFORM_REL, SYSTEM_PLATFORM_REL } from "@/lib/platform-relationship-utils";
 import { otherRelationshipObjectId } from "@/lib/relationship-display";
 import type { ObjectType, Relationship, RelationshipType } from "@minea/types";
 
@@ -28,6 +29,7 @@ function extractLinksForTypes(
   options?: {
     excludeSelf?: boolean;
     relationshipType?: RelationshipType;
+    relationshipTypes?: RelationshipType[];
     direction?: "outbound" | "inbound";
   }
 ): SystemDrawerLink[] {
@@ -50,6 +52,7 @@ function extractLinksForTypes(
     }
 
     if (!objectId || !objectType || !direction) continue;
+    if (options?.relationshipTypes && !options.relationshipTypes.includes(rel.type)) continue;
     if (options?.relationshipType && rel.type !== options.relationshipType) continue;
     if (options?.direction && direction !== options.direction) continue;
     if (options?.excludeSelf && objectId === systemId) continue;
@@ -92,7 +95,7 @@ export function systemObjectComponentLinks(systemId: string, relationships: Rela
 
 export function systemObjectPlatformLinks(systemId: string, relationships: Relationship[]) {
   return extractLinksForTypes(systemId, relationships, PLATFORM_LINK_TYPES, {
-    relationshipType: "runs_on",
+    relationshipTypes: [SYSTEM_PLATFORM_REL, LEGACY_SYSTEM_PLATFORM_REL],
     direction: "outbound",
   });
 }

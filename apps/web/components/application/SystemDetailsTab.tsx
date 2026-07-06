@@ -6,6 +6,12 @@ import { SystemDiagramPreview } from "@/components/application/SystemDiagramPrev
 import { SystemDrawerSection } from "@/components/application/SystemDrawerSection";
 import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
 import { systemCategoryDisplay } from "@/lib/system-category";
+import {
+  governanceStatusBadgeClass,
+  systemDiscovery,
+  systemGovernanceLabel,
+  systemGovernanceStatus,
+} from "@/lib/system-governance";
 import { buildDetailPropertyRows } from "@/lib/object-property-display";
 import { systemStatusLabel, SYSTEM_STATUS_STYLE } from "@/lib/system-utils";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -41,13 +47,17 @@ export function SystemDetailsTab({
   const platformName = appProps.platform?.platform_name;
   const status = object.status ?? "planned";
   const categoryMeta = systemCategoryDisplay(appProps);
+  const governance = systemGovernanceStatus(appProps);
+  const discovery = systemDiscovery(appProps);
   const detailPropertyRows = buildDetailPropertyRows(props, object.type);
 
   const platformFromRel = relationships.some(
     (r) =>
-      r.type === "runs_on" &&
+      (r.type === "built_on" || r.type === "runs_on") &&
       r.from_object_id === object.id &&
-      r.from_type === "application" &&
+      (r.from_type === "application" ||
+        r.from_type === "solution" ||
+        r.from_type === "technical_capability") &&
       r.to_type === "cloud_service"
   );
 
@@ -61,6 +71,18 @@ export function SystemDetailsTab({
 
       <DetailSection title="Properties">
         <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-gray-500">Governance status</span>
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-0.5 text-xs font-medium border",
+                governanceStatusBadgeClass(governance)
+              )}
+            >
+              {systemGovernanceLabel(appProps)}
+            </span>
+          </div>
+          {discovery && <PropertyRow label="Discovery" value={discovery} />}
           <PropertyRow label="Owner" value={object.owner ?? "Unassigned"} />
           <div className="flex items-center justify-between gap-3">
             <span className="text-gray-500">Status</span>

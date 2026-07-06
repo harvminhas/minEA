@@ -9,15 +9,20 @@ import {
   systemAnnualCost,
   systemAvatarColor,
   systemCategory,
+  systemGovernanceValue,
   systemProps,
   systemVendor,
   type SystemSortKey,
 } from "@/lib/system-list-utils";
 import { systemCategoryDisplay } from "@/lib/system-category";
+import {
+  governanceStatusBadgeClass,
+  SYSTEM_GOVERNANCE_STATUS_LABELS,
+} from "@/lib/system-governance";
 import { formatUpdatedAgo, SYSTEM_STATUS_STYLE, systemStatusLabel } from "@/lib/system-utils";
 import { cn, formatCurrency, getObjectInitial } from "@/lib/utils";
 
-const COL_COUNT = 8;
+const COL_COUNT = 9;
 
 function SortHeader({
   label,
@@ -88,6 +93,11 @@ export function SystemTable({
             <tr>
               <SortHeader label="Name" active={sortKey === "name"} onClick={() => toggleSort("name")} />
               <SortHeader
+                label="Governance"
+                active={sortKey === "governance"}
+                onClick={() => toggleSort("governance")}
+              />
+              <SortHeader
                 label="Vendor"
                 active={sortKey === "vendor"}
                 onClick={() => toggleSort("vendor")}
@@ -138,6 +148,7 @@ export function SystemTable({
               const category = systemCategory(item);
               const categoryMeta = systemCategoryDisplay(systemProps(item));
               const vendor = systemVendor(item);
+              const governance = systemGovernanceValue(item);
               const updatedLabel = [
                 item.updated_by_name?.trim(),
                 formatUpdatedAgo(item.updated_at),
@@ -166,6 +177,16 @@ export function SystemTable({
                         {item.name}
                       </span>
                     </button>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium border",
+                        governanceStatusBadgeClass(governance)
+                      )}
+                    >
+                      {SYSTEM_GOVERNANCE_STATUS_LABELS[governance]}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{vendor || "—"}</td>
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
@@ -208,6 +229,7 @@ export function SystemTable({
               (quickAddOpen ? (
                 <SystemQuickAddRow
                   categoryOptions={categoryOptions}
+                  colSpan={COL_COUNT}
                   onCancel={() => setQuickAddOpen(false)}
                   onCreated={(item) => {
                     setQuickAddOpen(false);

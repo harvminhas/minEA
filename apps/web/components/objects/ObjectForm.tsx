@@ -35,8 +35,13 @@ import {
   readSystemCategoryFields,
   SystemCategoryFields,
 } from "@/components/application/SystemCategoryFields";
+import {
+  readSystemGovernanceFields,
+  SystemGovernanceFields,
+} from "@/components/application/SystemGovernanceFields";
+import { isShadowGovernance } from "@/lib/system-governance";
 import { aiRoleForProperties, aiRoleFromProperties, SYSTEM_OBJECT_TYPES } from "@/lib/ai-role-utils";
-import type { AiRole } from "@minea/types";
+import type { AiRole, SystemGovernanceStatus } from "@minea/types";
 
 interface Props {
   objectType: ObjectType;
@@ -147,11 +152,16 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
 
   const initAppProps = (initialValues?.properties ?? {}) as ApplicationProperties;
   const initCategoryFields = readSystemCategoryFields(initAppProps);
+  const initGovernanceFields = readSystemGovernanceFields(initAppProps);
   const [platformId, setPlatformId] = useState(initAppProps.platform?.platform_id ?? "");
   const [selectedCapabilityIds, setSelectedCapabilityIds] = useState<string[]>([]);
   const [capSearch, setCapSearch] = useState("");
   const [category, setCategory] = useState(initCategoryFields.category);
   const [isCustomBuilt, setIsCustomBuilt] = useState(initCategoryFields.isCustomBuilt);
+  const [governanceStatus, setGovernanceStatus] = useState<SystemGovernanceStatus>(
+    initGovernanceFields.governanceStatus
+  );
+  const [discovery, setDiscovery] = useState(initGovernanceFields.discovery);
 
   const ownership = useOwnershipForm(initialValues);
 
@@ -171,6 +181,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
   const typeFields = TYPE_FIELDS[objectType] ?? [];
   const typeLabel = OBJECT_TYPE_LABELS[objectType] ?? objectType;
   const isSystemType = SYSTEM_OBJECT_TYPES.has(objectType);
+  const isShadowSystem = isSystemApp && isShadowGovernance(governanceStatus);
 
   const { data: platformsData } = useQuery({
     queryKey: ["objects", orgSlug, workspaceSlug, "cloud_service", "platforms"],
@@ -279,6 +290,9 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       const storedAiRole = aiRoleForProperties(aiRole);
       if (storedAiRole) props.ai_role = storedAiRole;
       if (isSystemApp) {
+        props.governance_status = governanceStatus;
+        if (discovery.trim()) props.discovery = discovery.trim();
+        else delete props.discovery;
         if (category.trim()) props.category = category.trim();
         else delete props.category;
         props.is_custom_built = isCustomBuilt;
@@ -315,6 +329,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
             orgSlug,
             workspaceSlug,
             saved.id,
+            saved.type,
             selectedPlatform,
             token!
           ),
@@ -344,7 +359,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       onSubmit={() => mutation.mutate()}
       submitLabel={isEdit ? "Save changes" : "Create"}
       isSubmitting={mutation.isPending}
-      submitDisabled={!name || !ownership.isValid}
+      submitDisabled={!name || (!isShadowSystem && !ownership.isValid)}
       error={mutation.isError ? (mutation.error as Error).message : null}
     >
       <FormField label="Name" required>
@@ -356,6 +371,17 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
         />
       </FormField>
 
+      {isSystemApp && (
+        <SystemGovernanceFields
+          governanceStatus={governanceStatus}
+          onGovernanceStatusChange={setGovernanceStatus}
+          discovery={discovery}
+          onDiscoveryChange={setDiscovery}
+        />
+      )}
+
+      {!isShadowSystem && (
+        <>
       <FormField label="Description">
         <textarea
           value={description}
@@ -376,7 +402,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
         </select>
       </FormField>
 
-      <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
+      <OwnershipFields value={ownership.value} onChange={ownership.setValue} required={!isShadowSystem} />
 
       {isSystemApp && (
         <SystemCategoryFields
@@ -524,6 +550,8 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
           placeholder="e.g. crm, sales, critical"
         />
       </FormField>
+        </>
+      )}
     </FormDrawer>
   );
 }

@@ -6,6 +6,11 @@ import { useMutation } from "@tanstack/react-query";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { mergeCategoryOptions, systemCategorySelectOptions } from "@/lib/system-category";
+import {
+  isShadowGovernance,
+  systemGovernanceSelectOptions,
+} from "@/lib/system-governance";
+import type { SystemGovernanceStatus } from "@minea/types";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import type { MinEAObject } from "@minea/types";
@@ -20,10 +25,12 @@ export function SystemQuickAddRow({
   categoryOptions,
   onCancel,
   onCreated,
+  colSpan = 9,
 }: {
   categoryOptions: string[];
   onCancel: () => void;
   onCreated: (item: MinEAObject) => void;
+  colSpan?: number;
 }) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
@@ -31,6 +38,8 @@ export function SystemQuickAddRow({
   const ownership = useOwnershipForm();
 
   const [name, setName] = useState("");
+  const [governanceStatus, setGovernanceStatus] = useState<SystemGovernanceStatus>("sanctioned");
+  const [discovery, setDiscovery] = useState("");
   const [vendor, setVendor] = useState("");
   const [category, setCategory] = useState("");
   const [isCustomBuilt, setIsCustomBuilt] = useState(false);
@@ -38,8 +47,10 @@ export function SystemQuickAddRow({
   const [status, setStatus] = useState<(typeof QUICK_ADD_STATUSES)[number]>("planned");
   const [error, setError] = useState<string | null>(null);
 
+  const isShadow = isShadowGovernance(governanceStatus);
   const categories = useMemo(() => mergeCategoryOptions(categoryOptions), [categoryOptions]);
   const categoryChoices = systemCategorySelectOptions();
+  const governanceChoices = systemGovernanceSelectOptions();
 
   useEffect(() => {
     nameRef.current?.focus();
@@ -60,12 +71,17 @@ export function SystemQuickAddRow({
       const trimmedName = name.trim();
       if (!trimmedName) throw new Error("System name is required");
 
-      const properties: Record<string, unknown> = {};
-      if (vendor.trim()) properties.vendor = vendor.trim();
-      if (category.trim()) properties.category = category.trim();
-      properties.is_custom_built = isCustomBuilt;
-      const cost = annualCost.trim() ? Number(annualCost.replace(/,/g, "")) : NaN;
-      if (!Number.isNaN(cost) && cost > 0) properties.annual_cost = cost;
+      const properties: Record<string, unknown> = {
+        governance_status: governanceStatus,
+      };
+      if (discovery.trim()) properties.discovery = discovery.trim();
+      if (!isShadow) {
+        if (vendor.trim()) properties.vendor = vendor.trim();
+        if (category.trim()) properties.category = category.trim();
+        properties.is_custom_built = isCustomBuilt;
+        const cost = annualCost.trim() ? Number(annualCost.replace(/,/g, "")) : NaN;
+        if (!Number.isNaN(cost) && cost > 0) properties.annual_cost = cost;
+      }
 
       return objectsApi.create(
         orgSlug,
@@ -73,8 +89,8 @@ export function SystemQuickAddRow({
         {
           type: "application",
           name: trimmedName,
-          ...ownership.toPayload(),
-          status,
+          ...(isShadow ? {} : ownership.toPayload()),
+          status: isShadow ? undefined : status,
           properties,
         },
         token
@@ -87,6 +103,67 @@ export function SystemQuickAddRow({
   });
 
   const canSave = name.trim().length > 0 && !saveMutation.isPending;
+
+  if (isShadow) {
+    return (
+      <tr className="border-t border-indigo-100 bg-indigo-50/30">
+        <td className="px-4 py-2 min-w-[160px]">
+          <input
+            ref={nameRef}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="System name"
+            className={inputClass}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && canSave) saveMutation.mutate();
+            }}
+          />
+        </td>
+        <td className="px-4 py-2 min-w-[160px]">
+          <select
+            value={governanceStatus}
+            onChange={(e) => setGovernanceStatus(e.target.value as SystemGovernanceStatus)}
+            className={cn(inputClass, "pr-7")}
+          >
+            {governanceChoices.map((g) => (
+              <option key={g.value} value={g.value}>
+                {g.label}
+              </option>
+            ))}
+          </select>
+        </td>
+        <td colSpan={colSpan - 3} className="px-4 py-2">
+          <input
+            value={discovery}
+            onChange={(e) => setDiscovery(e.target.value)}
+            placeholder="How was this found?"
+            className={inputClass}
+            maxLength={500}
+          />
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => saveMutation.mutate()}
+              disabled={!canSave}
+              className="rounded-md bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-3 py-1.5 text-xs font-medium transition-colors"
+            >
+              {saveMutation.isPending ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="text-xs font-medium text-gray-500 hover:text-gray-700"
+            >
+              Esc
+            </button>
+          </div>
+          {error && <p className="text-[10px] text-red-600 mt-1 max-w-[140px]">{error}</p>}
+        </td>
+      </tr>
+    );
+  }
 
   return (
     <tr className="border-t border-indigo-100 bg-indigo-50/30">
@@ -101,6 +178,19 @@ export function SystemQuickAddRow({
             if (e.key === "Enter" && canSave) saveMutation.mutate();
           }}
         />
+      </td>
+      <td className="px-4 py-2 min-w-[140px]">
+        <select
+          value={governanceStatus}
+          onChange={(e) => setGovernanceStatus(e.target.value as SystemGovernanceStatus)}
+          className={cn(inputClass, "pr-7")}
+        >
+          {governanceChoices.map((g) => (
+            <option key={g.value} value={g.value}>
+              {g.label}
+            </option>
+          ))}
+        </select>
       </td>
       <td className="px-4 py-2 min-w-[120px]">
         <input

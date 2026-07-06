@@ -5,6 +5,8 @@ from fastapi import HTTPException, status
 
 SYSTEM_OBJECT_TYPES = frozenset({"application", "solution", "technical_capability"})
 
+GOVERNANCE_STATUSES = frozenset({"sanctioned", "shadow", "unknown_provenance"})
+
 SYSTEM_CATEGORIES = frozenset(
     {
         "Analytics",
@@ -81,10 +83,34 @@ def normalize_system_properties(
         if legacy and result.get("category") != legacy:
             result.pop("category_legacy", None)
 
+    gov = result.get("governance_status")
+    if gov is None or gov == "":
+        result["governance_status"] = "sanctioned"
+    else:
+        result["governance_status"] = str(gov).strip()
+
+    discovery = result.get("discovery")
+    if discovery is not None:
+        discovery = str(discovery).strip()
+        if discovery:
+            result["discovery"] = discovery[:500]
+        else:
+            result.pop("discovery", None)
+
     return result
 
 
 def validate_system_properties(props: dict) -> None:
+    gov = props.get("governance_status", "sanctioned")
+    if gov not in GOVERNANCE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Invalid governance status '{gov}'. "
+                "Choose sanctioned, shadow, or unknown_provenance."
+            ),
+        )
+
     category = props.get("category")
     if category is None or category == "":
         return
