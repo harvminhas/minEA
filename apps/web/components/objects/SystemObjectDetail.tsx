@@ -23,6 +23,8 @@ import type { TechDebtHostKind } from "@minea/types";
 import { CreateApiPanel } from "@/components/integration/CreateApiPanel";
 import { CreateEventPanel } from "@/components/integration/CreateEventPanel";
 import { CreateFlowPanel } from "@/components/integration/CreateFlowPanel";
+import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
+import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { FlowDetail } from "@/components/integration/FlowDetail";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { SystemDiagramModal, type NodeLayout } from "@/components/application/SystemDiagram";
@@ -30,6 +32,8 @@ import { RelationshipForm } from "@/components/objects/RelationshipForm";
 import { excludeTechDebtRelationships } from "@/lib/relationship-display";
 import { systemFlowEndpoint, unlinkFlowFromSystem } from "@/lib/flow-system-utils";
 import {
+  linkPlatformToSystem,
+  linkRuntimeToSystem,
   systemApiProviderRef,
   systemEventProducerRef,
 } from "@/lib/system-integration-link-utils";
@@ -66,6 +70,10 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const [createApiName, setCreateApiName] = useState("");
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [createEventName, setCreateEventName] = useState("");
+  const [showCreatePlatform, setShowCreatePlatform] = useState(false);
+  const [createPlatformName, setCreatePlatformName] = useState("");
+  const [showCreateRuntime, setShowCreateRuntime] = useState(false);
+  const [createRuntimeName, setCreateRuntimeName] = useState("");
   const [selectedFlow, setSelectedFlow] = useState<MinEAObject | null>(null);
   const [liveSystem, setLiveSystem] = useState<MinEAObject | null>(null);
   const liveSystemRef = useRef<MinEAObject | null>(null);
@@ -279,6 +287,8 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
     queryClient.invalidateQueries({ queryKey: ["relationships"] });
     queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, "api"] });
     queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, "event"] });
+    queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, "cloud_service"] });
+    queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, "model"] });
   };
 
   const openCreateApi = (name: string) => {
@@ -299,6 +309,44 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const closeCreateEvent = () => {
     setShowCreateEvent(false);
     setCreateEventName("");
+  };
+
+  const openCreatePlatform = (name: string) => {
+    setCreatePlatformName(name);
+    setShowCreatePlatform(true);
+  };
+
+  const closeCreatePlatform = () => {
+    setShowCreatePlatform(false);
+    setCreatePlatformName("");
+  };
+
+  const openCreateRuntime = (name: string) => {
+    setCreateRuntimeName(name);
+    setShowCreateRuntime(true);
+  };
+
+  const closeCreateRuntime = () => {
+    setShowCreateRuntime(false);
+    setCreateRuntimeName("");
+  };
+
+  const linkCreatedPlatform = async (platformId: string) => {
+    if (!displaySystem) return;
+    const token = await getToken();
+    if (!token) return;
+    const platform = await objectsApi.get(orgSlug, workspaceSlug, platformId, token);
+    await linkPlatformToSystem(orgSlug, workspaceSlug, displaySystem, platform, token);
+    handleIntegrationLinked();
+  };
+
+  const linkCreatedRuntime = async (runtimeId: string) => {
+    if (!displaySystem) return;
+    const token = await getToken();
+    if (!token) return;
+    const runtime = await objectsApi.get(orgSlug, workspaceSlug, runtimeId, token);
+    await linkRuntimeToSystem(orgSlug, workspaceSlug, displaySystem, runtime, token);
+    handleIntegrationLinked();
   };
 
   const unlinkFlowMutation = useMutation({
@@ -442,10 +490,11 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
             canEdit={canEdit}
             onAddSystem={() => openRelForm("application")}
             onAddComponent={() => openRelForm("component")}
-            onAddPlatform={() => openRelForm("cloud_service")}
             onAddCapability={() => openRelForm("capability")}
             onCreateApi={openCreateApi}
             onCreateEvent={openCreateEvent}
+            onCreatePlatform={openCreatePlatform}
+            onCreateRuntime={openCreateRuntime}
             onIntegrationLinked={handleIntegrationLinked}
             onCreateFlow={openCreateFlow}
             onFlowLinked={handleFlowLinked}
@@ -561,6 +610,28 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
           onSuccess={() => {
             closeCreateEvent();
             handleIntegrationLinked();
+          }}
+        />
+      )}
+
+      {showCreatePlatform && (
+        <CreatePlatformPanel
+          initialName={createPlatformName}
+          onClose={closeCreatePlatform}
+          onSuccess={async (platformId) => {
+            closeCreatePlatform();
+            await linkCreatedPlatform(platformId);
+          }}
+        />
+      )}
+
+      {showCreateRuntime && (
+        <CreateRuntimePanel
+          initialName={createRuntimeName}
+          onClose={closeCreateRuntime}
+          onSuccess={async (runtimeId) => {
+            closeCreateRuntime();
+            await linkCreatedRuntime(runtimeId);
           }}
         />
       )}

@@ -1,5 +1,7 @@
+import { relationshipsApi } from "@/lib/api-client";
 import { persistApiArchitecture } from "@/lib/api-relationship-utils";
 import { persistEventArchitecture } from "@/lib/event-relationship-utils";
+import { SYSTEM_PLATFORM_REL } from "@/lib/platform-relationship-utils";
 import type { ApiProviderRef, EventProducerRef, MinEAObject } from "@minea/types";
 
 export function systemApiProviderRef(system: MinEAObject): ApiProviderRef {
@@ -40,4 +42,46 @@ export async function linkEventToSystemAsProducer(
   return persistEventArchitecture(orgSlug, workspaceSlug, event, {
     producer: systemEventProducerRef(system),
   }, token);
+}
+
+export async function linkPlatformToSystem(
+  orgSlug: string,
+  workspaceSlug: string,
+  system: MinEAObject,
+  platform: MinEAObject,
+  token: string
+): Promise<void> {
+  await relationshipsApi.create(
+    orgSlug,
+    workspaceSlug,
+    {
+      type: SYSTEM_PLATFORM_REL,
+      from_object_id: system.id,
+      from_type: system.type,
+      to_object_id: platform.id,
+      to_type: "cloud_service",
+    },
+    token
+  );
+}
+
+export async function linkRuntimeToSystem(
+  orgSlug: string,
+  workspaceSlug: string,
+  system: MinEAObject,
+  runtime: MinEAObject,
+  token: string
+): Promise<void> {
+  await relationshipsApi.create(
+    orgSlug,
+    workspaceSlug,
+    {
+      type: "runs_on",
+      from_object_id: system.id,
+      from_type: system.type,
+      to_object_id: runtime.id,
+      to_type: "model",
+    },
+    token
+  );
 }

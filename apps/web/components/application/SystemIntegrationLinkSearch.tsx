@@ -7,16 +7,20 @@ import { Search } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
-import type { MinEAObject, ObjectType } from "@minea/types";
-import { cn } from "@/lib/utils";
 import {
   linkApiToSystemAsProvider,
   linkEventToSystemAsProducer,
+  linkPlatformToSystem,
+  linkRuntimeToSystem,
 } from "@/lib/system-integration-link-utils";
+import { filterEnterprisePlatforms } from "@/lib/platform-relationship-utils";
+import { isComputeRuntime } from "@/lib/runtime-utils";
+import type { MinEAObject, ModelProperties, ObjectType } from "@minea/types";
+import { cn } from "@/lib/utils";
 
 const MAX_RESULTS = 20;
 
-export type IntegrationLinkKind = "api" | "event";
+export type IntegrationLinkKind = "api" | "event" | "platform" | "runtime";
 
 const LINK_CONFIG: Record<
   IntegrationLinkKind,
@@ -47,6 +51,24 @@ const LINK_CONFIG: Record<
     objectLabelPlural: "events",
     emptyWorkspace: "No events in this workspace yet.",
     emptyAvailable: "All workspace events are already linked to this system.",
+  },
+  platform: {
+    objectType: "cloud_service",
+    placeholder: "Search or create platform…",
+    createPrefix: "Create new platform",
+    objectLabel: "platform",
+    objectLabelPlural: "platforms",
+    emptyWorkspace: "No platforms in this workspace yet.",
+    emptyAvailable: "All workspace platforms are already linked to this system.",
+  },
+  runtime: {
+    objectType: "model",
+    placeholder: "Search or create runtime…",
+    createPrefix: "Create new runtime",
+    objectLabel: "runtime",
+    objectLabelPlural: "runtimes",
+    emptyWorkspace: "No runtimes in this workspace yet.",
+    emptyAvailable: "All workspace runtimes are already linked to this system.",
   },
 };
 
@@ -96,7 +118,16 @@ export function SystemIntegrationLinkSearch({
     enabled: authEnabled,
   });
 
-  const workspaceObjects = data?.items ?? [];
+  const workspaceObjects = useMemo(() => {
+    const items = data?.items ?? [];
+    if (kind === "platform") {
+      return filterEnterprisePlatforms(items);
+    }
+    if (kind === "runtime") {
+      return items.filter((item) => isComputeRuntime((item.properties ?? {}) as ModelProperties));
+    }
+    return items;
+  }, [data?.items, kind]);
   const linkedSet = useMemo(() => new Set(linkedObjectIds), [linkedObjectIds]);
 
   useEffect(() => {
@@ -134,8 +165,12 @@ export function SystemIntegrationLinkSearch({
       if (!target) throw new Error(`${config.objectLabel} not found`);
       if (kind === "api") {
         await linkApiToSystemAsProvider(orgSlug, workspaceSlug, system, target, token);
-      } else {
+      } else if (kind === "event") {
         await linkEventToSystemAsProducer(orgSlug, workspaceSlug, system, target, token);
+      } else if (kind === "platform") {
+        await linkPlatformToSystem(orgSlug, workspaceSlug, system, target, token);
+      } else {
+        await linkRuntimeToSystem(orgSlug, workspaceSlug, system, target, token);
       }
     },
     onSuccess: () => {

@@ -54,6 +54,11 @@ ALLOWED_TRIPLES: set[tuple[str, str, str]] = {
     ("built_on", "component", "cloud_service"),
     # Cross-layer: Infrastructure ← Application/Data
     ("runs_on", "application", "cloud_service"),
+    ("runs_on", "solution", "cloud_service"),
+    ("runs_on", "technical_capability", "cloud_service"),
+    ("runs_on", "application", "model"),
+    ("runs_on", "solution", "model"),
+    ("runs_on", "technical_capability", "model"),
     ("runs_on", "data_store", "cloud_service"),
     ("runs_on", "message_broker", "cloud_service"),
     # Initiatives

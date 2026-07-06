@@ -549,6 +549,8 @@ export interface ModelProperties {
   hosting_model?: "public_cloud" | "private_cloud" | "on_premise" | "hybrid";
   region?: string;
   environments?: string[];
+  /** How operators reach this runtime (VPN, terminal, console URL, etc.) */
+  access_method?: string;
   console_url?: string;
   cost_model?:
     | "per_vcpu_memory"

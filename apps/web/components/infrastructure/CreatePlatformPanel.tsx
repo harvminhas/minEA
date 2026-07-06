@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   initialValues?: MinEAObject;
+  initialName?: string;
   onClose: () => void;
   onSuccess: (platformId: string) => void;
 }
@@ -101,7 +102,7 @@ function initFromPlatform(platform?: MinEAObject) {
   };
 }
 
-export function CreatePlatformPanel({ initialValues, onClose, onSuccess }: Props) {
+export function CreatePlatformPanel({ initialValues, initialName = "", onClose, onSuccess }: Props) {
   const isEdit = !!initialValues;
   const init = initFromPlatform(initialValues);
 
@@ -110,7 +111,7 @@ export function CreatePlatformPanel({ initialValues, onClose, onSuccess }: Props
   const enabled = useAuthQueryEnabled();
   const [mounted, setMounted] = useState(false);
 
-  const [name, setName] = useState(init.name);
+  const [name, setName] = useState(isEdit ? init.name : initialName || init.name);
   const [description, setDescription] = useState(init.description);
   const [tags, setTags] = useState(init.tags);
   const [vendor, setVendor] = useState<string>(init.vendor);

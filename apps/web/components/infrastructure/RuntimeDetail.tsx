@@ -31,6 +31,7 @@ import {
   RUNTIME_COST_MODEL_LABEL,
   RUNTIME_HOSTING_LABEL,
   RUNTIME_ICON_STYLE,
+  runtimeAccessMethod,
   runtimeKindLabel,
   runtimeProviderLabel,
 } from "@/lib/runtime-utils";
@@ -213,11 +214,13 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
                   value={RUNTIME_HOSTING_LABEL[props.hosting_model] ?? props.hosting_model}
                 />
               )}
-              {props.region && <DetailRow label="Region" value={props.region} />}
+              {props.region && <DetailRow label="Location" value={props.region} />}
               {props.environments && props.environments.length > 0 && (
                 <DetailRow label="Environments" value={props.environments.join(", ")} />
               )}
-              {props.console_url && <DetailRow label="Console URL" value={props.console_url} />}
+              {runtimeAccessMethod(props) && (
+                <DetailRow label="Access method" value={runtimeAccessMethod(props)!} />
+              )}
             </DetailSection>
 
             <DetailSection title="Contract">

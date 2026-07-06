@@ -29,20 +29,21 @@ export const RUNTIME_KINDS = [
   { value: "container", label: "Container", hint: "ECS, Cloud Run, ACA" },
   { value: "vm", label: "VM", hint: "EC2, GCE, on-prem VMs" },
   { value: "paas", label: "PaaS / app host", hint: "App Service, Heroku" },
-  { value: "on_prem", label: "On-prem", hint: "bare metal, data centre" },
+  { value: "on_prem", label: "On-prem / bare metal", hint: "Mainframe, midrange, data centre" },
 ] as const;
 
 export const RUNTIME_PROVIDERS = [
   { value: "aws", label: "AWS" },
   { value: "gcp", label: "GCP" },
   { value: "azure", label: "Azure" },
+  { value: "self_hosted", label: "Self-hosted / Internal" },
   { value: "on_premise", label: "On-premise" },
 ];
 
 export const RUNTIME_HOSTING = [
   { value: "public_cloud", label: "Public cloud" },
   { value: "private_cloud", label: "Private cloud" },
-  { value: "on_premise", label: "On-premise" },
+  { value: "on_premise", label: "On-premises" },
   { value: "hybrid", label: "Hybrid" },
 ];
 
@@ -52,7 +53,7 @@ export const RUNTIME_COST_MODEL = [
   { value: "per_invocation", label: "Per-invocation" },
   { value: "reserved_committed", label: "Reserved / committed" },
   { value: "flat_enterprise", label: "Flat / enterprise" },
-  { value: "capex", label: "CapEx (owned hardware)" },
+  { value: "capex", label: "Capital asset (depreciated)" },
 ];
 
 export const RUNTIME_KIND_LABEL = Object.fromEntries(RUNTIME_KINDS.map((k) => [k.value, k.label]));
@@ -77,6 +78,14 @@ export function runtimeProviderLabel(provider: string | undefined): string {
   return RUNTIME_PROVIDER_LABEL[provider] ?? provider;
 }
 
+export function isBareMetalRuntimeKind(kind: string | undefined): boolean {
+  return kind === "on_prem";
+}
+
+export function runtimeAccessMethod(props: ModelProperties): string | undefined {
+  return props.access_method?.trim() || props.console_url?.trim() || undefined;
+}
+
 export const RUNTIME_ICON_STYLE = "bg-slate-100 text-slate-700";
 
 export function formatRuntimeSubtitle(props: ModelProperties): string {
@@ -99,7 +108,7 @@ export function buildRuntimeProperties(params: {
   hostingModel: string;
   region: string;
   environments: string[];
-  consoleUrl: string;
+  accessMethod: string;
   costModel: string;
   commitmentEnds: string;
   annualCost: string;
@@ -107,6 +116,7 @@ export function buildRuntimeProperties(params: {
   lifecycle: string;
   criticality: string;
 }): ModelProperties {
+  const accessMethod = params.accessMethod.trim() || undefined;
   return {
     compute_runtime_kind: params.kind as ModelProperties["compute_runtime_kind"],
     runtime_provider: params.provider || undefined,
@@ -114,7 +124,8 @@ export function buildRuntimeProperties(params: {
     hosting_model: params.hostingModel as ModelProperties["hosting_model"],
     region: params.region.trim() || undefined,
     environments: params.environments.length > 0 ? params.environments : undefined,
-    console_url: params.consoleUrl.trim() || undefined,
+    access_method: accessMethod,
+    console_url: accessMethod,
     cost_model: params.costModel as ModelProperties["cost_model"],
     commitment_ends: params.commitmentEnds.trim() || undefined,
     annual_cost: params.annualCost.trim() || undefined,

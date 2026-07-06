@@ -16,6 +16,7 @@ const DATA_DOMAIN_TYPES = new Set<ObjectType>(["data_domain"]);
 const SYSTEM_LINK_TYPES = new Set<ObjectType>(["application", "solution", "technical_capability"]);
 const COMPONENT_LINK_TYPES = new Set<ObjectType>(["component"]);
 const PLATFORM_LINK_TYPES = new Set<ObjectType>(["cloud_service"]);
+const RUNTIME_LINK_TYPES = new Set<ObjectType>(["model"]);
 const CAPABILITY_LINK_TYPES = new Set<ObjectType>(["capability"]);
 const API_LINK_TYPES = new Set<ObjectType>(["api"]);
 const EVENT_LINK_TYPES = new Set<ObjectType>(["event"]);
@@ -24,7 +25,11 @@ function extractLinksForTypes(
   systemId: string,
   relationships: Relationship[],
   targetTypes: Set<ObjectType>,
-  options?: { excludeSelf?: boolean }
+  options?: {
+    excludeSelf?: boolean;
+    relationshipType?: RelationshipType;
+    direction?: "outbound" | "inbound";
+  }
 ): SystemDrawerLink[] {
   const links: SystemDrawerLink[] = [];
   const seen = new Set<string>();
@@ -45,6 +50,8 @@ function extractLinksForTypes(
     }
 
     if (!objectId || !objectType || !direction) continue;
+    if (options?.relationshipType && rel.type !== options.relationshipType) continue;
+    if (options?.direction && direction !== options.direction) continue;
     if (options?.excludeSelf && objectId === systemId) continue;
 
     const dedupeKey = `${objectId}:${rel.type}:${direction}`;
@@ -84,7 +91,17 @@ export function systemObjectComponentLinks(systemId: string, relationships: Rela
 }
 
 export function systemObjectPlatformLinks(systemId: string, relationships: Relationship[]) {
-  return extractLinksForTypes(systemId, relationships, PLATFORM_LINK_TYPES);
+  return extractLinksForTypes(systemId, relationships, PLATFORM_LINK_TYPES, {
+    relationshipType: "runs_on",
+    direction: "outbound",
+  });
+}
+
+export function systemObjectRuntimeLinks(systemId: string, relationships: Relationship[]) {
+  return extractLinksForTypes(systemId, relationships, RUNTIME_LINK_TYPES, {
+    relationshipType: "runs_on",
+    direction: "outbound",
+  });
 }
 
 export function systemObjectCapabilityLinks(systemId: string, relationships: Relationship[]) {

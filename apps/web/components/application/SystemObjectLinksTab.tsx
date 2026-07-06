@@ -11,6 +11,7 @@ import {
   systemObjectComponentLinks,
   systemObjectEventLinks,
   systemObjectPlatformLinks,
+  systemObjectRuntimeLinks,
   systemObjectSystemLinks,
 } from "@/lib/system-drawer-utils";
 import { flowIdsLinkedToSystem, flowsForSystemObjectLinksTab } from "@/lib/flow-system-utils";
@@ -24,10 +25,11 @@ interface Props {
   canEdit?: boolean;
   onAddSystem?: () => void;
   onAddComponent?: () => void;
-  onAddPlatform?: () => void;
   onAddCapability?: () => void;
   onCreateApi?: (name: string) => void;
   onCreateEvent?: (name: string) => void;
+  onCreatePlatform?: (name: string) => void;
+  onCreateRuntime?: (name: string) => void;
   onIntegrationLinked?: () => void;
   onCreateFlow?: (name: string) => void;
   onFlowLinked?: () => void;
@@ -47,10 +49,11 @@ export function SystemObjectLinksTab({
   canEdit,
   onAddSystem,
   onAddComponent,
-  onAddPlatform,
   onAddCapability,
   onCreateApi,
   onCreateEvent,
+  onCreatePlatform,
+  onCreateRuntime,
   onIntegrationLinked,
   onCreateFlow,
   onFlowLinked,
@@ -63,6 +66,7 @@ export function SystemObjectLinksTab({
   const systemLinks = systemObjectSystemLinks(system.id, relationships);
   const componentLinks = systemObjectComponentLinks(system.id, relationships);
   const platformLinks = systemObjectPlatformLinks(system.id, relationships);
+  const runtimeLinks = systemObjectRuntimeLinks(system.id, relationships);
   const capabilityLinks = systemObjectCapabilityLinks(system.id, relationships);
   const apiLinks = systemObjectApiLinks(system.id, relationships);
   const eventLinks = systemObjectEventLinks(system.id, relationships);
@@ -100,20 +104,37 @@ export function SystemObjectLinksTab({
         />
       </SystemDrawerSection>
 
-      <SystemDrawerSection
+      <SystemIntegrationLinkSection
         title="Platforms"
-        count={platformLinks.length}
-        onAdd={canEdit ? onAddPlatform : undefined}
-      >
-        <SystemLinkedObjectList
-          links={platformLinks}
-          nameById={nameById}
-          namesLoading={namesLoading}
-          emptyLabel="No linked platforms."
-          onRemove={canEdit ? onRemove : undefined}
-          isRemoving={isRemoving}
-        />
-      </SystemDrawerSection>
+        kind="platform"
+        links={platformLinks}
+        linkedObjectIds={platformLinks.map((link) => link.objectId)}
+        nameById={nameById}
+        namesLoading={namesLoading}
+        emptyLabel="No linked platforms."
+        canEdit={canEdit}
+        system={system}
+        onLinked={onIntegrationLinked}
+        onCreateNew={onCreatePlatform}
+        onRemove={onRemove}
+        isRemoving={isRemoving}
+      />
+
+      <SystemIntegrationLinkSection
+        title="Runtimes"
+        kind="runtime"
+        links={runtimeLinks}
+        linkedObjectIds={runtimeLinks.map((link) => link.objectId)}
+        nameById={nameById}
+        namesLoading={namesLoading}
+        emptyLabel="No linked runtimes."
+        canEdit={canEdit}
+        system={system}
+        onLinked={onIntegrationLinked}
+        onCreateNew={onCreateRuntime}
+        onRemove={onRemove}
+        isRemoving={isRemoving}
+      />
 
       <SystemDrawerSection
         title="Capabilities"

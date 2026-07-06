@@ -14,6 +14,7 @@ import { AddProviderDialog } from "@/components/infrastructure/AddProviderDialog
 import {
   buildRuntimeProperties,
   collectCustomProviders,
+  isBareMetalRuntimeKind,
   lifecycleToStatus,
   PLATFORM_CRITICALITY,
   PLATFORM_LIFECYCLE,
@@ -22,6 +23,7 @@ import {
   RUNTIME_HOSTING,
   RUNTIME_KINDS,
   RUNTIME_PROVIDERS,
+  runtimeAccessMethod,
   statusToLifecycle,
 } from "@/lib/runtime-utils";
 import type { MinEAObject, ModelProperties } from "@minea/types";
@@ -29,6 +31,7 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   initialValues?: MinEAObject;
+  initialName?: string;
   onClose: () => void;
   onSuccess: (runtimeId: string) => void;
 }
@@ -79,6 +82,10 @@ function SelectField({
   );
 }
 
+function FieldHint({ children }: { children: React.ReactNode }) {
+  return <p className="text-[11px] text-gray-400 mt-1">{children}</p>;
+}
+
 function initFromRuntime(runtime?: MinEAObject) {
   const props = (runtime?.properties ?? {}) as ModelProperties;
   return {
@@ -91,7 +98,7 @@ function initFromRuntime(runtime?: MinEAObject) {
     hostingModel: props.hosting_model ?? "public_cloud",
     region: props.region ?? "",
     environments: props.environments ?? [],
-    consoleUrl: props.console_url ?? "",
+    accessMethod: runtimeAccessMethod(props) ?? "",
     costModel: props.cost_model ?? "per_vcpu_memory",
     commitmentEnds: props.commitment_ends ?? "",
     annualCost: props.annual_cost ?? "",
@@ -102,7 +109,7 @@ function initFromRuntime(runtime?: MinEAObject) {
   };
 }
 
-export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props) {
+export function CreateRuntimePanel({ initialValues, initialName = "", onClose, onSuccess }: Props) {
   const isEdit = !!initialValues;
   const init = initFromRuntime(initialValues);
 
@@ -111,7 +118,7 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
   const enabled = useAuthQueryEnabled();
   const [mounted, setMounted] = useState(false);
 
-  const [name, setName] = useState(init.name);
+  const [name, setName] = useState(isEdit ? init.name : initialName || init.name);
   const [description, setDescription] = useState(init.description);
   const [tags, setTags] = useState(init.tags);
   const [kind, setKind] = useState<string>(init.kind);
@@ -121,7 +128,7 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
   const [region, setRegion] = useState(init.region);
   const [environments, setEnvironments] = useState<string[]>(init.environments);
   const [envInput, setEnvInput] = useState("");
-  const [consoleUrl, setConsoleUrl] = useState(init.consoleUrl);
+  const [accessMethod, setAccessMethod] = useState(init.accessMethod);
   const [costModel, setCostModel] = useState<string>(init.costModel);
   const [commitmentEnds, setCommitmentEnds] = useState(init.commitmentEnds);
   const [annualCost, setAnnualCost] = useState(init.annualCost);
@@ -162,7 +169,7 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
         hostingModel,
         region,
         environments,
-        consoleUrl,
+        accessMethod,
         costModel,
         commitmentEnds,
         annualCost,
@@ -177,7 +184,7 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
       hostingModel,
       region,
       environments,
-      consoleUrl,
+      accessMethod,
       costModel,
       commitmentEnds,
       annualCost,
@@ -223,6 +230,31 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
     setEnvInput("");
   };
 
+  const applyBareMetalDefaults = () => {
+    setHostingModel("on_premise");
+    setProvider("self_hosted");
+    setCostModel("capex");
+  };
+
+  const selectKind = (value: string) => {
+    setKind(value);
+    if (isBareMetalRuntimeKind(value)) {
+      applyBareMetalDefaults();
+    }
+  };
+
+  const namePlaceholder = isBareMetalRuntimeKind(kind)
+    ? "e.g. AS/400 (Fastener Systems site)"
+    : "e.g. EKS prod (eu-west-1)";
+
+  const serviceProductPlaceholder = isBareMetalRuntimeKind(kind)
+    ? "e.g. IBM AS/400"
+    : "e.g. EKS";
+
+  const locationPlaceholder = isBareMetalRuntimeKind(kind)
+    ? "e.g. HQ data closet"
+    : "e.g. eu-west-1";
+
   if (!mounted) return null;
 
   return createPortal(
@@ -258,7 +290,7 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
                   <button
                     key={k.value}
                     type="button"
-                    onClick={() => setKind(k.value)}
+                    onClick={() => selectKind(k.value)}
                     className={cn(
                       "text-left rounded-lg border px-3 py-2.5 transition-colors",
                       kind === k.value
@@ -282,7 +314,7 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
                     autoFocus
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. EKS prod (eu-west-1)"
+                    placeholder={namePlaceholder}
                     className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
                   />
                 </div>
@@ -335,7 +367,7 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
                     <input
                       value={serviceProduct}
                       onChange={(e) => setServiceProduct(e.target.value)}
-                      placeholder="e.g. EKS"
+                      placeholder={serviceProductPlaceholder}
                       className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
                     />
                   </div>
@@ -371,15 +403,17 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
                   <div>
                     <FieldLabel>Hosting model</FieldLabel>
                     <SelectField value={hostingModel} onChange={setHostingModel} options={RUNTIME_HOSTING} />
+                    <FieldHint>Who owns and shares the infrastructure</FieldHint>
                   </div>
                   <div>
-                    <FieldLabel>Region</FieldLabel>
+                    <FieldLabel>Location</FieldLabel>
                     <input
                       value={region}
                       onChange={(e) => setRegion(e.target.value)}
-                      placeholder="e.g. eu-west-1"
+                      placeholder={locationPlaceholder}
                       className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
                     />
+                    <FieldHint>Cloud region or physical site</FieldHint>
                   </div>
                 </div>
 
@@ -428,11 +462,11 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
                 </div>
 
                 <div>
-                  <FieldLabel>Console / admin URL</FieldLabel>
+                  <FieldLabel>Access method</FieldLabel>
                   <input
-                    value={consoleUrl}
-                    onChange={(e) => setConsoleUrl(e.target.value)}
-                    placeholder="https://console.aws.amazon.com/eks/..."
+                    value={accessMethod}
+                    onChange={(e) => setAccessMethod(e.target.value)}
+                    placeholder="e.g. 5250 terminal session, VPN, https://console…"
                     className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
                   />
                 </div>
@@ -446,6 +480,7 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
                   <div>
                     <FieldLabel>Cost model</FieldLabel>
                     <SelectField value={costModel} onChange={setCostModel} options={RUNTIME_COST_MODEL} />
+                    <FieldHint>Consumption-based costs may be approximate</FieldHint>
                   </div>
                   <div>
                     <FieldLabel>Commitment ends</FieldLabel>
@@ -463,12 +498,9 @@ export function CreateRuntimePanel({ initialValues, onClose, onSuccess }: Props)
                   <input
                     value={annualCost}
                     onChange={(e) => setAnnualCost(e.target.value)}
-                    placeholder="e.g. $180,000"
+                    placeholder="e.g. $180,000 or support fee"
                     className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
                   />
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Consumption-based costs may be approximate
-                  </p>
                 </div>
               </div>
             </section>
