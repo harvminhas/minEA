@@ -67,11 +67,7 @@ const CRITICALITY_COLOR: Record<string, string> = {
 // ─── Custom React Flow node types ─────────────────────────────────────────────
 
 function endpointObjectType(kind: FlowEndpointKind): ObjectType {
-  if (kind === "data_object") return "data_object";
-  if (kind === "component") return "component";
-  if (kind === "data_store") return "data_store";
-  if (kind === "data_domain") return "data_domain";
-  return "application";
+  return kind;
 }
 
 const EndpointNode = memo(({ data }: NodeProps) => (
