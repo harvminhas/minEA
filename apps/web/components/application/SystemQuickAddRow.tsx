@@ -6,10 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { mergeCategoryOptions, systemCategorySelectOptions } from "@/lib/system-category";
-import {
-  isShadowGovernance,
-  systemGovernanceSelectOptions,
-} from "@/lib/system-governance";
+import { systemGovernanceSelectOptions } from "@/lib/system-governance";
 import type { SystemGovernanceStatus } from "@minea/types";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { useOwnershipForm } from "@/hooks/use-ownership-form";
@@ -25,12 +22,10 @@ export function SystemQuickAddRow({
   categoryOptions,
   onCancel,
   onCreated,
-  colSpan = 9,
 }: {
   categoryOptions: string[];
   onCancel: () => void;
   onCreated: (item: MinEAObject) => void;
-  colSpan?: number;
 }) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
@@ -47,7 +42,6 @@ export function SystemQuickAddRow({
   const [status, setStatus] = useState<(typeof QUICK_ADD_STATUSES)[number]>("planned");
   const [error, setError] = useState<string | null>(null);
 
-  const isShadow = isShadowGovernance(governanceStatus);
   const categories = useMemo(() => mergeCategoryOptions(categoryOptions), [categoryOptions]);
   const categoryChoices = systemCategorySelectOptions();
   const governanceChoices = systemGovernanceSelectOptions();
@@ -75,13 +69,11 @@ export function SystemQuickAddRow({
         governance_status: governanceStatus,
       };
       if (discovery.trim()) properties.discovery = discovery.trim();
-      if (!isShadow) {
-        if (vendor.trim()) properties.vendor = vendor.trim();
-        if (category.trim()) properties.category = category.trim();
-        properties.is_custom_built = isCustomBuilt;
-        const cost = annualCost.trim() ? Number(annualCost.replace(/,/g, "")) : NaN;
-        if (!Number.isNaN(cost) && cost > 0) properties.annual_cost = cost;
-      }
+      if (vendor.trim()) properties.vendor = vendor.trim();
+      if (category.trim()) properties.category = category.trim();
+      properties.is_custom_built = isCustomBuilt;
+      const cost = annualCost.trim() ? Number(annualCost.replace(/,/g, "")) : NaN;
+      if (!Number.isNaN(cost) && cost > 0) properties.annual_cost = cost;
 
       return objectsApi.create(
         orgSlug,
@@ -89,8 +81,8 @@ export function SystemQuickAddRow({
         {
           type: "application",
           name: trimmedName,
-          ...(isShadow ? {} : ownership.toPayload()),
-          status: isShadow ? undefined : status,
+          ...ownership.toPayload(),
+          status,
           properties,
         },
         token
@@ -103,67 +95,6 @@ export function SystemQuickAddRow({
   });
 
   const canSave = name.trim().length > 0 && !saveMutation.isPending;
-
-  if (isShadow) {
-    return (
-      <tr className="border-t border-indigo-100 bg-indigo-50/30">
-        <td className="px-4 py-2 min-w-[160px]">
-          <input
-            ref={nameRef}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="System name"
-            className={inputClass}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && canSave) saveMutation.mutate();
-            }}
-          />
-        </td>
-        <td className="px-4 py-2 min-w-[160px]">
-          <select
-            value={governanceStatus}
-            onChange={(e) => setGovernanceStatus(e.target.value as SystemGovernanceStatus)}
-            className={cn(inputClass, "pr-7")}
-          >
-            {governanceChoices.map((g) => (
-              <option key={g.value} value={g.value}>
-                {g.label}
-              </option>
-            ))}
-          </select>
-        </td>
-        <td colSpan={colSpan - 3} className="px-4 py-2">
-          <input
-            value={discovery}
-            onChange={(e) => setDiscovery(e.target.value)}
-            placeholder="How was this found?"
-            className={inputClass}
-            maxLength={500}
-          />
-        </td>
-        <td className="px-4 py-2 whitespace-nowrap">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => saveMutation.mutate()}
-              disabled={!canSave}
-              className="rounded-md bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white px-3 py-1.5 text-xs font-medium transition-colors"
-            >
-              {saveMutation.isPending ? "Saving…" : "Save"}
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="text-xs font-medium text-gray-500 hover:text-gray-700"
-            >
-              Esc
-            </button>
-          </div>
-          {error && <p className="text-[10px] text-red-600 mt-1 max-w-[140px]">{error}</p>}
-        </td>
-      </tr>
-    );
-  }
 
   return (
     <tr className="border-t border-indigo-100 bg-indigo-50/30">
@@ -183,7 +114,7 @@ export function SystemQuickAddRow({
         <select
           value={governanceStatus}
           onChange={(e) => setGovernanceStatus(e.target.value as SystemGovernanceStatus)}
-          className={cn(inputClass, "pr-7")}
+          className={cn(inputClass, "pr-7 mb-1")}
         >
           {governanceChoices.map((g) => (
             <option key={g.value} value={g.value}>
@@ -191,12 +122,19 @@ export function SystemQuickAddRow({
             </option>
           ))}
         </select>
+        <input
+          value={discovery}
+          onChange={(e) => setDiscovery(e.target.value)}
+          placeholder="How found? (optional)"
+          className={cn(inputClass, "text-xs")}
+          maxLength={500}
+        />
       </td>
       <td className="px-4 py-2 min-w-[120px]">
         <input
           value={vendor}
           onChange={(e) => setVendor(e.target.value)}
-          placeholder="Vendor"
+          placeholder="Vendor (optional)"
           className={inputClass}
         />
       </td>

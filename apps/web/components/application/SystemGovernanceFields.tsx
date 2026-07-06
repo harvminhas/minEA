@@ -2,6 +2,7 @@
 
 import type { ApplicationProperties } from "@minea/types";
 import {
+  isShadowGovernance,
   systemGovernanceSelectOptions,
   systemGovernanceStatus,
 } from "@/lib/system-governance";
@@ -44,6 +45,12 @@ export function SystemGovernanceFields({
           Whether IT formally knows about and governs this system — separate from category and
           build origin.
         </p>
+        {isShadowGovernance(governanceStatus) && (
+          <p className="text-[11px] text-amber-800 mt-1.5 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-2">
+            Only name and governance status are required. Add description, vendor, platform, runtime
+            links, and other details when you know them — e.g. a marketing SPA on WordPress.
+          </p>
+        )}
       </FormField>
 
       <FormField label="Discovery">

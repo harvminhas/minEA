@@ -229,7 +229,6 @@ export function SystemTable({
               (quickAddOpen ? (
                 <SystemQuickAddRow
                   categoryOptions={categoryOptions}
-                  colSpan={COL_COUNT}
                   onCancel={() => setQuickAddOpen(false)}
                   onCreated={(item) => {
                     setQuickAddOpen(false);

@@ -380,8 +380,6 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
         />
       )}
 
-      {!isShadowSystem && (
-        <>
       <FormField label="Description">
         <textarea
           value={description}
@@ -550,8 +548,6 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
           placeholder="e.g. crm, sales, critical"
         />
       </FormField>
-        </>
-      )}
     </FormDrawer>
   );
 }
