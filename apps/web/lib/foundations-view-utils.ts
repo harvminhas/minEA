@@ -17,7 +17,7 @@ import {
   systemObjectRuntimeLinks,
 } from "@/lib/system-drawer-utils";
 
-export type FoundationsTab = "platform" | "runtime";
+export type FoundationsTab = "platform" | "runtime" | "integration";
 
 export interface FoundationSystemEntry {
   system: MinEAObject;

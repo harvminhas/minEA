@@ -311,7 +311,7 @@ export function FoundationsViewPanel() {
   return (
     <ViewShell
       view={view}
-      subtitle="What your systems are built on, and where they run."
+      subtitle="What your estate is built on, where it runs, and what carries data between systems."
     >
       <FoundationsView />
     </ViewShell>
