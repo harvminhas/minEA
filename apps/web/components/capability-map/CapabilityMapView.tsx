@@ -17,6 +17,10 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { objectsApi } from "@/lib/api-client";
 import { AddCapabilityPickerDialog } from "@/components/capability-map/AddCapabilityPickerDialog";
+import {
+  AddCapabilityWizardDialog,
+  type AddCapabilityWizardResult,
+} from "@/components/capability-map/AddCapabilityWizardDialog";
 import { EditCapabilityDialog } from "@/components/capability-map/EditCapabilityDialog";
 import { AddDomainPickerDialog } from "@/components/capability-map/AddDomainPickerDialog";
 import { domainIcon, domainIconStyle } from "@/lib/capability-map-icons";
@@ -66,6 +70,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
   const [filter, setFilter] = useState<CapabilityMapFilter>("all");
   const [emptySectionHidden, setEmptySectionHidden] = useState(false);
   const [showDomainPicker, setShowDomainPicker] = useState(false);
+  const [showCapabilityWizard, setShowCapabilityWizard] = useState(false);
   const [capPickerDomain, setCapPickerDomain] = useState<CapabilityMapDomain | null>(null);
   const [editCapability, setEditCapability] = useState<{
     capability: CapabilityMapCapability;
@@ -168,10 +173,66 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
         token!
       );
     },
-    onSuccess: () => {
-      const domainId = capPickerDomain?.id;
+    onSuccess: (_data, variables) => {
+      const domainId = capPickerDomain?.id ?? variables.domainId;
       setCapPickerDomain(null);
       invalidate();
+      if (domainId) invalidateDomainHistory(domainId);
+      onRefresh();
+    },
+  });
+
+  const capabilityWizardMutation = useMutation({
+    mutationFn: async (result: AddCapabilityWizardResult) => {
+      const token = await getToken();
+      let domainId: string;
+      let capabilityOrder = 0;
+
+      if ("domainId" in result) {
+        domainId = result.domainId;
+        const domain = map.domains.find((d) => d.id === domainId);
+        capabilityOrder = domain?.capabilities.length ?? 0;
+      } else {
+        const domain = await objectsApi.create(
+          orgSlug,
+          workspaceSlug,
+          {
+            type: "business_domain",
+            name: result.newDomain.name,
+            status: "active",
+            properties: {
+              order_index: map.domains.length,
+              ...(result.newDomain.icon ? { icon: result.newDomain.icon } : {}),
+              ...(result.newDomain.sourceTemplateId
+                ? { source_template_id: result.newDomain.sourceTemplateId }
+                : {}),
+            },
+          },
+          token!
+        );
+        domainId = domain.id;
+        capabilityOrder = 0;
+      }
+
+      return objectsApi.create(
+        orgSlug,
+        workspaceSlug,
+        {
+          type: "capability",
+          name: result.capabilityName,
+          status: "active",
+          properties: {
+            domain_id: domainId,
+            order_index: capabilityOrder,
+          },
+        },
+        token!
+      );
+    },
+    onSuccess: (_data, variables) => {
+      setShowCapabilityWizard(false);
+      invalidate();
+      const domainId = "domainId" in variables ? variables.domainId : undefined;
       if (domainId) invalidateDomainHistory(domainId);
       onRefresh();
     },
@@ -243,14 +304,24 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
               )}
             </div>
             {canCreate && (
-              <button
-                type="button"
-                onClick={() => setShowDomainPicker(true)}
-                className="inline-flex items-center gap-1.5 border border-gray-200 rounded-md px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 flex-shrink-0"
-              >
-                <Plus size={14} />
-                Add domain
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowCapabilityWizard(true)}
+                  className="inline-flex items-center gap-1.5 bg-gray-900 hover:bg-gray-800 text-white rounded-md px-3 py-1.5 text-sm font-medium"
+                >
+                  <Plus size={14} />
+                  Add capability
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDomainPicker(true)}
+                  className="inline-flex items-center gap-1.5 border border-gray-200 rounded-md px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  <Plus size={14} />
+                  Add domain
+                </button>
+              </div>
             )}
           </div>
 
@@ -282,14 +353,24 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
                 Start building your map by adding a level-1 domain — pick from industry suggestions or create your own.
               </p>
               {canCreate && (
-                <button
-                  type="button"
-                  onClick={() => setShowDomainPicker(true)}
-                  className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md px-4 py-2 text-sm font-medium"
-                >
-                  <Plus size={14} />
-                  Add domain
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCapabilityWizard(true)}
+                    className="inline-flex items-center gap-1.5 bg-gray-900 hover:bg-gray-800 text-white rounded-md px-4 py-2 text-sm font-medium"
+                  >
+                    <Plus size={14} />
+                    Add capability
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDomainPicker(true)}
+                    className="inline-flex items-center gap-1.5 border border-gray-200 rounded-md px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <Plus size={14} />
+                    Add domain
+                  </button>
+                </div>
               )}
             </div>
           ) : (
@@ -339,6 +420,16 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
           )}
         </div>
       </div>
+
+      {canCreate && showCapabilityWizard && (
+        <AddCapabilityWizardDialog
+          domains={map.domains}
+          existingDomainNames={existingDomainNames}
+          isSubmitting={capabilityWizardMutation.isPending}
+          onClose={() => setShowCapabilityWizard(false)}
+          onSubmit={(result) => capabilityWizardMutation.mutate(result)}
+        />
+      )}
 
       {canCreate && showDomainPicker && (
         <AddDomainPickerDialog
@@ -402,12 +493,14 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
 
       {(createDomainMutation.isError ||
         createCapabilityMutation.isError ||
+        capabilityWizardMutation.isError ||
         deleteDomainMutation.isError ||
         deleteCapabilityMutation.isError) && (
         <p className="fixed bottom-4 right-4 z-[100] text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2 shadow-sm">
           {(
             createDomainMutation.error ??
             createCapabilityMutation.error ??
+            capabilityWizardMutation.error ??
             deleteDomainMutation.error ??
             deleteCapabilityMutation.error
           )?.message}
