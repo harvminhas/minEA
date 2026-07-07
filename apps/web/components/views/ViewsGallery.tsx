@@ -95,12 +95,68 @@ function InvestmentsIllustration() {
   );
 }
 
+function IntegrationHealthIllustration() {
+  return (
+    <div className="flex flex-col gap-1.5 px-4 py-4 w-full max-w-[200px]">
+      {[
+        { border: "border-red-400", badge: "MANUAL" },
+        { border: "border-amber-400", badge: "NO CONSUMERS" },
+        { border: "border-gray-300", badge: "FLOW" },
+      ].map((row, i) => (
+        <div
+          key={i}
+          className={cn("rounded-md border border-gray-200 bg-white p-2 border-t-2", row.border)}
+        >
+          <span className="text-[8px] font-bold text-gray-400">FLOW</span>
+          <div className="h-2 rounded bg-gray-200 w-3/4 mt-2" />
+          <span className="text-[7px] font-bold text-gray-500 mt-1 inline-block">{row.badge}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FoundationsIllustration() {
+  return (
+    <div className="flex flex-col gap-1.5 px-4 py-4 w-full max-w-[200px]">
+      {[
+        { label: "CRM FOUNDATION", pills: 1 },
+        { label: "CUSTOM DEV", pills: 2, warn: true },
+      ].map((row) => (
+        <div key={row.label} className="space-y-1">
+          <span
+            className={cn(
+              "text-[7px] font-bold tracking-wide",
+              row.warn ? "text-red-600" : "text-gray-400"
+            )}
+          >
+            {row.label}
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {Array.from({ length: row.pills }).map((_, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "h-5 rounded-full border bg-white px-2",
+                  row.warn ? "border-red-200" : "border-gray-200"
+                )}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const ILLUSTRATIONS: Record<string, () => React.ReactElement> = {
   "capability-heatmap": CapabilityHeatmapIllustration,
   journeys: JourneysIllustration,
   products: ProductsIllustration,
   investments: InvestmentsIllustration,
   "tech-debt": TechDebtIllustration,
+  "integration-health": IntegrationHealthIllustration,
+  foundations: FoundationsIllustration,
 };
 
 // ─── Gallery card ────────────────────────────────────────────────────────

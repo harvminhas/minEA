@@ -25,6 +25,9 @@ interface AppStore {
 
   sidebarExpanded: boolean;
   setSidebarExpanded: (expanded: boolean) => void;
+
+  lastAppPath: string | null;
+  setLastAppPath: (path: string | null) => void;
 }
 
 export const useAppStore = create<AppStore>()(
@@ -55,6 +58,9 @@ export const useAppStore = create<AppStore>()(
 
       sidebarExpanded: false,
       setSidebarExpanded: (expanded) => set({ sidebarExpanded: expanded }),
+
+      lastAppPath: null,
+      setLastAppPath: (path) => set({ lastAppPath: path }),
     }),
     {
       name: "minea-app-store",
@@ -63,6 +69,7 @@ export const useAppStore = create<AppStore>()(
         viewMode: state.viewMode,
         splitViewId: state.splitViewId,
         sidebarExpanded: state.sidebarExpanded,
+        lastAppPath: state.lastAppPath,
       }),
     }
   )

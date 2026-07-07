@@ -39,6 +39,10 @@ export function viewHasRepositoryData(
       return metrics.investmentCount > 0;
     case "tech-debt":
       return true;
+    case "integration-health":
+      return true;
+    case "foundations":
+      return metrics.systemCount > 0;
     default:
       return false;
   }

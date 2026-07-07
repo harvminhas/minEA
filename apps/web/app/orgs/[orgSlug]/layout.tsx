@@ -19,8 +19,15 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const pathname = usePathname();
-  const { setActiveOrg, setActiveWorkspace, activeWorkspace, viewMode, sidebarExpanded, setSplitViewId } =
-    useAppStore();
+  const {
+    setActiveOrg,
+    setActiveWorkspace,
+    activeWorkspace,
+    viewMode,
+    setViewMode,
+    sidebarExpanded,
+    setSplitViewId,
+  } = useAppStore();
   const queryEnabled = useAuthQueryEnabled(orgSlug);
   const isEmbed = pathname.includes("/embed/");
   const isOrgOnlyRoute = !!orgSlug && !pathname.includes("/workspaces/");
@@ -62,6 +69,14 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
       router.replace("/home");
     }
   }, [isFetched, isError, router, setActiveOrg]);
+
+  // Keep top-nav mode aligned when landing on a views URL (e.g. restore last location).
+  useEffect(() => {
+    if (!pathname.includes("/workspaces/") || viewMode === "split") return;
+    if (isViewsAreaPath(pathname) && viewMode !== "views") {
+      setViewMode("views");
+    }
+  }, [pathname, viewMode, setViewMode]);
 
   // Split mode: main pane is repository-only; views live in the right panel.
   useEffect(() => {

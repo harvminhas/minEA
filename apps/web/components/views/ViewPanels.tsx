@@ -15,6 +15,8 @@ import { PortfolioView } from "@/components/views/PortfolioView";
 import { CapabilityHeatmapView } from "@/components/views/CapabilityHeatmapView";
 import { InvestmentPipelineView } from "@/components/views/InvestmentPipelineView";
 import { TechDebtView } from "@/components/views/TechDebtView";
+import { IntegrationHealthView } from "@/components/views/IntegrationHealthView";
+import { FoundationsView } from "@/components/views/FoundationsView";
 import { JourneyBuilder } from "@/components/views/JourneyBuilder";
 import { ProcessBuilder } from "@/components/views/ProcessBuilder";
 
@@ -286,6 +288,32 @@ export function TechDebtViewPanel() {
       }
     >
       <TechDebtView createOpen={showCreate} onCreateOpenChange={setShowCreate} />
+    </ViewShell>
+  );
+}
+
+export function IntegrationHealthViewPanel() {
+  const view = getView("integration-health");
+
+  return (
+    <ViewShell
+      view={view}
+      subtitle="Every API, event, and data flow across your estate, and where it depends on people."
+    >
+      <IntegrationHealthView />
+    </ViewShell>
+  );
+}
+
+export function FoundationsViewPanel() {
+  const view = getView("foundations");
+
+  return (
+    <ViewShell
+      view={view}
+      subtitle="What your systems are built on, and where they run."
+    >
+      <FoundationsView />
     </ViewShell>
   );
 }

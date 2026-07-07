@@ -9,6 +9,8 @@ import {
   ProcessesViewPanel,
   ProductsViewPanel,
   TechDebtViewPanel,
+  IntegrationHealthViewPanel,
+  FoundationsViewPanel,
 } from "@/components/views/ViewPanels";
 
 const VIEW_PANELS: Record<ViewId, React.ComponentType> = {
@@ -18,6 +20,8 @@ const VIEW_PANELS: Record<ViewId, React.ComponentType> = {
   "capability-heatmap": CapabilityHeatmapViewPanel,
   investments: InvestmentsViewPanel,
   "tech-debt": TechDebtViewPanel,
+  "integration-health": IntegrationHealthViewPanel,
+  foundations: FoundationsViewPanel,
 };
 
 export function ViewPanelContent({ viewId }: { viewId: ViewId }) {

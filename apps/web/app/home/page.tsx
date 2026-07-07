@@ -5,10 +5,15 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { orgsApi, workspacesApi } from "@/lib/api-client";
+import { orgsApi } from "@/lib/api-client";
 import { apiBaseLabel, apiConfigHelpText } from "@/lib/api-base";
 import { useAppStore } from "@/lib/store";
-import { primaryViewPath } from "@/lib/tenancy";
+import { useAppStoreHydrated } from "@/lib/use-app-store-hydrated";
+import {
+  inferViewModeForPath,
+  resolvePostLoginDestination,
+  splitViewIdForPath,
+} from "@/lib/last-app-path";
 import { useAppBoot } from "@/lib/app-boot-context";
 
 type HomePhase = "orgs" | "workspaces" | "redirect";
@@ -17,7 +22,8 @@ export default function HomePage() {
   const { getToken, isLoaded } = useAuth();
   const router = useRouter();
   const { setHomeStep } = useAppBoot();
-  const { setViewMode } = useAppStore();
+  const { setViewMode, lastAppPath } = useAppStore();
+  const storeHydrated = useAppStoreHydrated();
   const [phase, setPhase] = useState<HomePhase>("orgs");
 
   const { data: orgs, isLoading, isError, error } = useQuery({
@@ -31,29 +37,33 @@ export default function HomePage() {
   });
 
   useEffect(() => {
-    if (isLoading || !isLoaded || isError) return;
+    if (isLoading || !isLoaded || isError || !storeHydrated) return;
 
     if (!orgs || orgs.length === 0) {
       router.replace("/onboarding");
       return;
     }
 
-    const org = orgs[0]!;
     setPhase("workspaces");
 
     (async () => {
-      const token = await getToken();
-      const workspaces = await workspacesApi.list(org.slug, token!);
       setPhase("redirect");
-      setViewMode("repository");
-      const ws = workspaces[0];
-      if (ws) {
-        router.replace(primaryViewPath(org.slug, ws.slug));
+      const { destination, restored } = await resolvePostLoginDestination({
+        orgs,
+        lastAppPath,
+        getToken,
+      });
+      const persistedMode = useAppStore.getState().viewMode;
+      if (restored) {
+        setViewMode(inferViewModeForPath(destination, persistedMode));
+        const splitViewId = splitViewIdForPath(destination);
+        if (splitViewId) useAppStore.getState().setSplitViewId(splitViewId);
       } else {
-        router.replace(`/orgs/${org.slug}/settings`);
+        setViewMode("repository");
       }
+      router.replace(destination);
     })();
-  }, [orgs, isLoading, isLoaded, isError, router, getToken, setViewMode]);
+  }, [orgs, isLoading, isLoaded, isError, storeHydrated, router, getToken, setViewMode, lastAppPath]);
 
   useEffect(() => {
     setHomeStep(phase === "orgs" ? 0 : phase === "workspaces" ? 1 : 2);

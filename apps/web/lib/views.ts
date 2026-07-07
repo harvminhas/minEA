@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, GitBranch, Grid3X3, Map, Package, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, GitBranch, Grid3X3, Layers, Map, Package, TrendingUp } from "lucide-react";
 
 /** v1 fixed views — not user-defined (spec §2). */
 export type ViewId =
@@ -8,7 +8,9 @@ export type ViewId =
   | "journeys"
   | "capability-heatmap"
   | "investments"
-  | "tech-debt";
+  | "tech-debt"
+  | "integration-health"
+  | "foundations";
 
 export interface ViewConfig {
   id: ViewId;
@@ -122,14 +124,60 @@ export const VIEWS_V1: ViewConfig[] = [
       "Record known issues as debt items. Attach them to systems or components for product roll-up, or leave them unattached until you know where they belong.",
     emptyCta: "Add debt item",
   },
+  {
+    id: "foundations",
+    label: "Tech Stack",
+    description: "Platforms and runtimes supporting systems",
+    drawerDescription:
+      "What your systems are built on and where they run — grouped by enterprise platform type or compute runtime.",
+    segment: "views/foundations",
+    icon: Layers,
+    color: "#6366f1",
+    anchorQuestion: "Show me what platforms and runtimes underpin our application estate.",
+    emptyTitle: "No systems to map yet",
+    emptyDescription:
+      "Add systems in the Application layer, link them to Platforms (built on) and Runtimes (runs on) in Object links. This view groups the estate for executive scanning.",
+    emptyCta: "Add systems",
+  },
+  {
+    id: "integration-health",
+    label: "Integration health",
+    description: "APIs, events, and flows at a glance",
+    drawerDescription:
+      "Every API, event, and data flow across your estate — highlighting manual processes, no-code integrations, and APIs without registered consumers.",
+    segment: "views/integration-health",
+    icon: ArrowLeftRight,
+    color: "#14b8a6",
+    anchorQuestion:
+      "Show me every integration and where it depends on people instead of systems.",
+    emptyTitle: "No integrations yet",
+    emptyDescription:
+      "Add flows, APIs, and events in the Integration layer. This view surfaces manual handoffs, no-code tools, and public APIs missing consumer records.",
+    emptyCta: "Add a flow",
+  },
 ];
 
-export const NAV_VIEWS: ViewConfig[] = [PRODUCTS_VIEW, ...VIEWS_V1];
+const ALL_VIEWS_LIST: ViewConfig[] = [PRODUCTS_VIEW, PROCESSES_VIEW, ...VIEWS_V1];
 
-const ALL_VIEWS: ViewConfig[] = [PRODUCTS_VIEW, PROCESSES_VIEW, ...VIEWS_V1];
+/** Sidebar / Views mode nav order */
+const NAV_VIEW_IDS: ViewId[] = [
+  "foundations",
+  "integration-health",
+  "tech-debt",
+  "products",
+  "capability-heatmap",
+  "journeys",
+  "investments",
+];
+
+export const NAV_VIEWS: ViewConfig[] = NAV_VIEW_IDS.map(
+  (id) => ALL_VIEWS_LIST.find((v) => v.id === id)!
+);
+
+const ALL_VIEWS: ViewConfig[] = ALL_VIEWS_LIST;
 
 /** All views that can render in the split panel (includes Processes). */
-export const SPLIT_PANEL_VIEWS: ViewConfig[] = ALL_VIEWS;
+export const SPLIT_PANEL_VIEWS: ViewConfig[] = [...NAV_VIEWS, PROCESSES_VIEW];
 
 export function isViewsAreaPath(pathname: string): boolean {
   return /\/views(\/|$)/.test(pathname);

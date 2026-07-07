@@ -128,6 +128,24 @@ export function buildViewRequirements(
           actionHref: investments,
         },
       ];
+    case "integration-health":
+      return [
+        {
+          label: "Flows, APIs, or events in repository",
+          met: true,
+          actionLabel: "Add integrations",
+          actionHref: `${basePath}/integration/flows`,
+        },
+      ];
+    case "foundations":
+      return [
+        {
+          label: "At least one system",
+          met: metrics.systemCount > 0,
+          actionLabel: "Add systems",
+          actionHref: `${basePath}/application/applications`,
+        },
+      ];
     default:
       return [];
   }
@@ -572,6 +590,20 @@ export function viewReadiness(
         : { ready: false, statusLabel: "Needs investments", statusTone: "needs" };
     case "tech-debt":
       return { ready: true, statusLabel: "None open", statusTone: "healthy" };
+    case "integration-health":
+      return {
+        ready: true,
+        statusLabel: "Integration layer",
+        statusTone: "healthy",
+      };
+    case "foundations":
+      return metrics.systemCount > 0
+        ? {
+            ready: true,
+            statusLabel: `${metrics.systemCount} system${metrics.systemCount === 1 ? "" : "s"} in estate`,
+            statusTone: "healthy",
+          }
+        : { ready: false, statusLabel: "Add systems", statusTone: "needs" };
     default:
       return { ready: false, statusLabel: "Needs data", statusTone: "needs" };
   }
