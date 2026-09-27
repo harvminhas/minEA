@@ -12,7 +12,8 @@ import { useAppStore } from "@/lib/store";
 import { orgsApi, workspacesApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { GlobalRefetchIndicator } from "@/components/ui/GlobalRefetchIndicator";
-import { isViewsAreaPath, viewIdFromPathname, workspaceHomePath } from "@/lib/views";
+import { isViewsAreaPath, isViewsModePath, viewIdFromPathname, workspaceHomePath } from "@/lib/views";
+import { MvpFrame } from "@/components/mvp/MvpFrame";
 
 export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
@@ -100,21 +101,29 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
   }
 
   const sidebarW = sidebarExpanded ? "ml-[200px]" : "ml-[52px]";
-  const bgClass = viewMode === "views" ? "bg-violet-50" : "bg-gray-50";
+  const bgClass = "bg-gray-50";
+  const mvpShell =
+    pathname.includes("/workspaces/") && !isEmbed && viewMode !== "split" && !isViewsModePath(pathname);
 
   return (
     <RequireAuth>
       <GlobalRefetchIndicator />
       <div className={`h-screen overflow-hidden ${bgClass}`}>
         <TopNav />
-        <div className="flex h-full pt-12">
-          <AppSidebar />
-          {viewMode === "split" ? (
-            <div className={`flex flex-1 ${sidebarW} overflow-hidden`}>
-              <ResizableSplitLayout>{children}</ResizableSplitLayout>
-            </div>
+        <div className="flex h-full pt-14">
+          {mvpShell ? (
+            <MvpFrame>{children}</MvpFrame>
           ) : (
-            <main className={`flex-1 ${sidebarW} overflow-y-auto`}>{children}</main>
+            <>
+              <AppSidebar />
+              {viewMode === "split" ? (
+                <div className={`flex flex-1 ${sidebarW} overflow-hidden`}>
+                  <ResizableSplitLayout>{children}</ResizableSplitLayout>
+                </div>
+              ) : (
+                <main className={`flex-1 ${sidebarW} overflow-y-auto`}>{children}</main>
+              )}
+            </>
           )}
         </div>
       </div>

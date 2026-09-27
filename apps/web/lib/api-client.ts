@@ -948,7 +948,34 @@ export const dataApi = {
 
 // ─── AI ──────────────────────────────────────────────────────────────────────
 
+export type AskModelPayload = {
+  source: "llm" | "fallback";
+  fallback_reason: string | null;
+  answer_text: string | null;
+  citations: {
+    n: number;
+    record_id: string;
+    name: string;
+    type_label: string;
+    kind: string;
+    owner: string;
+    criticality: string;
+    relationship: string;
+  }[];
+  gaps: { record_id: string; field: string; message: string }[];
+  follow_ups: string[];
+  tools_used: string[];
+  unsupported?: boolean;
+};
+
 export const aiApi = {
+  ask: (orgSlug: string, workspaceSlug: string, question: string, token: string) =>
+    apiFetch<AskModelPayload>(`${wsBase(orgSlug, workspaceSlug)}/ai/ask`, {
+      method: "POST",
+      body: JSON.stringify({ question }),
+      token,
+    }),
+
   ingest: (orgSlug: string, workspaceSlug: string, text: string, token: string) =>
     apiFetch<CisPayload>(`${wsBase(orgSlug, workspaceSlug)}/ai/ingest`, {
       method: "POST",

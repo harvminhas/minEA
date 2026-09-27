@@ -14,7 +14,6 @@ import {
 import { ZeroStateDashboard } from "@/components/dashboard/ZeroStateDashboard";
 import { PopulatedStateDashboard } from "@/components/dashboard/PopulatedStateDashboard";
 import { ArchitectureInsightsPanel } from "@/components/insights/ArchitectureInsightsPanel";
-import { HowItWorksModal } from "@/components/dashboard/HowItWorksModal";
 import { WorkspaceSnapshotRefreshBar } from "@/components/dashboard/WorkspaceSnapshotRefreshBar";
 
 function formatUpdatedAgo(iso: string | null): string {
@@ -30,7 +29,6 @@ export function WorkspaceDashboard() {
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
   const { activeOrg, setViewMode } = useAppStore();
   const [insightsOpen, setInsightsOpen] = useState(false);
-  const [howItWorksOpen, setHowItWorksOpen] = useState(false);
 
   const { data: dashboardState, isPending, isError, error, refetch } =
     useWorkspaceDashboard(orgSlug, workspaceSlug);
@@ -108,7 +106,6 @@ export function WorkspaceDashboard() {
             metrics={metrics}
             insights={insightsState.insights}
             onOpenInsights={() => setInsightsOpen(true)}
-            onOpenHowItWorks={() => setHowItWorksOpen(true)}
           />
         ) : null}
       </div>
@@ -124,7 +121,6 @@ export function WorkspaceDashboard() {
         onRefresh={insightsState.refresh}
       />
 
-      <HowItWorksModal open={howItWorksOpen} onClose={() => setHowItWorksOpen(false)} />
     </>
   );
 }

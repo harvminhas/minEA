@@ -2,21 +2,24 @@
 
 import { type ApplicationProperties, type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
 import { Clock } from "lucide-react";
+import { CatalogCardFields } from "@/components/catalog/CatalogCardFields";
+import {
+  catalogOwnerLabel,
+  formatCatalogAnnualCost,
+  formatCatalogContractEnd,
+} from "@/lib/catalog-fields";
 import {
   formatUpdatedAgo,
   isSystemObject,
-  systemStatusLabel,
-  SYSTEM_STATUS_STYLE,
 } from "@/lib/system-utils";
 import { supportsTechDebtTab } from "@/lib/object-tech-debt";
 import { systemCategoryDisplay } from "@/lib/system-category";
 import {
   governanceStatusBadgeClass,
-  systemDiscovery,
   systemGovernanceLabel,
   systemGovernanceStatus,
 } from "@/lib/system-governance";
-import { formatCurrency, getObjectInitial, cn } from "@/lib/utils";
+import { getObjectInitial, cn } from "@/lib/utils";
 
 interface Props {
   object: MinEAObject;
@@ -43,20 +46,11 @@ function SystemCard({
   color: string;
   onClick?: () => void;
 }) {
-  const status = object.status ?? "planned";
-  const capCount = object.capability_count ?? 0;
-  const props = object.properties as Record<string, unknown>;
   const appProps = object.properties as ApplicationProperties;
-  const platformName = appProps.platform?.platform_name ?? null;
-  const vendor = props.vendor ? String(props.vendor) : null;
   const categoryMeta = systemCategoryDisplay(appProps);
   const governance = systemGovernanceStatus(appProps);
-  const discoveryNote = systemDiscovery(appProps);
-  const annualCost = props.annual_cost != null && Number(props.annual_cost) > 0
-    ? Number(props.annual_cost)
-    : null;
-  const tags = object.tags ?? [];
   const openDebt = object.open_tech_debt_count ?? 0;
+  const subtitle = categoryMeta.label || "Application";
 
   return (
     <div
@@ -74,9 +68,7 @@ function SystemCard({
           </div>
           <div className="min-w-0">
             <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{object.name}</p>
-            {vendor && (
-              <p className="text-xs text-gray-400 mt-0.5 truncate">{vendor}</p>
-            )}
+            <p className="text-xs text-gray-400 mt-0.5 truncate">{subtitle}</p>
           </div>
         </div>
         <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -95,60 +87,17 @@ function SystemCard({
               {openDebt} debt
             </span>
           )}
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize",
-              SYSTEM_STATUS_STYLE[status] ?? SYSTEM_STATUS_STYLE.planned
-            )}
-          >
-            {systemStatusLabel(status)}
-          </span>
         </div>
       </div>
 
-      {/* Key-value rows */}
-      <div className="space-y-1.5 text-xs">
-        {governance !== "sanctioned" && (
-          <PropertyRow label="Governance" value={systemGovernanceLabel(appProps)} />
-        )}
-        {discoveryNote && <PropertyRow label="Discovery" value={discoveryNote} />}
-        {categoryMeta.label && (
-          <PropertyRow
-            label="Category"
-            value={
-              categoryMeta.needsReview ? `${categoryMeta.label} (needs review)` : categoryMeta.label
-            }
-          />
-        )}
-        {categoryMeta.isCustomBuilt && (
-          <PropertyRow label="Custom-built" value="Yes — built in-house" />
-        )}
-        {platformName && <PropertyRow label="Platform" value={platformName} />}
-        {annualCost != null && (
-          <PropertyRow label="Annual cost" value={formatCurrency(annualCost)} />
-        )}
-        <PropertyRow label="Capabilities" value={String(capCount)} />
-        <PropertyRow
-          label="Tech debt"
-          value={openDebt === 0 ? "None open" : String(openDebt)}
-          valueClassName={openDebt > 0 ? "text-red-700" : undefined}
-        />
-        {object.owner && <PropertyRow label="Owner" value={object.owner} />}
-      </div>
-
-      {/* Tags */}
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-3">
-          {tags.slice(0, 4).map((tag) => (
-            <span
-              key={tag}
-              className="rounded border border-gray-200 px-2 py-0.5 text-xs text-gray-500"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
+      <CatalogCardFields
+        owner={catalogOwnerLabel(object)}
+        vendor={appProps.vendor?.trim() || "—"}
+        annualCost={formatCatalogAnnualCost(appProps.annual_cost)}
+        contractEnd={formatCatalogContractEnd(appProps.contract_renewal)}
+        lifecycle={object.status}
+        criticality={appProps.criticality}
+      />
 
       {/* Footer */}
       <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">
@@ -158,23 +107,6 @@ function SystemCard({
           {formatUpdatedAgo(object.updated_at)}
         </span>
       </div>
-    </div>
-  );
-}
-
-function PropertyRow({
-  label,
-  value,
-  valueClassName,
-}: {
-  label: string;
-  value: string;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-gray-400">{label}</span>
-      <span className={cn("text-gray-700 font-medium", valueClassName)}>{value}</span>
     </div>
   );
 }

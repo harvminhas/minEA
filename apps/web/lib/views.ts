@@ -183,6 +183,11 @@ export function isViewsAreaPath(pathname: string): boolean {
   return /\/views(\/|$)/.test(pathname);
 }
 
+/** Views tab routes. Processes stays with Model, not this nav. */
+export function isViewsModePath(pathname: string): boolean {
+  return isViewsAreaPath(pathname) && !/\/views\/processes(\/|$)/.test(pathname);
+}
+
 /** Resolve a view id from a workspace pathname, if the URL is a view route. */
 export function viewIdFromPathname(pathname: string): ViewId | null {
   for (const view of ALL_VIEWS) {

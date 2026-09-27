@@ -13,6 +13,7 @@ import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import {
   buildPlatformProperties,
   lifecycleToStatus,
+  normalizeLifecycle,
   PLATFORM_CRITICALITY,
   PLATFORM_HOSTING,
   PLATFORM_LICENSE,
@@ -96,7 +97,7 @@ function initFromPlatform(platform?: MinEAObject) {
     contractRenewal: props.contract_renewal ?? "",
     annualCost: props.annual_cost ?? "",
     slaTarget: props.sla_target ?? "99_9",
-    lifecycle: props.lifecycle ?? statusToLifecycle(platform?.status),
+    lifecycle: normalizeLifecycle(props.lifecycle ?? statusToLifecycle(platform?.status)),
     criticality: props.criticality ?? "low",
     owner: platform?.owner ?? "",
   };
@@ -404,7 +405,7 @@ export function CreatePlatformPanel({ initialValues, initialName = "", onClose, 
                     <SelectField value={licenseModel} onChange={setLicenseModel} options={PLATFORM_LICENSE} />
                   </div>
                   <div>
-                    <FieldLabel>Contract renewal</FieldLabel>
+                    <FieldLabel>Contract end</FieldLabel>
                     <input
                       value={contractRenewal}
                       onChange={(e) => setContractRenewal(e.target.value)}

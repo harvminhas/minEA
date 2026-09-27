@@ -268,6 +268,9 @@ export interface ApplicationProperties {
   discovery?: string;
   hosting_model?: "cloud" | "on_premise" | "hybrid" | "saas";
   annual_cost?: number;
+  /** Contract end or renewal date (YYYY-MM-DD or a short note). */
+  contract_renewal?: string;
+  criticality?: "low" | "medium" | "high" | "tier1";
   /** Enterprise platform this system is built on (synced via built_on relationship). */
   platform?: PlatformRef | null;
   /** How this entity relates to AI workloads. Omitted or "none" = not AI-related. */
@@ -522,7 +525,7 @@ export interface ToolProperties {
   contract_renewal?: string;
   annual_cost?: string;
   sla_target?: "99_9" | "99_95" | "99_99" | "best_effort";
-  lifecycle?: "pilot" | "active" | "deprecated" | "end_of_life";
+  lifecycle?: "planned" | "active" | "retiring" | "end_of_life" | "pilot" | "deprecated";
   criticality?: "low" | "medium" | "high" | "tier1";
   /** Persisted node positions for the integration infra relationship diagram. */
   node_layout?: Record<string, { x: number; y: number }>;
@@ -544,7 +547,7 @@ export interface CloudServiceProperties {
   contract_renewal?: string;
   annual_cost?: string;
   sla_target?: "99_9" | "99_95" | "99_99" | "best_effort";
-  lifecycle?: "pilot" | "active" | "deprecated" | "end_of_life";
+  lifecycle?: "planned" | "active" | "retiring" | "end_of_life" | "pilot" | "deprecated";
   criticality?: "low" | "medium" | "high" | "tier1";
 }
 
@@ -557,6 +560,8 @@ export interface ModelProperties {
   data_residency?: string;
   /** Technology → Runtimes (compute / hosting) */
   compute_runtime_kind?: "kubernetes" | "serverless" | "container" | "vm" | "paas" | "on_prem";
+  /** Supplier for this runtime, separate from the hosting provider. */
+  vendor?: string;
   runtime_provider?: string;
   service_product?: string;
   hosting_model?: "public_cloud" | "private_cloud" | "on_premise" | "hybrid";
@@ -575,7 +580,7 @@ export interface ModelProperties {
   commitment_ends?: string;
   annual_cost?: string;
   sla_target?: "99_9" | "99_95" | "99_99" | "best_effort";
-  lifecycle?: "pilot" | "active" | "deprecated" | "end_of_life";
+  lifecycle?: "planned" | "active" | "retiring" | "end_of_life" | "pilot" | "deprecated";
   criticality?: "low" | "medium" | "high" | "tier1";
 }
 

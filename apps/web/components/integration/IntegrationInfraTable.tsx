@@ -2,16 +2,27 @@
 
 import { useMemo, useState } from "react";
 import { ArrowLeftRight, ArrowUpDown } from "lucide-react";
+import {
+  catalogLifecycleLabel,
+  catalogOwnerLabel,
+  formatCatalogAnnualCost,
+  formatCatalogContractEnd,
+} from "@/lib/catalog-fields";
 import { INFRA_ICON_STYLE } from "@/lib/integration-infra-utils";
 import {
-  infraKindLabelForItem,
+  infraProps,
   infraVendorLabelForItem,
   sortIntegrationInfra,
   type InfraSortKey,
 } from "@/lib/integration-infra-list-utils";
+import {
+  criticalityBadgeStyle,
+  criticalityCardLabel,
+  lifecycleBadgeStyle,
+} from "@/lib/technology-card-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import type { MinEAObject } from "@minea/types";
-import { cn, getStatusColor, getStatusLabel } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 function SortHeader({
   label,
@@ -73,16 +84,20 @@ export function IntegrationInfraTable({
         <thead>
           <tr>
             <SortHeader label="Name" active={sortKey === "name"} onClick={() => toggleSort("name")} />
-            <SortHeader label="Kind" active={sortKey === "kind"} onClick={() => toggleSort("kind")} />
-            <SortHeader label="Vendor" active={sortKey === "vendor"} onClick={() => toggleSort("vendor")} />
             <SortHeader label="Owner" active={sortKey === "owner"} onClick={() => toggleSort("owner")} />
-            <SortHeader label="Status" active={sortKey === "status"} onClick={() => toggleSort("status")} />
+            <SortHeader label="Vendor" active={sortKey === "vendor"} onClick={() => toggleSort("vendor")} />
+            <SortHeader label="Annual cost" active={sortKey === "cost"} onClick={() => toggleSort("cost")} />
+            <SortHeader label="Contract end" active={sortKey === "contract"} onClick={() => toggleSort("contract")} />
+            <SortHeader label="Lifecycle" active={sortKey === "status"} onClick={() => toggleSort("status")} />
+            <SortHeader label="Criticality" active={sortKey === "criticality"} onClick={() => toggleSort("criticality")} />
             <SortHeader label="Updated" active={sortKey === "updated"} onClick={() => toggleSort("updated")} />
           </tr>
         </thead>
         <tbody>
           {sorted.map((item) => {
-            const status = item.status ?? "planned";
+            const props = infraProps(item);
+            const lifecycle = props.lifecycle ?? item.status ?? "planned";
+            const criticality = props.criticality;
 
             return (
               <tr
@@ -103,24 +118,41 @@ export function IntegrationInfraTable({
                     <span className="font-medium text-gray-900 truncate">{item.name}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-gray-600 text-xs">
-                  {infraKindLabelForItem(item) || "—"}
+                <td className="px-4 py-3 text-gray-600 text-xs truncate max-w-[160px]">
+                  {catalogOwnerLabel(item)}
                 </td>
                 <td className="px-4 py-3 text-gray-600 text-xs truncate max-w-[140px]">
                   {infraVendorLabelForItem(item) || "—"}
                 </td>
-                <td className="px-4 py-3 text-gray-600 text-xs truncate max-w-[120px]">
-                  {item.owner || "—"}
+                <td className="px-4 py-3 text-gray-700 text-xs whitespace-nowrap">
+                  {formatCatalogAnnualCost(props.annual_cost)}
+                </td>
+                <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+                  {formatCatalogContractEnd(props.contract_renewal)}
                 </td>
                 <td className="px-4 py-3">
                   <span
                     className={cn(
-                      "rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
-                      getStatusColor(status)
+                      "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                      lifecycleBadgeStyle(lifecycle)
                     )}
                   >
-                    {getStatusLabel(status)}
+                    {catalogLifecycleLabel(lifecycle)}
                   </span>
+                </td>
+                <td className="px-4 py-3">
+                  {criticality ? (
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                        criticalityBadgeStyle(criticality)
+                      )}
+                    >
+                      {criticalityCardLabel(criticality)}
+                    </span>
+                  ) : (
+                    <span className="text-gray-400 text-xs">—</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
                   {formatUpdatedAgo(item.updated_at)}

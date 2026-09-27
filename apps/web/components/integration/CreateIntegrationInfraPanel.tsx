@@ -20,6 +20,9 @@ import {
   INFRA_KINDS,
   INFRA_VENDORS,
   lifecycleToStatus,
+  normalizeLifecycle,
+  PLATFORM_CRITICALITY,
+  PLATFORM_LIFECYCLE,
   statusToLifecycle,
   type IntegrationInfraHandle,
 } from "@/lib/integration-infra-utils";
@@ -66,7 +69,10 @@ function initFromInfra(infra?: MinEAObject) {
     hostingModel: props.hosting_model ?? "saas",
     region: props.region ?? "",
     existingProps: props,
-    lifecycle: props.lifecycle ?? statusToLifecycle(infra?.status),
+    contractRenewal: props.contract_renewal ?? "",
+    annualCost: props.annual_cost ?? "",
+    lifecycle: normalizeLifecycle(props.lifecycle ?? statusToLifecycle(infra?.status)),
+    criticality: props.criticality ?? "low",
     owner: infra?.owner ?? "",
   };
 }
@@ -93,6 +99,10 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
     NonNullable<ToolProperties["hosting_model"]>
   >((init.hostingModel as NonNullable<ToolProperties["hosting_model"]>) ?? "saas");
   const [region, setRegion] = useState(init.region);
+  const [contractRenewal, setContractRenewal] = useState(init.contractRenewal);
+  const [annualCost, setAnnualCost] = useState(init.annualCost);
+  const [lifecycle, setLifecycle] = useState<string>(init.lifecycle);
+  const [criticality, setCriticality] = useState<string>(init.criticality);
   const [error, setError] = useState<string | null>(null);
   const [showAddVendor, setShowAddVendor] = useState(false);
   const [sessionVendors, setSessionVendors] = useState<string[]>([]);
@@ -154,18 +164,18 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
         environments: init.existingProps.environments ?? [],
         adminUrl: init.existingProps.admin_url ?? "",
         licenseModel: init.existingProps.license_model ?? "per_vcore",
-        contractRenewal: init.existingProps.contract_renewal ?? "",
-        annualCost: init.existingProps.annual_cost ?? "",
+        contractRenewal,
+        annualCost,
         slaTarget: init.existingProps.sla_target ?? "99_9",
-        lifecycle: init.lifecycle,
-        criticality: init.existingProps.criticality ?? "low",
+        lifecycle,
+        criticality,
       });
 
       const body = {
         name: name.trim(),
         description: description.trim() || undefined,
         ...ownership.toPayload(),
-        status: lifecycleToStatus(init.lifecycle),
+        status: lifecycleToStatus(lifecycle),
         tags: tags
           .split(",")
           .map((t) => t.trim())
@@ -421,8 +431,68 @@ export function CreateIntegrationInfraPanel({ initialValues, onClose, onSuccess 
             </section>
 
             <section>
-              <SectionHeader>Governance</SectionHeader>
-              <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
+              <SectionHeader>Record</SectionHeader>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  <div>
+                    <FieldLabel>Annual cost</FieldLabel>
+                    <input
+                      value={annualCost}
+                      onChange={(e) => setAnnualCost(e.target.value)}
+                      placeholder="e.g. $120,000"
+                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>Contract end</FieldLabel>
+                    <input
+                      value={contractRenewal}
+                      onChange={(e) => setContractRenewal(e.target.value)}
+                      placeholder="YYYY-MM-DD"
+                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>Lifecycle</FieldLabel>
+                    <div className="relative">
+                      <select
+                        value={lifecycle}
+                        onChange={(e) => setLifecycle(e.target.value)}
+                        className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 pr-8"
+                      >
+                        {PLATFORM_LIFECYCLE.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+                        ▾
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <FieldLabel>Criticality</FieldLabel>
+                    <div className="relative">
+                      <select
+                        value={criticality}
+                        onChange={(e) => setCriticality(e.target.value)}
+                        className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 pr-8"
+                      >
+                        {PLATFORM_CRITICALITY.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+                        ▾
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
+              </div>
             </section>
 
             {error && (

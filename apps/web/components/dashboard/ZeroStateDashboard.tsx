@@ -4,7 +4,6 @@ import Link from "next/link";
 import { CheckCircle2, Circle, Server, Share2 } from "lucide-react";
 import type { WorkspaceMetrics } from "@/lib/workspace-dashboard";
 import { DashboardMetricsSection } from "@/components/dashboard/DashboardMetricsSection";
-import { DashboardViewsSection } from "@/components/dashboard/DashboardViewsSection";
 import { cn } from "@/lib/utils";
 
 const FIRST_STEPS = [
@@ -21,8 +20,8 @@ const FIRST_STEPS = [
     active: false,
   },
   {
-    title: "Group into domains",
-    description: "Optional. Do this once you have a few systems in.",
+    title: "Record the work",
+    description: "Optional. Do this once a few systems are in.",
     hrefSegment: "business/capabilities",
     active: false,
     optional: true,
@@ -65,16 +64,15 @@ export function ZeroStateDashboard({
         emptyWorkspace
       />
 
-      <div className="rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-50/80 via-white to-white p-6">
+      <div className="rounded-2xl border border-gray-200 bg-white p-6">
         <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
+          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600">
             <Server size={22} />
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-gray-900 text-[15px]">Start with what you have</p>
             <p className="text-sm text-gray-500 mt-0.5 max-w-xl">
-              List the systems in your estate first. Group them into domains and capabilities later,
-              once you can see the whole picture.
+              List the systems in your estate first. Name the work they do once you can see the whole picture.
             </p>
           </div>
           <Link
@@ -86,7 +84,7 @@ export function ZeroStateDashboard({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-5">
+      <div>
         <section className="rounded-2xl border border-gray-200/80 bg-white p-5">
           <h2 className="text-sm font-semibold text-gray-800 mb-4">Suggested first steps</h2>
           <ol className="space-y-1">
@@ -97,7 +95,7 @@ export function ZeroStateDashboard({
                   className="group flex items-start gap-3 rounded-xl px-2 py-3 hover:bg-gray-50 transition-colors"
                 >
                   {step.active ? (
-                    <CheckCircle2 size={18} className="mt-0.5 flex-shrink-0 text-sky-500" />
+                    <CheckCircle2 size={18} className="mt-0.5 flex-shrink-0 text-gray-400" />
                   ) : (
                     <Circle size={18} className="mt-0.5 flex-shrink-0 text-gray-300" />
                   )}
@@ -130,8 +128,6 @@ export function ZeroStateDashboard({
             ))}
           </ol>
         </section>
-
-        <DashboardViewsSection basePath={basePath} metrics={metrics} emptyWorkspace />
       </div>
     </div>
   );

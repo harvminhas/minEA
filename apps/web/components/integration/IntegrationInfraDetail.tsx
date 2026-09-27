@@ -13,12 +13,17 @@ import {
   infraDiagramNameById,
   mergeInfraArchitectureRelationships,
 } from "@/lib/integration-infra-relationship-utils";
-import { OwnershipDetailRow } from "@/components/ownership/OwnershipDetailRow";
+import { CatalogDetailFields } from "@/components/catalog/CatalogDetailFields";
 import {
   DetailPanel,
   DetailRow,
   DetailSection,
 } from "@/components/ui/DetailPanel";
+import {
+  catalogOwnerLabel,
+  formatCatalogAnnualCost,
+  formatCatalogContractEnd,
+} from "@/lib/catalog-fields";
 import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
 import { usePermissions } from "@/lib/use-permissions";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
@@ -42,8 +47,6 @@ import {
   INFRA_HOSTING_LABEL,
   INFRA_ICON_STYLE,
   INFRA_LICENSE_LABEL,
-  PLATFORM_CRITICALITY_LABEL,
-  PLATFORM_LIFECYCLE_LABEL,
   PLATFORM_SLA_LABEL,
   resolvedInfraHandles,
 } from "@/lib/integration-infra-utils";
@@ -375,13 +378,23 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
             </DetailSection>
 
             <DetailSection title="Identity">
-              {vendorLabel && <DetailRow label="Vendor" value={vendorLabel} />}
               {props.vendor_product && <DetailRow label="Vendor product" value={props.vendor_product} />}
               {infra.description && <DetailRow label="Description" value={infra.description} />}
               {infra.tags.length > 0 && <DetailRow label="Tags" value={infra.tags.join(", ")} />}
             </DetailSection>
 
-            <DetailSection title="Deployment">
+            <DetailSection title="Record">
+              <CatalogDetailFields
+                owner={catalogOwnerLabel(infra)}
+                vendor={vendorLabel || "—"}
+                annualCost={formatCatalogAnnualCost(props.annual_cost)}
+                contractEnd={formatCatalogContractEnd(props.contract_renewal)}
+                lifecycle={props.lifecycle ?? infra.status}
+                criticality={props.criticality}
+              />
+            </DetailSection>
+
+            <DetailSection title="More details">
               {props.hosting_model && (
                 <DetailRow
                   label="Hosting model"
@@ -393,36 +406,25 @@ export function IntegrationInfraDetail({ infra, onClose, onDelete, onUpdate }: P
                 <DetailRow label="Environments" value={props.environments.join(", ")} />
               )}
               {props.admin_url && <DetailRow label="Admin URL" value={props.admin_url} />}
-            </DetailSection>
-
-            <DetailSection title="Contract">
               {props.license_model && (
                 <DetailRow
                   label="License model"
                   value={INFRA_LICENSE_LABEL[props.license_model] ?? props.license_model}
                 />
               )}
-              {props.contract_renewal && <DetailRow label="Contract renewal" value={props.contract_renewal} />}
-              {props.annual_cost && <DetailRow label="Annual cost" value={props.annual_cost} />}
-            </DetailSection>
-
-            <DetailSection title="Governance">
-              <OwnershipDetailRow entity={infra} />
+              {props.auth_mechanism && <DetailRow label="Auth" value={props.auth_mechanism} />}
               {props.sla_target && (
                 <DetailRow label="SLA target" value={PLATFORM_SLA_LABEL[props.sla_target] ?? props.sla_target} />
               )}
-              {props.lifecycle && (
-                <DetailRow
-                  label="Lifecycle"
-                  value={PLATFORM_LIFECYCLE_LABEL[props.lifecycle] ?? props.lifecycle}
-                />
-              )}
-              {props.criticality && (
-                <DetailRow
-                  label="Criticality"
-                  value={PLATFORM_CRITICALITY_LABEL[props.criticality] ?? props.criticality}
-                />
-              )}
+              {!props.hosting_model &&
+                !props.region &&
+                !(props.environments && props.environments.length > 0) &&
+                !props.admin_url &&
+                !props.license_model &&
+                !props.auth_mechanism &&
+                !props.sla_target && (
+                  <p className="text-sm text-gray-400">No additional details yet.</p>
+                )}
             </DetailSection>
           </>
         )}

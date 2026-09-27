@@ -8,12 +8,17 @@ import type { MinEAObject, ModelProperties } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
-import { OwnershipDetailRow } from "@/components/ownership/OwnershipDetailRow";
+import { CatalogDetailFields } from "@/components/catalog/CatalogDetailFields";
 import {
   DetailPanel,
   DetailRow,
   DetailSection,
 } from "@/components/ui/DetailPanel";
+import {
+  catalogOwnerLabel,
+  formatCatalogAnnualCost,
+  formatCatalogContractEnd,
+} from "@/lib/catalog-fields";
 import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
 import { usePermissions } from "@/lib/use-permissions";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
@@ -25,8 +30,6 @@ import type { HistoryEntry } from "@/components/shared/EntityHistory";
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import {
   formatRuntimeSubtitle,
-  PLATFORM_CRITICALITY_LABEL,
-  PLATFORM_LIFECYCLE_LABEL,
   PLATFORM_SLA_LABEL,
   RUNTIME_COST_MODEL_LABEL,
   RUNTIME_HOSTING_LABEL,
@@ -201,13 +204,24 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
             </DetailSection>
 
             <DetailSection title="Identity">
-              {providerLabel && <DetailRow label="Provider" value={providerLabel} />}
               {props.service_product && <DetailRow label="Service / product" value={props.service_product} />}
               {runtime.description && <DetailRow label="Description" value={runtime.description} />}
               {runtime.tags.length > 0 && <DetailRow label="Tags" value={runtime.tags.join(", ")} />}
             </DetailSection>
 
-            <DetailSection title="Deployment">
+            <DetailSection title="Record">
+              <CatalogDetailFields
+                owner={catalogOwnerLabel(runtime)}
+                vendor={props.vendor?.trim() || "—"}
+                annualCost={formatCatalogAnnualCost(props.annual_cost)}
+                contractEnd={formatCatalogContractEnd(props.commitment_ends)}
+                lifecycle={props.lifecycle ?? runtime.status}
+                criticality={props.criticality}
+              />
+            </DetailSection>
+
+            <DetailSection title="More details">
+              {providerLabel && <DetailRow label="Provider" value={providerLabel} />}
               {props.hosting_model && (
                 <DetailRow
                   label="Hosting model"
@@ -221,36 +235,24 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
               {runtimeAccessMethod(props) && (
                 <DetailRow label="Access method" value={runtimeAccessMethod(props)!} />
               )}
-            </DetailSection>
-
-            <DetailSection title="Contract">
               {props.cost_model && (
                 <DetailRow
                   label="Cost model"
                   value={RUNTIME_COST_MODEL_LABEL[props.cost_model] ?? props.cost_model}
                 />
               )}
-              {props.commitment_ends && <DetailRow label="Commitment ends" value={props.commitment_ends} />}
-              {props.annual_cost && <DetailRow label="Annual cost (est.)" value={props.annual_cost} />}
-            </DetailSection>
-
-            <DetailSection title="Governance">
-              <OwnershipDetailRow entity={runtime} />
               {props.sla_target && (
                 <DetailRow label="SLA target" value={PLATFORM_SLA_LABEL[props.sla_target] ?? props.sla_target} />
               )}
-              {props.lifecycle && (
-                <DetailRow
-                  label="Lifecycle"
-                  value={PLATFORM_LIFECYCLE_LABEL[props.lifecycle] ?? props.lifecycle}
-                />
-              )}
-              {props.criticality && (
-                <DetailRow
-                  label="Criticality"
-                  value={PLATFORM_CRITICALITY_LABEL[props.criticality] ?? props.criticality}
-                />
-              )}
+              {!providerLabel &&
+                !props.hosting_model &&
+                !props.region &&
+                !(props.environments && props.environments.length > 0) &&
+                !runtimeAccessMethod(props) &&
+                !props.cost_model &&
+                !props.sla_target && (
+                  <p className="text-sm text-gray-400">No additional details yet.</p>
+                )}
             </DetailSection>
 
             <DetailSection title="Components">

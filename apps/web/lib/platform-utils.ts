@@ -46,9 +46,9 @@ export const PLATFORM_SLA = [
 ];
 
 export const PLATFORM_LIFECYCLE = [
-  { value: "pilot", label: "Pilot" },
+  { value: "planned", label: "Planned" },
   { value: "active", label: "Active" },
-  { value: "deprecated", label: "Deprecated" },
+  { value: "retiring", label: "Retiring" },
   { value: "end_of_life", label: "End of life" },
 ];
 
@@ -64,7 +64,31 @@ export const PLATFORM_TYPE_LABEL = Object.fromEntries(PLATFORM_TYPES.map((t) => 
 export const PLATFORM_HOSTING_LABEL = Object.fromEntries(PLATFORM_HOSTING.map((h) => [h.value, h.label]));
 export const PLATFORM_LICENSE_LABEL = Object.fromEntries(PLATFORM_LICENSE.map((l) => [l.value, l.label]));
 export const PLATFORM_SLA_LABEL = Object.fromEntries(PLATFORM_SLA.map((s) => [s.value, s.label]));
-export const PLATFORM_LIFECYCLE_LABEL = Object.fromEntries(PLATFORM_LIFECYCLE.map((l) => [l.value, l.label]));
+export const PLATFORM_LIFECYCLE_LABEL: Record<string, string> = {
+  ...Object.fromEntries(PLATFORM_LIFECYCLE.map((l) => [l.value, l.label])),
+  pilot: "Planned",
+  under_evaluation: "Planned",
+  deprecated: "Retiring",
+  retired: "End of life",
+};
+
+/** Map stored lifecycle or object status onto the shared four values. */
+export function normalizeLifecycle(
+  value?: string | null
+): "planned" | "active" | "retiring" | "end_of_life" {
+  switch (value) {
+    case "active":
+      return "active";
+    case "retiring":
+    case "deprecated":
+      return "retiring";
+    case "end_of_life":
+    case "retired":
+      return "end_of_life";
+    default:
+      return "planned";
+  }
+}
 export const PLATFORM_CRITICALITY_LABEL = Object.fromEntries(PLATFORM_CRITICALITY.map((c) => [c.value, c.label]));
 
 export function isEnterprisePlatform(props: CloudServiceProperties): boolean {
@@ -86,13 +110,11 @@ export function platformTypeLabel(props: CloudServiceProperties): string {
 }
 
 export function lifecycleToStatus(lifecycle: string): ObjectStatus {
-  switch (lifecycle) {
-    case "pilot":
-      return "under_evaluation";
+  switch (normalizeLifecycle(lifecycle)) {
     case "active":
       return "active";
-    case "deprecated":
-      return "deprecated";
+    case "retiring":
+      return "retiring";
     case "end_of_life":
       return "retired";
     default:
@@ -101,18 +123,7 @@ export function lifecycleToStatus(lifecycle: string): ObjectStatus {
 }
 
 export function statusToLifecycle(status: ObjectStatus | string | null | undefined): string {
-  switch (status) {
-    case "under_evaluation":
-      return "pilot";
-    case "active":
-      return "active";
-    case "deprecated":
-      return "deprecated";
-    case "retired":
-      return "end_of_life";
-    default:
-      return "pilot";
-  }
+  return normalizeLifecycle(status);
 }
 
 export function buildPlatformProperties(params: {

@@ -1,29 +1,38 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation } from "@tanstack/react-query";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
-import { mergeCategoryOptions, systemCategorySelectOptions } from "@/lib/system-category";
-import { systemGovernanceSelectOptions } from "@/lib/system-governance";
-import type { SystemGovernanceStatus } from "@minea/types";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import type { MinEAObject } from "@minea/types";
-import { cn, getStatusLabel } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
-const QUICK_ADD_STATUSES = ["planned", "active", "under_evaluation"] as const;
+const QUICK_ADD_STATUSES = [
+  { value: "planned", label: "Planned" },
+  { value: "active", label: "Active" },
+  { value: "retiring", label: "Retiring" },
+  { value: "retired", label: "End of life" },
+] as const;
+
+const QUICK_ADD_CRITICALITY = [
+  { value: "", label: "Criticality" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "tier1", label: "Tier 1" },
+] as const;
 
 const inputClass =
   "w-full min-w-0 rounded-md border border-gray-200 px-2 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500";
 
 export function SystemQuickAddRow({
-  categoryOptions,
   onCancel,
   onCreated,
 }: {
-  categoryOptions: string[];
+  categoryOptions?: string[];
   onCancel: () => void;
   onCreated: (item: MinEAObject) => void;
 }) {
@@ -33,18 +42,12 @@ export function SystemQuickAddRow({
   const ownership = useOwnershipForm();
 
   const [name, setName] = useState("");
-  const [governanceStatus, setGovernanceStatus] = useState<SystemGovernanceStatus>("sanctioned");
-  const [discovery, setDiscovery] = useState("");
   const [vendor, setVendor] = useState("");
-  const [category, setCategory] = useState("");
-  const [isCustomBuilt, setIsCustomBuilt] = useState(false);
   const [annualCost, setAnnualCost] = useState("");
-  const [status, setStatus] = useState<(typeof QUICK_ADD_STATUSES)[number]>("planned");
+  const [contractEnd, setContractEnd] = useState("");
+  const [criticality, setCriticality] = useState("");
+  const [status, setStatus] = useState<(typeof QUICK_ADD_STATUSES)[number]["value"]>("planned");
   const [error, setError] = useState<string | null>(null);
-
-  const categories = useMemo(() => mergeCategoryOptions(categoryOptions), [categoryOptions]);
-  const categoryChoices = systemCategorySelectOptions();
-  const governanceChoices = systemGovernanceSelectOptions();
 
   useEffect(() => {
     nameRef.current?.focus();
@@ -66,14 +69,13 @@ export function SystemQuickAddRow({
       if (!trimmedName) throw new Error("System name is required");
 
       const properties: Record<string, unknown> = {
-        governance_status: governanceStatus,
+        governance_status: "sanctioned",
       };
-      if (discovery.trim()) properties.discovery = discovery.trim();
       if (vendor.trim()) properties.vendor = vendor.trim();
-      if (category.trim()) properties.category = category.trim();
-      properties.is_custom_built = isCustomBuilt;
       const cost = annualCost.trim() ? Number(annualCost.replace(/,/g, "")) : NaN;
       if (!Number.isNaN(cost) && cost > 0) properties.annual_cost = cost;
+      if (contractEnd.trim()) properties.contract_renewal = contractEnd.trim();
+      if (criticality) properties.criticality = criticality;
 
       return objectsApi.create(
         orgSlug,
@@ -110,63 +112,22 @@ export function SystemQuickAddRow({
           }}
         />
       </td>
-      <td className="px-4 py-2 min-w-[140px]">
-        <select
-          value={governanceStatus}
-          onChange={(e) => setGovernanceStatus(e.target.value as SystemGovernanceStatus)}
-          className={cn(inputClass, "pr-7 mb-1")}
-        >
-          {governanceChoices.map((g) => (
-            <option key={g.value} value={g.value}>
-              {g.label}
-            </option>
-          ))}
-        </select>
-        <input
-          value={discovery}
-          onChange={(e) => setDiscovery(e.target.value)}
-          placeholder="How found? (optional)"
-          className={cn(inputClass, "text-xs")}
-          maxLength={500}
+      <td className="px-4 py-2 min-w-[220px]">
+        <OwnershipFields
+          value={ownership.value}
+          onChange={ownership.setValue}
+          required={false}
+          teamLabel="Owner"
+          pocLabel="Point of contact"
         />
       </td>
       <td className="px-4 py-2 min-w-[120px]">
         <input
           value={vendor}
           onChange={(e) => setVendor(e.target.value)}
-          placeholder="Vendor (optional)"
+          placeholder="Vendor"
           className={inputClass}
         />
-      </td>
-      <td className="px-4 py-2 min-w-[140px]">
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className={cn(inputClass, "pr-7 mb-1")}
-        >
-          <option value="">Category</option>
-          {categoryChoices.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
-          {categories
-            .filter((c) => !categoryChoices.some((choice) => choice.value === c))
-            .map((c) => (
-              <option key={`legacy-${c}`} value={c}>
-                {c} (legacy)
-              </option>
-            ))}
-        </select>
-        <label className="inline-flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isCustomBuilt}
-            onChange={(e) => setIsCustomBuilt(e.target.checked)}
-            className="accent-indigo-600"
-          />
-          Custom-built
-        </label>
       </td>
       <td className="px-4 py-2 min-w-[100px]">
         <input
@@ -177,25 +138,36 @@ export function SystemQuickAddRow({
           className={inputClass}
         />
       </td>
-      <td className="px-4 py-2 text-gray-400 text-sm text-center">—</td>
-      <td className="px-4 py-2 min-w-[220px]">
-        <OwnershipFields
-          value={ownership.value}
-          onChange={ownership.setValue}
-          required={false}
-          teamLabel="Owner"
-          pocLabel="Point of contact"
+      <td className="px-4 py-2 min-w-[120px]">
+        <input
+          value={contractEnd}
+          onChange={(e) => setContractEnd(e.target.value)}
+          placeholder="YYYY-MM-DD"
+          className={inputClass}
         />
       </td>
-      <td className="px-4 py-2 min-w-[110px]">
+      <td className="px-4 py-2 min-w-[120px]">
         <select
           value={status}
-          onChange={(e) => setStatus(e.target.value as (typeof QUICK_ADD_STATUSES)[number])}
+          onChange={(e) => setStatus(e.target.value as (typeof QUICK_ADD_STATUSES)[number]["value"])}
           className={cn(inputClass, "pr-7")}
         >
           {QUICK_ADD_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {getStatusLabel(s)}
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-4 py-2 min-w-[120px]">
+        <select
+          value={criticality}
+          onChange={(e) => setCriticality(e.target.value)}
+          className={cn(inputClass, "pr-7")}
+        >
+          {QUICK_ADD_CRITICALITY.map((option) => (
+            <option key={option.value || "none"} value={option.value}>
+              {option.label}
             </option>
           ))}
         </select>

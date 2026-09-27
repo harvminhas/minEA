@@ -6,7 +6,16 @@ import {
 } from "@/lib/integration-infra-utils";
 import type { MinEAObject, ToolProperties } from "@minea/types";
 
-export type InfraSortKey = "name" | "kind" | "vendor" | "owner" | "status" | "updated";
+export type InfraSortKey =
+  | "name"
+  | "kind"
+  | "vendor"
+  | "owner"
+  | "status"
+  | "cost"
+  | "contract"
+  | "criticality"
+  | "updated";
 
 export function infraProps(object: MinEAObject): ToolProperties {
   return (object.properties ?? {}) as ToolProperties;
@@ -79,7 +88,20 @@ export function sortIntegrationInfra(
         cmp = (a.owner?.trim() ?? "").localeCompare(b.owner?.trim() ?? "");
         break;
       case "status":
-        cmp = (a.status ?? "planned").localeCompare(b.status ?? "planned");
+        cmp = (infraProps(a).lifecycle ?? a.status ?? "planned").localeCompare(
+          infraProps(b).lifecycle ?? b.status ?? "planned"
+        );
+        break;
+      case "cost":
+        cmp = (infraProps(a).annual_cost ?? "").localeCompare(infraProps(b).annual_cost ?? "");
+        break;
+      case "contract":
+        cmp = (infraProps(a).contract_renewal ?? "").localeCompare(
+          infraProps(b).contract_renewal ?? ""
+        );
+        break;
+      case "criticality":
+        cmp = (infraProps(a).criticality ?? "").localeCompare(infraProps(b).criticality ?? "");
         break;
       case "updated":
         cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();

@@ -27,6 +27,9 @@ const PROPERTY_LABELS: Record<string, string> = {
 const HIDDEN_DETAIL_KEYS = new Set([
   "vendor",
   "annual_cost",
+  "contract_renewal",
+  "criticality",
+  "hosting_model",
   "platform",
   "category",
   "category_legacy",

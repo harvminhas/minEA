@@ -1,6 +1,7 @@
 import type { MinEAObject, ObjectStatus, ToolProperties } from "@minea/types";
 import {
   lifecycleToStatus,
+  normalizeLifecycle,
   PLATFORM_CRITICALITY,
   PLATFORM_CRITICALITY_LABEL,
   PLATFORM_LIFECYCLE,
@@ -13,6 +14,7 @@ import {
 
 export {
   lifecycleToStatus,
+  normalizeLifecycle,
   statusToLifecycle,
   PLATFORM_SLA,
   PLATFORM_SLA_LABEL,

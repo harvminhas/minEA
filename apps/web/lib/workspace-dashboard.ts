@@ -169,6 +169,23 @@ export function isWorkspaceEmpty(metrics: WorkspaceMetrics): boolean {
   );
 }
 
+export function estateBriefing(metrics: WorkspaceMetrics): string {
+  if (metrics.systemCount === 0) return "No systems in the estate yet.";
+  const sentences = [`${metrics.systemCount} systems in the estate.`];
+  if (metrics.shadowSystemCount === 1) sentences.push("1 is outside IT.");
+  else if (metrics.shadowSystemCount > 1) {
+    sentences.push(`${metrics.shadowSystemCount} are outside IT.`);
+  }
+  if (metrics.capabilitiesWithoutSystemCount === 1) {
+    sentences.push("1 piece of work has no system behind it.");
+  } else if (metrics.capabilitiesWithoutSystemCount > 1) {
+    sentences.push(
+      `${metrics.capabilitiesWithoutSystemCount} pieces of work have no system behind them.`
+    );
+  }
+  return sentences.join(" ");
+}
+
 export function greetingForHour(hour: number): string {
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";

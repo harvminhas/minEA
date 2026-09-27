@@ -1,6 +1,7 @@
 import type { MinEAObject, ModelProperties } from "@minea/types";
 import {
   lifecycleToStatus,
+  normalizeLifecycle,
   PLATFORM_CRITICALITY,
   PLATFORM_CRITICALITY_LABEL,
   PLATFORM_LIFECYCLE,
@@ -13,6 +14,7 @@ import {
 
 export {
   lifecycleToStatus,
+  normalizeLifecycle,
   statusToLifecycle,
   PLATFORM_SLA,
   PLATFORM_SLA_LABEL,
@@ -103,6 +105,7 @@ export function collectCustomProviders(items: MinEAObject[]): string[] {
 
 export function buildRuntimeProperties(params: {
   kind: string;
+  vendor: string;
   provider: string;
   serviceProduct: string;
   hostingModel: string;
@@ -119,6 +122,7 @@ export function buildRuntimeProperties(params: {
   const accessMethod = params.accessMethod.trim() || undefined;
   return {
     compute_runtime_kind: params.kind as ModelProperties["compute_runtime_kind"],
+    vendor: params.vendor.trim() || undefined,
     runtime_provider: params.provider || undefined,
     service_product: params.serviceProduct.trim() || undefined,
     hosting_model: params.hostingModel as ModelProperties["hosting_model"],

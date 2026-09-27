@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.ask.loop import answer_with_model
 from app.ai.chat import stream_chat
 from app.ai.ingestion import extract_from_text
 from app.ai.insights import generate_insights, insight_to_dict
@@ -38,6 +39,25 @@ class ChatRequest(BaseModel):
 
 class IngestRequest(BaseModel):
     text: str
+
+
+class AskRequest(BaseModel):
+    question: str
+
+
+@router.post("/ask")
+async def ask(
+    body: AskRequest,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """The model asks for a lookup, the server runs it, and the result goes back.
+
+    When the model is off, times out, or fails the citation check, the response
+    is source=fallback so the screen can answer from the fixed handlers.
+    """
+    await ctx.require_read(db)
+    return await answer_with_model(db, ctx, body.question)
 
 
 @router.post("/chat")

@@ -19,6 +19,8 @@ export type SystemSortKey =
   | "capabilities"
   | "owner"
   | "status"
+  | "contract"
+  | "criticality"
   | "updated";
 
 export function systemProps(object: MinEAObject): ApplicationProperties {
@@ -135,6 +137,14 @@ export function sortSystems(
         break;
       case "status":
         cmp = (a.status ?? "planned").localeCompare(b.status ?? "planned");
+        break;
+      case "contract":
+        cmp = (systemProps(a).contract_renewal ?? "").localeCompare(
+          systemProps(b).contract_renewal ?? ""
+        );
+        break;
+      case "criticality":
+        cmp = (systemProps(a).criticality ?? "").localeCompare(systemProps(b).criticality ?? "");
         break;
       case "updated":
         cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock, Cpu, Plus } from "lucide-react";
@@ -8,54 +8,26 @@ import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { usePermissions } from "@/lib/use-permissions";
+import { CatalogCardFields } from "@/components/catalog/CatalogCardFields";
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { RuntimeDetail } from "@/components/infrastructure/RuntimeDetail";
 import {
+  catalogOwnerLabel,
+  formatCatalogAnnualCost,
+  formatCatalogContractEnd,
+} from "@/lib/catalog-fields";
+import {
   formatRuntimeSubtitle,
   isComputeRuntime,
-  RUNTIME_COST_MODEL_LABEL,
-  RUNTIME_HOSTING_LABEL,
   RUNTIME_ICON_STYLE,
-  runtimeProviderLabel,
   TECHNOLOGY_LAYER_COLOR,
 } from "@/lib/runtime-utils";
-import {
-  criticalityBadgeStyle,
-  criticalityCardLabel,
-  formatAnnualCostDisplay,
-  labelFromMap,
-  lifecycleBadgeStyle,
-  lifecycleCardLabel,
-} from "@/lib/technology-card-utils";
-import { PLATFORM_SLA_LABEL } from "@/lib/platform-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import type { MinEAObject, ModelProperties } from "@minea/types";
 import { cn } from "@/lib/utils";
 
-function PropertyRow({
-  label,
-  value,
-  valueClassName,
-}: {
-  label: string;
-  value: ReactNode;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
-      <span className="text-gray-400 flex-shrink-0">{label}</span>
-      <span className={cn("text-right truncate max-w-[60%] font-medium text-gray-900", valueClassName)}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
 function RuntimeCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: () => void }) {
   const props = (item.properties ?? {}) as ModelProperties;
-  const lifecycle = props.lifecycle;
-  const lifecycleLabel = lifecycleCardLabel(lifecycle);
-  const criticality = props.criticality ?? "low";
 
   return (
     <div
@@ -77,51 +49,16 @@ function RuntimeCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: 
             <p className="text-xs text-gray-400 mt-0.5 truncate">{formatRuntimeSubtitle(props)}</p>
           </div>
         </div>
-        {lifecycleLabel && (
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-0.5 text-xs font-medium flex-shrink-0",
-              lifecycleBadgeStyle(lifecycle)
-            )}
-          >
-            {lifecycleLabel}
-          </span>
-        )}
       </div>
 
-      <div className="divide-y divide-gray-100 text-xs">
-        <PropertyRow
-          label="Provider"
-          value={runtimeProviderLabel(props.runtime_provider) || "—"}
-          valueClassName={!props.runtime_provider ? "font-normal text-gray-400" : undefined}
-        />
-        <PropertyRow
-          label="Hosting model"
-          value={labelFromMap(props.hosting_model, RUNTIME_HOSTING_LABEL)}
-          valueClassName={!props.hosting_model ? "font-normal text-gray-400" : undefined}
-        />
-        <PropertyRow
-          label="Cost model"
-          value={labelFromMap(props.cost_model, RUNTIME_COST_MODEL_LABEL)}
-          valueClassName={!props.cost_model ? "font-normal text-gray-400" : undefined}
-        />
-        <PropertyRow
-          label="SLA target"
-          value={labelFromMap(props.sla_target, PLATFORM_SLA_LABEL)}
-          valueClassName={!props.sla_target ? "font-normal text-gray-400" : undefined}
-        />
-        <div className="flex items-center justify-between gap-2 py-2">
-          <span className="text-gray-400 flex-shrink-0">Criticality</span>
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize flex-shrink-0",
-              criticalityBadgeStyle(criticality)
-            )}
-          >
-            {criticalityCardLabel(criticality)}
-          </span>
-        </div>
-      </div>
+      <CatalogCardFields
+        owner={catalogOwnerLabel(item)}
+        vendor={props.vendor?.trim() || "—"}
+        annualCost={formatCatalogAnnualCost(props.annual_cost)}
+        contractEnd={formatCatalogContractEnd(props.commitment_ends)}
+        lifecycle={props.lifecycle ?? item.status}
+        criticality={props.criticality}
+      />
 
       <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">
         <Clock size={12} className="flex-shrink-0" />

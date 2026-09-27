@@ -25,6 +25,10 @@ export type RepositoryNavItem = {
   badge?: NavBadge;
   /** Omit from sidebar navigation; route and data model remain available. */
   hidden?: boolean;
+  /**
+   * Group label navigates here. The row is not repeated in the expanded child list.
+   */
+  header?: boolean;
   /** Omit for upcoming items; used to fetch sidebar totals. */
   countSource?: NavCountSource;
 };
@@ -50,6 +54,14 @@ export function visibleNavItems(layer: RepositoryLayer): RepositoryNavItem[] {
   return layer.items.filter((item) => !isNavItemHidden(item));
 }
 
+export function layerHeaderItem(layer: RepositoryLayer): RepositoryNavItem | undefined {
+  return visibleNavItems(layer).find((item) => item.header);
+}
+
+export function layerChildItems(layer: RepositoryLayer): RepositoryNavItem[] {
+  return visibleNavItems(layer).filter((item) => !item.header);
+}
+
 /** Sum of enabled subnav item counts for a layer header. */
 export function layerNavCountTotal(
   layer: RepositoryLayer,
@@ -62,40 +74,14 @@ export function layerNavCountTotal(
 
 export const REPOSITORY_LAYERS: RepositoryLayer[] = [
   {
-    id: "strategy",
-    label: "Strategy",
-    color: "#8b5cf6",
-    items: [
-      { label: "Products", segment: "strategy/products", countSource: { kind: "products" } },
-      {
-        label: "Roadmaps",
-        segment: "strategy/roadmaps",
-        badge: "new",
-        countSource: { kind: "objects", type: "roadmap_item" },
-      },
-    ],
-  },
-  {
-    id: "business",
-    label: "Business",
-    color: "#3b82f6",
-    items: [
-      {
-        label: "Capabilities",
-        segment: "business/capabilities",
-        countSource: { kind: "capability-map" },
-      },
-      { label: "Processes", segment: "views/processes", countSource: { kind: "processes" } },
-    ],
-  },
-  {
-    id: "application",
-    label: "Application",
-    color: "#6366f1",
+    id: "systems",
+    label: "Systems",
+    color: "#64748b",
     items: [
       {
         label: "Systems",
         segment: "application/applications",
+        header: true,
         countSource: {
           kind: "objects-multi",
           types: ["application", "solution", "technical_capability"],
@@ -104,63 +90,39 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
       {
         label: "Components",
         segment: "application/components",
-        badge: "new",
         countSource: { kind: "objects", type: "component" },
       },
     ],
   },
   {
-    id: "integration",
-    label: "Integration",
-    color: "#14b8a6",
+    id: "integrations",
+    label: "Integrations",
+    color: "#64748b",
     items: [
       { label: "APIs", segment: "integration/apis", countSource: { kind: "objects", type: "api" } },
       { label: "Events", segment: "integration/events", countSource: { kind: "objects", type: "event" } },
       {
         label: "Flows",
         segment: "integration/flows",
-        badge: "new",
         countSource: { kind: "objects", type: "integration_flow" },
       },
-    ],
-  },
-  {
-    id: "data",
-    label: "Data",
-    color: "#f59e0b",
-    items: [
       {
-        label: "Data Entities",
-        segment: "data/data-objects",
-        countSource: { kind: "objects", type: "data_object" },
-      },
-      {
-        label: "Data Stores",
-        segment: "data/data-stores",
-        countSource: { kind: "objects", type: "data_store" },
-      },
-      {
-        label: "Data Domains",
-        segment: "data/data-domains",
-        countSource: { kind: "objects", type: "data_domain" },
+        label: "Integration infra",
+        segment: "integration/tools",
+        countSource: { kind: "objects", type: "tool" },
       },
     ],
   },
   {
-    id: "technology",
-    label: "Technology",
+    id: "platforms",
+    label: "Platforms",
     color: "#64748b",
-    badge: "new",
     items: [
       {
         label: "Platforms",
         segment: "infrastructure/cloud-services",
+        header: true,
         countSource: { kind: "objects", type: "cloud_service" },
-      },
-      {
-        label: "Integration Infra",
-        segment: "integration/tools",
-        countSource: { kind: "objects", type: "tool" },
       },
       {
         label: "Runtimes",
@@ -172,11 +134,59 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
   {
     id: "people",
     label: "People",
-    color: "#e11d48",
+    color: "#64748b",
     items: [
       { label: "Roles", segment: "people/roles", countSource: { kind: "people-roles" } },
       { label: "Teams", segment: "people/teams", countSource: { kind: "people-teams" } },
       { label: "Contacts", segment: "people/contacts", countSource: { kind: "people-contacts" } },
+    ],
+  },
+  {
+    id: "business",
+    label: "Business",
+    color: "#64748b",
+    items: [
+      {
+        label: "Capabilities",
+        segment: "business/capabilities",
+        countSource: { kind: "capability-map" },
+      },
+      { label: "Processes", segment: "views/processes", countSource: { kind: "processes" } },
+    ],
+  },
+  {
+    id: "strategy",
+    label: "Strategy",
+    color: "#64748b",
+    items: [
+      { label: "Products", segment: "strategy/products", countSource: { kind: "products" } },
+      {
+        label: "Roadmaps",
+        segment: "strategy/roadmaps",
+        countSource: { kind: "objects", type: "roadmap_item" },
+      },
+    ],
+  },
+  {
+    id: "data",
+    label: "Data",
+    color: "#64748b",
+    items: [
+      {
+        label: "Entities",
+        segment: "data/data-objects",
+        countSource: { kind: "objects", type: "data_object" },
+      },
+      {
+        label: "Stores",
+        segment: "data/data-stores",
+        countSource: { kind: "objects", type: "data_store" },
+      },
+      {
+        label: "Domains",
+        segment: "data/data-domains",
+        countSource: { kind: "objects", type: "data_domain" },
+      },
     ],
   },
 ];

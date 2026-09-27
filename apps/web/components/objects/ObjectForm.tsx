@@ -50,23 +50,68 @@ interface Props {
   onSuccess: () => void;
 }
 
-const TYPE_FIELDS: Record<
-  string,
-  Array<{ key: string; label: string; type: "text" | "number" | "select"; options?: string[] }>
-> = {
+const SYSTEM_LIFECYCLE_OPTIONS = [
+  { value: "planned", label: "Planned" },
+  { value: "active", label: "Active" },
+  { value: "retiring", label: "Retiring" },
+  { value: "retired", label: "End of life" },
+];
+
+function systemLifecycleOptions(current: string) {
+  if (!current || SYSTEM_LIFECYCLE_OPTIONS.some((option) => option.value === current)) {
+    return SYSTEM_LIFECYCLE_OPTIONS;
+  }
+  return [
+    ...SYSTEM_LIFECYCLE_OPTIONS,
+    {
+      value: current,
+      label: current.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    },
+  ];
+}
+
+type FormPropertyField = {
+  key: string;
+  label: string;
+  type: "text" | "number" | "select";
+  options?: string[];
+  optionLabels?: Record<string, string>;
+};
+
+const SYSTEM_CATALOG_FIELDS: FormPropertyField[] = [
+  { key: "vendor", label: "Vendor", type: "text" },
+  { key: "annual_cost", label: "Annual cost ($)", type: "number" },
+  { key: "contract_renewal", label: "Contract end", type: "text" },
+  {
+    key: "criticality",
+    label: "Criticality",
+    type: "select",
+    options: ["low", "medium", "high", "tier1"],
+    optionLabels: {
+      low: "Low",
+      medium: "Medium",
+      high: "High",
+      tier1: "Tier 1 / business-critical",
+    },
+  },
+  {
+    key: "hosting_model",
+    label: "Hosting model",
+    type: "select",
+    options: ["cloud", "on_premise", "hybrid", "saas"],
+    optionLabels: {
+      cloud: "Cloud",
+      on_premise: "On-premises",
+      hybrid: "Hybrid",
+      saas: "SaaS",
+    },
+  },
+];
+
+const TYPE_FIELDS: Record<string, FormPropertyField[]> = {
   capability: [
     { key: "maturity", label: "Maturity (1-5)", type: "number" },
     { key: "investment", label: "Investment", type: "select", options: ["low", "medium", "high"] },
-  ],
-  application: [
-    { key: "vendor", label: "Vendor", type: "text" },
-    {
-      key: "hosting_model",
-      label: "Hosting Model",
-      type: "select",
-      options: ["cloud", "on_premise", "hybrid", "saas"],
-    },
-    { key: "annual_cost", label: "Annual Cost ($)", type: "number" },
   ],
   agent: [
     {
@@ -167,7 +212,9 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
 
   const [name, setName] = useState(initialValues?.name ?? "");
   const [description, setDescription] = useState(initialValues?.description ?? "");
-  const [status, setStatus] = useState(initialValues?.status ?? "");
+  const [status, setStatus] = useState(
+    initialValues?.status ?? (SYSTEM_OBJECT_TYPES.has(objectType) ? "planned" : "")
+  );
   const [tags, setTags] = useState((initialValues?.tags ?? []).join(", "));
   const [properties, setProperties] = useState<Record<string, string>>(
     Object.fromEntries(
@@ -178,9 +225,9 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
     aiRoleFromProperties((initialValues?.properties as { ai_role?: AiRole } | undefined)?.ai_role)
   );
 
-  const typeFields = TYPE_FIELDS[objectType] ?? [];
-  const typeLabel = OBJECT_TYPE_LABELS[objectType] ?? objectType;
   const isSystemType = SYSTEM_OBJECT_TYPES.has(objectType);
+  const typeFields = isSystemType ? SYSTEM_CATALOG_FIELDS : (TYPE_FIELDS[objectType] ?? []);
+  const typeLabel = OBJECT_TYPE_LABELS[objectType] ?? objectType;
   const isShadowSystem = isSystemApp && isShadowGovernance(governanceStatus);
 
   const { data: platformsData } = useQuery({
@@ -389,12 +436,15 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
         />
       </FormField>
 
-      <FormField label="Status">
+      <FormField label={isSystemType ? "Lifecycle" : "Status"}>
         <select value={status} onChange={(e) => setStatus(e.target.value)} className={formFieldClass}>
-          <option value="">— No status —</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+          {!isSystemType && <option value="">— No status —</option>}
+          {(isSystemType ? systemLifecycleOptions(status) : STATUSES.map((s) => ({
+            value: s,
+            label: s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          }))).map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
             </option>
           ))}
         </select>
@@ -522,7 +572,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
                   <option value="">—</option>
                   {field.options?.map((o) => (
                     <option key={o} value={o}>
-                      {o}
+                      {field.optionLabels?.[o] ?? o}
                     </option>
                   ))}
                 </select>

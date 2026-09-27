@@ -1,10 +1,14 @@
 import { PLATFORM_CRITICALITY_LABEL, PLATFORM_LIFECYCLE_LABEL } from "@/lib/platform-utils";
 
 export const LIFECYCLE_BADGE_STYLE: Record<string, string> = {
-  pilot: "bg-sky-50 text-sky-700",
+  planned: "bg-stone-100 text-gray-600",
+  pilot: "bg-stone-100 text-gray-600",
+  under_evaluation: "bg-stone-100 text-gray-600",
   active: "bg-emerald-50 text-emerald-700",
-  deprecated: "bg-amber-50 text-amber-700",
+  retiring: "bg-orange-50 text-orange-700",
+  deprecated: "bg-orange-50 text-orange-700",
   end_of_life: "bg-red-50 text-red-500",
+  retired: "bg-red-50 text-red-500",
 };
 
 export const TECH_CRITICALITY_STYLE: Record<string, string> = {
@@ -16,12 +20,11 @@ export const TECH_CRITICALITY_STYLE: Record<string, string> = {
 
 export function lifecycleCardLabel(lifecycle?: string | null): string | null {
   if (!lifecycle) return null;
-  if (lifecycle === "active") return "Live";
   return PLATFORM_LIFECYCLE_LABEL[lifecycle] ?? lifecycle;
 }
 
 export function lifecycleBadgeStyle(lifecycle?: string | null): string {
-  return LIFECYCLE_BADGE_STYLE[lifecycle ?? "pilot"] ?? LIFECYCLE_BADGE_STYLE.pilot;
+  return LIFECYCLE_BADGE_STYLE[lifecycle ?? "planned"] ?? LIFECYCLE_BADGE_STYLE.planned;
 }
 
 export function criticalityCardLabel(criticality?: string | null): string {

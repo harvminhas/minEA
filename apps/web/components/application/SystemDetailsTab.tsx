@@ -1,10 +1,16 @@
 "use client";
 
 import type { ApplicationProperties, MinEAObject, Relationship, SystemProductLink } from "@minea/types";
+import { CatalogDetailFields } from "@/components/catalog/CatalogDetailFields";
 import { DetailSection } from "@/components/ui/DetailPanel";
 import { SystemDiagramPreview } from "@/components/application/SystemDiagramPreview";
 import { SystemDrawerSection } from "@/components/application/SystemDrawerSection";
 import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
+import {
+  catalogOwnerLabel,
+  formatCatalogAnnualCost,
+  formatCatalogContractEnd,
+} from "@/lib/catalog-fields";
 import { systemCategoryDisplay } from "@/lib/system-category";
 import {
   governanceStatusBadgeClass,
@@ -12,9 +18,8 @@ import {
   systemGovernanceLabel,
   systemGovernanceStatus,
 } from "@/lib/system-governance";
-import { buildDetailPropertyRows } from "@/lib/object-property-display";
-import { systemStatusLabel, SYSTEM_STATUS_STYLE } from "@/lib/system-utils";
-import { cn, formatCurrency } from "@/lib/utils";
+import { buildDetailPropertyRows, formatPropertyDisplayValue } from "@/lib/object-property-display";
+import { cn } from "@/lib/utils";
 
 interface Props {
   object: MinEAObject;
@@ -32,7 +37,6 @@ interface Props {
 
 export function SystemDetailsTab({
   object,
-  layerLabel,
   linkedCapabilities,
   productLinks,
   productLinksLoading = false,
@@ -45,10 +49,10 @@ export function SystemDetailsTab({
   const props = object.properties as Record<string, unknown>;
   const appProps = object.properties as ApplicationProperties;
   const platformName = appProps.platform?.platform_name;
-  const status = object.status ?? "planned";
   const categoryMeta = systemCategoryDisplay(appProps);
   const governance = systemGovernanceStatus(appProps);
   const discovery = systemDiscovery(appProps);
+  const hostingLabel = formatPropertyDisplayValue("hosting_model", appProps.hosting_model, object.type);
   const detailPropertyRows = buildDetailPropertyRows(props, object.type);
 
   const platformFromRel = relationships.some(
@@ -69,7 +73,18 @@ export function SystemDetailsTab({
         </DetailSection>
       )}
 
-      <DetailSection title="Properties">
+      <DetailSection title="Record">
+        <CatalogDetailFields
+          owner={catalogOwnerLabel(object)}
+          vendor={appProps.vendor?.trim() || "—"}
+          annualCost={formatCatalogAnnualCost(appProps.annual_cost)}
+          contractEnd={formatCatalogContractEnd(appProps.contract_renewal)}
+          lifecycle={object.status}
+          criticality={appProps.criticality}
+        />
+      </DetailSection>
+
+      <DetailSection title="More details">
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between gap-3">
             <span className="text-gray-500">Governance status</span>
@@ -83,53 +98,22 @@ export function SystemDetailsTab({
             </span>
           </div>
           {discovery && <PropertyRow label="Discovery" value={discovery} />}
-          <PropertyRow label="Owner" value={object.owner ?? "Unassigned"} />
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-gray-500">Status</span>
-            <span
-              className={cn(
-                "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize",
-                SYSTEM_STATUS_STYLE[status] ?? SYSTEM_STATUS_STYLE.planned
-              )}
-            >
-              {systemStatusLabel(status)}
-            </span>
-          </div>
           <PropertyRow label="Category" value={categoryMeta.label || "—"} />
           {categoryMeta.needsReview && categoryMeta.label && (
             <p className="text-[11px] font-medium text-amber-700 -mt-1">
               Needs review — pick a functional domain when editing
             </p>
           )}
-          <PropertyRow
-            label="Custom-built"
-            value={categoryMeta.isCustomBuilt ? "Yes" : "No"}
-          />
-          <PropertyRow
-            label="Vendor"
-            value={props.vendor != null && props.vendor !== "" ? String(props.vendor) : "—"}
-          />
+          <PropertyRow label="Custom-built" value={categoryMeta.isCustomBuilt ? "Yes" : "No"} />
           {(platformName || platformFromRel) && (
-            <PropertyRow
-              label="Built on platform"
-              value={platformName || "Linked platform"}
-            />
+            <PropertyRow label="Built on platform" value={platformName || "Linked platform"} />
           )}
-          {props.annual_cost !== undefined && Number(props.annual_cost) > 0 && (
-            <PropertyRow label="Annual cost" value={formatCurrency(Number(props.annual_cost))} />
-          )}
+          {hostingLabel && <PropertyRow label="Hosting model" value={hostingLabel} />}
+          {detailPropertyRows.map((row) => (
+            <PropertyRow key={row.key} label={row.label} value={row.value} />
+          ))}
         </div>
       </DetailSection>
-
-      {detailPropertyRows.length > 0 && (
-        <DetailSection title={`${layerLabel} details`}>
-          <div className="space-y-2 text-sm">
-            {detailPropertyRows.map((row) => (
-              <PropertyRow key={row.key} label={row.label} value={row.value} />
-            ))}
-          </div>
-        </DetailSection>
-      )}
 
       <SystemDrawerSection title="Capabilities" count={linkedCapabilities.length}>
         {linkedCapabilities.length === 0 ? (

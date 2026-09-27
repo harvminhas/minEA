@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { ChevronDown, Bell, HelpCircle, Search, LogOut, Settings, BookOpen, LayoutTemplate, Columns2, Plus } from "lucide-react";
+import { ChevronDown, Bell, HelpCircle, Search, LogOut, Settings, Columns2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { useAppStore, type ViewMode } from "@/lib/store";
-import { useTenancy, primaryViewPath } from "@/lib/tenancy";
+import { useAppStore } from "@/lib/store";
+import { useTenancy } from "@/lib/tenancy";
 import { isViewsAreaPath, viewIdFromPathname, workspaceHomePath } from "@/lib/views";
+import { askPath, modelPath, reportsPath } from "@/lib/mvp-paths";
 import { useQuery } from "@tanstack/react-query";
 import { billingApi, orgsApi, workspacesApi } from "@/lib/api-client";
 import { usePermissions } from "@/lib/use-permissions";
@@ -27,6 +28,8 @@ export function TopNav() {
   const [wsOpen, setWsOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [jumpQuery, setJumpQuery] = useState("");
+  const jumpRef = useRef<HTMLInputElement>(null);
   const wsRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
@@ -41,6 +44,17 @@ export function TopNav() {
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        jumpRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, []);
 
   const { data: org } = useQuery({
@@ -82,9 +96,13 @@ export function TopNav() {
   const initials = (user?.displayName ?? user?.email ?? "?").charAt(0).toUpperCase();
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-12 bg-[#0f172a] border-b border-white/10 flex items-center px-4 gap-3 z-50">
+    <header className="fixed top-0 left-0 right-0 h-14 bg-[#0f172a] border-b border-white/10 flex items-center px-4 gap-3 z-50">
       {/* Logo */}
-      <Link href="/home" className="flex-shrink-0 mr-1">
+      <Link
+        href={orgSlug && workspaceSlug ? askPath(basePath) : "/home"}
+        onClick={() => setViewMode("repository")}
+        className="flex-shrink-0 mr-1"
+      >
         <BuboMapWordmark size="sm" beta theme="dark" />
       </Link>
 
@@ -118,7 +136,7 @@ export function TopNav() {
                   key={ws.id}
                   type="button"
                   onClick={() => {
-                    router.push(primaryViewPath(orgSlug, ws.slug));
+                    router.push(askPath(`/orgs/${orgSlug}/workspaces/${ws.slug}`));
                     setWsOpen(false);
                   }}
                   className={cn(
@@ -179,59 +197,91 @@ export function TopNav() {
 
       {/* View Mode Toggle — only when inside a workspace */}
       {workspaceSlug && (
-        <div className="flex items-center gap-0.5 rounded-md bg-white/8 border border-white/10 p-0.5 flex-shrink-0">
+        <div className="flex items-center gap-0.5 rounded-lg bg-white/8 border border-white/10 p-0.5 flex-shrink-0">
           {(
             [
-              { mode: "repository" as ViewMode, label: "Repository", icon: BookOpen },
-              { mode: "split"       as ViewMode, label: "Split",      icon: Columns2 },
-              { mode: "views"       as ViewMode, label: "Views",      icon: LayoutTemplate },
+              { id: "ask", label: "Ask", href: askPath(basePath) },
+              { id: "reports", label: "Reports", href: reportsPath(basePath) },
+              { id: "model", label: "Model", href: modelPath(basePath, "overview") },
+              { id: "views", label: "Views", href: `${basePath}/views` },
             ] as const
-          ).map(({ mode, label, icon: Icon }) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => {
-                setViewMode(mode);
-                if (!basePath || !orgSlug || !workspaceSlug) return;
-                if (mode === "views") {
-                  router.push(`${basePath}/views`);
-                } else if (mode === "repository") {
-                  router.push(basePath);
-                } else if (mode === "split") {
-                  const activeViewId = viewIdFromPathname(pathname);
-                  if (activeViewId) setSplitViewId(activeViewId);
-                  if (isViewsAreaPath(pathname)) {
-                    router.push(workspaceHomePath(orgSlug, workspaceSlug));
-                  }
-                }
-              }}
-              title={label}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors",
-                viewMode === mode
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-white/45 hover:text-white/80 hover:bg-white/8"
-              )}
-            >
-              <Icon size={12} />
-              {label}
-            </button>
-          ))}
+          ).map((tab) => {
+            const inModel =
+              !pathname.includes("/ask") &&
+              !pathname.includes("/reports") &&
+              (!pathname.includes("/views") || pathname.includes("/views/processes"));
+            const selected = tab.id === "views"
+              ? pathname.includes("/views") && !pathname.includes("/views/processes")
+              : tab.id === "ask"
+                ? pathname.includes("/ask")
+                : tab.id === "reports"
+                  ? pathname.includes("/reports")
+                  : inModel;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setViewMode(tab.id === "views" ? "views" : "repository");
+                  router.push(tab.href);
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1 rounded-md text-[13px] font-medium transition-colors",
+                  selected ? "bg-[#5b4ce6] text-white" : "text-white/55 hover:text-white hover:bg-white/8"
+                )}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            title={viewMode === "split" ? "Close side by side" : "Open beside"}
+            onClick={() => {
+              if (!basePath || !orgSlug || !workspaceSlug) return;
+              if (viewMode === "split") {
+                setViewMode("repository");
+                return;
+              }
+              const activeViewId = viewIdFromPathname(pathname);
+              setSplitViewId(activeViewId ?? "foundations");
+              setViewMode("split");
+              if (isViewsAreaPath(pathname)) {
+                router.push(workspaceHomePath(orgSlug, workspaceSlug));
+              }
+            }}
+            className={cn(
+              "ml-1 flex items-center justify-center h-7 w-7 rounded text-white/45 hover:text-white/80 hover:bg-white/8",
+              viewMode === "split" && "bg-indigo-600 text-white hover:text-white"
+            )}
+          >
+            <Columns2 size={13} />
+          </button>
         </div>
       )}
 
       {/* Search bar */}
       <div className="flex-1 flex justify-center px-4">
-        <button
-          type="button"
-          className="flex items-center gap-2 w-full max-w-md rounded-md bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-white/35 hover:bg-white/8 hover:border-white/20 hover:text-white/55 transition-colors"
+        <form
+          className="flex items-center gap-2 w-full max-w-md rounded-md bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-white/70"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!basePath) return;
+            const q = jumpQuery.trim();
+            router.push(q ? askPath(basePath, q) : askPath(basePath));
+            setJumpQuery("");
+          }}
         >
-          <Search size={13} className="flex-shrink-0" />
-          <span>Search or jump to...</span>
-          <kbd className="ml-auto text-[10px] bg-white/10 rounded px-1.5 py-0.5 text-white/30 font-mono">
-            ⌘K
-          </kbd>
-        </button>
+          <Search size={13} className="flex-shrink-0 text-white/35" />
+          <input
+            ref={jumpRef}
+            value={jumpQuery}
+            onChange={(event) => setJumpQuery(event.target.value)}
+            placeholder="Ask or jump to..."
+            className="flex-1 bg-transparent outline-none placeholder:text-white/35"
+          />
+          <kbd className="text-[10px] bg-white/10 rounded px-1.5 py-0.5 text-white/30 font-mono">Ctrl K</kbd>
+        </form>
       </div>
 
       {/* Right actions */}

@@ -16,6 +16,7 @@ import {
   collectCustomProviders,
   isBareMetalRuntimeKind,
   lifecycleToStatus,
+  normalizeLifecycle,
   PLATFORM_CRITICALITY,
   PLATFORM_LIFECYCLE,
   PLATFORM_SLA,
@@ -93,6 +94,7 @@ function initFromRuntime(runtime?: MinEAObject) {
     description: runtime?.description ?? "",
     tags: (runtime?.tags ?? []).join(", "),
     kind: props.compute_runtime_kind ?? "kubernetes",
+    vendor: props.vendor ?? "",
     provider: props.runtime_provider ?? "aws",
     serviceProduct: props.service_product ?? "",
     hostingModel: props.hosting_model ?? "public_cloud",
@@ -103,7 +105,7 @@ function initFromRuntime(runtime?: MinEAObject) {
     commitmentEnds: props.commitment_ends ?? "",
     annualCost: props.annual_cost ?? "",
     slaTarget: props.sla_target ?? "99_9",
-    lifecycle: props.lifecycle ?? statusToLifecycle(runtime?.status),
+    lifecycle: normalizeLifecycle(props.lifecycle ?? statusToLifecycle(runtime?.status)),
     criticality: props.criticality ?? "low",
     owner: runtime?.owner ?? "",
   };
@@ -122,6 +124,7 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
   const [description, setDescription] = useState(init.description);
   const [tags, setTags] = useState(init.tags);
   const [kind, setKind] = useState<string>(init.kind);
+  const [vendor, setVendor] = useState(init.vendor);
   const [provider, setProvider] = useState<string>(init.provider);
   const [serviceProduct, setServiceProduct] = useState(init.serviceProduct);
   const [hostingModel, setHostingModel] = useState<string>(init.hostingModel);
@@ -164,6 +167,7 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
     () =>
       buildRuntimeProperties({
         kind,
+        vendor,
         provider,
         serviceProduct,
         hostingModel,
@@ -179,6 +183,7 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
       }),
     [
       kind,
+      vendor,
       provider,
       serviceProduct,
       hostingModel,
@@ -315,6 +320,16 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder={namePlaceholder}
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Vendor</FieldLabel>
+                  <input
+                    value={vendor}
+                    onChange={(e) => setVendor(e.target.value)}
+                    placeholder="e.g. IBM, DigitalOcean"
                     className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
                   />
                 </div>
@@ -483,7 +498,7 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
                     <FieldHint>Consumption-based costs may be approximate</FieldHint>
                   </div>
                   <div>
-                    <FieldLabel>Commitment ends</FieldLabel>
+                    <FieldLabel>Contract end</FieldLabel>
                     <input
                       value={commitmentEnds}
                       onChange={(e) => setCommitmentEnds(e.target.value)}

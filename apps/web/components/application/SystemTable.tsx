@@ -8,21 +8,20 @@ import {
   sortSystems,
   systemAnnualCost,
   systemAvatarColor,
-  systemCategory,
-  systemGovernanceValue,
   systemProps,
   systemVendor,
   type SystemSortKey,
 } from "@/lib/system-list-utils";
-import { systemCategoryDisplay } from "@/lib/system-category";
+import { catalogLifecycleLabel, catalogOwnerLabel, formatCatalogAnnualCost, formatCatalogContractEnd } from "@/lib/catalog-fields";
 import {
-  governanceStatusBadgeClass,
-  SYSTEM_GOVERNANCE_STATUS_LABELS,
-} from "@/lib/system-governance";
-import { formatUpdatedAgo, SYSTEM_STATUS_STYLE, systemStatusLabel } from "@/lib/system-utils";
-import { cn, formatCurrency, getObjectInitial } from "@/lib/utils";
+  criticalityBadgeStyle,
+  criticalityCardLabel,
+  lifecycleBadgeStyle,
+} from "@/lib/technology-card-utils";
+import { formatUpdatedAgo } from "@/lib/system-utils";
+import { cn, getObjectInitial } from "@/lib/utils";
 
-const COL_COUNT = 9;
+const COL_COUNT = 8;
 
 function SortHeader({
   label,
@@ -92,40 +91,23 @@ export function SystemTable({
           <thead>
             <tr>
               <SortHeader label="Name" active={sortKey === "name"} onClick={() => toggleSort("name")} />
+              <SortHeader label="Owner" active={sortKey === "owner"} onClick={() => toggleSort("owner")} />
+              <SortHeader label="Vendor" active={sortKey === "vendor"} onClick={() => toggleSort("vendor")} />
+              <SortHeader label="Annual cost" active={sortKey === "cost"} onClick={() => toggleSort("cost")} />
               <SortHeader
-                label="Governance"
-                active={sortKey === "governance"}
-                onClick={() => toggleSort("governance")}
+                label="Contract end"
+                active={sortKey === "contract"}
+                onClick={() => toggleSort("contract")}
               />
               <SortHeader
-                label="Vendor"
-                active={sortKey === "vendor"}
-                onClick={() => toggleSort("vendor")}
-              />
-              <SortHeader
-                label="Category"
-                active={sortKey === "category"}
-                onClick={() => toggleSort("category")}
-              />
-              <SortHeader
-                label="Cost/yr"
-                active={sortKey === "cost"}
-                onClick={() => toggleSort("cost")}
-              />
-              <SortHeader
-                label="Capabilities"
-                active={sortKey === "capabilities"}
-                onClick={() => toggleSort("capabilities")}
-              />
-              <SortHeader
-                label="Owner"
-                active={sortKey === "owner"}
-                onClick={() => toggleSort("owner")}
-              />
-              <SortHeader
-                label="Status"
+                label="Lifecycle"
                 active={sortKey === "status"}
                 onClick={() => toggleSort("status")}
+              />
+              <SortHeader
+                label="Criticality"
+                active={sortKey === "criticality"}
+                onClick={() => toggleSort("criticality")}
               />
               <SortHeader
                 label="Updated"
@@ -144,11 +126,9 @@ export function SystemTable({
             )}
             {sorted.map((item) => {
               const status = item.status ?? "planned";
-              const cost = systemAnnualCost(item);
-              const category = systemCategory(item);
-              const categoryMeta = systemCategoryDisplay(systemProps(item));
+              const props = systemProps(item);
               const vendor = systemVendor(item);
-              const governance = systemGovernanceValue(item);
+              const criticality = props.criticality;
               const updatedLabel = [
                 item.updated_by_name?.trim(),
                 formatUpdatedAgo(item.updated_at),
@@ -178,46 +158,39 @@ export function SystemTable({
                       </span>
                     </button>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span
-                      className={cn(
-                        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium border",
-                        governanceStatusBadgeClass(governance)
-                      )}
-                    >
-                      {SYSTEM_GOVERNANCE_STATUS_LABELS[governance]}
-                    </span>
+                  <td className="px-4 py-3 text-gray-700 max-w-[180px] truncate">
+                    {catalogOwnerLabel(item)}
                   </td>
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{vendor || "—"}</td>
-                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                    <div className="flex flex-col gap-0.5">
-                      <span>{categoryMeta.label || category || "—"}</span>
-                      {categoryMeta.needsReview && (
-                        <span className="text-[10px] font-medium text-amber-700">Needs review</span>
-                      )}
-                      {categoryMeta.isCustomBuilt && (
-                        <span className="text-[10px] font-medium text-gray-500">Custom-built</span>
-                      )}
-                    </div>
-                  </td>
                   <td className="px-4 py-3 text-gray-700 whitespace-nowrap tabular-nums">
-                    {cost != null ? formatCurrency(cost) : "—"}
+                    {formatCatalogAnnualCost(systemAnnualCost(item))}
                   </td>
-                  <td className="px-4 py-3 text-gray-700 tabular-nums">
-                    {item.capability_count ?? 0}
-                  </td>
-                  <td className="px-4 py-3 text-gray-700 max-w-[140px] truncate">
-                    {item.owner?.trim() || "—"}
+                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                    {formatCatalogContractEnd(props.contract_renewal)}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span
                       className={cn(
-                        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium capitalize",
-                        SYSTEM_STATUS_STYLE[status] ?? SYSTEM_STATUS_STYLE.planned
+                        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
+                        lifecycleBadgeStyle(status)
                       )}
                     >
-                      {systemStatusLabel(status)}
+                      {catalogLifecycleLabel(status)}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {criticality ? (
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
+                          criticalityBadgeStyle(criticality)
+                        )}
+                      >
+                        {criticalityCardLabel(criticality)}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
                     {updatedLabel || "—"}

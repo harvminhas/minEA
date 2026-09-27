@@ -37,7 +37,8 @@ import {
   systemFilterOptions,
   systemVendor,
 } from "@/lib/system-list-utils";
-import { formatUpdatedAgo, systemStatusLabel } from "@/lib/system-utils";
+import { catalogLifecycleLabel, catalogOwnerLabel } from "@/lib/catalog-fields";
+import { formatUpdatedAgo } from "@/lib/system-utils";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import type { MinEAObject } from "@minea/types";
 import { cn, formatCurrency, getStatusLabel } from "@/lib/utils";
@@ -195,25 +196,27 @@ function SystemListContent() {
   const exportCsv = () => {
     const header = [
       "Name",
-      "Governance",
-      "Vendor",
-      "Category",
-      "Cost/yr",
-      "Capabilities",
       "Owner",
-      "Status",
+      "Vendor",
+      "Annual cost",
+      "Contract end",
+      "Lifecycle",
+      "Criticality",
+      "Governance",
+      "Category",
       "Updated by",
       "Updated",
     ];
     const rows = filtered.map((item) => [
       item.name,
-      systemGovernance(item),
+      catalogOwnerLabel(item),
       systemVendor(item),
-      systemCategory(item),
       systemAnnualCost(item) != null ? formatCurrency(systemAnnualCost(item)!) : "",
-      String(item.capability_count ?? 0),
-      item.owner ?? "",
-      systemStatusLabel(item.status),
+      (item.properties as { contract_renewal?: string }).contract_renewal ?? "",
+      catalogLifecycleLabel(item.status),
+      (item.properties as { criticality?: string }).criticality ?? "",
+      systemGovernance(item),
+      systemCategory(item),
       item.updated_by_name ?? "",
       formatUpdatedAgo(item.updated_at),
     ]);

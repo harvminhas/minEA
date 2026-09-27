@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock, Layers, Plus } from "lucide-react";
@@ -8,54 +8,30 @@ import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { usePermissions } from "@/lib/use-permissions";
+import { CatalogCardFields } from "@/components/catalog/CatalogCardFields";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { PlatformDetail } from "@/components/infrastructure/PlatformDetail";
 import {
+  catalogOwnerLabel,
+  formatCatalogAnnualCost,
+  formatCatalogContractEnd,
+} from "@/lib/catalog-fields";
+import {
   formatPlatformSubtitle,
   isEnterprisePlatform,
-  PLATFORM_HOSTING_LABEL,
   PLATFORM_ICON_STYLE,
-  PLATFORM_LICENSE_LABEL,
   PLATFORM_VENDOR_LABEL,
   TECHNOLOGY_LAYER_COLOR,
 } from "@/lib/platform-utils";
-import {
-  criticalityBadgeStyle,
-  criticalityCardLabel,
-  formatAnnualCostDisplay,
-  labelFromMap,
-  lifecycleBadgeStyle,
-  lifecycleCardLabel,
-} from "@/lib/technology-card-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import type { CloudServiceProperties, MinEAObject } from "@minea/types";
 import { cn } from "@/lib/utils";
 
-function PropertyRow({
-  label,
-  value,
-  valueClassName,
-}: {
-  label: string;
-  value: ReactNode;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
-      <span className="text-gray-400 flex-shrink-0">{label}</span>
-      <span className={cn("text-right truncate max-w-[60%] font-medium text-gray-900", valueClassName)}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
 function PlatformCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: () => void }) {
   const props = (item.properties ?? {}) as CloudServiceProperties;
-  const lifecycle = props.lifecycle;
-  const lifecycleLabel = lifecycleCardLabel(lifecycle);
-  const criticality = props.criticality ?? "low";
-  const vendorLabel = PLATFORM_VENDOR_LABEL[props.vendor ?? ""] ?? props.vendor ?? "—";
+  const vendorLabel = props.vendor
+    ? (PLATFORM_VENDOR_LABEL[props.vendor] ?? props.vendor)
+    : "—";
 
   return (
     <div
@@ -77,51 +53,16 @@ function PlatformCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail:
             <p className="text-xs text-gray-400 mt-0.5 truncate">{formatPlatformSubtitle(props)}</p>
           </div>
         </div>
-        {lifecycleLabel && (
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-0.5 text-xs font-medium flex-shrink-0",
-              lifecycleBadgeStyle(lifecycle)
-            )}
-          >
-            {lifecycleLabel}
-          </span>
-        )}
       </div>
 
-      <div className="divide-y divide-gray-100 text-xs">
-        <PropertyRow
-          label="Vendor"
-          value={vendorLabel}
-          valueClassName={vendorLabel === "—" ? "font-normal text-gray-400" : undefined}
-        />
-        <PropertyRow
-          label="Hosting model"
-          value={labelFromMap(props.hosting_model, PLATFORM_HOSTING_LABEL)}
-          valueClassName={!props.hosting_model ? "font-normal text-gray-400" : undefined}
-        />
-        <PropertyRow
-          label="License model"
-          value={labelFromMap(props.license_model, PLATFORM_LICENSE_LABEL)}
-          valueClassName={!props.license_model ? "font-normal text-gray-400" : undefined}
-        />
-        <PropertyRow
-          label="Annual cost"
-          value={formatAnnualCostDisplay(props.annual_cost)}
-          valueClassName={!props.annual_cost ? "font-normal text-gray-400" : undefined}
-        />
-        <div className="flex items-center justify-between gap-2 py-2">
-          <span className="text-gray-400 flex-shrink-0">Criticality</span>
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize flex-shrink-0",
-              criticalityBadgeStyle(criticality)
-            )}
-          >
-            {criticalityCardLabel(criticality)}
-          </span>
-        </div>
-      </div>
+      <CatalogCardFields
+        owner={catalogOwnerLabel(item)}
+        vendor={vendorLabel}
+        annualCost={formatCatalogAnnualCost(props.annual_cost)}
+        contractEnd={formatCatalogContractEnd(props.contract_renewal)}
+        lifecycle={props.lifecycle ?? item.status}
+        criticality={props.criticality}
+      />
 
       <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">
         <Clock size={12} className="flex-shrink-0" />

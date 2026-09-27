@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeftRight,
@@ -21,15 +21,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { CatalogCardFields } from "@/components/catalog/CatalogCardFields";
 import { CreateIntegrationInfraPanel } from "@/components/integration/CreateIntegrationInfraPanel";
 import { IntegrationInfraDetail } from "@/components/integration/IntegrationInfraDetail";
 import { IntegrationInfraTable } from "@/components/integration/IntegrationInfraTable";
 import {
+  catalogOwnerLabel,
+  formatCatalogAnnualCost,
+  formatCatalogContractEnd,
+} from "@/lib/catalog-fields";
+import {
   formatInfraSubtitle,
-  INFRA_HOSTING_LABEL,
   INFRA_ICON_STYLE,
   INFRA_KIND_LABEL,
-  INFRA_LICENSE_LABEL,
   INFRA_VENDOR_LABEL,
   infraVendorLabel,
   isIntegrationInfra,
@@ -40,14 +44,6 @@ import {
   infraKindLabelForItem,
   infraVendorLabelForItem,
 } from "@/lib/integration-infra-list-utils";
-import {
-  criticalityBadgeStyle,
-  criticalityCardLabel,
-  formatAnnualCostDisplay,
-  labelFromMap,
-  lifecycleBadgeStyle,
-  lifecycleCardLabel,
-} from "@/lib/technology-card-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import type { MinEAObject, ToolProperties } from "@minea/types";
 import { cn, getStatusLabel } from "@/lib/utils";
@@ -94,30 +90,8 @@ function FilterDropdown({
   );
 }
 
-function PropertyRow({
-  label,
-  value,
-  valueClassName,
-}: {
-  label: string;
-  value: ReactNode;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
-      <span className="text-gray-400 flex-shrink-0">{label}</span>
-      <span className={cn("text-right truncate max-w-[60%] font-medium text-gray-900", valueClassName)}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
 function InfraCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: () => void }) {
   const props = (item.properties ?? {}) as ToolProperties;
-  const lifecycle = props.lifecycle;
-  const lifecycleLabel = lifecycleCardLabel(lifecycle);
-  const criticality = props.criticality ?? "low";
   const vendorLabel = infraVendorLabel(props.vendor) || "—";
 
   return (
@@ -140,51 +114,16 @@ function InfraCard({ item, onOpenDetail }: { item: MinEAObject; onOpenDetail: ()
             <p className="text-xs text-gray-400 mt-0.5 truncate">{formatInfraSubtitle(props)}</p>
           </div>
         </div>
-        {lifecycleLabel && (
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-0.5 text-xs font-medium flex-shrink-0",
-              lifecycleBadgeStyle(lifecycle)
-            )}
-          >
-            {lifecycleLabel}
-          </span>
-        )}
       </div>
 
-      <div className="divide-y divide-gray-100 text-xs">
-        <PropertyRow
-          label="Vendor"
-          value={vendorLabel}
-          valueClassName={vendorLabel === "—" ? "font-normal text-gray-400" : undefined}
-        />
-        <PropertyRow
-          label="Hosting model"
-          value={labelFromMap(props.hosting_model, INFRA_HOSTING_LABEL)}
-          valueClassName={!props.hosting_model ? "font-normal text-gray-400" : undefined}
-        />
-        <PropertyRow
-          label="License model"
-          value={labelFromMap(props.license_model, INFRA_LICENSE_LABEL)}
-          valueClassName={!props.license_model ? "font-normal text-gray-400" : undefined}
-        />
-        <PropertyRow
-          label="Annual cost"
-          value={formatAnnualCostDisplay(props.annual_cost)}
-          valueClassName={!props.annual_cost ? "font-normal text-gray-400" : undefined}
-        />
-        <div className="flex items-center justify-between gap-2 py-2">
-          <span className="text-gray-400 flex-shrink-0">Criticality</span>
-          <span
-            className={cn(
-              "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize flex-shrink-0",
-              criticalityBadgeStyle(criticality)
-            )}
-          >
-            {criticalityCardLabel(criticality)}
-          </span>
-        </div>
-      </div>
+      <CatalogCardFields
+        owner={catalogOwnerLabel(item)}
+        vendor={vendorLabel}
+        annualCost={formatCatalogAnnualCost(props.annual_cost)}
+        contractEnd={formatCatalogContractEnd(props.contract_renewal)}
+        lifecycle={props.lifecycle ?? item.status}
+        criticality={props.criticality}
+      />
 
       <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">
         <Clock size={12} className="flex-shrink-0" />

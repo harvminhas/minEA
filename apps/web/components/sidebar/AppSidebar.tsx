@@ -16,19 +16,19 @@ import {
   Share2,
   Database,
   Users,
-  AlertTriangle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/lib/store";
 import { useTenancy } from "@/lib/tenancy";
-import { NAV_VIEWS } from "@/lib/views";
+import { isViewsModePath, NAV_VIEWS } from "@/lib/views";
 import {
   REPOSITORY_LAYERS,
   isNavItemDisabled,
+  layerChildItems,
+  layerHeaderItem,
   layerNavCountTotal,
   visibleNavItems,
-  type NavBadge,
   type RepositoryLayer,
   type RepositoryNavItem,
 } from "@/lib/repository-nav";
@@ -36,14 +36,13 @@ import { useRepositoryNavCounts } from "@/lib/use-repository-nav-counts";
 // ─── Icons assigned to each repository layer ─────────────────────────────
 
 const LAYER_ICONS: Record<string, LucideIcon> = {
-  strategy: Target,
-  business: Briefcase,
-  application: AppWindow,
-  integration: Share2,
-  data: Database,
-  technology: Cpu,
+  systems: AppWindow,
+  integrations: Share2,
+  platforms: Cpu,
   people: Users,
-  risk: AlertTriangle,
+  business: Briefcase,
+  strategy: Target,
+  data: Database,
 };
 
 function NavCount({ value, show }: { value: number; show: boolean }) {
@@ -53,24 +52,8 @@ function NavCount({ value, show }: { value: number; show: boolean }) {
   );
 }
 
-function NavBadgePill({ badge }: { badge: NavBadge }) {
-  if (badge === "new") {
-    return (
-      <span className="flex-shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
-        New
-      </span>
-    );
-  }
-  return (
-    <span className="flex-shrink-0 rounded px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide bg-white/5 text-white/25 border border-white/10">
-      Upcoming
-    </span>
-  );
-}
-
 function RepoNavItemRow({
   item,
-  layer,
   href,
   pathname,
   onNavigate,
@@ -79,7 +62,6 @@ function RepoNavItemRow({
   showCounts,
 }: {
   item: RepositoryNavItem;
-  layer: RepositoryLayer;
   href: string;
   pathname: string;
   onNavigate?: () => void;
@@ -95,19 +77,14 @@ function RepoNavItemRow({
     disabled
       ? "text-white/25 cursor-not-allowed"
       : isActive
-        ? "bg-white/10 text-white"
-        : "text-white/45 hover:text-white hover:bg-white/5"
+        ? "bg-indigo-600 text-white"
+        : "text-white/55 hover:text-white hover:bg-white/5"
   );
 
   const content = (
     <>
-      <span
-        className={cn("h-1 w-1 rounded-full flex-shrink-0", disabled && "opacity-40")}
-        style={{ backgroundColor: layer.color }}
-      />
       <span className="truncate text-[13px] flex-1 min-w-0">{item.label}</span>
       {!disabled && <NavCount value={count ?? 0} show={showCounts} />}
-      {item.badge && <NavBadgePill badge={item.badge} />}
     </>
   );
 
@@ -144,9 +121,7 @@ function IconBtn({
   active,
   icon: Icon,
   tooltip,
-  color,
   onClick,
-  isViews,
   suppressTooltip,
   isOpen,
 }: {
@@ -154,39 +129,19 @@ function IconBtn({
   active?: boolean;
   icon: LucideIcon;
   tooltip: string;
-  color?: string;
   onClick?: () => void;
-  isViews?: boolean;
   suppressTooltip?: boolean;
   isOpen?: boolean;
 }) {
-  const activeClass = isViews
-    ? "bg-violet-500 text-white"
-    : "bg-white/10 text-white";
-  const inactiveClass = isViews
-    ? "text-violet-300/60 hover:text-violet-100 hover:bg-violet-800/60"
-    : "text-white/50 hover:text-white hover:bg-white/8";
+  const activeClass = "bg-indigo-600 text-white";
+  const inactiveClass = "text-white/50 hover:text-white hover:bg-white/8";
 
   const inner = (
     <>
       {(active || isOpen) && (
-        <span
-          className={cn(
-            "absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r",
-            isViews ? "bg-violet-300" : "bg-white/70"
-          )}
-        />
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r bg-white/70" />
       )}
-      {color ? (
-        <span
-          className="h-5 w-5 rounded flex items-center justify-center flex-shrink-0 text-[10px] font-bold"
-          style={{ backgroundColor: `${color}22`, color }}
-        >
-          <Icon size={13} />
-        </span>
-      ) : (
-        <Icon size={16} />
-      )}
+      <Icon size={16} />
       {!suppressTooltip && <Tooltip>{tooltip}</Tooltip>}
     </>
   );
@@ -219,19 +174,8 @@ function CollapsedViewsNav({
   basePath: string;
   pathname: string;
 }) {
-  const galleryHref = `${basePath}/views`;
-  const isOnGallery = pathname === galleryHref;
-
   return (
     <>
-      <IconBtn
-        href={galleryHref}
-        active={isOnGallery}
-        icon={LayoutGrid}
-        tooltip="Gallery"
-        isViews
-      />
-      <div className="w-6 h-px bg-violet-700/40 my-0.5" />
       {NAV_VIEWS.map((view) => {
         const href = `${basePath}/${view.segment}`;
         const isActive = pathname === href || pathname.startsWith(`${href}/`);
@@ -242,8 +186,6 @@ function CollapsedViewsNav({
             active={isActive}
             icon={view.icon}
             tooltip={view.label}
-            color={view.color}
-            isViews
           />
         );
       })}
@@ -308,11 +250,10 @@ function CollapsedLayerFlyout({
 
   return (
     <div ref={anchorRef} className="relative">
-      <IconBtn
+        <IconBtn
         active={isLayerActive}
         icon={LayerIcon}
         tooltip={layer.label}
-        color={layer.color}
         onClick={onToggle}
         suppressTooltip={isOpen}
         isOpen={isOpen}
@@ -336,7 +277,6 @@ function CollapsedLayerFlyout({
             <RepoNavItemRow
               key={item.segment}
               item={item}
-              layer={layer}
               href={`${basePath}/${item.segment}`}
               pathname={pathname}
               onNavigate={onClose}
@@ -419,7 +359,6 @@ function CollapsedRepoNav({
               active={isActive}
               icon={LayerIcon}
               tooltip={layer.label}
-              color={layer.color}
             />
           );
         }
@@ -451,49 +390,24 @@ function ExpandedViewsNav({
   basePath: string;
   pathname: string;
 }) {
-  const galleryHref = `${basePath}/views`;
-  const isOnGallery = pathname === galleryHref;
-
   return (
     <div>
-      {/* Gallery */}
-      <Link
-        href={galleryHref}
-        className={cn(
-          "flex items-center gap-2.5 px-4 py-1.5 text-sm transition-colors",
-          isOnGallery
-            ? "bg-violet-500/30 text-violet-100"
-            : "text-violet-300/60 hover:text-violet-100 hover:bg-violet-800/40"
-        )}
-      >
-        <span className="h-5 w-5 rounded flex items-center justify-center flex-shrink-0 bg-violet-500/20">
-          <LayoutGrid size={11} className="text-violet-300" />
-        </span>
-        <span className="truncate">Gallery</span>
-      </Link>
-
-      <div className="mx-4 my-1.5 h-px bg-violet-700/40" />
-
-      {NAV_VIEWS.map((view) => {
+      {NAV_VIEWS.map((view, index) => {
         const href = `${basePath}/${view.segment}`;
         const isActive = pathname === href || pathname.startsWith(`${href}/`);
-        const Icon = view.icon;
         const rowClass = cn(
           "flex items-center gap-2.5 px-4 py-1.5 text-sm transition-colors",
           isActive
-            ? "bg-violet-500/30 text-violet-100"
-            : "text-violet-300/60 hover:text-violet-100 hover:bg-violet-800/40"
+            ? "bg-indigo-600 text-white"
+            : "text-white/55 hover:text-white hover:bg-white/5"
         );
         return (
-          <Link key={view.id} href={href} className={rowClass}>
-            <span
-              className="h-5 w-5 rounded flex items-center justify-center flex-shrink-0"
-              style={{ backgroundColor: `${view.color}22` }}
-            >
-              <Icon size={11} style={{ color: view.color }} />
-            </span>
-            <span className="truncate flex-1">{view.label}</span>
-          </Link>
+          <div key={view.id}>
+            {index === 3 && <div className="mx-4 my-1.5 h-px bg-white/10" />}
+            <Link href={href} className={rowClass}>
+              <span className="truncate flex-1">{view.label}</span>
+            </Link>
+          </div>
         );
       })}
     </div>
@@ -524,11 +438,10 @@ function ExpandedRepoNav({
         className={cn(
           "flex items-center gap-2.5 px-4 py-1.5 text-sm transition-colors",
           isOnOverview
-            ? "bg-white/10 text-white"
-            : "text-white/45 hover:text-white hover:bg-white/5"
+            ? "bg-indigo-600 text-white"
+            : "text-white/55 hover:text-white hover:bg-white/5"
         )}
       >
-        <LayoutGrid size={14} className="text-white/40 flex-shrink-0" />
         <span className="truncate flex-1">Overview</span>
       </Link>
 
@@ -536,54 +449,65 @@ function ExpandedRepoNav({
 
       {REPOSITORY_LAYERS.map((layer) => {
         const items = visibleNavItems(layer);
+        const header = layerHeaderItem(layer);
+        const children = layerChildItems(layer);
         const isCollapsed = collapsedLayers[layer.id] ?? true;
-        const LayerIcon = LAYER_ICONS[layer.id] ?? Briefcase;
-        const isLayerActive = items.some((item) => {
+        const headerHref = header ? `${basePath}/${header.segment}` : null;
+        const headerActive =
+          !!headerHref && (pathname === headerHref || pathname.startsWith(`${headerHref}/`));
+        const childActive = children.some((item) => {
           if (isNavItemDisabled(item)) return false;
           const href = `${basePath}/${item.segment}`;
           return pathname === href || pathname.startsWith(`${href}/`);
         });
+        const headerCount = header
+          ? countsBySegment[header.segment] ?? 0
+          : layerNavCountTotal(layer, countsBySegment);
+        const rowClass = cn(
+          "flex w-full items-center gap-2 px-4 py-1.5 text-sm transition-colors min-w-0",
+          headerActive
+            ? "bg-indigo-600 text-white"
+            : childActive && isCollapsed
+              ? "text-white"
+              : "text-white/55 hover:text-white hover:bg-white/5"
+        );
 
         return (
           <div key={layer.id}>
-            <button
-              type="button"
-              onClick={() => toggleLayer(layer.id)}
-              className={cn(
-                "flex w-full items-center gap-2 px-4 py-1.5 text-sm transition-colors min-w-0",
-                isLayerActive && isCollapsed
-                  ? "text-white"
-                  : "text-white/55 hover:text-white hover:bg-white/5"
-              )}
-            >
-              <ChevronRight
-                size={12}
-                className={cn("flex-shrink-0 transition-transform", !isCollapsed && "rotate-90")}
-              />
-              <span
-                className="h-4 w-4 rounded border border-white/15 flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: `${layer.color}18` }}
+            <div className={rowClass}>
+              <button
+                type="button"
+                onClick={() => toggleLayer(layer.id)}
+                className="flex-shrink-0"
+                aria-label={isCollapsed ? `Expand ${layer.label}` : `Collapse ${layer.label}`}
               >
-                <span
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{ backgroundColor: layer.color }}
+                <ChevronRight
+                  size={12}
+                  className={cn("transition-transform", !isCollapsed && "rotate-90")}
                 />
-              </span>
-              <span className="truncate flex-1 text-left">{layer.label}</span>
-              {layer.badge && <NavBadgePill badge={layer.badge} />}
-              <NavCount
-                value={layerNavCountTotal(layer, countsBySegment)}
-                show={showCounts}
-              />
-            </button>
+              </button>
+              {headerHref ? (
+                <Link href={headerHref} className="truncate flex-1 text-left">
+                  {layer.label}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => toggleLayer(layer.id)}
+                  className="truncate flex-1 text-left"
+                >
+                  {layer.label}
+                </button>
+              )}
+              <NavCount value={headerCount} show={showCounts} />
+            </div>
 
-            {!isCollapsed && (
+            {!isCollapsed && children.length > 0 && (
               <div className="mb-0.5">
-                {items.map((item) => (
+                {children.map((item) => (
                   <RepoNavItemRow
                     key={item.segment}
                     item={item}
-                    layer={layer}
                     href={`${basePath}/${item.segment}`}
                     pathname={pathname}
                     count={countsBySegment[item.segment]}
@@ -609,7 +533,7 @@ export function AppSidebar() {
   const countsBySegment = navCounts ?? {};
   const showCounts = navCounts !== undefined;
 
-  const isViews = viewMode === "views";
+  const isViews = viewMode !== "split" && (viewMode === "views" || isViewsModePath(pathname));
   const sidebarModeLabel = isViews ? "Views" : "Repository";
 
   const settingsHref = orgSlug ? `/orgs/${orgSlug}/settings` : "/home";
@@ -623,9 +547,7 @@ export function AppSidebar() {
       className={cn(
         "flex items-center gap-2 rounded-md transition-colors text-sm",
         sidebarExpanded ? "px-1.5 py-1" : "h-9 w-9 justify-center",
-        isViews
-          ? "text-violet-300/50 hover:text-violet-100 hover:bg-violet-800/40"
-          : "text-white/35 hover:text-white hover:bg-white/8"
+        "text-white/35 hover:text-white hover:bg-white/8"
       )}
     >
       {sidebarExpanded ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
@@ -635,26 +557,21 @@ export function AppSidebar() {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-12 bottom-0 flex flex-col z-40 transition-[width] duration-200 overflow-hidden",
-        isViews
-          ? "bg-violet-950/90 border-r border-violet-800/40"
-          : "sidebar border-r border-white/10",
+        "fixed left-0 top-14 bottom-0 flex flex-col z-40 transition-[width] duration-200 overflow-hidden sidebar border-r border-white/10",
         sidebarExpanded ? "w-[200px]" : "w-[52px]"
       )}
     >
       {/* ── Header row with toggle ── */}
       <div
         className={cn(
-          "flex items-center flex-shrink-0 border-b h-10",
-          isViews ? "border-violet-800/40" : "border-white/8",
+          "flex items-center flex-shrink-0 border-b h-10 border-white/8",
           sidebarExpanded ? "px-3 justify-between" : "justify-center"
         )}
       >
         {sidebarExpanded && (
           <span
             className={cn(
-              "text-[10px] font-semibold uppercase tracking-wider select-none",
-              isViews ? "text-violet-300/50" : "text-white/30"
+              "text-[10px] font-semibold uppercase tracking-wider select-none text-white/30"
             )}
           >
             {sidebarModeLabel}
@@ -702,18 +619,14 @@ export function AppSidebar() {
 
       {/* ── Footer: settings (expanded only) ── */}
       {sidebarExpanded && (
-        <div className={cn("border-t py-1", isViews ? "border-violet-800/40" : "border-white/10")}>
+        <div className="border-t border-white/10 py-1">
           <Link
             href={settingsHref}
             className={cn(
               "flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors",
-              isViews
-                ? isOnSettings
-                  ? "bg-violet-500/30 text-violet-100"
-                  : "text-violet-300/50 hover:text-violet-100 hover:bg-violet-800/40"
-                : isOnSettings
-                  ? "bg-white/10 text-white"
-                  : "text-white/45 hover:text-white hover:bg-white/5"
+              isOnSettings
+                ? "bg-indigo-600 text-white"
+                : "text-white/55 hover:text-white hover:bg-white/5"
             )}
           >
             <Settings size={14} />

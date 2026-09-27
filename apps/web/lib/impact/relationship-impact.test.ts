@@ -1,0 +1,89 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { impactOf, type ImpactEdge, type ImpactNode } from "./relationship-impact.ts";
+
+const salesforce: ImpactNode[] = [
+  { id: "sf", name: "SalesForce CRM" },
+  { id: "cs", name: "Customer Service" },
+  { id: "mkt", name: "Marketing" },
+  { id: "sm", name: "Sales Module" },
+  { id: "m360", name: "My 360" },
+  { id: "mc", name: "Marketing Campaigns" },
+  { id: "next", name: "New CRM" },
+];
+
+const salesforceEdges: ImpactEdge[] = [
+  { type: "calls", fromId: "cs", toId: "sf" },
+  { type: "part_of", fromId: "mkt", toId: "sf" },
+  { type: "part_of", fromId: "sm", toId: "sf" },
+  { type: "part_of", fromId: "m360", toId: "sf" },
+  { type: "supported_by", fromId: "mc", toId: "mkt" },
+  { type: "replaces", fromId: "next", toId: "sf" },
+  { type: "calls", fromId: "cs", toId: "sf" },
+];
+
+test("SalesForce CRM impact", () => {
+  const hits = impactOf(salesforce, salesforceEdges, "sf");
+  const byName = new Map(hits.map((hit) => [hit.name, hit]));
+  for (const name of ["Customer Service", "Marketing", "Sales Module", "My 360"]) {
+    assert.equal(byName.get(name)?.severity, "direct");
+    assert.equal(byName.get(name)?.indirect, false);
+  }
+  assert.equal(byName.get("Marketing")?.path[0]?.label, "Marketing is part of SalesForce CRM");
+  assert.equal(byName.get("Marketing Campaigns")?.severity, "loses_support");
+  assert.equal(byName.has("New CRM"), false);
+  assert.equal(hits.filter((hit) => hit.name === "Customer Service").length, 1);
+});
+
+test("a replaces edge never shows up in impact", () => {
+  const nodes = [
+    { id: "old", name: "Old CRM" },
+    { id: "new", name: "New CRM" },
+  ];
+  const edges = [{ type: "replaces", fromId: "new", toId: "old" }];
+  assert.deepEqual(impactOf(nodes, edges, "old"), []);
+  assert.deepEqual(impactOf(nodes, edges, "new"), []);
+});
+
+test("calls chain: C fails, B is direct, A is indirect", () => {
+  const nodes = [
+    { id: "a", name: "A" },
+    { id: "b", name: "B" },
+    { id: "c", name: "C" },
+  ];
+  const edges = [
+    { type: "calls", fromId: "a", toId: "b" },
+    { type: "calls", fromId: "b", toId: "c" },
+  ];
+  const hits = impactOf(nodes, edges, "c");
+  const byName = new Map(hits.map((hit) => [hit.name, hit]));
+  assert.equal(byName.get("B")?.severity, "direct");
+  assert.equal(byName.get("B")?.indirect, false);
+  assert.equal(byName.get("A")?.severity, "direct");
+  assert.equal(byName.get("A")?.indirect, true);
+  assert.equal(byName.get("A")?.path.map((step) => step.label).join(", then "), "B calls C, then A calls B");
+  assert.equal(hits.length, 2);
+});
+
+test("AS400 hosting fixture", () => {
+  const nodes = [
+    { id: "as400", name: "AS400" },
+    { id: "oe", name: "Order Entry" },
+    { id: "inv", name: "Inventory" },
+    { id: "edi", name: "EDI Gateway" },
+    { id: "legacy", name: "Legacy box" },
+  ];
+  const edges = [
+    { type: "runs_on", fromId: "oe", toId: "as400" },
+    { type: "runs_on", fromId: "inv", toId: "as400" },
+    { type: "runs_on", fromId: "edi", toId: "as400" },
+    { type: "replaces", fromId: "legacy", toId: "as400" },
+  ];
+  const hits = impactOf(nodes, edges, "as400");
+  assert.deepEqual(
+    hits.map((hit) => hit.name),
+    ["EDI Gateway", "Inventory", "Order Entry"]
+  );
+  assert.ok(hits.every((hit) => hit.severity === "direct" && hit.indirect === false));
+  assert.equal(hits[0]?.path[0]?.label, "EDI Gateway runs on AS400");
+});
