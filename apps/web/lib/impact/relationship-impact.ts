@@ -54,7 +54,7 @@ export const relationshipImpactRules: Record<string, ImpactRule> = {
   },
 };
 
-export type ImpactNode = { id: string; name: string };
+export type ImpactNode = { id: string; name: string; typeLabel?: string };
 
 export type ImpactEdge = {
   type: string;

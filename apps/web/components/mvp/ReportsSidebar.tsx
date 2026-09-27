@@ -69,7 +69,7 @@ export function ReportsSidebar() {
         </Link>
       </nav>
       <p className="mt-auto px-4 py-4 text-[12px] leading-5 text-[#8b90a0]">
-        Reports refresh from your model. {stats.systems + stats.infrastructure} records in view.
+        Reports refresh from your model. {stats.systems} applications and {stats.infrastructure} infrastructure in view.
       </p>
     </aside>
   );

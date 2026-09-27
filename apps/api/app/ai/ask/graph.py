@@ -36,6 +36,30 @@ LIFECYCLE = {
     "retired": "End of life",
 }
 CRITICALITY = {"low": "Low", "medium": "Medium", "high": "High", "tier1": "Critical", "critical": "Critical"}
+TYPE_LABELS = {
+    "application": "Application",
+    "solution": "Solution",
+    "technical_capability": "Capability",
+    "capability": "Capability",
+    "infrastructure": "Infrastructure",
+    "flow": "Flow",
+    "integration_flow": "Flow",
+    "component": "Component",
+    "api": "API",
+    "event": "Event",
+    "data_object": "Data Entity",
+    "data_store": "Data Store",
+    "data_domain": "Data Domain",
+    "roadmap_item": "Roadmap Item",
+    "tech_debt": "Tech Debt",
+    "agent": "AI Agent",
+    "value_stream": "Value Stream",
+    "business_domain": "Domain",
+    "message_broker": "Message Broker",
+    "tool": "Tool",
+    "cloud_service": "Cloud Service",
+    "model": "Model",
+}
 
 
 @dataclass
@@ -56,10 +80,22 @@ class Rec:
     blank: list[str] = field(default_factory=list)
     description: str = ""
 
+    def type_label(self) -> str:
+        if self.raw_type == "technical_capability":
+            return "Capability"
+        if self.raw_type == "solution":
+            return "Solution"
+        if self.raw_type == "application":
+            return "Application"
+        if self.type == "infrastructure" and self.kind:
+            return self.kind
+        return TYPE_LABELS.get(self.raw_type) or TYPE_LABELS.get(self.type) or self.type.replace("_", " ").title()
+
     def summary(self) -> dict:
         return {
             "id": self.id,
             "type": self.type,
+            "type_label": self.type_label(),
             "name": self.name,
             "kind": self.kind or None,
             "owner_team": self.owner_team,

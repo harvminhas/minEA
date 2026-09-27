@@ -71,7 +71,7 @@ def search_records(bag: ToolBag, args: dict) -> dict:
 def impact_of(bag: ToolBag, args: dict) -> dict:
     target = bag.graph.get(str(args.get("id") or ""))
     if not target:
-        return {"error": "not_found", "message": "That record is not in this workspace."}
+        return {"error": "not_found", "message": "That item is not in this workspace."}
     bag.note_record(target)
     names = {rec.id: rec.name for rec in bag.graph.records.values()}
     edges = [ImpactEdge(edge.relation, edge.from_id, edge.to_id) for edge in bag.graph.edges]
@@ -94,7 +94,12 @@ def impact_of(bag: ToolBag, args: dict) -> dict:
         "loses_support": sum(1 for hit in affected if hit["severity"] == "loses_support"),
         "critical_direct": len(critical),
     }
-    for value in counts.values():
+    by_type: dict[str, int] = {}
+    for hit in affected:
+        rec = bag.graph.get(hit["id"])
+        label = rec.type_label() if rec else "Item"
+        by_type[label] = by_type.get(label, 0) + 1
+    for value in [*counts.values(), *by_type.values()]:
         bag.note_number(value)
     gaps = []
     for hit in [ {"id": target.id}, *affected ]:
@@ -116,6 +121,7 @@ def impact_of(bag: ToolBag, args: dict) -> dict:
             for hit in affected
         ],
         "counts": counts,
+        "by_type": by_type,
         "gaps": gaps[:10],
     }
 
@@ -157,6 +163,11 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
         bag.note_record(rec)
     total = sum(rec.annual or 0 for rec in rows)
     bag.note_number(len(rows))
+    by_type: dict[str, int] = {}
+    for rec in rows:
+        by_type[rec.type_label()] = by_type.get(rec.type_label(), 0) + 1
+    for value in by_type.values():
+        bag.note_number(value)
     if metric == "sum_annual_cost":
         bag.note_number(int(total))
     groups: list[dict] = []
@@ -188,6 +199,7 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
     return {
         "metric": metric,
         "count": len(rows),
+        "by_type": by_type,
         "annual_cost": int(total) if metric == "sum_annual_cost" else None,
         "groups": groups,
         "records": [rec.summary() for rec in rows[:50]],
@@ -211,6 +223,7 @@ def find_gaps(bag: ToolBag, args: dict) -> dict:
                 "record_id": rec.id,
                 "record_name": rec.name,
                 "type": rec.type,
+                "type_label": rec.type_label(),
                 "field": rec.blank[0],
                 "message": f"{rec.name} is missing {', '.join(field.replace('_', ' ') for field in rec.blank)}.",
             }
@@ -222,7 +235,7 @@ def find_gaps(bag: ToolBag, args: dict) -> dict:
 TOOLS: list[AskTool] = [
     AskTool(
         name="search_records",
-        description="Find records in this workspace by name. Use this first to turn a name in the question into an id.",
+        description="Find an application, capability, infrastructure item, or other item by name. Each match includes type_label. Use this first to turn a name in the question into an id.",
         parameters={
             "type": "object",
             "properties": {
@@ -235,7 +248,7 @@ TOOLS: list[AskTool] = [
     ),
     AskTool(
         name="impact_of",
-        description="What is affected if this record fails. Each affected record has severity direct, degraded, or loses_support, indirect true when it is more than one step away, and a path of labels. Use the counts. Do not add records the tool did not return.",
+        description="What is affected if this item fails. Each result includes type_label, severity direct, degraded, or loses_support, indirect true when it is more than one step away, and a path of labels. by_type counts each type. Use those counts. Do not add items the lookup did not return.",
         parameters={
             "type": "object",
             "properties": {"id": {"type": "string"}},
@@ -245,7 +258,7 @@ TOOLS: list[AskTool] = [
     ),
     AskTool(
         name="aggregate",
-        description="Count records or sum annual cost. Use for any total, share, renewal window, or criticality question such as the most critical system. filters.criticality is Critical, High, Medium, or Low. Do not add numbers yourself.",
+        description="Count applications, capabilities, or infrastructure, or sum annual cost. Use for any total, share, renewal window, or criticality question such as the most critical system. filters.criticality is Critical, High, Medium, or Low. by_type counts each type_label. Do not add numbers yourself.",
         parameters={
             "type": "object",
             "properties": {
@@ -268,7 +281,7 @@ TOOLS: list[AskTool] = [
     ),
     AskTool(
         name="find_gaps",
-        description="List records with missing owner, vendor, cost, renewal, lifecycle, or criticality.",
+        description="List applications and infrastructure missing owner, vendor, cost, renewal, lifecycle, or criticality. Each gap includes type_label.",
         parameters={
             "type": "object",
             "properties": {"scope": {"type": "string"}},

@@ -202,7 +202,7 @@ export function ModelDetailPanel({
             <Section title="Depends on this">
               {impactGraph.isLoading && <p className="text-[13px] text-[#8b90a0]">Looking up what depends on this…</p>}
               {!impactGraph.isLoading && dependents.length === 0 && (
-                <p className="text-[13px] text-[#8b90a0]">Nothing is recorded as affected if this fails.</p>
+                <p className="text-[13px] text-[#8b90a0]">Nothing linked to this is affected if it fails.</p>
               )}
               {dependents.map((hit) => (
                 <div key={hit.id} className="py-1.5 text-[13px]">

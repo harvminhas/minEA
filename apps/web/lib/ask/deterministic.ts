@@ -31,12 +31,53 @@ export type AskGraph = {
   edges: ImpactEdge[];
 };
 
+export function describeTypes(labels: string[]): string {
+  const counts = new Map<string, number>();
+  for (const raw of labels) {
+    const label = raw.trim() || "Item";
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const parts = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([label, count]) => `${count} ${count === 1 ? label : pluralType(label)}`);
+  if (parts.length === 0) return "nothing";
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+}
+
+function pluralType(label: string): string {
+  if (/[^aeiou]y$/i.test(label)) return `${label.slice(0, -1)}ies`;
+  if (/(s|x|ch|sh)$/i.test(label)) return `${label}es`;
+  return `${label}s`;
+}
+
+function typeLabels(rows: { typeLabel: string }[]): string[] {
+  return rows.map((row) => row.typeLabel);
+}
+
 const SUGGESTED = [
   "What renews in the next 90 days?",
   "Where is our money going?",
   "What has no owner?",
   "What goes end of life next year?",
 ];
+
+function withoutDuplicateRoster(text: string, citations: AskCitation[]): string {
+  const cleaned = text.replace(/\s*\((?:applications?|capabilities|capability|solutions?|infrastructure|on-prem servers?|saas platforms?|cloud|network|flows?|apis?|events?|components?)\)/gi, "");
+  if (citations.length < 2 || !cleaned.includes(":")) return cleaned.trim();
+  const head = cleaned.slice(0, cleaned.indexOf(":")).trim();
+  let remainder = cleaned.slice(cleaned.indexOf(":") + 1);
+  for (const citation of [...citations].sort((a, b) => b.row.name.length - a.row.name.length)) {
+    remainder = remainder.replace(new RegExp(citation.row.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), "");
+  }
+  remainder = remainder.replace(/\[\d+\]/g, "").replace(/[\s*•\-,.;:]+/g, "");
+  if (remainder.length > 0) return cleaned.trim();
+  if (/^the following have no owner$/i.test(head)) {
+    return `**${describeTypes(citations.map((item) => item.row.typeLabel))} have no owner.**`;
+  }
+  return head.endsWith(".") ? head : `${head}.`;
+}
 
 export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], basePath: string): AskAnswer | null {
   if (payload.source !== "llm" || !payload.answer_text) return null;
@@ -49,7 +90,7 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
   }));
   return {
     handler: payload.unsupported ? "unsupported" : "impact",
-    answerText: payload.answer_text,
+    answerText: withoutDuplicateRoster(payload.answer_text, citations),
     citations,
     gaps: payload.gaps.map((gap) => {
       const row = citations.find((item) => item.recordId === gap.record_id)?.row ?? rows.find((item) => item.id === gap.record_id);
@@ -85,7 +126,7 @@ function rowForCitation(item: AskModelPayload["citations"][number], rows: Catalo
     object: { id: item.record_id, name: item.name, type: application ? "application" : "cloud_service" } as MinEAObject,
     kind: application ? "application" : "platform",
     name: item.name,
-    typeLabel: item.kind || item.type_label,
+    typeLabel: item.type_label || item.kind || "Item",
     subtitle: "",
     ownerTeam: item.owner,
     ownerPerson: "",
@@ -121,13 +162,13 @@ export function answerFromRecords(input: {
   const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
   if (!question) {
-    return empty("unsupported", "Ask a question about the records in this workspace.", today);
+    return empty("unsupported", "Ask a question about your applications, capabilities, or infrastructure.", today);
   }
   if (/uptime|invoice|ticket|forecast|google workspace|opinion/.test(q) || /customer data|sensitive|personal data/.test(q)) {
     return {
       ...empty(
         "unsupported",
-        "I can't answer that yet. This workspace doesn't record it, so nothing here is guessed. Try one of the questions below.",
+        "I can't answer that yet. This workspace doesn't have that, so nothing here is guessed. Try one of the questions below.",
         today
       ),
       followUps: SUGGESTED.slice(0, 3),
@@ -139,7 +180,7 @@ export function answerFromRecords(input: {
     if (!named) {
       return empty(
         "unsupported",
-        "Name the system you mean, for example “What breaks if the firewall goes down?” I won't guess which record.",
+        "Name the application or infrastructure you mean, for example “What breaks if the firewall goes down?” I won't guess which one.",
         today
       );
     }
@@ -177,10 +218,11 @@ export function graphFrom(nodes: ImpactNode[], relationships: Relationship[]): A
 
 function impactAnswer(target: CatalogRow, rows: CatalogRow[], graph: AskGraph, basePath: string, today: string): AskAnswer {
   const hits = impactOf(graph.nodes, graph.edges, target.id);
-  const rowFor = (hit: ImpactHit) => rows.find((row) => row.id === hit.id) ?? placeholderRow(hit.id, hit.name);
+  const typeOf = new Map(graph.nodes.map((node) => [node.id, node.typeLabel]));
+  const rowFor = (hit: ImpactHit) => rows.find((row) => row.id === hit.id) ?? placeholderRow(hit.id, hit.name, typeOf.get(hit.id));
   const cited = hits.map((hit) => ({ hit, row: rowFor(hit) }));
   const citations: AskCitation[] = [
-    { n: 1, recordId: target.id, relationship: "The record you asked about", row: target },
+    { n: 1, recordId: target.id, relationship: `The ${target.typeLabel} you asked about`, row: target },
     ...cited.map((item, index) => ({
       n: index + 2,
       recordId: item.hit.id,
@@ -190,19 +232,9 @@ function impactAnswer(target: CatalogRow, rows: CatalogRow[], graph: AskGraph, b
     })),
   ];
 
-  const sentence = (group: typeof cited, start: string) => {
+  const sentence = (group: typeof cited, ending: string) => {
     if (!group.length) return "";
-    const text = group
-      .map((item) => {
-        const n = citations.find((citation) => citation.recordId === item.hit.id)?.n;
-        return `${item.hit.name} [${n}]`;
-      })
-      .reduce((left, part, index, all) => {
-        if (index === 0) return part;
-        if (index === all.length - 1) return `${left}, and ${part}`;
-        return `${left}, ${part}`;
-      }, "");
-    return ` ${start} ${text}.`;
+    return ` **${describeTypes(typeLabels(group.map((item) => item.row)))}** ${ending}.`;
   };
 
   const stops = cited.filter((item) => item.hit.severity === "direct" && !item.hit.indirect);
@@ -211,8 +243,8 @@ function impactAnswer(target: CatalogRow, rows: CatalogRow[], graph: AskGraph, b
   const support = cited.filter((item) => item.hit.severity === "loses_support");
   const critical = stops.filter((item) => item.row.criticality === "tier1" || item.row.criticalityLabel === "Critical");
   const answerText = hits.length
-    ? `If ${target.name} [1] goes down,${sentence(stops, `**${stops.length} ${stops.length === 1 ? "record stops" : "records stop"} working**:`)}${critical.length ? ` **${critical.length} of them ${critical.length === 1 ? "is" : "are"} critical.**` : ""}${sentence(later, "Affected indirectly:")}${sentence(degraded, "Degraded:")}${sentence(support, "Loses support:")}`
-    : `Nothing is recorded as affected if ${target.name} [1] fails.`;
+    ? `If ${target.name} [1] goes down,${sentence(stops, stops.length === 1 ? "stops working" : "stop working")}${critical.length ? ` **${critical.length} of them ${critical.length === 1 ? "is" : "are"} critical.**` : ""}${sentence(later, later.length === 1 ? "is affected indirectly" : "are affected indirectly")}${sentence(degraded, degraded.length === 1 ? "is degraded" : "are degraded")}${sentence(support, support.length === 1 ? "loses support" : "lose support")}`
+    : `Nothing linked to ${target.name} [1] is affected if it fails.`;
 
   return {
     handler: "impact",
@@ -233,14 +265,14 @@ function impactAnswer(target: CatalogRow, rows: CatalogRow[], graph: AskGraph, b
   };
 }
 
-function placeholderRow(id: string, name: string): CatalogRow {
+function placeholderRow(id: string, name: string, typeLabel = "Item"): CatalogRow {
   const missing: CatalogMissing = { owner: true, vendor: true, cost: true, renewal: true, lifecycle: true, criticality: true };
   return {
     id,
     object: { id, name, type: "application" } as MinEAObject,
     kind: "application",
     name,
-    typeLabel: "Record",
+    typeLabel,
     subtitle: "",
     ownerTeam: "",
     ownerPerson: "",
@@ -284,14 +316,13 @@ function spendAnswer(rows: CatalogRow[], basePath: string, today: string): AskAn
       row: retiring,
     });
   }
-  const topText = top.map((vendor, index) => `${vendor.vendor} [${index + 1}] (${moneyLabel(vendor.annual)})`).join(", ");
   const saving = retiring
     ? ` ${retiring.name} [${citations.find((citation) => citation.recordId === retiring.id)?.n}] costs ${retiring.annualCostLabel} a year and is marked Retiring, so it is the clearest saving.`
     : "";
   return {
     handler: "spend",
     answerText: total
-      ? `You spend **${moneyLabel(total)} a year** across ${rollup.length} vendors.${top.length ? ` **${share}% goes to ${top.length === 1 ? "one" : top.length === 2 ? "two" : "three"}**: ${topText}.` : ""}${saving}`
+      ? `You spend **${moneyLabel(total)} a year** across ${rollup.length} vendors.${top.length ? ` **${share}% goes to ${top.length === 1 ? "one vendor" : top.length === 2 ? "two vendors" : "three vendors"}.**` : ""}${saving}`
       : "No annual costs are recorded yet, so spend cannot be totaled.",
     citations,
     gaps: gapsFor(rows.filter((row) => row.missing.cost || row.missing.vendor).slice(0, 4), basePath),
@@ -314,15 +345,11 @@ function renewalsAnswer(rows: CatalogRow[], basePath: string, today: string): As
     relationship: `Renews ${row.renewalLabel}${row.annualCostNumber ? ` · ${row.annualCostLabel}` : ""}`,
     row,
   }));
-  const listed = hits
-    .slice(0, 4)
-    .map((row, index) => `${row.name} [${index + 1}]${row.renewalLabel ? ` on ${row.renewalLabel}` : ""}`)
-    .join(", ");
   return {
     handler: "renewals",
     answerText: hits.length
-      ? `**${hits.length} ${hits.length === 1 ? "contract renews" : "contracts renew"} in the next 90 days**${sum ? `, worth **${moneyLabel(sum)} a year**` : ""}. ${listed}.`
-      : "No renewal dates fall in the next 90 days. Records without a date are left out rather than guessed.",
+      ? `**${hits.length} ${hits.length === 1 ? "contract renews" : "contracts renew"} in the next 90 days**${sum ? `, worth **${moneyLabel(sum)} a year**` : ""}.`
+      : "No renewal dates fall in the next 90 days. Missing dates are left out rather than guessed.",
     citations,
     gaps: gapsFor(hits.filter((row) => row.missing.owner || row.missing.vendor), basePath),
     followUps: ["What can we cancel?", "Who approves the largest renewal?", "What renews in the next 12 months?"],
@@ -337,7 +364,7 @@ function ownershipAnswer(named: CatalogRow | null, rows: CatalogRow[], basePath:
       handler: "ownership",
       answerText: owner
         ? `${named.name} [1] is owned by **${owner}**.`
-        : `${named.name} [1] has no owner recorded.`,
+        : `${named.name} [1] has no owner.`,
       citations: [{ n: 1, recordId: named.id, relationship: owner || "No owner", row: named }],
       gaps: owner ? [] : gapsFor([named], basePath),
       followUps: ["What else has no owner?", "What breaks if it goes down?", "What renews in the next 90 days?"],
@@ -348,8 +375,8 @@ function ownershipAnswer(named: CatalogRow | null, rows: CatalogRow[], basePath:
   return {
     handler: "ownership",
     answerText: hits.length
-      ? `**${hits.length} records have no owner**: ${hits.slice(0, 6).map((row, index) => `${row.name} [${index + 1}]`).join(", ")}.`
-      : "Every application and infrastructure record has an owner.",
+      ? `**${describeTypes(typeLabels(hits))} ${hits.length === 1 ? "has" : "have"} no owner.**`
+      : "Every application and infrastructure item has an owner.",
     citations: hits.slice(0, 8).map((row, index) => ({ n: index + 1, recordId: row.id, relationship: "No owner", row })),
     gaps: gapsFor(hits.slice(0, 6), basePath),
     followUps: ["Are any critical systems unowned?", "Where is our money going?", "What renews in the next 90 days?"],
@@ -367,11 +394,8 @@ function criticalityAnswer(rows: CatalogRow[], basePath: string, today: string):
   return {
     handler: "criticality",
     answerText: hits.length
-      ? `The most critical ${hits.length === 1 ? "record is" : "records are"} **${label}**: ${hits
-          .slice(0, 6)
-          .map((row, index) => `${row.name} [${index + 1}]`)
-          .join(", ")}.`
-      : "No application or infrastructure record has a criticality set, so nothing is ranked.",
+      ? `The most critical ${describeTypes(typeLabels(hits))} ${hits.length === 1 ? "is" : "are"} **${label}**.`
+      : "No application or infrastructure item has a criticality set, so nothing is ranked.",
     citations: hits.slice(0, 8).map((row, index) => ({
       n: index + 1,
       recordId: row.id,
@@ -397,7 +421,7 @@ function lifecycleAnswer(rows: CatalogRow[], basePath: string, today: string): A
   return {
     handler: "lifecycle",
     answerText: hits.length
-      ? `**${hits.length} records are retiring or end of life**: ${hits.slice(0, 6).map((row, index) => `${row.name} [${index + 1}]`).join(", ")}.`
+      ? `**${describeTypes(typeLabels(hits))} ${hits.length === 1 ? "is" : "are"} retiring or end of life.**`
       : "Nothing is marked retiring or end of life.",
     citations: hits.slice(0, 8).map((row, index) => ({
       n: index + 1,

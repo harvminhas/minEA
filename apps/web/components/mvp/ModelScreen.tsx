@@ -6,6 +6,7 @@ import { LayoutGrid, Plus, Table2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { modelItemPath, modelPath, type ModelSection } from "@/lib/mvp-paths";
+import { describeTypes } from "@/lib/ask/deterministic";
 import { catalogStats, moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { AddChip, Pill } from "@/components/mvp/pills";
@@ -86,7 +87,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
               </p>
                 <h1 className="text-[22px] font-semibold text-[#1c2230]">
                   {SECTION_TITLE[section]}{" "}
-                  <span className="text-[14px] font-normal text-[#8b90a0]">{filtered.length} records</span>
+                  <span className="text-[14px] font-normal text-[#8b90a0]">{filtered.length ? describeTypes(filtered.map((row) => row.typeLabel)) : "none"}</span>
                 </h1>
               </div>
               <div className="flex items-center gap-2">
@@ -150,10 +151,10 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
               ))}
             </div>
 
-            {catalog.isLoading && <p className="text-[13px] text-[#8b90a0]">Loading records…</p>}
+            {catalog.isLoading && <p className="text-[13px] text-[#8b90a0]">Loading…</p>}
             {!catalog.isLoading && filtered.length === 0 && (
               <p className="rounded-xl border border-dashed border-[#e6e8ee] px-4 py-10 text-center text-[13px] text-[#8b90a0]">
-                No records match. Add one, or clear the filters.
+                Nothing matches. Add one, or clear the filters.
               </p>
             )}
 
@@ -357,7 +358,7 @@ function Overview({
     <div className="px-8 py-8">
       <h1 className="text-[28px] font-semibold text-[#1c2230]">Model overview</h1>
       <p className="mt-1 text-[14px] text-[#6b7289]">
-        {stats.systems} applications, {stats.infrastructure} infrastructure records
+        {stats.systems} applications, {stats.infrastructure} infrastructure
         {stats.vendorCount ? `, ${stats.vendorCount} vendors` : ""}.
       </p>
       <div className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
@@ -390,7 +391,7 @@ function ConnectionsList({ items, basePath }: { items: { id: string; name: strin
       <h1 className="text-[22px] font-semibold text-[#1c2230]">Connections <span className="text-[14px] font-normal text-[#8b90a0]">{items.length}</span></h1>
       <p className="mb-4 mt-1 text-[13px] text-[#6b7289]">Flows, APIs, events, and integration infrastructure. Open a list to edit diagrams and links.</p>
       <div className="divide-y divide-[#f0f1f5] rounded-xl border border-[#e6e8ee]">
-        {items.length === 0 && <p className="px-4 py-8 text-[13px] text-[#8b90a0]">No connections recorded yet.</p>}
+        {items.length === 0 && <p className="px-4 py-8 text-[13px] text-[#8b90a0]">No connections yet.</p>}
         {items.map((item) => (
           <Link key={item.id} href={hrefFor(item.type)} className="flex items-center justify-between px-4 py-3 text-[13px] hover:bg-[#fafafb]">
             <span className="font-medium text-[#1c2230]">{item.name}</span>
@@ -435,7 +436,7 @@ function VendorsTable({
           ))}
         </tbody>
       </table>
-      {vendors.length === 0 && <p className="py-8 text-[13px] text-[#8b90a0]">No vendors recorded yet. Add a vendor on an application or infrastructure record.</p>}
+      {vendors.length === 0 && <p className="py-8 text-[13px] text-[#8b90a0]">No vendors yet. Add a vendor on an application or infrastructure item.</p>}
     </div>
   );
 }
@@ -456,7 +457,7 @@ function OwnersTable({ rows, basePath }: { rows: CatalogRow[]; basePath: string 
         {[...groups.entries()].map(([owner, items]) => (
           <div key={owner} className="flex items-center justify-between px-4 py-3 text-[13px]">
             <span className="font-medium text-[#1c2230]">{owner}</span>
-            <span className="text-[#8b90a0]">{items.length} records</span>
+            <span className="text-[#8b90a0]">{describeTypes(items.map((row) => row.typeLabel))}</span>
           </div>
         ))}
       </div>

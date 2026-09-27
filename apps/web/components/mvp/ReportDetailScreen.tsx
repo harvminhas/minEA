@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTenancy } from "@/lib/tenancy";
 import { modelItemPath, reportsPath } from "@/lib/mvp-paths";
+import { describeTypes } from "@/lib/ask/deterministic";
 import { catalogStats, moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { Pill } from "@/components/mvp/pills";
@@ -25,7 +26,7 @@ export function ReportDetailScreen({ reportId }: { reportId: string }) {
       <Shell title={reportId === "tech-debt" ? "Tech debt summary" : "Vendors holding sensitive data"} basePath={basePath}>
         <p className="text-[14px] text-[#6b7289]">
           {reportId === "tech-debt"
-            ? "Tech debt is recorded on each item. Open a record in Model and use the Tech debt tab."
+            ? "Tech debt is stored on each item. Open it in Model and use the Tech debt tab."
             : "Sensitivity of vendor data is not tracked yet, so this report does not list vendors."}
         </p>
       </Shell>
@@ -55,7 +56,7 @@ export function ReportDetailScreen({ reportId }: { reportId: string }) {
   return (
     <Shell title={title} basePath={basePath}>
       <p className="mb-4 text-[14px] text-[#6b7289]">
-        {filtered.length} records
+        {filtered.length ? describeTypes(filtered.map((row) => row.typeLabel)) : "Nothing in this report"}
         {reportId === "single-points" ? ". These are marked critical. Ask what breaks if one of them goes down to see dependencies." : "."}
       </p>
       <RecordTable
@@ -81,11 +82,11 @@ function ImpactReport() {
   return (
     <Shell title="Impact analysis" basePath={basePath}>
       <p className="mb-4 text-[14px] text-[#6b7289]">
-        What is affected if a record fails. This uses the same links as Ask and Depends on this.
+        What is affected if an application, capability, or infrastructure item fails. This uses the same links as Ask and Depends on this.
       </p>
       {graph.isLoading && <p className="text-[13px] text-[#8b90a0]">Looking up relationships…</p>}
       {!graph.isLoading && groups.length === 0 && (
-        <p className="text-[13px] text-[#8b90a0]">No failure links are recorded yet.</p>
+        <p className="text-[13px] text-[#8b90a0]">No failure links yet.</p>
       )}
       <div className="space-y-6">
         {groups.map((group) => (
@@ -159,7 +160,7 @@ function SpendReport({ rows }: { rows: CatalogRow[] }) {
             <div className="w-28 text-right text-[#3c4254]">{vendor.annual ? moneyLabel(vendor.annual) : "—"}</div>
           </div>
         ))}
-        {vendors.length === 0 && <p className="text-[13px] text-[#8b90a0]">No vendor spend recorded yet.</p>}
+        {vendors.length === 0 && <p className="text-[13px] text-[#8b90a0]">No vendor spend yet.</p>}
       </div>
       <table className="mt-6 w-full text-left text-[13px]">
         <thead>

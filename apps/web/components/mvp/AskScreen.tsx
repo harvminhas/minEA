@@ -18,8 +18,8 @@ import { ChevronRight } from "lucide-react";
 
 const THINKING_STEPS = [
   "Reading your question",
-  "Looking up records in this workspace",
-  "Checking the answer against those records",
+  "Looking up applications, capabilities, and infrastructure",
+  "Checking the answer against those results",
 ];
 
 export function AskScreen({ mode }: { mode: "home" | "answer" }) {
@@ -102,7 +102,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   if (mode === "home") {
     return (
       <div className="mx-auto flex max-w-3xl flex-col items-center px-6 pb-16 pt-16">
-        <p className="rounded-full bg-[#f4f3ff] px-3 py-1 text-[12px] text-[#5b4ce6]">Answers come from your own records, with sources</p>
+        <p className="rounded-full bg-[#f4f3ff] px-3 py-1 text-[12px] text-[#5b4ce6]">Answers come from your applications, capabilities, and infrastructure, with sources</p>
         <h1 className="mt-6 text-center text-[36px] font-semibold tracking-tight text-[#1c2230]">What do you want to know?</h1>
         <p className="mt-2 text-center text-[14px] text-[#6b7289]">
           {stats.systems} applications · {stats.infrastructure} infrastructure
@@ -210,15 +210,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 }}
               />
             </p>
-            <p className="mt-2 text-[12.5px] text-[#94a3b8]">
-              Answer generated from your model on {answer.caption.generatedAt} · {answer.caption.recordCount} records · {answer.caption.gapCount} gaps
-              {answer.caption.extra ? ` · ${answer.caption.extra}` : ""}
-            </p>
 
             {answer.citations.length > 0 && (
-              <>
-                <p className="mb-2 mt-6 text-[13px] text-[#6b7289]">Based on these records · click a row to open it in Model</p>
-                <table className="w-full text-left text-[13px]">
+              <table className="mt-6 w-full text-left text-[13px]">
                   <thead>
                     <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
                       <th className="h-10 w-10" />
@@ -239,10 +233,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                           <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-[#e4e0ff] text-[11px] font-semibold text-[#4c3fd1]">{item.n}</span>
                         </td>
                         <td className="px-2 py-2.5 font-medium">{item.row.name}</td>
-                        <td className="px-2 py-2.5">
-                          {item.row.kind === "application" ? "Application" : "Infrastructure"}
-                          <div className="text-[12px] text-[#8b90a0]">{item.row.typeLabel}</div>
-                        </td>
+                        <td className="px-2 py-2.5">{item.row.typeLabel}</td>
                         <td className="px-2 py-2.5">{item.row.ownerTeam || item.row.ownerPerson || <span className="rounded bg-[#fff7ed] px-1.5 py-0.5 text-[#c2410c]">No owner · Add</span>}</td>
                         <td className="px-2 py-2.5">{item.row.criticalityLabel ? <Pill label={item.row.criticalityLabel} tone="criticality" /> : <span className="text-[#c2410c]">Add</span>}</td>
                         <td className="px-2 py-2.5 text-[#6b7289]">
@@ -254,7 +245,6 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                     ))}
                   </tbody>
                 </table>
-              </>
             )}
 
             {answer.gaps.length > 0 && (
@@ -273,7 +263,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               <button type="button" onClick={() => { saveAsk(question, answer.answerText); setNote("Saved to Reports › Saved from Ask"); }} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">
                 Save as report
               </button>
-              <button type="button" onClick={() => { downloadCsv(answer); setNote("Exported answer and records to CSV"); }} className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px]">
+              <button type="button" onClick={() => { downloadCsv(answer); setNote("Exported the answer and its sources to CSV"); }} className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px]">
                 Export
               </button>
               <button type="button" onClick={() => { navigator.clipboard.writeText(window.location.href); setNote("Share link copied"); }} className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px]">
