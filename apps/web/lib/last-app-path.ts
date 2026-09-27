@@ -80,11 +80,7 @@ export async function resolvePostLoginDestination(opts: {
   if (!parsed || !isTrackableAppPath(parsed.pathname)) return fallback();
 
   const org = orgs.find((o) => o.slug === parsed.orgSlug);
-  if (!org) return fallback();
-
-  if (!parsed.workspaceSlug) {
-    return { destination: lastAppPath, restored: true };
-  }
+  if (!org || !parsed.workspaceSlug) return fallback();
 
   const token = await getToken();
   if (!token) return fallback();
@@ -94,5 +90,5 @@ export async function resolvePostLoginDestination(opts: {
     return fallback();
   }
 
-  return { destination: lastAppPath, restored: true };
+  return { destination: primaryViewPath(org.slug, parsed.workspaceSlug), restored: false };
 }

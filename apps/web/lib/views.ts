@@ -229,13 +229,13 @@ export function viewPath(
   return base;
 }
 
-/** Workspace home — dashboard with zero / populated states. */
+/** Workspace root. The signed-in landing route is Ask, via primaryViewPath. */
 export function workspaceHomePath(orgSlug: string, workspaceSlug: string): string {
   return `/orgs/${orgSlug}/workspaces/${workspaceSlug}`;
 }
 
 export function primaryViewPath(orgSlug: string, workspaceSlug: string): string {
-  return workspaceHomePath(orgSlug, workspaceSlug);
+  return `${workspaceHomePath(orgSlug, workspaceSlug)}/ask`;
 }
 
 export function embedViewPath(orgSlug: string, workspaceSlug: string, viewId: ViewId): string {
