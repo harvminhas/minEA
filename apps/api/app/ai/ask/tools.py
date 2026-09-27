@@ -174,9 +174,9 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
     if args.get("group_by") == "vendor":
         buckets: dict[str, list[Rec]] = {}
         for rec in rows:
-            if rec.vendor and rec.annual:
+            if rec.vendor:
                 buckets.setdefault(rec.vendor, []).append(rec)
-        ranked = sorted(buckets.items(), key=lambda item: -sum(rec.annual or 0 for rec in item[1]))
+        ranked = sorted(buckets.items(), key=lambda item: (-sum(rec.annual or 0 for rec in item[1]), item[0].lower()))
         spend = sum(rec.annual or 0 for rec in rows if rec.annual)
         running = 0.0
         for name, items in ranked[: int(args.get("top") or 10)]:
@@ -189,12 +189,13 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
                 {
                     "key": name,
                     "count": len(items),
-                    "annual_cost": int(amount),
-                    "share_pct": share,
+                    "annual_cost": int(amount) if amount else None,
+                    "share_pct": share if amount else None,
                     "record_ids": [rec.id for rec in items],
                 }
             )
-        if groups:
+        bag.note_number(len(groups))
+        if groups and spend:
             bag.note_number(round(running / spend * 100) if spend else 0)
     return {
         "metric": metric,
@@ -258,7 +259,7 @@ TOOLS: list[AskTool] = [
     ),
     AskTool(
         name="aggregate",
-        description="Count applications, capabilities, or infrastructure, or sum annual cost. Use for any total, share, renewal window, or criticality question such as the most critical system. filters.criticality is Critical, High, Medium, or Low. by_type counts each type_label. Do not add numbers yourself.",
+        description="Count applications, capabilities, or infrastructure, or sum annual cost. Use for any total, share, renewal window, or criticality question such as the most critical system. A list of vendors is group_by vendor: every named vendor is returned, including vendors with no annual cost. An empty groups list means no vendor is named. filters.criticality is Critical, High, Medium, or Low. by_type counts each type_label. Do not add numbers yourself.",
         parameters={
             "type": "object",
             "properties": {

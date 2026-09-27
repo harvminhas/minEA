@@ -77,7 +77,10 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
 
   const answer = useMemo(() => {
     if (mode !== "answer" || !question) return local;
-    return (remote.data && answerFromModel(remote.data, rows, basePath)) || local;
+    const fromModel = remote.data ? answerFromModel(remote.data, rows, basePath) : null;
+    if (!fromModel || fromModel.handler === "unsupported") return local;
+    if (local.handler === "vendors" && fromModel.citations.length === 0) return local;
+    return fromModel;
   }, [mode, question, remote.data, local, rows, basePath]);
 
   const topInfra = rows
@@ -232,8 +235,8 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                         <td className="px-2 py-2.5">
                           <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-[#e4e0ff] text-[11px] font-semibold text-[#4c3fd1]">{item.n}</span>
                         </td>
-                        <td className="px-2 py-2.5 font-medium">{item.row.name}</td>
-                        <td className="px-2 py-2.5">{item.row.typeLabel}</td>
+                        <td className="px-2 py-2.5 font-medium">{item.displayName || item.row.name}</td>
+                        <td className="px-2 py-2.5">{item.displayType || item.row.typeLabel}</td>
                         <td className="px-2 py-2.5">{item.row.ownerTeam || item.row.ownerPerson || <span className="rounded bg-[#fff7ed] px-1.5 py-0.5 text-[#c2410c]">No owner · Add</span>}</td>
                         <td className="px-2 py-2.5">{item.row.criticalityLabel ? <Pill label={item.row.criticalityLabel} tone="criticality" /> : <span className="text-[#c2410c]">Add</span>}</td>
                         <td className="px-2 py-2.5 text-[#6b7289]">
@@ -354,7 +357,7 @@ function saveAsk(question: string, prose: string) {
 function downloadCsv(answer: AskAnswer) {
   const header = ["Name", "Type", "Owner", "Criticality", "Relationship"];
   const lines = answer.citations.map((item) =>
-    [item.row.name, item.row.typeLabel, item.row.ownerTeam || item.row.ownerPerson, item.row.criticalityLabel, item.relationship]
+    [item.displayName || item.row.name, item.displayType || item.row.typeLabel, item.row.ownerTeam || item.row.ownerPerson, item.row.criticalityLabel, item.relationship]
       .map((cell) => `"${(cell || "").replace(/"/g, '""')}"`)
       .join(",")
   );

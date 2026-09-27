@@ -13,11 +13,14 @@ export type AskCitation = {
   recordId: string;
   relationship: string;
   badge?: string;
+  /** Shown in the table when the row is an example of a grouped answer, such as a vendor. */
+  displayName?: string;
+  displayType?: string;
   row: CatalogRow;
 };
 
 export type AskAnswer = {
-  handler: "impact" | "spend" | "renewals" | "ownership" | "lifecycle" | "criticality" | "unsupported";
+  handler: "impact" | "spend" | "vendors" | "renewals" | "ownership" | "lifecycle" | "criticality" | "unsupported";
   answerText: string;
   citations: AskCitation[];
   gaps: { text: string; fillHref: string }[];
@@ -193,7 +196,8 @@ export function answerFromRecords(input: {
   if (/no owner|unowned|without an owner|who owns/.test(q)) return ownershipAnswer(named, input.rows, input.basePath, today);
   if (/end of life|retiring|eol/.test(q)) return lifecycleAnswer(input.rows, input.basePath, today);
   if (/critical|most important|tier 1|tier1/.test(q)) return criticalityAnswer(input.rows, input.basePath, today);
-  if (/money|spend|cost|pay|vendor/.test(q)) return spendAnswer(input.rows, input.basePath, today);
+  if (/money|spend|cost|pay/.test(q)) return spendAnswer(input.rows, input.basePath, today);
+  if (/vendor/.test(q)) return vendorsAnswer(input.rows, today);
 
   return {
     ...empty(
@@ -293,6 +297,28 @@ function placeholderRow(id: string, name: string, typeLabel = "Item"): CatalogRo
     suggestion: null,
     missing,
     missingCount: 6,
+  };
+}
+
+function vendorsAnswer(rows: CatalogRow[], today: string): AskAnswer {
+  const vendors = vendorRollup(rows);
+  const citations: AskCitation[] = vendors.slice(0, 12).map((vendor, index) => ({
+    n: index + 1,
+    recordId: vendor.items[0].id,
+    relationship: describeTypes(typeLabels(vendor.items)),
+    displayName: vendor.vendor,
+    displayType: "Vendor",
+    row: vendor.items[0],
+  }));
+  return {
+    handler: "vendors",
+    answerText: vendors.length
+      ? `**${vendors.length === 1 ? "1 vendor is" : `${vendors.length} vendors are`}** named on applications and infrastructure.`
+      : "No vendor is named on an application or infrastructure item.",
+    citations,
+    gaps: [],
+    followUps: ["Where is our money going?", "What renews in the next 90 days?", "What has no owner?"],
+    caption: { generatedAt: today, recordCount: citations.length, gapCount: 0 },
   };
 }
 
