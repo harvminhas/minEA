@@ -21,6 +21,7 @@ from app.schemas.objects import (
 )
 from app.services.authorization import require_limit
 from app.services.capability_validation import validate_object_write
+from app.services.cost_lines import apply_cost_lines
 from app.services.object_history import describe_object_history
 from app.services.object_tech_debt import tech_debt_summary_for_object
 from app.services.owner_fields import apply_ownership_write_resolved, ownership_from_body, ownership_read_payload
@@ -159,7 +160,7 @@ async def create_object(
         tags=body.tags,
         external_id=body.external_id,
         source=body.source,
-        properties=body.properties,
+        properties=apply_cost_lines(body.type, dict(body.properties or {})),
         created_by=ctx.user_id,
         updated_by=ctx.user_id,
     )
@@ -285,6 +286,7 @@ async def update_object(
             for key, val in value.items():
                 if val is None:
                     merged.pop(key, None)
+            merged = apply_cost_lines(obj.type, merged)
             if merged != (obj.properties or {}):
                 field_changes["properties"] = {"old": obj.properties, "new": merged}
             obj.properties = merged

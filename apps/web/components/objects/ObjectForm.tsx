@@ -28,6 +28,9 @@ import {
   syncSystemCapabilityRelations,
 } from "@/lib/system-capability-utils";
 import { FormDrawer, FormField, FormSection, formFieldClass } from "@/components/ui/FormDrawer";
+import { CostLinesEditor } from "@/components/mvp/CostSection";
+import { VendorField } from "@/components/mvp/VendorField";
+import { type CostLine, parseLegacyAnnualCost, readCostLines } from "@/lib/cost/math";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { AiRoleField } from "@/components/ui/AiRoleField";
@@ -80,7 +83,6 @@ type FormPropertyField = {
 
 const SYSTEM_CATALOG_FIELDS: FormPropertyField[] = [
   { key: "vendor", label: "Vendor", type: "text" },
-  { key: "annual_cost", label: "Annual cost ($)", type: "number" },
   { key: "contract_renewal", label: "Contract end", type: "text" },
   {
     key: "criticality",
@@ -187,7 +189,7 @@ const TYPE_FIELDS: Record<string, FormPropertyField[]> = {
 const STATUSES = ["planned", "active", "retiring", "retired", "deprecated", "under_evaluation"];
 
 export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Props) {
-  const { getToken } = useAuth();
+  const { getToken, user } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
@@ -226,6 +228,10 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
   );
 
   const isSystemType = SYSTEM_OBJECT_TYPES.has(objectType);
+  const initialCostProps = (initialValues?.properties ?? {}) as Record<string, unknown>;
+  const [costLines, setCostLines] = useState<CostLine[]>(() => readCostLines(initialCostProps) ?? []);
+  const [costTouched, setCostTouched] = useState(false);
+  const legacyCost = costLines.length ? null : parseLegacyAnnualCost(initialCostProps.annual_cost);
   const typeFields = isSystemType ? SYSTEM_CATALOG_FIELDS : (TYPE_FIELDS[objectType] ?? []);
   const typeLabel = OBJECT_TYPE_LABELS[objectType] ?? objectType;
   const isShadowSystem = isSystemApp && isShadowGovernance(governanceStatus);
@@ -346,6 +352,9 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       }
       if (isApplication) {
         props.platform = selectedPlatform;
+      }
+      if (isSystemType && costTouched) {
+        props.cost_lines = costLines;
       }
       const shared = {
         name,
@@ -562,29 +571,50 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       {(typeFields.length > 0 || isSystemType) && (
         <FormSection title={`${typeLabel} Properties`}>
           {typeFields.map((field) => (
-            <FormField key={field.key} label={field.label}>
-              {field.type === "select" ? (
-                <select
-                  value={properties[field.key] ?? ""}
-                  onChange={(e) => setProperties((p) => ({ ...p, [field.key]: e.target.value }))}
-                  className={`${formFieldClass} mb-3`}
-                >
-                  <option value="">—</option>
-                  {field.options?.map((o) => (
-                    <option key={o} value={o}>
-                      {field.optionLabels?.[o] ?? o}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type={field.type}
-                  value={properties[field.key] ?? ""}
-                  onChange={(e) => setProperties((p) => ({ ...p, [field.key]: e.target.value }))}
-                  className={`${formFieldClass} mb-3`}
+            <div key={field.key}>
+              <FormField label={field.label}>
+                {field.type === "select" ? (
+                  <select
+                    value={properties[field.key] ?? ""}
+                    onChange={(e) => setProperties((p) => ({ ...p, [field.key]: e.target.value }))}
+                    className={`${formFieldClass} mb-3`}
+                  >
+                    <option value="">—</option>
+                    {field.options?.map((o) => (
+                      <option key={o} value={o}>
+                        {field.optionLabels?.[o] ?? o}
+                      </option>
+                    ))}
+                  </select>
+                ) : field.key === "vendor" ? (
+                  <VendorField
+                    value={properties.vendor ?? ""}
+                    onChange={(vendor) => setProperties((current) => ({ ...current, vendor }))}
+                    placeholder="Start typing a vendor"
+                    className={`${formFieldClass} mb-3`}
+                  />
+                ) : (
+                  <input
+                    type={field.type}
+                    value={properties[field.key] ?? ""}
+                    onChange={(e) => setProperties((p) => ({ ...p, [field.key]: e.target.value }))}
+                    className={`${formFieldClass} mb-3`}
+                  />
+                )}
+              </FormField>
+              {isSystemType && field.key === "vendor" && (
+                <CostLinesEditor
+                  lines={costLines}
+                  vendor={properties.vendor ?? ""}
+                  legacyDollars={legacyCost}
+                  actor={user?.uid || "user"}
+                  onChange={(next) => {
+                    setCostLines(next);
+                    setCostTouched(true);
+                  }}
                 />
               )}
-            </FormField>
+            </div>
           ))}
           {isSystemType && <AiRoleField value={aiRole} onChange={setAiRole} variant="drawer" />}
         </FormSection>

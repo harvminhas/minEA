@@ -1,4 +1,5 @@
 import type { MinEAObject } from "@minea/types";
+import { dollarsFromCents, formatDollars, lineAnnualCents, oneTimeCents, readCostLines, runCents, totalCents } from "@/lib/cost/math";
 import { isEnterprisePlatform, PLATFORM_VENDOR_LABEL } from "@/lib/platform-utils";
 import { isComputeRuntime, RUNTIME_COST_MODEL_LABEL } from "@/lib/runtime-utils";
 
@@ -172,7 +173,9 @@ export function rowFromObject(object: MinEAObject): CatalogRow | null {
   const vendor = displayVendor(str(props, "vendor"));
   const costModel = str(props, "cost_model");
   const customBuilt = props.is_custom_built === true;
-  const numeric = parseMoney(props.annual_cost);
+  const lines = readCostLines(props);
+  const lineRun = lines ? dollarsFromCents(runCents(lines)) : null;
+  const numeric = lineRun != null && lineRun > 0 ? lineRun : parseMoney(props.annual_cost);
   const costModelLabel = RUNTIME_COST_MODEL_LABEL[costModel] ?? "";
 
   let annualCostLabel = "—";
@@ -189,6 +192,18 @@ export function rowFromObject(object: MinEAObject): CatalogRow | null {
   } else if (typeof props.annual_cost === "string" && props.annual_cost.trim()) {
     annualCostLabel = props.annual_cost.trim();
     costMissing = false;
+  }
+  if (lines) {
+    const total = dollarsFromCents(totalCents(lines));
+    const oneTime = dollarsFromCents(oneTimeCents(lines));
+    if (total > 0) {
+      annualCostLabel = `${lineRun != null && lineRun < total ? "~" : ""}${formatDollars(total)}`;
+      if (oneTime > 0) annualCostLabel += ` + ${formatDollars(oneTime)} one-time`;
+      costMissing = false;
+    } else if (oneTime > 0) {
+      annualCostLabel = `${formatDollars(oneTime)} one-time`;
+      costMissing = false;
+    }
   }
 
   const renewalRaw = (kind === "runtime" ? str(props, "commitment_ends") : str(props, "contract_renewal")).trim();
@@ -265,27 +280,57 @@ export function catalogStats(rows: CatalogRow[]) {
   };
 }
 
-export function vendorRollup(rows: CatalogRow[]) {
-  const map = new Map<
-    string,
-    { vendor: string; annual: number; items: CatalogRow[]; renewal: CatalogRow | null; owners: Set<string> }
-  >();
-  for (const row of rows) {
-    if (!row.vendor) continue;
-    const current = map.get(row.vendorKey) ?? {
-      vendor: row.vendor,
-      annual: 0,
-      items: [],
-      renewal: null,
-      owners: new Set<string>(),
-    };
-    current.annual += row.annualCostNumber ?? 0;
-    current.items.push(row);
-    if (row.ownerTeam) current.owners.add(row.ownerTeam);
-    if (row.renewalDate && (!current.renewal?.renewalDate || row.renewalDate < current.renewal.renewalDate)) {
-      current.renewal = row;
-    }
-    map.set(row.vendorKey, current);
+type VendorBucket = {
+  vendor: string;
+  annual: number;
+  items: CatalogRow[];
+  renewal: CatalogRow | null;
+  owners: Set<string>;
+};
+
+function addVendor(map: Map<string, VendorBucket>, name: string, amount: number, row: CatalogRow) {
+  const key = name.toLowerCase();
+  const current = map.get(key) ?? {
+    vendor: name,
+    annual: 0,
+    items: [],
+    renewal: null,
+    owners: new Set<string>(),
+  };
+  current.annual += amount;
+  if (!current.items.some((item) => item.id === row.id)) current.items.push(row);
+  if (row.ownerTeam) current.owners.add(row.ownerTeam);
+  if (row.renewalDate && (!current.renewal?.renewalDate || row.renewalDate < current.renewal.renewalDate)) {
+    current.renewal = row;
   }
-  return [...map.values()].sort((a, b) => b.annual - a.annual);
+  map.set(key, current);
+}
+
+export function vendorRollup(rows: CatalogRow[]) {
+  const map = new Map<string, VendorBucket>();
+  for (const row of rows) {
+    const lines = readCostLines((row.object.properties ?? {}) as Record<string, unknown>) ?? [];
+    const billable = lines.filter((line) => line.type !== "internal_estimate");
+    if (billable.length > 0) {
+      const seen = new Set<string>();
+      for (const line of billable) {
+        const name = displayVendor(line.vendor) || row.vendor;
+        if (!name) continue;
+        seen.add(name.toLowerCase());
+        const amount = line.frequency === "one_time" ? 0 : dollarsFromCents(lineAnnualCents(line));
+        addVendor(map, name, amount, row);
+      }
+      if (row.vendor && !seen.has(row.vendorKey)) addVendor(map, row.vendor, 0, row);
+    } else if (row.vendor) {
+      addVendor(map, row.vendor, row.annualCostNumber ?? 0, row);
+    }
+  }
+  return [...map.values()].sort((a, b) => b.annual - a.annual || a.vendor.localeCompare(b.vendor));
+}
+
+/** Vendor names already used on an application, infrastructure item, or cost line. */
+export function knownVendors(rows: CatalogRow[]): string[] {
+  return vendorRollup(rows)
+    .map((vendor) => vendor.vendor)
+    .sort((a, b) => a.localeCompare(b));
 }

@@ -9,6 +9,7 @@ import { modelItemPath, modelPath, type ModelSection } from "@/lib/mvp-paths";
 import { describeTypes } from "@/lib/ask/deterministic";
 import { catalogStats, moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
 import { useModelCatalog } from "@/lib/use-model-catalog";
+import { QuickCost } from "@/components/mvp/CostSection";
 import { AddChip, Pill } from "@/components/mvp/pills";
 import { ModelDetailPanel } from "@/components/mvp/ModelDetailPanel";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
@@ -198,7 +199,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                         </td>
                         <td className="px-2 py-3">
                           {row.missing.cost ? (
-                            <AddChip label="Add" onClick={() => open(row)} />
+                            <QuickCost row={row} onSaved={() => queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] })} />
                           ) : (
                             <span className={row.annualCostNumber == null ? "text-[#6b7289]" : "text-[#1c2230]"}>{row.annualCostLabel}</span>
                           )}

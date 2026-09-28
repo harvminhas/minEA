@@ -72,6 +72,7 @@ class Rec:
     owner_team: str | None
     owner_person: str | None
     vendor: str | None
+    vendor_names: list[str]
     annual: float | None
     cost_note: str | None
     renewal: str | None
@@ -163,6 +164,30 @@ def _kind(obj: MinEAObject, props: dict) -> str:
     return "Cloud"
 
 
+def _vendor_names(props: dict) -> list[str]:
+    """Object vendor, then any vendor named on a cost line. Hosting words are not vendors."""
+    found: list[str] = []
+    seen: set[str] = set()
+
+    def add(raw: object) -> None:
+        text = str(raw or "").strip()
+        if not text or text in HOSTING_NOT_VENDOR:
+            return
+        key = text.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        found.append(text)
+
+    add(props.get("vendor"))
+    lines = props.get("cost_lines")
+    if isinstance(lines, list):
+        for line in lines:
+            if isinstance(line, dict) and line.get("type") != "internal_estimate":
+                add(line.get("vendor"))
+    return found
+
+
 def _record(obj: MinEAObject, team_names: dict[str, str]) -> Rec | None:
     props = obj.properties or {}
     if obj.type in APP_TYPES:
@@ -180,8 +205,8 @@ def _record(obj: MinEAObject, team_names: dict[str, str]) -> Rec | None:
     else:
         record_type = "other"
 
-    vendor_raw = str(props.get("vendor") or "").strip()
-    vendor = None if not vendor_raw or vendor_raw in HOSTING_NOT_VENDOR else vendor_raw
+    vendor_names = _vendor_names(props)
+    vendor = vendor_names[0] if vendor_names else None
     annual = _money(props.get("annual_cost"))
     cost_model = str(props.get("cost_model") or "")
     cost_note = None
@@ -225,6 +250,7 @@ def _record(obj: MinEAObject, team_names: dict[str, str]) -> Rec | None:
         owner_team=team,
         owner_person=person,
         vendor=vendor,
+        vendor_names=vendor_names,
         annual=annual,
         cost_note=cost_note,
         renewal=renewal,

@@ -174,13 +174,19 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
     if args.get("group_by") == "vendor":
         buckets: dict[str, list[Rec]] = {}
         for rec in rows:
-            if rec.vendor:
-                buckets.setdefault(rec.vendor, []).append(rec)
-        ranked = sorted(buckets.items(), key=lambda item: (-sum(rec.annual or 0 for rec in item[1]), item[0].lower()))
+            for name in rec.vendor_names:
+                buckets.setdefault(name, []).append(rec)
+        ranked = sorted(
+            buckets.items(),
+            key=lambda item: (
+                -sum(rec.annual or 0 for rec in item[1] if (rec.vendor or "").lower() == item[0].lower()),
+                item[0].lower(),
+            ),
+        )
         spend = sum(rec.annual or 0 for rec in rows if rec.annual)
         running = 0.0
         for name, items in ranked[: int(args.get("top") or 10)]:
-            amount = sum(rec.annual or 0 for rec in items)
+            amount = sum(rec.annual or 0 for rec in items if (rec.vendor or "").lower() == name.lower())
             running += amount
             share = round(amount / spend * 100) if spend else 0
             bag.note_number(int(amount))

@@ -96,6 +96,7 @@ function initFromPlatform(platform?: MinEAObject) {
     licenseModel: props.license_model ?? "per_user",
     contractRenewal: props.contract_renewal ?? "",
     annualCost: props.annual_cost ?? "",
+    hasCostLines: Array.isArray((platform?.properties as { cost_lines?: unknown } | undefined)?.cost_lines),
     slaTarget: props.sla_target ?? "99_9",
     lifecycle: normalizeLifecycle(props.lifecycle ?? statusToLifecycle(platform?.status)),
     criticality: props.criticality ?? "low",
@@ -415,15 +416,19 @@ export function CreatePlatformPanel({ initialValues, initialName = "", onClose, 
                   </div>
                 </div>
 
-                <div>
-                  <FieldLabel>Annual cost</FieldLabel>
-                  <input
-                    value={annualCost}
-                    onChange={(e) => setAnnualCost(e.target.value)}
-                    placeholder="e.g. $450,000"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  />
-                </div>
+                {init.hasCostLines ? (
+                  <p className="text-[12px] text-gray-500">Annual cost is calculated from the cost lines on this item.</p>
+                ) : (
+                  <div>
+                    <FieldLabel>Annual cost</FieldLabel>
+                    <input
+                      value={annualCost}
+                      onChange={(e) => setAnnualCost(e.target.value)}
+                      placeholder="e.g. $450,000"
+                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+                    />
+                  </div>
+                )}
               </div>
             </section>
 

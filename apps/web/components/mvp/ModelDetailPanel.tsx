@@ -16,6 +16,7 @@ import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformP
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { PLATFORM_SLA_LABEL } from "@/lib/platform-utils";
 import type { CatalogRow } from "@/lib/model-catalog";
+import { CostSection } from "@/components/mvp/CostSection";
 import { AddChip, Pill } from "@/components/mvp/pills";
 
 export function ModelDetailPanel({
@@ -183,11 +184,10 @@ export function ModelDetailPanel({
                   )}
                 </div>
               </div>
-              <Field label="Annual cost" value={row.annualCostLabel === "—" ? "" : row.annualCostLabel} empty="Add annual cost" onAdd={() => setEditing(true)} />
-              <Field label="Cost model" value={row.costModelLabel} />
               <Field label="Renewal date" value={row.renewalLabel} empty="Add renewal date" onAdd={() => setEditing(true)} />
               <Field label="Notice period" value="" empty="Coming soon" />
             </Section>
+            <CostSection row={row} onSaved={refresh} />
             <Section title="Governance">
               <Field
                 label="Owner"

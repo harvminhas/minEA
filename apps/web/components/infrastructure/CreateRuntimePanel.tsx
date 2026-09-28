@@ -8,6 +8,7 @@ import { Cpu, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
+import { VendorField } from "@/components/mvp/VendorField";
 import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { AddProviderDialog } from "@/components/infrastructure/AddProviderDialog";
@@ -104,6 +105,7 @@ function initFromRuntime(runtime?: MinEAObject) {
     costModel: props.cost_model ?? "per_vcpu_memory",
     commitmentEnds: props.commitment_ends ?? "",
     annualCost: props.annual_cost ?? "",
+    hasCostLines: Array.isArray((runtime?.properties as { cost_lines?: unknown } | undefined)?.cost_lines),
     slaTarget: props.sla_target ?? "99_9",
     lifecycle: normalizeLifecycle(props.lifecycle ?? statusToLifecycle(runtime?.status)),
     criticality: props.criticality ?? "low",
@@ -326,10 +328,10 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
 
                 <div>
                   <FieldLabel>Vendor</FieldLabel>
-                  <input
+                  <VendorField
                     value={vendor}
-                    onChange={(e) => setVendor(e.target.value)}
-                    placeholder="e.g. IBM, DigitalOcean"
+                    onChange={setVendor}
+                    placeholder="Start typing a vendor"
                     className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
                   />
                 </div>
@@ -508,15 +510,19 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
                   </div>
                 </div>
 
-                <div>
-                  <FieldLabel>Annual cost (est.)</FieldLabel>
-                  <input
-                    value={annualCost}
-                    onChange={(e) => setAnnualCost(e.target.value)}
-                    placeholder="e.g. $180,000 or support fee"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  />
-                </div>
+                {init.hasCostLines ? (
+                  <p className="text-[12px] text-gray-500">Annual cost is calculated from the cost lines on this item.</p>
+                ) : (
+                  <div>
+                    <FieldLabel>Annual cost (est.)</FieldLabel>
+                    <input
+                      value={annualCost}
+                      onChange={(e) => setAnnualCost(e.target.value)}
+                      placeholder="e.g. $180,000 or support fee"
+                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+                    />
+                  </div>
+                )}
               </div>
             </section>
 
