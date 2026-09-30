@@ -17,41 +17,57 @@ export type ImpactRule = {
   /** Failed record is the stored source. The target is affected. */
   whenSourceFails?: ImpactSeverity;
   label: (sourceName: string, targetName: string) => string;
+  /** Short path phrase, read from the affected item back toward the failed one. */
+  step: (sourceName: string, targetName: string) => string;
 };
 
 export const relationshipImpactRules: Record<string, ImpactRule> = {
   calls: {
     whenTargetFails: "direct",
     label: (source, target) => `${source} calls ${target}`,
+    step: (_source, target) => `Calls ${target}`,
   },
   part_of: {
     whenTargetFails: "direct",
     whenSourceFails: "degraded",
     label: (source, target) => `${source} is part of ${target}`,
+    step: (_source, target) => `Part of ${target}`,
   },
   replaces: {
     label: (source, target) => `${source} replaces ${target}`,
+    step: (_source, target) => `Replaces ${target}`,
   },
   supported_by: {
     whenTargetFails: "loses_support",
     label: (source, target) => `${source} is supported by ${target}`,
+    step: (_source, target) => `Supported by ${target}`,
   },
   supports: {
     whenSourceFails: "loses_support",
     label: (source, target) => `${source} supports ${target}`,
+    step: (source) => `Supported by ${source}`,
   },
   runs_on: {
     whenTargetFails: "direct",
     label: (source, target) => `${source} runs on ${target}`,
+    step: (_source, target) => `Runs on ${target}`,
   },
   built_on: {
     whenTargetFails: "direct",
     label: (source, target) => `${source} is built on ${target}`,
+    step: (_source, target) => `Built on ${target}`,
   },
   hosts: {
     whenSourceFails: "direct",
     label: (source, target) => `${source} hosts ${target}`,
+    step: (source) => `Runs on ${source}`,
   },
+};
+
+export const impactSectionTitle: Record<ImpactSeverity, string> = {
+  direct: "Stops working",
+  degraded: "Degraded",
+  loses_support: "Loses support",
 };
 
 export type ImpactNode = { id: string; name: string; typeLabel?: string };
@@ -146,6 +162,31 @@ export function impactOf(nodes: ImpactNode[], edges: ImpactEdge[], failedId: str
   );
 }
 
+/** Path in plain words, from the affected item back to the failed one. Phrases come from the rules. */
+export function connectionPhrase(hit: ImpactHit, nodes: ImpactNode[]): string {
+  const names = new Map(nodes.map((node) => [node.id, node.name]));
+  const nameOf = (id: string) => names.get(id) ?? id;
+  const phrases = [...hit.path].reverse().map((step) => {
+    const rule = relationshipImpactRules[step.type];
+    return rule ? rule.step(nameOf(step.fromId), nameOf(step.toId)) : step.label;
+  });
+  if (phrases.length === 0) return "";
+  return phrases
+    .map((phrase, index) => (index === 0 ? phrase : phrase.charAt(0).toLowerCase() + phrase.slice(1)))
+    .join(" → ");
+}
+
+export function groupImpactHits(hits: ImpactHit[]): { title: string; severity: ImpactSeverity; hits: ImpactHit[] }[] {
+  const order: ImpactSeverity[] = ["direct", "degraded", "loses_support"];
+  return order
+    .map((severity) => ({
+      title: impactSectionTitle[severity],
+      severity,
+      hits: hits.filter((hit) => hit.severity === severity),
+    }))
+    .filter((group) => group.hits.length > 0);
+}
+
 export function impactReachLabel(hit: ImpactHit): string {
   if (hit.severity === "loses_support") return "Loses support";
   if (hit.severity === "degraded") return "Degraded";
@@ -168,4 +209,132 @@ function push(map: Map<string, ImpactEdge[]>, id: string, edge: ImpactEdge) {
   const list = map.get(id);
   if (list) list.push(edge);
   else map.set(id, [edge]);
+}
+
+export type ImpactRecord = {
+  id: string;
+  name: string;
+  typeLabel: string;
+  owner: string;
+  criticality: string;
+  annualCost: string | null;
+  renewal: string | null;
+  missingOwner: boolean;
+  missingCriticality: boolean;
+  hostingModel: string;
+};
+
+export type ImpactRow = {
+  n: number;
+  hit: ImpactHit;
+  record: ImpactRecord;
+  connection: string;
+  severity: ImpactSeverity;
+  section: string;
+};
+
+export type ImpactPresentation = {
+  sentence: string;
+  context: string;
+  rows: ImpactRow[];
+  gaps: string[];
+  followUps: string[];
+};
+
+export function presentImpact(input: {
+  source: ImpactRecord;
+  records: ImpactRecord[];
+  nodes: ImpactNode[];
+  edges: ImpactEdge[];
+}): ImpactPresentation {
+  const hits = impactOf(input.nodes, input.edges, input.source.id);
+  const byId = new Map(input.records.map((record) => [record.id, record]));
+  const recordFor = (hit: ImpactHit): ImpactRecord =>
+    byId.get(hit.id) ?? {
+      id: hit.id,
+      name: hit.name,
+      typeLabel: input.nodes.find((node) => node.id === hit.id)?.typeLabel || "Item",
+      owner: "",
+      criticality: "",
+      annualCost: null,
+      renewal: null,
+      missingOwner: true,
+      missingCriticality: true,
+      hostingModel: "",
+    };
+
+  let n = 2;
+  const rows: ImpactRow[] = groupImpactHits(hits).flatMap((group) =>
+    group.hits.map((hit) => ({
+      n: n++,
+      hit,
+      record: recordFor(hit),
+      connection: connectionPhrase(hit, input.nodes),
+      severity: hit.severity,
+      section: group.title,
+    }))
+  );
+
+  const direct = rows.filter((row) => row.severity === "direct");
+  const degraded = rows.filter((row) => row.severity === "degraded");
+  const support = rows.filter((row) => row.severity === "loses_support");
+  const clauses = [
+    clause(direct, "stops working", "stop working"),
+    clause(degraded, "is degraded", "are degraded"),
+    clause(support, "loses support", "lose support"),
+  ].filter(Boolean);
+  const sentence = clauses.length
+    ? `If ${input.source.name} [1] goes down, ${clauses.join(" and ")}.`
+    : `Nothing in your model depends on ${input.source.name} [1].`;
+
+  return {
+    sentence,
+    context: sourceContext(input.source),
+    rows,
+    gaps: impactGaps(input.source, rows.map((row) => row.record), input.edges),
+    followUps: [
+      `What does ${input.source.name} cost us?`,
+      `Who owns ${(direct[0] ?? rows[0])?.record.name || input.source.name}?`,
+      `What connects to ${input.source.name} through integrations?`,
+    ],
+  };
+}
+
+function clause(rows: ImpactRow[], singular: string, plural: string): string {
+  if (!rows.length) return "";
+  return `${nameList(rows.map((row) => row.record.name))} ${rows.length === 1 ? singular : plural}`;
+}
+
+function nameList(names: string[]): string {
+  if (names.length <= 3) {
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]} and ${names[1]}`;
+    return `${names[0]}, ${names[1]}, and ${names[2]}`;
+  }
+  return `${names[0]}, ${names[1]}, ${names[2]}, and ${names.length - 3} more`;
+}
+
+function sourceContext(source: ImpactRecord): string {
+  const parts: string[] = [];
+  if (source.owner) parts.push(`Owner ${source.owner}`);
+  parts.push(source.criticality ? `Criticality ${source.criticality}` : "Criticality not set");
+  if (source.annualCost) parts.push(source.annualCost);
+  if (source.renewal) parts.push(`renews ${source.renewal}`);
+  return parts.join(" · ");
+}
+
+function impactGaps(source: ImpactRecord, affected: ImpactRecord[], edges: ImpactEdge[]): string[] {
+  const gaps: string[] = [];
+  for (const record of [source, ...affected]) {
+    const bits = [record.missingOwner ? "no owner" : "", record.missingCriticality ? "no criticality" : ""].filter(Boolean);
+    if (bits.length) gaps.push(`${record.name} has ${bits.join(" and ")}.`);
+  }
+  const touches = (type: string) => edges.some((edge) => edge.type === type && (edge.fromId === source.id || edge.toId === source.id));
+  if (!touches("calls")) {
+    gaps.push(`No integrations are recorded for ${source.name}, so systems that call it through an API may be missing.`);
+  }
+  if (source.hostingModel && !touches("runs_on") && !touches("built_on")) {
+    gaps.push(`${source.name} has no host linked.`);
+  }
+  return gaps;
 }

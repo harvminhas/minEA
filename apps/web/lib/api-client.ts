@@ -952,6 +952,10 @@ export type AskModelPayload = {
   source: "llm" | "fallback";
   fallback_reason: string | null;
   answer_text: string | null;
+  intent?: string;
+  verdict?: { text: string; inferred: boolean; basis?: string[] } | null;
+  evidence?: { text: string; citation_ids: string[] }[];
+  fix_actions?: { record_id: string; field: "criticality" | "owner"; suggested_value: string }[];
   citations: {
     n: number;
     record_id: string;

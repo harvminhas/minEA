@@ -9,7 +9,7 @@ import { describeTypes } from "@/lib/ask/deterministic";
 import { catalogStats, moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { Pill } from "@/components/mvp/pills";
-import { impactOf, impactReachLabel } from "@/lib/impact/relationship-impact";
+import { connectionPhrase, groupImpactHits, impactOf } from "@/lib/impact/relationship-impact";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 
 export function ReportDetailScreen({ reportId }: { reportId: string }) {
@@ -92,13 +92,17 @@ function ImpactReport() {
         {groups.map((group) => (
           <section key={group.node.id}>
             <h2 className="text-[15px] font-semibold text-[#1c2230]">If {group.node.name} fails</h2>
-            {group.hits.map((hit) => (
-              <div key={hit.id} className="mt-2 border-b border-[#f3f4f8] py-2 text-[13px]">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium text-[#1c2230]">{hit.name}</span>
-                  <span className="text-[#6b7289]">{impactReachLabel(hit)}</span>
-                </div>
-                <p className="text-[12px] text-[#8b90a0]">{hit.path.map((step) => step.label).join(", then ")}</p>
+            {groupImpactHits(group.hits).map((section) => (
+              <div key={section.title} className="mt-2">
+                <p className="text-[12px] font-semibold text-[#3c4254]">
+                  {section.title} · {section.hits.length}
+                </p>
+                {section.hits.map((hit) => (
+                  <div key={hit.id} className="border-b border-[#f3f4f8] py-2 text-[13px]">
+                    <div className="font-medium text-[#1c2230]">{hit.name}</div>
+                    <p className="text-[12px] text-[#8b90a0]">{connectionPhrase(hit, graph.nodes)}</p>
+                  </div>
+                ))}
               </div>
             ))}
           </section>

@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Trash2, X } from "lucide-react";
 import type { TechDebtHostKind } from "@minea/types";
 import { objectsApi } from "@/lib/api-client";
-import { impactOf, impactReachLabel } from "@/lib/impact/relationship-impact";
+import { connectionPhrase, groupImpactHits, impactOf } from "@/lib/impact/relationship-impact";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
@@ -202,15 +202,19 @@ export function ModelDetailPanel({
             <Section title="Depends on this">
               {impactGraph.isLoading && <p className="text-[13px] text-[#8b90a0]">Looking up what depends on this…</p>}
               {!impactGraph.isLoading && dependents.length === 0 && (
-                <p className="text-[13px] text-[#8b90a0]">Nothing linked to this is affected if it fails.</p>
+                <p className="text-[13px] text-[#8b90a0]">Nothing in your model depends on {row.name}.</p>
               )}
-              {dependents.map((hit) => (
-                <div key={hit.id} className="py-1.5 text-[13px]">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[#1c2230]">{hit.name}</span>
-                    <span className="text-[#8b90a0]">{impactReachLabel(hit)}</span>
-                  </div>
-                  <p className="text-[12px] text-[#8b90a0]">{hit.path.map((step) => step.label).join(", then ")}</p>
+              {groupImpactHits(dependents).map((group) => (
+                <div key={group.title} className="mt-2">
+                  <p className="text-[12px] font-semibold text-[#3c4254]">
+                    {group.title} · {group.hits.length}
+                  </p>
+                  {group.hits.map((hit) => (
+                    <div key={hit.id} className="py-1.5 text-[13px]">
+                      <div className="text-[#1c2230]">{hit.name}</div>
+                      <p className="text-[12px] text-[#8b90a0]">{connectionPhrase(hit, impactGraph.nodes)}</p>
+                    </div>
+                  ))}
                 </div>
               ))}
             </Section>

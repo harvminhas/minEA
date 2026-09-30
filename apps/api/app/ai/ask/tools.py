@@ -135,8 +135,9 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
         rows = [rec for rec in rows if rec.type == "application"]
     elif wanted == "infrastructure":
         rows = [rec for rec in rows if rec.type == "infrastructure"]
-    if filters.get("missing_field") == "owner":
-        rows = [rec for rec in rows if "owner" in rec.blank]
+    missing_field = _GAP_FIELDS.get(str(filters.get("missing_field") or "").strip().lower())
+    if missing_field:
+        rows = [rec for rec in rows if missing_field in rec.blank]
     criticality = str(filters.get("criticality") or "").strip().lower()
     if criticality in {"tier1", "critical"}:
         criticality = "critical"
@@ -213,6 +214,18 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
     }
 
 
+_GAP_FIELDS = {
+    "vendor": "vendor",
+    "owner": "owner",
+    "cost": "annual_cost",
+    "annual_cost": "annual_cost",
+    "renewal": "renewal_date",
+    "renewal_date": "renewal_date",
+    "lifecycle": "lifecycle",
+    "criticality": "criticality",
+}
+
+
 def find_gaps(bag: ToolBag, args: dict) -> dict:
     rows = _estate(bag.graph)
     scope = str(args.get("scope") or "estate")
@@ -220,9 +233,11 @@ def find_gaps(bag: ToolBag, args: dict) -> dict:
         rows = [rec for rec in rows if rec.type == "application"]
     elif scope == "infrastructure":
         rows = [rec for rec in rows if rec.type == "infrastructure"]
+    field = _GAP_FIELDS.get(str(args.get("field") or "").strip().lower())
     gaps = []
     for rec in rows:
-        if not rec.blank:
+        blank = [item for item in rec.blank if item == field] if field else list(rec.blank)
+        if not blank:
             continue
         bag.note_record(rec)
         gaps.append(
@@ -231,12 +246,17 @@ def find_gaps(bag: ToolBag, args: dict) -> dict:
                 "record_name": rec.name,
                 "type": rec.type,
                 "type_label": rec.type_label(),
-                "field": rec.blank[0],
-                "message": f"{rec.name} is missing {', '.join(field.replace('_', ' ') for field in rec.blank)}.",
+                "field": blank[0],
+                "message": f"{rec.name} is missing {', '.join(item.replace('_', ' ') for item in blank)}.",
             }
         )
+    by_type: dict[str, int] = {}
+    for gap in gaps:
+        by_type[gap["type_label"]] = by_type.get(gap["type_label"], 0) + 1
     bag.note_number(len(gaps))
-    return {"gaps": gaps[:50], "count": len(gaps)}
+    for value in by_type.values():
+        bag.note_number(value)
+    return {"gaps": gaps[:50], "count": len(gaps), "by_type": by_type}
 
 
 TOOLS: list[AskTool] = [
@@ -288,10 +308,13 @@ TOOLS: list[AskTool] = [
     ),
     AskTool(
         name="find_gaps",
-        description="List applications and infrastructure missing owner, vendor, cost, renewal, lifecycle, or criticality. Each gap includes type_label.",
+        description="List applications or infrastructure missing a field. field is owner, vendor, annual_cost, renewal_date, lifecycle, or criticality. scope is applications, infrastructure, or estate. Use this for without, missing, or no vendor/owner/cost. count and by_type are the numbers to write. This is not a list of vendors.",
         parameters={
             "type": "object",
-            "properties": {"scope": {"type": "string"}},
+            "properties": {
+                "scope": {"type": "string"},
+                "field": {"type": "string"},
+            },
         },
         run=find_gaps,
     ),

@@ -1,5 +1,14 @@
 import type { MinEAObject, Relationship } from "@minea/types";
 import type { AskModelPayload } from "@/lib/api-client";
+import {
+  choiceLabel,
+  classifyIntent,
+  importanceVerdict,
+  inferCriticality,
+  resolveSubject,
+} from "@/lib/ask/answerStrategies";
+import { dollarsFromCents, lineAnnualCents, lineTitle, readCostLines } from "@/lib/cost/math";
+import { presentImpact, type ImpactRecord } from "@/lib/impact/impact-answer";
 import { impactOf, type ImpactEdge, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
 import { moneyLabel, vendorRollup, type CatalogMissing, type CatalogRow } from "@/lib/model-catalog";
 import { modelItemPath } from "@/lib/mvp-paths";
@@ -13,18 +22,58 @@ export type AskCitation = {
   recordId: string;
   relationship: string;
   badge?: string;
+  /** Set on impact rows so the table can group them. The source citation has none. */
+  section?: string;
   /** Shown in the table when the row is an example of a grouped answer, such as a vendor. */
   displayName?: string;
   displayType?: string;
   row: CatalogRow;
 };
 
+export type AskVerdict = {
+  text: string;
+  inferred: boolean;
+  basis: string[];
+};
+
+export type AskEvidence = {
+  text: string;
+  citationIds: string[];
+};
+
+export type AskFixAction = {
+  recordId: string;
+  field: "criticality" | "owner";
+  suggestedValue: string;
+};
+
 export type AskAnswer = {
-  handler: "impact" | "spend" | "vendors" | "renewals" | "ownership" | "lifecycle" | "criticality" | "unsupported";
+  handler:
+    | "impact"
+    | "importance"
+    | "cost"
+    | "spend"
+    | "vendors"
+    | "renewals"
+    | "ownership"
+    | "lifecycle"
+    | "criticality"
+    | "gaps"
+    | "clarify"
+    | "unsupported";
   answerText: string;
   citations: AskCitation[];
   gaps: { text: string; fillHref: string }[];
   followUps: string[];
+  verdict?: AskVerdict;
+  evidence?: AskEvidence[];
+  fixActions?: AskFixAction[];
+  /** Extra sentence after the verdict, such as a stored value that the evidence outranks. */
+  note?: string;
+  /** Shown under an impact sentence. Omitted when the handler has nothing to add. */
+  context?: string;
+  /** Blank cells for this field use the amber Add. Other blanks stay a grey dash. */
+  focusBlank?: keyof CatalogMissing;
   caption: { generatedAt: string; recordCount: number; gapCount: number; extra?: string };
   loading?: boolean;
 };
@@ -59,6 +108,19 @@ function typeLabels(rows: { typeLabel: string }[]): string[] {
   return rows.map((row) => row.typeLabel);
 }
 
+const HANDLER_INTENTS: Record<string, AskAnswer["handler"]> = {
+  importance: "importance",
+  impact: "impact",
+  cost: "cost",
+  ownership: "ownership",
+  gaps: "gaps",
+  spend: "spend",
+  vendors: "vendors",
+  renewals: "renewals",
+  lifecycle: "lifecycle",
+  criticality: "criticality",
+};
+
 const SUGGESTED = [
   "What renews in the next 90 days?",
   "Where is our money going?",
@@ -91,10 +153,25 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
     relationship: item.relationship,
     row: rowForCitation(item, rows),
   }));
+  const intent = payload.intent;
+  const handler = payload.unsupported
+    ? "unsupported"
+    : intent && intent in HANDLER_INTENTS
+      ? HANDLER_INTENTS[intent]
+      : "impact";
   return {
-    handler: payload.unsupported ? "unsupported" : "impact",
+    handler,
     answerText: withoutDuplicateRoster(payload.answer_text, citations),
     citations,
+    verdict: payload.verdict
+      ? { text: payload.verdict.text, inferred: payload.verdict.inferred, basis: payload.verdict.basis ?? [] }
+      : undefined,
+    evidence: (payload.evidence ?? []).map((item) => ({ text: item.text, citationIds: item.citation_ids ?? [] })),
+    fixActions: (payload.fix_actions ?? []).map((item) => ({
+      recordId: item.record_id,
+      field: item.field,
+      suggestedValue: item.suggested_value,
+    })),
     gaps: payload.gaps.map((gap) => {
       const row = citations.find((item) => item.recordId === gap.record_id)?.row ?? rows.find((item) => item.id === gap.record_id);
       return {
@@ -159,6 +236,8 @@ export function answerFromRecords(input: {
   graph: AskGraph;
   basePath: string;
   loading?: boolean;
+  /** Set when the person picked one of several items that share a name. */
+  focusId?: string;
 }): AskAnswer {
   const question = input.question.trim();
   const q = question.toLowerCase();
@@ -178,8 +257,14 @@ export function answerFromRecords(input: {
     };
   }
 
-  const named = matchRecord(question, input.rows);
-  if (/break|fail|goes down|outage|depend|impact/.test(q)) {
+  const intent = classifyIntent(question);
+  const wantsSubject = intent === "importance" || intent === "impact" || intent === "cost" || (intent === "ownership" && /who owns/.test(q));
+  const resolution = wantsSubject ? resolveSubject(question, input.rows) : { status: "none" as const, matches: [] };
+  const focused = input.focusId ? resolution.matches.find((row) => row.id === input.focusId) : undefined;
+  if (resolution.status === "many" && !focused) return clarifyAnswer(intent, resolution.matches, today);
+  const named = focused ?? (resolution.status === "one" ? resolution.matches[0] : null);
+
+  if (intent === "importance" || intent === "impact" || intent === "cost") {
     if (!named) {
       return empty(
         "unsupported",
@@ -187,17 +272,29 @@ export function answerFromRecords(input: {
         today
       );
     }
-    if (input.loading) {
-      return { ...empty("impact", `Looking up what depends on ${named.name}…`, today), loading: true };
+    if (input.loading && intent !== "cost") {
+      return { ...empty(intent, `Looking up what depends on ${named.name}…`, today), loading: true };
     }
-    return impactAnswer(named, input.rows, input.graph, input.basePath, today);
+    if (intent === "impact") return impactAnswer(named, input.rows, input.graph, input.basePath, today);
+    if (intent === "cost") return costAnswer(named, input.basePath, today);
+    return importanceAnswer(named, input.rows, input.graph, input.basePath, today);
   }
-  if (/renew|contract|expire|90 day/.test(q)) return renewalsAnswer(input.rows, input.basePath, today);
-  if (/no owner|unowned|without an owner|who owns/.test(q)) return ownershipAnswer(named, input.rows, input.basePath, today);
-  if (/end of life|retiring|eol/.test(q)) return lifecycleAnswer(input.rows, input.basePath, today);
-  if (/critical|most important|tier 1|tier1/.test(q)) return criticalityAnswer(input.rows, input.basePath, today);
-  if (/money|spend|cost|pay/.test(q)) return spendAnswer(input.rows, input.basePath, today);
-  if (/vendor/.test(q)) return vendorsAnswer(input.rows, today);
+  if (intent === "gaps") {
+    const missing = missingFieldQuestion(q);
+    if (missing) return missingFieldAnswer(missing, q, input.rows, input.basePath, today);
+  }
+  if (intent === "renewals") return renewalsAnswer(input.rows, input.basePath, today);
+  if (intent === "ownership") {
+    if (named && input.loading) {
+      return { ...empty("ownership", `Looking up what depends on ${named.name}…`, today), loading: true };
+    }
+    if (named) return ownershipStrategy(named, input.rows, input.graph, input.basePath, today);
+    return ownershipAnswer(null, input.rows, input.basePath, today);
+  }
+  if (intent === "lifecycle") return lifecycleAnswer(input.rows, input.basePath, today);
+  if (intent === "criticality") return criticalityAnswer(input.rows, input.basePath, today);
+  if (intent === "spend") return spendAnswer(input.rows, input.basePath, today);
+  if (intent === "vendors") return vendorsAnswer(input.rows, today);
 
   return {
     ...empty(
@@ -221,51 +318,54 @@ export function graphFrom(nodes: ImpactNode[], relationships: Relationship[]): A
 }
 
 function impactAnswer(target: CatalogRow, rows: CatalogRow[], graph: AskGraph, basePath: string, today: string): AskAnswer {
-  const hits = impactOf(graph.nodes, graph.edges, target.id);
-  const typeOf = new Map(graph.nodes.map((node) => [node.id, node.typeLabel]));
-  const rowFor = (hit: ImpactHit) => rows.find((row) => row.id === hit.id) ?? placeholderRow(hit.id, hit.name, typeOf.get(hit.id));
-  const cited = hits.map((hit) => ({ hit, row: rowFor(hit) }));
+  const presented = presentImpact({
+    source: impactRecord(target),
+    records: rows.map(impactRecord),
+    nodes: graph.nodes,
+    edges: graph.edges,
+  });
+  const rowById = new Map(rows.map((row) => [row.id, row]));
   const citations: AskCitation[] = [
-    { n: 1, recordId: target.id, relationship: `The ${target.typeLabel} you asked about`, row: target },
-    ...cited.map((item, index) => ({
-      n: index + 2,
-      recordId: item.hit.id,
-      relationship: item.hit.path.map((step) => step.label).join(", then "),
-      badge: item.hit.indirect ? "indirect" : item.hit.severity === "direct" ? undefined : item.hit.severity,
-      row: item.row,
+    { n: 1, recordId: target.id, relationship: "", row: target },
+    ...presented.rows.map((item) => ({
+      n: item.n,
+      recordId: item.record.id,
+      relationship: item.connection,
+      section: item.section,
+      row: rowById.get(item.record.id) ?? placeholderRow(item.record.id, item.record.name, item.record.typeLabel),
     })),
   ];
-
-  const sentence = (group: typeof cited, ending: string) => {
-    if (!group.length) return "";
-    return ` **${describeTypes(typeLabels(group.map((item) => item.row)))}** ${ending}.`;
-  };
-
-  const stops = cited.filter((item) => item.hit.severity === "direct" && !item.hit.indirect);
-  const later = cited.filter((item) => item.hit.severity === "direct" && item.hit.indirect);
-  const degraded = cited.filter((item) => item.hit.severity === "degraded");
-  const support = cited.filter((item) => item.hit.severity === "loses_support");
-  const critical = stops.filter((item) => item.row.criticality === "tier1" || item.row.criticalityLabel === "Critical");
-  const answerText = hits.length
-    ? `If ${target.name} [1] goes down,${sentence(stops, stops.length === 1 ? "stops working" : "stop working")}${critical.length ? ` **${critical.length} of them ${critical.length === 1 ? "is" : "are"} critical.**` : ""}${sentence(later, later.length === 1 ? "is affected indirectly" : "are affected indirectly")}${sentence(degraded, degraded.length === 1 ? "is degraded" : "are degraded")}${sentence(support, support.length === 1 ? "loses support" : "lose support")}`
-    : `Nothing linked to ${target.name} [1] is affected if it fails.`;
-
   return {
     handler: "impact",
-    answerText,
+    answerText: presented.sentence,
+    context: presented.context,
     citations,
-    gaps: gapsFor([target, ...cited.map((item) => item.row)].filter((row) => row.kind === "application" || row.kind === "platform" || row.kind === "runtime"), basePath),
-    followUps: [
-      `Who can fix ${target.name} if it fails?`,
-      `What would it cost to move off ${target.name}?`,
-      "What else has no backup?",
-    ],
-    caption: {
-      generatedAt: today,
-      recordCount: citations.length,
-      gapCount: 0,
-      extra: "How this was worked out",
-    },
+    gaps: presented.gaps.map((text) => ({
+      text,
+      fillHref: modelItemPath(basePath, target.kind === "application" ? "applications" : "infrastructure", target.id),
+    })),
+    followUps: presented.followUps,
+    caption: { generatedAt: today, recordCount: presented.rows.length, gapCount: presented.gaps.length },
+  };
+}
+
+function impactRecord(row: CatalogRow): ImpactRecord {
+  const owner = [row.ownerTeam, row.ownerPerson].filter(Boolean).join(" · ");
+  const renewal = row.renewalDate
+    ? row.renewalDate.toLocaleDateString("en-US", { month: "short", year: "numeric" })
+    : row.renewalLabel || null;
+  const hosting = row.object.properties && typeof row.object.properties === "object" ? (row.object.properties as { hosting_model?: unknown }).hosting_model : "";
+  return {
+    id: row.id,
+    name: row.name,
+    typeLabel: row.typeLabel,
+    owner,
+    criticality: row.criticalityLabel,
+    annualCost: row.annualCostNumber != null ? `${moneyLabel(row.annualCostNumber)}/yr` : null,
+    renewal,
+    missingOwner: row.missing.owner,
+    missingCriticality: row.missing.criticality,
+    hostingModel: typeof hosting === "string" ? hosting.trim() : "",
   };
 }
 
@@ -383,11 +483,64 @@ function renewalsAnswer(rows: CatalogRow[], basePath: string, today: string): As
   };
 }
 
+const MISSING_FIELDS: { field: keyof CatalogMissing; test: RegExp; phrase: string; filled: string; label: string }[] = [
+  { field: "vendor", test: /vendor/, phrase: "no vendor", filled: "a vendor", label: "No vendor" },
+  { field: "owner", test: /owner/, phrase: "no owner", filled: "an owner", label: "No owner" },
+  { field: "cost", test: /\bcost\b|\bspend\b|\bprice\b/, phrase: "no annual cost", filled: "an annual cost", label: "No annual cost" },
+  { field: "renewal", test: /renew|contract/, phrase: "no renewal date", filled: "a renewal date", label: "No renewal date" },
+  { field: "criticality", test: /critical/, phrase: "no criticality", filled: "a criticality", label: "No criticality" },
+  { field: "lifecycle", test: /lifecycle|end of life|\beol\b/, phrase: "no lifecycle", filled: "a lifecycle", label: "No lifecycle" },
+];
+
+function missingFieldQuestion(q: string): (typeof MISSING_FIELDS)[number] | null {
+  if (!/without|missing|lack|blank|unset|\bno\b|not (set|named|assigned|recorded)|does not have|doesn't have|do not have|don't have|has no|have no/.test(q)) {
+    return null;
+  }
+  return MISSING_FIELDS.find((item) => item.test.test(q)) ?? null;
+}
+
+function scopedRows(q: string, rows: CatalogRow[]): CatalogRow[] {
+  const applications = /\bapplications?\b|\bapps?\b/.test(q);
+  const infrastructure = /infrastructure|\bservers?\b|\bplatforms?\b/.test(q);
+  if (applications && !infrastructure) return rows.filter((row) => row.kind === "application");
+  if (infrastructure && !applications) return rows.filter((row) => row.kind !== "application");
+  return rows;
+}
+
+function missingFieldAnswer(
+  missing: (typeof MISSING_FIELDS)[number],
+  q: string,
+  rows: CatalogRow[],
+  basePath: string,
+  today: string
+): AskAnswer {
+  const scope = scopedRows(q, rows);
+  const hits = scope.filter((row) => row.missing[missing.field]);
+  const who = scope.length > 0 && scope.every((row) => row.kind === "application") ? "application" : "item";
+  return {
+    handler: "gaps",
+    focusBlank: missing.field,
+    answerText: hits.length
+      ? `**${describeTypes(typeLabels(hits))} ${hits.length === 1 ? "has" : "have"} ${missing.phrase}.**`
+      : `Every ${who} here has ${missing.filled}.`,
+    citations: hits.slice(0, 12).map((row, index) => ({
+      n: index + 1,
+      recordId: row.id,
+      relationship: missing.label,
+      row,
+    })),
+    gaps: gapsFor(hits.slice(0, 6), basePath),
+    followUps: ["What has no owner?", "Where is our money going?", "What renews in the next 90 days?"],
+    caption: { generatedAt: today, recordCount: hits.length, gapCount: hits.length },
+  };
+}
+
 function ownershipAnswer(named: CatalogRow | null, rows: CatalogRow[], basePath: string, today: string): AskAnswer {
   if (named && !/no owner|unowned/.test(named.name.toLowerCase())) {
     const owner = [named.ownerTeam, named.ownerPerson].filter(Boolean).join(" · ");
     return {
       handler: "ownership",
+      focusBlank: "owner",
       answerText: owner
         ? `${named.name} [1] is owned by **${owner}**.`
         : `${named.name} [1] has no owner.`,
@@ -400,6 +553,7 @@ function ownershipAnswer(named: CatalogRow | null, rows: CatalogRow[], basePath:
   const hits = rows.filter((row) => row.missing.owner);
   return {
     handler: "ownership",
+    focusBlank: "owner",
     answerText: hits.length
       ? `**${describeTypes(typeLabels(hits))} ${hits.length === 1 ? "has" : "have"} no owner.**`
       : "Every application and infrastructure item has an owner.",
@@ -480,17 +634,239 @@ function gapsFor(rows: CatalogRow[], basePath: string): { text: string; fillHref
   return gaps.slice(0, 4);
 }
 
-function matchRecord(question: string, rows: CatalogRow[]): CatalogRow | null {
-  const folded = question.toLowerCase().replace(/[^a-z0-9]+/g, "");
-  const ranked = rows
-    .map((row) => {
-      const name = row.name.toLowerCase().replace(/[^a-z0-9]+/g, "");
-      const idx = name.length > 2 ? folded.indexOf(name) : -1;
-      return { row, idx, length: name.length };
-    })
-    .filter((item) => item.idx >= 0)
-    .sort((a, b) => b.length - a.length);
-  return ranked[0]?.row ?? null;
+function clarifyAnswer(intent: string, matches: CatalogRow[], today: string): AskAnswer {
+  const shown = matches.slice(0, 5);
+  const labels = shown.map((row) => choiceLabel(row, shown));
+  const choice = labels.length === 2 ? `${labels[0]} or ${labels[1]}` : labels.join(", ");
+  return {
+    ...empty("clarify", `Did you mean ${choice}?`, today),
+    citations: shown.map((row, index) => ({
+      n: index + 1,
+      recordId: row.id,
+      relationship: labels[index],
+      displayName: labels[index],
+      row,
+    })),
+    followUps: shown.map((row, index) => clarifyQuestion(intent, labels[index])),
+    caption: { generatedAt: today, recordCount: shown.length, gapCount: 0 },
+  };
+}
+
+function clarifyQuestion(intent: string, name: string): string {
+  if (intent === "importance") return `How important is ${name}?`;
+  if (intent === "impact") return `What breaks if ${name} goes down?`;
+  if (intent === "cost") return `What does ${name} cost?`;
+  if (intent === "ownership") return `Who owns ${name}?`;
+  return name;
+}
+
+function importanceAnswer(target: CatalogRow, rows: CatalogRow[], graph: AskGraph, basePath: string, today: string): AskAnswer {
+  const hits = impactOf(graph.nodes, graph.edges, target.id);
+  const touching = graph.edges.filter((edge) => edge.fromId === target.id || edge.toId === target.id);
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const direct = hits.filter((hit) => hit.severity === "direct" && !hit.indirect);
+  const supportsCapability = hits.some((hit) => nodeById.get(hit.id)?.typeLabel === "Capability") || touching.some((edge) => {
+    if (edge.type !== "supported_by" && edge.type !== "supports") return false;
+    const other = edge.fromId === target.id ? edge.toId : edge.fromId;
+    return nodeById.get(other)?.typeLabel === "Capability";
+  });
+  const dependentIsHigh = hits.some((hit) => ["high", "critical", "tier1"].includes(rowById.get(hit.id)?.criticality ?? ""));
+  const inferred = inferCriticality({
+    relationshipCount: touching.length,
+    directDependents: direct.length,
+    dependentCount: hits.length,
+    supportsCapability,
+    dependentIsHigh,
+  });
+  const verdict = importanceVerdict(target.criticality, inferred);
+  const evidence = importanceEvidence(target, hits, nodeById);
+  if (verdict.inferred && evidence.length === 0) {
+    evidence.push({ text: `Nothing in the model depends on ${target.name}.`, citationIds: [target.id] });
+  }
+  const seats = seatCount(target);
+  if (target.annualCostNumber != null && evidence.length < 4) {
+    evidence.push({ text: `${target.name} costs ${moneyLabel(target.annualCostNumber)} a year.`, citationIds: [target.id] });
+  }
+  if (seats && evidence.length < 4) {
+    evidence.push({ text: `${target.name} has ${seats} seats on a per-user cost line.`, citationIds: [target.id] });
+  }
+  const citations = cite(target, evidence, rows);
+  const fixActions: AskFixAction[] = verdict.suggestedValue
+    ? [{ recordId: target.id, field: "criticality", suggestedValue: verdict.suggestedValue }]
+    : [];
+  return {
+    handler: "importance",
+    answerText: verdict.note ? `${verdict.text} ${verdict.note}` : verdict.text,
+    verdict: { text: verdict.text, inferred: verdict.inferred, basis: verdict.basis },
+    evidence: evidence.slice(0, 4),
+    fixActions,
+    note: verdict.note ?? undefined,
+    citations,
+    gaps: subjectGaps(target, touching, basePath),
+    followUps: [`What breaks if ${target.name} goes down?`, `Who owns ${target.name}?`, `What does ${target.name} cost?`],
+    caption: { generatedAt: today, recordCount: citations.length, gapCount: 0 },
+  };
+}
+
+function importanceEvidence(target: CatalogRow, hits: ImpactHit[], nodeById: Map<string, ImpactNode>): AskEvidence[] {
+  const direct = hits.filter((hit) => hit.severity === "direct" && !hit.indirect);
+  const capabilities = hits.filter((hit) => nodeById.get(hit.id)?.typeLabel === "Capability");
+  const bullets: AskEvidence[] = [];
+  if (direct.length) {
+    bullets.push({
+      text: `${joinNames(direct.map((hit) => hit.name))} ${direct.length === 1 ? "stops" : "stop"} working if ${target.name} goes down.`,
+      citationIds: direct.map((hit) => hit.id),
+    });
+  }
+  if (capabilities.length) {
+    bullets.push({
+      text: `${joinNames(capabilities.map((hit) => hit.name))} ${capabilities.length === 1 ? "is" : "are"} supported by ${target.name}.`,
+      citationIds: capabilities.map((hit) => hit.id),
+    });
+  }
+  const covered = new Set(bullets.flatMap((bullet) => bullet.citationIds));
+  const rest = hits.filter((hit) => !covered.has(hit.id));
+  if (rest.length) {
+    const shown = rest.slice(0, 3);
+    bullets.push({
+      text: `${joinNames(shown.map((hit) => hit.name))} ${shown.length === 1 ? "is" : "are"} affected if ${target.name} goes down.`,
+      citationIds: shown.map((hit) => hit.id),
+    });
+  }
+  return bullets.slice(0, 4);
+}
+
+function costAnswer(target: CatalogRow, basePath: string, today: string): AskAnswer {
+  const lines = readCostLines(target.object.properties as Record<string, unknown> | null) ?? [];
+  const evidence: AskEvidence[] = lines.slice(0, 4).map((line) => ({
+    text: `${lineTitle(line)} · ${moneyLabel(dollarsFromCents(lineAnnualCents(line)))} a year.`,
+    citationIds: [target.id],
+  }));
+  if (!evidence.length && target.annualCostNumber != null) {
+    evidence.push({ text: `${target.name} costs ${moneyLabel(target.annualCostNumber)} a year.`, citationIds: [target.id] });
+  }
+  const total = target.annualCostNumber != null ? `${moneyLabel(target.annualCostNumber)} a year` : "No annual cost is recorded";
+  return {
+    handler: "cost",
+    answerText: total,
+    verdict: { text: total, inferred: false, basis: evidence.length ? ["cost lines"] : ["no cost recorded"] },
+    evidence,
+    fixActions: [],
+    citations: [{ n: 1, recordId: target.id, relationship: total, row: target }],
+    gaps: target.missing.cost ? [{ text: `${target.name} has no annual cost.`, fillHref: itemHref(basePath, target) }] : [],
+    followUps: [`How important is ${target.name}?`, `What breaks if ${target.name} goes down?`, `Who owns ${target.name}?`],
+    caption: { generatedAt: today, recordCount: 1, gapCount: target.missing.cost ? 1 : 0 },
+  };
+}
+
+function ownershipStrategy(target: CatalogRow, rows: CatalogRow[], graph: AskGraph, basePath: string, today: string): AskAnswer {
+  const owner = [target.ownerTeam, target.ownerPerson].filter(Boolean).join(" · ");
+  if (owner) {
+    return {
+      handler: "ownership",
+      answerText: `${target.name} is owned by ${owner}.`,
+      verdict: { text: `${target.name} is owned by ${owner}.`, inferred: false, basis: ["owner column"] },
+      evidence: [{ text: `Owner ${owner} is set on ${target.name}.`, citationIds: [target.id] }],
+      fixActions: [],
+      citations: [{ n: 1, recordId: target.id, relationship: owner, row: target }],
+      gaps: [],
+      followUps: [`How important is ${target.name}?`, `What breaks if ${target.name} goes down?`, `What does ${target.name} cost?`],
+      caption: { generatedAt: today, recordCount: 1, gapCount: 0 },
+    };
+  }
+  const neighborIds = new Set<string>();
+  for (const edge of graph.edges) {
+    if (edge.fromId === target.id) neighborIds.add(edge.toId);
+    else if (edge.toId === target.id) neighborIds.add(edge.fromId);
+  }
+  const candidates = [...neighborIds]
+    .map((id) => rows.find((row) => row.id === id))
+    .filter((row): row is CatalogRow => Boolean(row))
+    .map((row) => ({ row, owner: [row.ownerTeam, row.ownerPerson].filter(Boolean).join(" · ") }))
+    .filter((item) => item.owner);
+  if (!candidates.length) {
+    return {
+      handler: "ownership",
+      answerText: "Unknown",
+      verdict: { text: "Unknown", inferred: false, basis: ["no related owner"] },
+      evidence: [],
+      fixActions: [],
+      citations: [{ n: 1, recordId: target.id, relationship: "No owner", row: target }],
+      gaps: [{ text: `${target.name} has no owner, and no related item has an owner to infer from.`, fillHref: itemHref(basePath, target) }],
+      followUps: [`How important is ${target.name}?`, `What breaks if ${target.name} goes down?`],
+      caption: { generatedAt: today, recordCount: 1, gapCount: 1 },
+    };
+  }
+  const counts = new Map<string, { owner: string; rows: CatalogRow[] }>();
+  for (const candidate of candidates) {
+    const key = candidate.owner.toLowerCase();
+    const group = counts.get(key) ?? { owner: candidate.owner, rows: [] };
+    group.rows.push(candidate.row);
+    counts.set(key, group);
+  }
+  const best = [...counts.values()].sort((a, b) => b.rows.length - a.rows.length || a.owner.localeCompare(b.owner))[0];
+  const evidence = best.rows.slice(0, 4).map((row) => ({
+    text: `Inferred from ${row.name}, which is owned by ${best.owner}.`,
+    citationIds: [row.id],
+  }));
+  return {
+    handler: "ownership",
+    answerText: `Likely ${best.owner}`,
+    verdict: { text: `Likely ${best.owner}`, inferred: true, basis: [`owners of ${best.rows.length} related ${best.rows.length === 1 ? "item" : "items"}`] },
+    evidence,
+    fixActions: [{ recordId: target.id, field: "owner", suggestedValue: best.owner }],
+    citations: cite(target, evidence, rows),
+    gaps: [{ text: `${target.name} has no owner.`, fillHref: itemHref(basePath, target) }],
+    followUps: [`How important is ${target.name}?`, `What breaks if ${target.name} goes down?`, `What does ${target.name} cost?`],
+    caption: { generatedAt: today, recordCount: evidence.length + 1, gapCount: 1 },
+  };
+}
+
+function subjectGaps(target: CatalogRow, touching: ImpactEdge[], basePath: string): { text: string; fillHref: string }[] {
+  const href = itemHref(basePath, target);
+  const gaps: { text: string; fillHref: string }[] = [];
+  if (target.missing.criticality) gaps.push({ text: `${target.name} has no criticality.`, fillHref: href });
+  if (target.missing.owner) gaps.push({ text: `${target.name} has no owner.`, fillHref: href });
+  if (touching.length === 0) {
+    gaps.push({ text: `${target.name} has no relationships recorded.`, fillHref: href });
+  } else if (!touching.some((edge) => edge.type === "calls")) {
+    gaps.push({ text: `No integrations are recorded for ${target.name}, so this may be understated.`, fillHref: href });
+  }
+  return gaps;
+}
+
+function cite(target: CatalogRow, evidence: AskEvidence[], rows: CatalogRow[]): AskCitation[] {
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const ids = [target.id, ...evidence.flatMap((item) => item.citationIds)];
+  const seen = new Set<string>();
+  const citations: AskCitation[] = [];
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const row = rowById.get(id) ?? placeholderRow(id, id);
+    citations.push({ n: citations.length + 1, recordId: id, relationship: id === target.id ? "" : "Evidence", row });
+  }
+  return citations;
+}
+
+function seatCount(row: CatalogRow): number | null {
+  const lines = readCostLines(row.object.properties as Record<string, unknown> | null);
+  if (!lines) return null;
+  const seats = lines.reduce((sum, line) => (line.calculation.kind === "per_user" ? sum + line.calculation.seats : sum), 0);
+  return seats > 0 ? seats : null;
+}
+
+function joinNames(names: string[]): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  if (names.length <= 8) return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+  return `${names.slice(0, 5).join(", ")}, and ${names.length - 5} more`;
+}
+
+function itemHref(basePath: string, row: CatalogRow): string {
+  return modelItemPath(basePath, row.kind === "application" ? "applications" : "infrastructure", row.id);
 }
 
 function empty(handler: AskAnswer["handler"], answerText: string, today: string): AskAnswer {

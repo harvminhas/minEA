@@ -1,8 +1,9 @@
 /** Workspace paths for the Ask / Reports / Model shell. */
 
-export function askPath(basePath: string, query?: string): string {
+export function askPath(basePath: string, query?: string, focusId?: string): string {
   if (!query?.trim()) return `${basePath}/ask`;
-  return `${basePath}/ask/answer?q=${encodeURIComponent(query.trim())}`;
+  const path = `${basePath}/ask/answer?q=${encodeURIComponent(query.trim())}`;
+  return focusId ? `${path}&focus=${encodeURIComponent(focusId)}` : path;
 }
 
 export function reportsPath(basePath: string): string {

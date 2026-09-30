@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "strategies": "node --experimental-strip-types scripts/write-answer-strategies.ts",
+    "prebuild": "node --experimental-strip-types scripts/write-answer-strategies.ts",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

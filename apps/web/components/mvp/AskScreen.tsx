@@ -1,20 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
-import { aiApi } from "@/lib/api-client";
+import { ChevronRight, Sparkles, X } from "lucide-react";
+import { aiApi, objectsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, modelItemPath, reportPath } from "@/lib/mvp-paths";
-import { catalogStats, moneyLabel } from "@/lib/model-catalog";
+import { catalogStats, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 import { useModelCatalog } from "@/lib/use-model-catalog";
-import { answerFromModel, answerFromRecords, type AskAnswer } from "@/lib/ask/deterministic";
+import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { Pill } from "@/components/mvp/pills";
-import { ChevronRight } from "lucide-react";
+import { relationshipVerb } from "@/lib/relationship-display";
+import type { ImpactEdge, ImpactNode } from "@/lib/impact/relationship-impact";
+import type { RelationshipType } from "@minea/types";
 
 const THINKING_STEPS = [
   "Reading your question",
@@ -27,6 +29,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const initial = mode === "answer" ? params.get("q") ?? "" : "";
   const [draft, setDraft] = useState(initial);
   const [note, setNote] = useState("");
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const router = useRouter();
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
@@ -34,8 +37,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const rows = catalog.data?.rows ?? [];
   const stats = catalogStats(rows);
   const question = initial.trim();
+  const focusId = mode === "answer" ? params.get("focus") ?? undefined : undefined;
 
-  const impactQuery = /break|fail|goes down|outage|depend|impact/i.test(question);
+  const impactQuery = /break|fail|goes down|is down|outage|depend|impact|important|how critical|live without|who owns/i.test(question);
   const impact = useImpactGraph();
 
   const remote = useQuery({
@@ -57,8 +61,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         graph: { nodes: impact.nodes, edges: impact.edges },
         basePath,
         loading: impactQuery && impact.isLoading,
+        focusId,
       }),
-    [question, rows, impact.nodes, impact.edges, impact.isLoading, impactQuery, basePath]
+    [question, rows, impact.nodes, impact.edges, impact.isLoading, impactQuery, basePath, focusId]
   );
 
   const thinking = mode === "answer" && question.length > 0 && remote.isPending;
@@ -78,6 +83,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const answer = useMemo(() => {
     if (mode !== "answer" || !question) return local;
     const fromModel = remote.data ? answerFromModel(remote.data, rows, basePath) : null;
+    if (local.handler === "gaps" || local.handler === "impact" || local.handler === "importance" || local.handler === "cost" || local.handler === "ownership" || local.handler === "clarify") return local;
     if (!fromModel || fromModel.handler === "unsupported") return local;
     if (local.handler === "vendors" && fromModel.citations.length === 0) return local;
     return fromModel;
@@ -95,11 +101,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     "What goes end of life next year?",
   ];
 
-  const submit = (value: string) => {
+  const submit = (value: string, nextFocusId?: string) => {
     const q = value.trim();
     if (!q) return;
     setDraft(q);
-    router.push(askPath(basePath, q));
+    router.push(askPath(basePath, q, nextFocusId));
   };
 
   if (mode === "home") {
@@ -204,63 +210,90 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         ) : (
           <div className="px-5 py-5">
             <p className="text-[17px] leading-7 text-[#1c2230]">
-              <AnswerText
-                text={answer.answerText}
-                onCite={(n) => {
-                  const citation = answer.citations.find((item) => item.n === n);
-                  if (!citation) return;
-                  router.push(recordHref(basePath, citation.row));
-                }}
-              />
+              <AnswerText text={answer.answerText} nodes={impact.nodes} onOpen={setPreviewId} />
+              {answer.verdict?.inferred && (
+                <span className="ml-2 inline-flex rounded bg-[#fff7ed] px-1.5 py-0.5 align-middle text-[11px] font-semibold text-[#c2410c]">Inferred</span>
+              )}
             </p>
+            {answer.evidence && answer.evidence.length > 0 && (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-[14px] text-[#3c4254]">
+                {answer.evidence.map((item) => (
+                  <li key={item.text}>
+                    <LinkedNames text={item.text} nodes={impact.nodes} onOpen={setPreviewId} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {answer.context && <p className="mt-2 text-[13px] text-[#6b7289]">{answer.context}</p>}
+            {(answer.fixActions?.length ?? 0) > 0 && (
+              <FixActions
+                actions={answer.fixActions ?? []}
+                orgSlug={orgSlug}
+                workspaceSlug={workspaceSlug}
+                getToken={getToken}
+                onSaved={(message) => setNote(message)}
+              />
+            )}
 
-            {answer.citations.length > 0 && (
+            {tableCitations(answer).length > 0 && (
               <table className="mt-6 w-full text-left text-[13px]">
                   <thead>
                     <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
-                      <th className="h-10 w-10" />
-                      {["Name", "Type", "Owner", "Criticality", "Relationship"].map((heading) => (
+                      {(answer.handler === "impact"
+                        ? ["Name", "Type", "Owner", "Criticality", "How it's connected"]
+                        : ["Name", "Type", "Owner", "Criticality", "Relationship"]
+                      ).map((heading) => (
                         <th key={heading} className="h-10 px-2 font-medium">{heading}</th>
                       ))}
                       <th className="w-8" />
                     </tr>
                   </thead>
                   <tbody>
-                    {answer.citations.map((item) => (
-                      <tr
-                        key={item.recordId}
-                        className="cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]"
-                        onClick={() => router.push(recordHref(basePath, item.row))}
-                      >
-                        <td className="px-2 py-2.5">
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-[#e4e0ff] text-[11px] font-semibold text-[#4c3fd1]">{item.n}</span>
-                        </td>
-                        <td className="px-2 py-2.5 font-medium">{item.displayName || item.row.name}</td>
-                        <td className="px-2 py-2.5">{item.displayType || item.row.typeLabel}</td>
-                        <td className="px-2 py-2.5">{item.row.ownerTeam || item.row.ownerPerson || <span className="rounded bg-[#fff7ed] px-1.5 py-0.5 text-[#c2410c]">No owner · Add</span>}</td>
-                        <td className="px-2 py-2.5">{item.row.criticalityLabel ? <Pill label={item.row.criticalityLabel} tone="criticality" /> : <span className="text-[#c2410c]">Add</span>}</td>
-                        <td className="px-2 py-2.5 text-[#6b7289]">
-                          {item.relationship}
-                          {item.badge ? <span className="ml-2 rounded-full bg-[#f3f4f8] px-1.5 py-0.5 text-[10px]">{item.badge}</span> : null}
-                        </td>
-                        <td className="text-[#94a3b8]"><ChevronRight size={14} /></td>
-                      </tr>
-                    ))}
+                    {tableCitations(answer).map((item, index, list) => {
+                      const section = item.section && item.section !== list[index - 1]?.section ? item.section : "";
+                      const count = section ? list.filter((row) => row.section === item.section).length : 0;
+                      return (
+                        <Fragment key={item.recordId}>
+                          {section && (
+                            <tr className="bg-[#fafafb]">
+                              <td colSpan={6} className="px-2 py-2 text-[12px] font-semibold text-[#3c4254]">
+                                {section} · {count}
+                              </td>
+                            </tr>
+                          )}
+                          <tr
+                            className="cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]"
+                            onClick={() => router.push(recordHref(basePath, item.row))}
+                          >
+                            <td className="px-2 py-2.5 font-medium">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setPreviewId(item.recordId);
+                                }}
+                                className="font-medium text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-2 hover:decoration-[#4c3fd1]"
+                              >
+                                {item.displayName || item.row.name}
+                              </button>
+                            </td>
+                            <td className="px-2 py-2.5">{item.displayType || item.row.typeLabel}</td>
+                            <td className="px-2 py-2.5">{ownerCell(item, answer.focusBlank)}</td>
+                            <td className="px-2 py-2.5">{criticalityCell(item, answer.focusBlank)}</td>
+                            <td className="px-2 py-2.5 text-[#6b7289]">
+                              {item.relationship}
+                              {item.badge ? <span className="ml-2 rounded-full bg-[#f3f4f8] px-1.5 py-0.5 text-[10px]">{item.badge}</span> : null}
+                            </td>
+                            <td className="text-[#94a3b8]"><ChevronRight size={14} /></td>
+                          </tr>
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
             )}
 
-            {answer.gaps.length > 0 && (
-              <div className="mt-4 rounded-xl border border-[#fde7b8] bg-[#fff8eb] px-4 py-3 text-[13px] text-[#78350f]">
-                <div className="font-semibold text-[#92400e]">Gaps</div>
-                {answer.gaps.map((gap) => (
-                  <p key={gap.text} className="mt-1">
-                    {gap.text}{" "}
-                    <Link href={gap.fillHref} className="font-medium text-[#5b4ce6]">Fill in</Link>
-                  </p>
-                ))}
-              </div>
-            )}
+            {answer.gaps.length > 0 && <GapsList key={question} gaps={answer.gaps} />}
 
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#eef0f4] pt-4">
               <button type="button" onClick={() => { saveAsk(question, answer.answerText); setNote("Saved to Reports › Saved from Ask"); }} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">
@@ -285,14 +318,192 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         <div className="mt-5 rounded-2xl border border-[#e6e8ee] bg-[#fafafb] px-5 py-4">
           <p className="mb-2 text-[13px] font-medium text-[#1c2230]">Ask next</p>
           <div className="flex flex-wrap gap-2">
-            {answer.followUps.map((follow) => (
-              <button key={follow} type="button" onClick={() => submit(follow)} className="rounded-full border border-[#e6e8ee] bg-white px-3 py-1.5 text-[13px] text-[#3c4254] hover:border-[#c9c6f5]">
+            {(answer.handler === "clarify" ? answer.citations.map((item) => item.displayName || item.row.name) : uniqueFollowUps(answer.followUps)).map((follow, index) => (
+              <button
+                key={answer.handler === "clarify" ? answer.citations[index]?.recordId ?? follow : follow}
+                type="button"
+                onClick={() => submit(answer.handler === "clarify" ? question : follow, answer.handler === "clarify" ? answer.citations[index]?.recordId : undefined)}
+                className="rounded-full border border-[#e6e8ee] bg-white px-3 py-1.5 text-[13px] text-[#3c4254] hover:border-[#c9c6f5]"
+              >
                 {follow}
               </button>
             ))}
           </div>
         </div>
       )}
+      {previewId && (
+        <RecordPreview
+          id={previewId}
+          nodes={impact.nodes}
+          edges={impact.edges}
+          rows={rows}
+          basePath={basePath}
+          onOpen={setPreviewId}
+          onClose={() => setPreviewId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function LinkedNames({ text, nodes, onOpen }: { text: string; nodes: ImpactNode[]; onOpen: (id: string) => void }) {
+  const parts = linkRecordNames(text, nodes);
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.id ? (
+          <button
+            key={`${part.id}-${index}`}
+            type="button"
+            onClick={() => onOpen(part.id!)}
+            className="font-medium text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-2 hover:decoration-[#4c3fd1]"
+          >
+            {part.value}
+          </button>
+        ) : (
+          <span key={index}>{part.value}</span>
+        )
+      )}
+    </>
+  );
+}
+
+function linkRecordNames(text: string, nodes: ImpactNode[]): { value: string; id?: string }[] {
+  const ranges: { start: number; end: number; id: string }[] = [];
+  const lower = text.toLowerCase();
+  const sorted = [...nodes].filter((node) => node.name.trim().length >= 2).sort((a, b) => b.name.length - a.name.length);
+  for (const node of sorted) {
+    const needle = node.name.toLowerCase();
+    let from = 0;
+    while (from < text.length) {
+      const at = lower.indexOf(needle, from);
+      if (at < 0) break;
+      const end = at + needle.length;
+      const touches = ranges.some((range) => at < range.end && end > range.start);
+      if (!touches) ranges.push({ start: at, end, id: node.id });
+      from = end;
+    }
+  }
+  ranges.sort((a, b) => a.start - b.start);
+  const parts: { value: string; id?: string }[] = [];
+  let cursor = 0;
+  for (const range of ranges) {
+    if (range.start > cursor) parts.push({ value: text.slice(cursor, range.start) });
+    parts.push({ value: text.slice(range.start, range.end), id: range.id });
+    cursor = range.end;
+  }
+  if (cursor < text.length) parts.push({ value: text.slice(cursor) });
+  return parts;
+}
+
+function RecordPreview({
+  id,
+  nodes,
+  edges,
+  rows,
+  basePath,
+  onOpen,
+  onClose,
+}: {
+  id: string;
+  nodes: ImpactNode[];
+  edges: ImpactEdge[];
+  rows: CatalogRow[];
+  basePath: string;
+  onOpen: (id: string) => void;
+  onClose: () => void;
+}) {
+  const node = nodes.find((item) => item.id === id);
+  const row = rows.find((item) => item.id === id);
+  const name = row?.name || node?.name || "This item";
+  const typeLabel = row?.typeLabel || node?.typeLabel || "Item";
+  const owner = [row?.ownerTeam, row?.ownerPerson].filter(Boolean).join(" · ");
+  const links = edges
+    .filter((edge) => edge.fromId === id || edge.toId === id)
+    .map((edge) => {
+      const outbound = edge.fromId === id;
+      const otherId = outbound ? edge.toId : edge.fromId;
+      const other = nodes.find((item) => item.id === otherId);
+      return {
+        id: `${edge.type}:${edge.fromId}:${edge.toId}`,
+        otherId,
+        otherName: other?.name || "Unnamed",
+        verb: relationshipVerb(edge.type as RelationshipType),
+        outbound,
+      };
+    })
+    .sort((a, b) => a.otherName.localeCompare(b.otherName));
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#1c2230]/40 p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={name}
+        className="max-h-[80vh] w-full max-w-md overflow-auto rounded-2xl bg-white p-5 shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-[18px] font-semibold text-[#1c2230]">{name}</h2>
+            <p className="text-[13px] text-[#6b7289]">{typeLabel}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-[#6b7289] hover:bg-[#f3f4f8]">
+            <X size={16} />
+          </button>
+        </div>
+        <dl className="mt-4 space-y-1 text-[13px] text-[#3c4254]">
+          <div className="flex justify-between gap-3"><dt className="text-[#8b90a0]">Owner</dt><dd>{owner || "Not set"}</dd></div>
+          <div className="flex justify-between gap-3"><dt className="text-[#8b90a0]">Criticality</dt><dd>{row?.criticalityLabel || "Not set"}</dd></div>
+          {row?.annualCostNumber != null && (
+            <div className="flex justify-between gap-3"><dt className="text-[#8b90a0]">Annual cost</dt><dd>{moneyLabel(row.annualCostNumber)}/yr</dd></div>
+          )}
+          {row?.vendor && (
+            <div className="flex justify-between gap-3"><dt className="text-[#8b90a0]">Vendor</dt><dd>{row.vendor}</dd></div>
+          )}
+        </dl>
+        <h3 className="mt-5 text-[13px] font-semibold text-[#1c2230]">Relationships</h3>
+        {links.length === 0 ? (
+          <p className="mt-2 text-[13px] text-[#8b90a0]">No relationships recorded.</p>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {links.map((link) => (
+              <li key={link.id} className="flex flex-wrap items-center gap-2 text-[13px]">
+                {link.outbound ? (
+                  <>
+                    <span className="rounded-lg bg-[#f4f3ff] px-2 py-1 font-medium text-[#3f35b5]">{name}</span>
+                    <span className="text-[#8b90a0]">{link.verb}</span>
+                    <button type="button" onClick={() => onOpen(link.otherId)} className="rounded-lg border border-[#e6e8ee] px-2 py-1 font-medium text-[#1c2230] hover:border-[#c9c6f5]">
+                      {link.otherName}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => onOpen(link.otherId)} className="rounded-lg border border-[#e6e8ee] px-2 py-1 font-medium text-[#1c2230] hover:border-[#c9c6f5]">
+                      {link.otherName}
+                    </button>
+                    <span className="text-[#8b90a0]">{link.verb}</span>
+                    <span className="rounded-lg bg-[#f4f3ff] px-2 py-1 font-medium text-[#3f35b5]">{name}</span>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {row && (
+          <Link href={recordHref(basePath, row)} className="mt-5 inline-block text-[13px] font-medium text-[#5b4ce6]">
+            Open full page
+          </Link>
+        )}
+      </div>
     </div>
   );
 }
@@ -315,33 +526,160 @@ function criticalityRank(value: string): number {
   return 0;
 }
 
+function FixActions({
+  actions,
+  orgSlug,
+  workspaceSlug,
+  getToken,
+  onSaved,
+}: {
+  actions: AskFixAction[];
+  orgSlug: string;
+  workspaceSlug: string;
+  getToken: () => Promise<string | null>;
+  onSaved: (message: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState<string | null>(null);
+  const [otherOwner, setOtherOwner] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function write(action: AskFixAction, value: string) {
+    if (!orgSlug || !workspaceSlug || saving) return;
+    setSaving(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const body = action.field === "criticality" ? { properties: { criticality: value } } : { owner: value };
+      await objectsApi.update(orgSlug, workspaceSlug, action.recordId, body, token);
+      await queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] });
+      onSaved(action.field === "criticality" ? `Criticality set to ${labelFor(value)}` : `Owner set to ${value}`);
+      setOpen(null);
+    } catch {
+      onSaved("That could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2">
+      {actions.map((action) => {
+        const key = `${action.recordId}:${action.field}`;
+        const others = action.field === "criticality" ? ["low", "medium", "high"].filter((value) => value !== action.suggestedValue) : [];
+        return (
+          <div key={key} className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => write(action, action.suggestedValue)}
+              className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-60"
+            >
+              {action.field === "criticality" ? `Set criticality: ${labelFor(action.suggestedValue)}` : `Set owner: ${action.suggestedValue}`}
+            </button>
+            <button type="button" onClick={() => setOpen(open === key ? null : key)} className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px]">
+              Other…
+            </button>
+            {open === key && action.field === "criticality" && others.map((value) => (
+              <button key={value} type="button" disabled={saving} onClick={() => write(action, value)} className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px]">
+                {labelFor(value)}
+              </button>
+            ))}
+            {open === key && action.field === "owner" && (
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (otherOwner.trim()) write(action, otherOwner.trim());
+                }}
+              >
+                <input value={otherOwner} onChange={(event) => setOtherOwner(event.target.value)} placeholder="Owner" className="rounded-lg border border-[#e6e8ee] px-2 py-1 text-[13px]" />
+                <button type="submit" disabled={saving || !otherOwner.trim()} className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px]">
+                  Save
+                </button>
+              </form>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function GapsList({ gaps }: { gaps: { text: string; fillHref: string }[] }) {
+  const [open, setOpen] = useState(false);
+  const visible = open ? gaps : gaps.slice(0, 2);
+  const hidden = gaps.length - 2;
+  return (
+    <div className="mt-4 rounded-xl border border-[#fde7b8] bg-[#fff8eb] px-4 py-3 text-[13px] text-[#78350f]">
+      <div className="font-semibold text-[#92400e]">Gaps</div>
+      {visible.map((gap) => (
+        <p key={gap.text} className="mt-1">
+          {gap.text}{" "}
+          <Link href={gap.fillHref} className="font-medium text-[#5b4ce6]">Fill in</Link>
+        </p>
+      ))}
+      {hidden > 0 && (
+        <button type="button" onClick={() => setOpen((value) => !value)} className="mt-2 font-medium text-[#5b4ce6]">
+          {open ? "Show less" : `Show ${hidden} more`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function uniqueFollowUps(items: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const item of items) {
+    const key = item.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(item.trim());
+  }
+  return unique;
+}
+
+function labelFor(value: string): string {
+  if (value === "high") return "High";
+  if (value === "medium") return "Medium";
+  if (value === "low") return "Low";
+  return value;
+}
+
+function tableCitations(answer: AskAnswer): AskCitation[] {
+  if (answer.handler === "clarify") return [];
+  if (answer.evidence && answer.evidence.length > 0) return [];
+  if (answer.handler !== "impact") return answer.citations;
+  return answer.citations.filter((item) => item.n !== 1);
+}
+
+function ownerCell(item: AskCitation, focus: AskAnswer["focusBlank"]) {
+  const owner = item.row.ownerTeam || item.row.ownerPerson;
+  if (owner) return owner;
+  if (focus === "owner") return <span className="rounded bg-[#fff7ed] px-1.5 py-0.5 text-[#c2410c]">No owner · Add</span>;
+  return <span className="text-[#b0b4c0]">—</span>;
+}
+
+function criticalityCell(item: AskCitation, focus: AskAnswer["focusBlank"]) {
+  if (item.row.criticalityLabel) return <Pill label={item.row.criticalityLabel} tone="criticality" />;
+  if (focus === "criticality") return <span className="text-[#c2410c]">Add</span>;
+  return <span className="text-[#b0b4c0]">—</span>;
+}
+
 function recordHref(basePath: string, row: { id: string; kind: string }): string {
   return modelItemPath(basePath, row.kind === "application" ? "applications" : "infrastructure", row.id);
 }
 
-function AnswerText({ text, onCite }: { text: string; onCite: (n: number) => void }) {
-  const parts = text.split(/(\*\*[^*]+\*\*|\[\d+\])/g);
+function AnswerText({ text, nodes, onOpen }: { text: string; nodes: ImpactNode[]; onOpen: (id: string) => void }) {
+  const parts = text.replace(/\s*\[\d+\]/g, "").split(/(\*\*[^*]+\*\*)/g);
   return (
     <>
       {parts.map((part, index) => {
         if (part.startsWith("**") && part.endsWith("**")) {
           return <strong key={index}>{part.slice(2, -2)}</strong>;
         }
-        const cite = part.match(/^\[(\d+)\]$/);
-        if (cite) {
-          const n = Number(cite[1]);
-          return (
-            <button
-              key={index}
-              type="button"
-              onClick={() => onCite(n)}
-              className="mx-0.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded bg-[#e4e0ff] px-1 text-[11px] font-semibold text-[#4c3fd1]"
-            >
-              {n}
-            </button>
-          );
-        }
-        return <span key={index}>{part}</span>;
+        return <LinkedNames key={index} text={part} nodes={nodes} onOpen={onOpen} />;
       })}
     </>
   );
