@@ -210,7 +210,15 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         ) : (
           <div className="px-5 py-5">
             <p className="text-[17px] leading-7 text-[#1c2230]">
-              <AnswerText text={answer.answerText} nodes={impact.nodes} onOpen={setPreviewId} />
+              {answer.handler === "clarify" ? (
+                <ClarifyChoices
+                  citations={answer.citations}
+                  followUps={answer.followUps}
+                  onChoose={submit}
+                />
+              ) : (
+                <AnswerText text={answer.answerText} nodes={impact.nodes} onOpen={setPreviewId} />
+              )}
               {answer.verdict?.inferred && (
                 <span className="ml-2 inline-flex rounded bg-[#fff7ed] px-1.5 py-0.5 align-middle text-[11px] font-semibold text-[#c2410c]">Inferred</span>
               )}
@@ -314,17 +322,12 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         )}
       </section>
 
-      {!thinking && answer.followUps.length > 0 && (
+      {!thinking && answer.handler !== "clarify" && answer.followUps.length > 0 && (
         <div className="mt-5 rounded-2xl border border-[#e6e8ee] bg-[#fafafb] px-5 py-4">
           <p className="mb-2 text-[13px] font-medium text-[#1c2230]">Ask next</p>
           <div className="flex flex-wrap gap-2">
-            {(answer.handler === "clarify" ? answer.citations.map((item) => item.displayName || item.row.name) : uniqueFollowUps(answer.followUps)).map((follow, index) => (
-              <button
-                key={answer.handler === "clarify" ? answer.citations[index]?.recordId ?? follow : follow}
-                type="button"
-                onClick={() => submit(answer.handler === "clarify" ? question : follow, answer.handler === "clarify" ? answer.citations[index]?.recordId : undefined)}
-                className="rounded-full border border-[#e6e8ee] bg-white px-3 py-1.5 text-[13px] text-[#3c4254] hover:border-[#c9c6f5]"
-              >
+            {uniqueFollowUps(answer.followUps).map((follow) => (
+              <button key={follow} type="button" onClick={() => submit(follow)} className="rounded-full border border-[#e6e8ee] bg-white px-3 py-1.5 text-[13px] text-[#3c4254] hover:border-[#c9c6f5]">
                 {follow}
               </button>
             ))}
@@ -343,6 +346,39 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         />
       )}
     </div>
+  );
+}
+
+function ClarifyChoices({
+  citations,
+  followUps,
+  onChoose,
+}: {
+  citations: AskCitation[];
+  followUps: string[];
+  onChoose: (question: string, focusId: string) => void;
+}) {
+  return (
+    <>
+      Did you mean{" "}
+      {citations.map((item, index) => {
+        const label = item.displayName || item.row.name;
+        const next = followUps[index] || label;
+        return (
+          <span key={item.recordId}>
+            {index > 0 && (index === citations.length - 1 ? " or " : ", ")}
+            <button
+              type="button"
+              onClick={() => onChoose(next, item.recordId)}
+              className="font-medium text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-2 hover:decoration-[#4c3fd1]"
+            >
+              {label}
+            </button>
+          </span>
+        );
+      })}
+      ?
+    </>
   );
 }
 
