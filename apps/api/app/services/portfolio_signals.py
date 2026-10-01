@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.objects import MinEAObject
 from app.models.relationships import Relationship
 from app.models.views_graph import Product, ProductCapability, ProductSystemOverride, Realization, RealizationSystem
+from app.services.cost_lines import object_annual_dollars
 
 OPEN_DEBT_STATUSES = {"open", "in_progress", "deferred"}
 CRITICAL_SEVERITIES = {"critical", "high"}
@@ -88,13 +89,9 @@ async def _annual_cost_for_product(
     for (props,) in result.all():
         if not props:
             continue
-        raw = props.get("annual_cost")
-        if raw is None:
-            continue
-        try:
-            total += float(raw)
-        except (TypeError, ValueError):
-            continue
+        amount = object_annual_dollars(props)
+        if amount is not None:
+            total += amount
     return total
 
 

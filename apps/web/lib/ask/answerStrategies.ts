@@ -21,6 +21,7 @@ export type AskIntent =
   | "criticality"
   | "spend"
   | "vendors"
+  | "aging"
   | "unknown";
 
 export type InferenceInput = {
@@ -74,6 +75,7 @@ Intents:
 - cost (what does this item cost): the cost total and the cost lines for that item.
 - ownership (who owns this item): the owner column. If it is blank, owners of related items, labelled inferred.
 - gaps, lists, and spend: find_gaps or aggregate. A missing-field question is not a vendor list.
+- aging (out of support, unsupported OS, old servers, what needs replacing): list of infrastructure past support. End-of-life questions stay on the lifecycle list. The counts come from the infrastructure status module when that split is on.
 
 Answer rules:
 - Lead with a one-line verdict.
@@ -125,6 +127,7 @@ export function classifyIntent(question: string): AskIntent {
   if (/who owns/.test(q)) return "ownership";
   if (/no owner|unowned|without an owner/.test(q)) return "ownership";
   if (/renew|contract|expire|90 day/.test(q)) return "renewals";
+  if (/out of support|unsupported|aging|old servers|needs replacing/.test(q)) return "aging";
   if (/end of life|retiring|eol/.test(q)) return "lifecycle";
   if (/critical|most important|tier 1|tier1/.test(q)) return "criticality";
   if (/what does .+ cost|how much (?:does|do|is)|what do we pay/.test(q)) return "cost";

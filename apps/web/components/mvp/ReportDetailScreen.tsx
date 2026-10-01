@@ -4,7 +4,11 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTenancy } from "@/lib/tenancy";
-import { modelItemPath, reportsPath } from "@/lib/mvp-paths";
+import { askPath, modelItemPath, reportsPath, sectionForKind } from "@/lib/mvp-paths";
+import { readRuntimeInfra } from "@/lib/infra/read";
+import { agingSummary } from "@/lib/infra/status";
+import { hostingMap, infraCost, singlePoints, withArticle } from "@/lib/reports/home";
+import { criticalityClass } from "@/components/mvp/pills";
 import { describeTypes } from "@/lib/ask/deterministic";
 import { catalogStats, moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
 import { useModelCatalog } from "@/lib/use-model-catalog";
@@ -20,6 +24,10 @@ export function ReportDetailScreen({ reportId }: { reportId: string }) {
   const stats = catalogStats(rows);
 
   if (reportId === "spend") return <SpendReport rows={rows} />;
+  if (reportId === "single-points") return <SpofReport rows={rows} />;
+  if (reportId === "hosting") return <HostingReport rows={rows} />;
+  if (reportId === "infrastructure-cost") return <InfraCostReport rows={rows} />;
+  if (reportId === "aging") return <AgingReport rows={rows} />;
   if (reportId === "impact") return <ImpactReport />;
   if (reportId === "sensitive-vendors" || reportId === "tech-debt") {
     return (
@@ -61,8 +69,119 @@ export function ReportDetailScreen({ reportId }: { reportId: string }) {
       </p>
       <RecordTable
         rows={filtered}
-        onOpen={(row) => router.push(modelItemPath(basePath, row.kind === "application" ? "applications" : "infrastructure", row.id))}
+        onOpen={(row) => router.push(modelItemPath(basePath, sectionForKind(row.kind), row.id))}
       />
+    </Shell>
+  );
+}
+
+function SpofReport({ rows }: { rows: CatalogRow[] }) {
+  const { basePath } = useTenancy();
+  const router = useRouter();
+  const impact = useImpactGraph();
+  const hosts = singlePoints(rows, impact.edges);
+  return (
+    <Shell title="Single points of failure" basePath={basePath}>
+      <p className="mb-4 text-[14px] text-[#6b7289]">
+        {hosts.length
+          ? `${hosts.length} platforms or servers with 3 or more things running on or built on them`
+          : "None found"}
+      </p>
+      <div className="space-y-3">
+        {hosts.map((host) => (
+          <div key={host.id} className="rounded-xl border border-[#e6e8ee] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <button type="button" className="text-[15px] font-semibold text-[#3f35b5]" onClick={() => router.push(modelItemPath(basePath, host.kind === "platform" ? "platforms" : "servers", host.id))}>
+                  {host.name}
+                </button>
+                <div className="mt-1 flex items-center gap-2 text-[12px] text-[#6b7289]">
+                  <span>{host.typeLine}</span>
+                  {host.statusLabel && <span className="rounded-full bg-[#fde8e8] px-2 py-0.5 text-[11px] font-semibold text-[#b42318]">{host.statusLabel}</span>}
+                </div>
+              </div>
+              <div className="text-right text-[13px] text-[#6b7289]"><span className="text-[18px] font-semibold text-[#1c2230]">{host.count}</span> things run on or are built on it</div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {host.dependents.map((item) => (
+                <button key={item.id} type="button" onClick={() => router.push(modelItemPath(basePath, sectionForKind(rows.find((row) => row.id === item.id)?.kind ?? "application"), item.id))} className={`rounded-full px-2 py-0.5 text-[12px] font-medium ${criticalityClass(item.criticalityLabel)}`}>
+                  {item.name}{item.criticalityLabel ? ` · ${item.criticalityLabel}` : ""}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-[13px] text-[#6b7289]">
+              No backup or failover recorded for {withArticle(host.name, host.kind === "runtime")}.{" "}
+              <Link href={askPath(basePath, `What breaks if ${withArticle(host.name, host.kind === "runtime")} goes down?`)} className="font-medium text-[#5b4ce6]">
+                Ask what breaks if it goes down →
+              </Link>
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-[12px] text-[#8b90a0]">Counted from runs-on and built-on links only (hosting labels aren't used).</p>
+    </Shell>
+  );
+}
+
+function HostingReport({ rows }: { rows: CatalogRow[] }) {
+  const { basePath } = useTenancy();
+  const impact = useImpactGraph();
+  const map = hostingMap(rows, impact.edges);
+  return (
+    <Shell title="Hosting map" basePath={basePath}>
+      <p className="text-[14px] text-[#6b7289]">{map.hosts} hosts · {map.unlinked} app{map.unlinked === 1 ? "" : "s"} with no host linked. Hosts come from runs-on and built-on links.</p>
+    </Shell>
+  );
+}
+
+function InfraCostReport({ rows }: { rows: CatalogRow[] }) {
+  const { basePath } = useTenancy();
+  const cost = infraCost(rows);
+  return (
+    <Shell title="Infrastructure cost" basePath={basePath}>
+      <p className="text-[14px] text-[#1c2230]">
+        {moneyLabel(cost.total)} a year. Platforms {moneyLabel(cost.platforms)}. Servers and devices {moneyLabel(cost.servers)}.
+      </p>
+    </Shell>
+  );
+}
+
+function AgingReport({ rows }: { rows: CatalogRow[] }) {
+  const { basePath } = useTenancy();
+  const router = useRouter();
+  const summary = agingSummary(rows.filter((row) => row.kind === "runtime").map((row) => readRuntimeInfra(row.object)), new Date());
+  const groups = [
+    ["Out of support", summary.items.filter((item) => item.status.status === "out_of_support")],
+    ["Unsupported OS", summary.items.filter((item) => item.status.status === "unsupported_os")],
+    ["Ends in 90 days", summary.items.filter((item) => item.status.status === "ends_soon")],
+    ["Not set", summary.items.filter((item) => item.status.status === "unknown")],
+  ] as const;
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return (
+    <Shell title="Aging infrastructure" basePath={basePath}>
+      <p className="mb-4 text-[14px] text-[#6b7289]">
+        {summary.outOfSupportOrOs} out of support or on an unsupported OS · {summary.endsSoon} ending in 90 days.
+      </p>
+      {groups.map(([title, items]) => items.length === 0 ? null : (
+        <div key={title} className="mb-4">
+          <h2 className="mb-2 text-[13px] font-semibold text-[#1c2230]">{title}</h2>
+          <div className="divide-y divide-[#f0f1f5] rounded-xl border border-[#e6e8ee]">
+            {items.map((item) => {
+              const row = item.runtime.id ? byId.get(item.runtime.id) : undefined;
+              if (!row) return null;
+              return (
+                <button key={row.id} type="button" onClick={() => router.push(modelItemPath(basePath, "servers", row.id))} className="flex w-full items-center justify-between px-4 py-3 text-left text-[13px] hover:bg-[#fafafb]">
+                  <span>
+                    <span className="font-medium text-[#1c2230]">{row.name}</span>
+                    <span className="mt-0.5 block text-[12px] text-[#8b90a0]">{item.status.reason}</span>
+                  </span>
+                  <span className="text-[#6b7289]">{item.status.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </Shell>
   );
 }

@@ -2,15 +2,21 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, reportPath } from "@/lib/mvp-paths";
 import { catalogStats, moneyLabel } from "@/lib/model-catalog";
 import { useModelCatalog } from "@/lib/use-model-catalog";
+import { useImpactGraph } from "@/lib/impact/use-impact-graph";
+import { hostingMap, infraCost, popularCards, REPORT_REGISTRY, singlePoints, topHostLine } from "@/lib/reports/home";
 
 export function ReportsScreen() {
   const { basePath } = useTenancy();
+  const params = useSearchParams();
+  const group = params.get("group");
   const catalog = useModelCatalog();
-  const stats = catalogStats(catalog.data?.rows ?? []);
+  const impact = useImpactGraph();
+  const rows = catalog.data?.rows ?? [];
   const [saved, setSaved] = useState<{ q: string; prose: string; at: string }[]>([]);
 
   useEffect(() => {
@@ -21,36 +27,52 @@ export function ReportsScreen() {
     }
   }, []);
 
-  const cards = [
-    { id: "renewals", title: "Renewals next 90 days", body: "What contracts come up soon, and what do they cost?", stat: `${stats.renewals.length} renewals${stats.renewalSpend ? ` · ${moneyLabel(stats.renewalSpend)}` : ""}` },
-    { id: "spend", title: "Spend by vendor & category", body: "Where is our money going, and to whom?", stat: stats.spend ? `${moneyLabel(stats.spend)} / yr` : "No costs tracked yet" },
-    { id: "impact", title: "Impact analysis", body: "What breaks if a system or vendor fails?", stat: "From your relationships" },
-    { id: "end-of-life", title: "End of life & retiring", body: "What is being phased out or losing support?", stat: `${stats.endOfLife.length} items` },
-    { id: "ownership-gaps", title: "Ownership gaps", body: "Which systems have nobody accountable for them?", stat: `${stats.noOwner.length} with no owner` },
-    { id: "sensitive-vendors", title: "Vendors holding sensitive data", body: "Which vendors store customer, employee, or financial data?", stat: "Not tracked yet" },
-    { id: "single-points", title: "Single points of failure", body: "Where would one failure stop critical work?", stat: "Open Ask" },
-    { id: "tech-debt", title: "Tech debt summary", body: "What known problems are we carrying, and where?", stat: "Open the tech debt view" },
-  ];
+  const cards = popularCards(rows, impact.edges);
+  const cost = infraCost(rows);
+  const hosts = hostingMap(rows, impact.edges);
+  const spof = singlePoints(rows, impact.edges);
+  const shown = REPORT_REGISTRY.filter((item) => !group || item.category === group);
+
+  const statFor = (id: string): { value: string; detail: string; alert?: boolean } => {
+    if (id === "renewals") return cards.renewals;
+    if (id === "spend") return { value: cards.spend.value, detail: cards.spend.detail.replace("/ yr · ", "/ yr · ") };
+    if (id === "infrastructure-cost") return { value: moneyLabel(cost.total), detail: `/ yr · platforms ${moneyLabel(cost.platforms)} · servers ${moneyLabel(cost.servers)}` };
+    if (id === "impact") return { value: topHostLine(rows, impact.edges), detail: "" };
+    if (id === "aging") return cards.aging;
+    if (id === "hosting") return { value: `${hosts.hosts} hosts`, detail: `${hosts.unlinked} app${hosts.unlinked === 1 ? "" : "s"} with no host linked` };
+    if (id === "end-of-life") {
+      const retiring = catalogStats(rows).endOfLife.length;
+      return { value: retiring ? `${retiring} items` : "Nothing is retiring", detail: "" };
+    }
+    if (id === "single-points") return spof.length ? { value: String(spof.length), detail: spof.map((item) => item.name).join(", "), alert: true } : { value: "None found", detail: "" };
+    if (id === "ownership-gaps") return cards.ownership;
+    if (id === "sensitive-vendors") return { value: "Not tracked yet", detail: "" };
+    return { value: "Open the tech debt view", detail: "" };
+  };
 
   return (
     <div className="px-8 py-6">
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h1 className="text-[22px] font-semibold text-[#1c2230]">Reports</h1>
-          <p className="text-[13px] text-[#6b7289]">Ready-made answers to the questions you get asked most</p>
+          <h1 className="text-[22px] font-semibold text-[#1c2230]">Reports <span className="text-[14px] font-normal text-[#6b7289]">Ready-made answers to the questions you get asked most</span></h1>
         </div>
         <Link href={askPath(basePath)} className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px] font-medium text-[#3c4254]">
           Ask a new question
         </Link>
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {cards.map((card) => (
-          <Link key={card.id} href={card.id === "tech-debt" ? `${basePath}/views/tech-debt` : card.id === "single-points" ? askPath(basePath, "What are the single points of failure?") : reportPath(basePath, card.id)} className="rounded-xl border border-[#e6e8ee] p-4 hover:border-[#c9c6f5]">
-            <div className="text-[14px] font-semibold text-[#1c2230]">{card.title}</div>
-            <p className="mt-1 min-h-[40px] text-[12px] leading-5 text-[#6b7289]">{card.body}</p>
-            <div className="mt-3 text-[16px] font-semibold text-[#1c2230]">{card.stat}</div>
-          </Link>
-        ))}
+        {shown.map((card) => {
+          const stat = statFor(card.id);
+          const href = card.id === "tech-debt" ? `${basePath}/views/tech-debt` : reportPath(basePath, card.id);
+          return (
+            <Link key={card.id} href={href} className="rounded-xl border border-[#e6e8ee] p-4 hover:border-[#c9c6f5]">
+              <div className="text-[14px] font-semibold text-[#1c2230]">{card.title}</div>
+              <p className="mt-1 min-h-[40px] text-[12px] leading-5 text-[#6b7289]">{card.body}</p>
+              <div className={`mt-3 text-[18px] font-semibold ${stat.alert ? "text-[#b42318]" : "text-[#1c2230]"}`}>{stat.value}</div>
+              {stat.detail && <div className="text-[12px] text-[#8b90a0]">{stat.detail}</div>}
+            </Link>
+          );
+        })}
       </div>
       <div className="mt-8">
         <h2 className="mb-2 text-[13px] font-semibold text-[#1c2230]">Saved from Ask · {saved.length}</h2>

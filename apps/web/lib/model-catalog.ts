@@ -1,5 +1,5 @@
 import type { MinEAObject } from "@minea/types";
-import { dollarsFromCents, formatDollars, lineAnnualCents, oneTimeCents, readCostLines, runCents, totalCents } from "@/lib/cost/math";
+import { annualCost, vendorAmounts } from "@/lib/cost/service";
 import { isEnterprisePlatform, PLATFORM_VENDOR_LABEL } from "@/lib/platform-utils";
 import { isComputeRuntime, RUNTIME_COST_MODEL_LABEL } from "@/lib/runtime-utils";
 
@@ -76,15 +76,6 @@ const CRITICALITY_LABEL: Record<string, string> = {
 
 export function moneyLabel(amount: number): string {
   return `$${Math.round(amount).toLocaleString("en-US")}`;
-}
-
-function parseMoney(value: unknown): number | null {
-  if (typeof value === "number") return value > 0 ? value : null;
-  if (typeof value !== "string") return null;
-  const cleaned = value.replace(/[$,\s]/g, "");
-  if (!cleaned || /[a-z]/i.test(cleaned)) return null;
-  const n = Number(cleaned);
-  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 function parseIsoDate(value?: string | null): Date | null {
@@ -172,39 +163,11 @@ export function rowFromObject(object: MinEAObject): CatalogRow | null {
   const ownerPerson = object.point_of_contact_name?.trim() || (!ownerTeam ? object.owner?.trim() || "" : "");
   const vendor = displayVendor(str(props, "vendor"));
   const costModel = str(props, "cost_model");
-  const customBuilt = props.is_custom_built === true;
-  const lines = readCostLines(props);
-  const lineRun = lines ? dollarsFromCents(runCents(lines)) : null;
-  const numeric = lineRun != null && lineRun > 0 ? lineRun : parseMoney(props.annual_cost);
+  const cost = annualCost(props);
+  const numeric = cost.run;
   const costModelLabel = RUNTIME_COST_MODEL_LABEL[costModel] ?? "";
-
-  let annualCostLabel = "—";
-  let costMissing = true;
-  if (numeric != null) {
-    annualCostLabel = moneyLabel(numeric);
-    costMissing = false;
-  } else if (costModel === "capex") {
-    annualCostLabel = "Capital asset";
-    costMissing = false;
-  } else if (customBuilt) {
-    annualCostLabel = "No license cost";
-    costMissing = false;
-  } else if (typeof props.annual_cost === "string" && props.annual_cost.trim()) {
-    annualCostLabel = props.annual_cost.trim();
-    costMissing = false;
-  }
-  if (lines) {
-    const total = dollarsFromCents(totalCents(lines));
-    const oneTime = dollarsFromCents(oneTimeCents(lines));
-    if (total > 0) {
-      annualCostLabel = `${lineRun != null && lineRun < total ? "~" : ""}${formatDollars(total)}`;
-      if (oneTime > 0) annualCostLabel += ` + ${formatDollars(oneTime)} one-time`;
-      costMissing = false;
-    } else if (oneTime > 0) {
-      annualCostLabel = `${formatDollars(oneTime)} one-time`;
-      costMissing = false;
-    }
-  }
+  const annualCostLabel = cost.label;
+  const costMissing = cost.missing;
 
   const renewalRaw = (kind === "runtime" ? str(props, "commitment_ends") : str(props, "contract_renewal")).trim();
   const renewalDate = parseIsoDate(renewalRaw);
@@ -309,21 +272,15 @@ function addVendor(map: Map<string, VendorBucket>, name: string, amount: number,
 export function vendorRollup(rows: CatalogRow[]) {
   const map = new Map<string, VendorBucket>();
   for (const row of rows) {
-    const lines = readCostLines((row.object.properties ?? {}) as Record<string, unknown>) ?? [];
-    const billable = lines.filter((line) => line.type !== "internal_estimate");
-    if (billable.length > 0) {
-      const seen = new Set<string>();
-      for (const line of billable) {
-        const name = displayVendor(line.vendor) || row.vendor;
-        if (!name) continue;
-        seen.add(name.toLowerCase());
-        const amount = line.frequency === "one_time" ? 0 : dollarsFromCents(lineAnnualCents(line));
-        addVendor(map, name, amount, row);
-      }
-      if (row.vendor && !seen.has(row.vendorKey)) addVendor(map, row.vendor, 0, row);
-    } else if (row.vendor) {
-      addVendor(map, row.vendor, row.annualCostNumber ?? 0, row);
+    const amounts = vendorAmounts((row.object.properties ?? {}) as Record<string, unknown>, row.vendor);
+    const seen = new Set<string>();
+    for (const amount of amounts) {
+      const name = displayVendor(amount.vendor);
+      if (!name) continue;
+      seen.add(name.toLowerCase());
+      addVendor(map, name, amount.dollars, row);
     }
+    if (row.vendor && !seen.has(row.vendorKey)) addVendor(map, row.vendor, 0, row);
   }
   return [...map.values()].sort((a, b) => b.annual - a.annual || a.vendor.localeCompare(b.vendor));
 }

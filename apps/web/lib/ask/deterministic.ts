@@ -11,7 +11,9 @@ import { dollarsFromCents, lineAnnualCents, lineTitle, readCostLines } from "@/l
 import { presentImpact, type ImpactRecord } from "@/lib/impact/impact-answer";
 import { impactOf, type ImpactEdge, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
 import { moneyLabel, vendorRollup, type CatalogMissing, type CatalogRow } from "@/lib/model-catalog";
-import { modelItemPath } from "@/lib/mvp-paths";
+import { modelItemPath, sectionForKind } from "@/lib/mvp-paths";
+import { readRuntimeInfra } from "@/lib/infra/read";
+import { agingSummary } from "@/lib/infra/status";
 
 /**
  * Fixed handlers. The Ask screen uses these when the model is off, times out,
@@ -59,6 +61,7 @@ export type AskAnswer = {
     | "lifecycle"
     | "criticality"
     | "gaps"
+    | "aging"
     | "clarify"
     | "unsupported";
   answerText: string;
@@ -119,6 +122,7 @@ const HANDLER_INTENTS: Record<string, AskAnswer["handler"]> = {
   renewals: "renewals",
   lifecycle: "lifecycle",
   criticality: "criticality",
+  aging: "aging",
 };
 
 const SUGGESTED = [
@@ -176,7 +180,7 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
       const row = citations.find((item) => item.recordId === gap.record_id)?.row ?? rows.find((item) => item.id === gap.record_id);
       return {
         text: gap.message,
-        fillHref: modelItemPath(basePath, row?.kind === "application" ? "applications" : "infrastructure", gap.record_id),
+        fillHref: modelItemPath(basePath, row ? sectionForKind(row.kind) : "applications", gap.record_id),
       };
     }),
     followUps: payload.follow_ups.slice(0, 3),
@@ -291,6 +295,7 @@ export function answerFromRecords(input: {
     if (named) return ownershipStrategy(named, input.rows, input.graph, input.basePath, today);
     return ownershipAnswer(null, input.rows, input.basePath, today);
   }
+  if (intent === "aging") return agingAnswer(input.rows, input.basePath, today);
   if (intent === "lifecycle") return lifecycleAnswer(input.rows, input.basePath, today);
   if (intent === "criticality") return criticalityAnswer(input.rows, input.basePath, today);
   if (intent === "spend") return spendAnswer(input.rows, input.basePath, today);
@@ -342,7 +347,7 @@ function impactAnswer(target: CatalogRow, rows: CatalogRow[], graph: AskGraph, b
     citations,
     gaps: presented.gaps.map((text) => ({
       text,
-      fillHref: modelItemPath(basePath, target.kind === "application" ? "applications" : "infrastructure", target.id),
+      fillHref: modelItemPath(basePath, sectionForKind(target.kind), target.id),
     })),
     followUps: presented.followUps,
     caption: { generatedAt: today, recordCount: presented.rows.length, gapCount: presented.gaps.length },
@@ -596,6 +601,30 @@ function criticalityRank(value: string): number {
   return 0;
 }
 
+function agingAnswer(rows: CatalogRow[], basePath: string, today: string): AskAnswer {
+  const runtimes = rows.filter((row) => row.kind === "runtime");
+  const summary = agingSummary(runtimes.map((row) => readRuntimeInfra(row.object)), new Date());
+  const shown = summary.items.filter((item) => item.status.severity === "bad" || item.status.severity === "warn");
+  const byId = new Map(runtimes.map((row) => [row.id, row]));
+  const quiet = summary.outOfSupportOrOs === 0 && summary.endsSoon === 0;
+  return {
+    handler: "aging",
+    answerText: quiet
+      ? "Nothing is out of support or ending in the next 90 days."
+      : `${summary.outOfSupportOrOs} servers and devices are out of support or on an unsupported operating system, and ${summary.endsSoon} end in the next 90 days.`,
+    citations: shown.flatMap((item, index) => {
+      const row = item.runtime.id ? byId.get(item.runtime.id) : undefined;
+      if (!row) return [];
+      return [{ n: index + 1, recordId: row.id, relationship: item.status.reason, row }];
+    }),
+    gaps: summary.unknown
+      ? [{ text: `${summary.unknown} servers and devices have no support date`, fillHref: `${basePath}/model/servers?status=unknown` }]
+      : [],
+    followUps: ["What goes end of life next year?", "What breaks if the AS400 goes down?", "What has no owner?"],
+    caption: { generatedAt: today, recordCount: shown.length, gapCount: summary.unknown },
+  };
+}
+
 function lifecycleAnswer(rows: CatalogRow[], basePath: string, today: string): AskAnswer {
   const hits = rows.filter((row) => ["retiring", "deprecated", "end_of_life", "retired"].includes(row.lifecycle));
   return {
@@ -619,7 +648,7 @@ function gapsFor(rows: CatalogRow[], basePath: string): { text: string; fillHref
   const gaps: { text: string; fillHref: string }[] = [];
   const seen = new Set<string>();
   for (const row of rows) {
-    const href = `${basePath}/model/${row.kind === "application" ? "applications" : "infrastructure"}/${row.id}`;
+    const href = modelItemPath(basePath, sectionForKind(row.kind), row.id);
     const bits = [
       row.missing.vendor ? "no vendor" : "",
       row.missing.renewal ? "no renewal date" : "",
@@ -866,7 +895,7 @@ function joinNames(names: string[]): string {
 }
 
 function itemHref(basePath: string, row: CatalogRow): string {
-  return modelItemPath(basePath, row.kind === "application" ? "applications" : "infrastructure", row.id);
+  return modelItemPath(basePath, sectionForKind(row.kind), row.id);
 }
 
 function empty(handler: AskAnswer["handler"], answerText: string, today: string): AskAnswer {

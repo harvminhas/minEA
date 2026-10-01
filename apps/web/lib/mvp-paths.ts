@@ -17,6 +17,8 @@ export function reportPath(basePath: string, reportId: string): string {
 export type ModelSection =
   | "overview"
   | "applications"
+  | "platforms"
+  | "servers"
   | "infrastructure"
   | "connections"
   | "vendors"
@@ -25,11 +27,19 @@ export type ModelSection =
 export const MODEL_SECTIONS: ModelSection[] = [
   "overview",
   "applications",
+  "platforms",
+  "servers",
   "infrastructure",
   "connections",
   "vendors",
   "owners",
 ];
+
+export function sectionForKind(kind: "application" | "runtime" | "platform"): ModelSection {
+  if (kind === "application") return "applications";
+  if (kind === "platform") return "platforms";
+  return "servers";
+}
 
 export function isModelSection(value: string): value is ModelSection {
   return (MODEL_SECTIONS as string[]).includes(value);

@@ -185,6 +185,13 @@ test("what is most important stays on the criticality list", () => {
   assert.equal(answer.handler, "criticality");
 });
 
+test("out of support is the aging intent, end of life stays lifecycle", () => {
+  const answer = ask("What's out of support?");
+  assert.equal(answer.handler, "aging");
+  const retiring = ask("What goes end of life next year?");
+  assert.equal(retiring.handler, "lifecycle");
+});
+
 test("what has no criticality stays on the list handler", () => {
   const answer = ask("What has no criticality?");
   assert.equal(answer.handler, "gaps");

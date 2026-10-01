@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LayoutGrid, Plus, Table2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { modelItemPath, modelPath, type ModelSection } from "@/lib/mvp-paths";
+import { AgingTile, PlatformsTable, ServersTable } from "@/components/mvp/InfraTables";
 import { describeTypes } from "@/lib/ask/deterministic";
 import { catalogStats, moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
 import { useModelCatalog } from "@/lib/use-model-catalog";
@@ -21,6 +22,8 @@ import Link from "next/link";
 const SECTION_TITLE: Record<ModelSection, string> = {
   overview: "Overview",
   applications: "Applications",
+  platforms: "Platforms & cloud",
+  servers: "Servers & devices",
   infrastructure: "Infrastructure",
   connections: "Connections",
   vendors: "Vendors & contracts",
@@ -72,10 +75,23 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
 
   const vendors = useMemo(() => vendorRollup(rows), [rows]);
 
+  useEffect(() => {
+    if (section !== "infrastructure") return;
+    if (selectedId && catalog.isLoading) return;
+    if (!selected) {
+      router.replace(modelPath(basePath, "servers"));
+      return;
+    }
+    const next = selected.kind === "platform" ? "platforms" : selected.kind === "application" ? "applications" : "servers";
+    router.replace(modelItemPath(basePath, next, selected.id));
+  }, [section, selected, selectedId, catalog.isLoading, basePath, router]);
+
   return (
     <div className="flex h-full min-h-0">
       <div className="min-w-0 flex-1">
-        {section === "overview" && <Overview stats={stats} basePath={basePath} />}
+        {section === "overview" && <Overview stats={stats} rows={rows} basePath={basePath} />}
+        {section === "platforms" && <PlatformsTable rows={rows} selectedId={selectedId} />}
+        {section === "servers" && <ServersTable rows={rows} selectedId={selectedId} />}
         {section === "connections" && <ConnectionsList items={connections} basePath={basePath} />}
         {section === "vendors" && <VendorsTable vendors={vendors} />}
         {section === "owners" && <OwnersTable rows={rows} basePath={basePath} />}
@@ -344,16 +360,21 @@ function AddMenu({ onPick }: { onPick: (kind: "runtime" | "platform") => void })
 
 function Overview({
   stats,
+  rows,
   basePath,
 }: {
   stats: ReturnType<typeof catalogStats>;
+  rows: CatalogRow[];
   basePath: string;
 }) {
+  const platforms = rows.filter((row) => row.kind === "platform").length;
+  const servers = rows.filter((row) => row.kind === "runtime").length;
   const cards = [
-    { href: `${basePath}/application/applications`, label: "Applications", value: String(stats.systems) },
-    { href: `${basePath}/infrastructure/cloud-services`, label: "Infrastructure", value: String(stats.infrastructure) },
-    { href: modelPath(basePath, "vendors"), label: "Vendors", value: String(stats.vendorCount) },
-    { href: `${basePath}/reports/spend`, label: "Tracked spend", value: stats.spend ? `${moneyLabel(stats.spend)} / yr` : "—" },
+    { href: modelPath(basePath, "applications"), label: "Applications", value: String(stats.systems) },
+    { href: modelPath(basePath, "platforms"), label: "Platforms & cloud", value: String(platforms) },
+    { href: modelPath(basePath, "servers"), label: "Servers & devices", value: String(servers) },
+    { href: `${basePath}/reports/spend`, label: "Annual spend tracked", value: stats.spend ? moneyLabel(stats.spend) : "—" },
+    { href: modelPath(basePath, "applications"), label: "Missing fields", value: String(stats.missing) },
   ];
   return (
     <div className="px-8 py-8">
@@ -362,7 +383,7 @@ function Overview({
         {stats.systems} applications, {stats.infrastructure} infrastructure
         {stats.vendorCount ? `, ${stats.vendorCount} vendors` : ""}.
       </p>
-      <div className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-5">
         {cards.map((card) => (
           <Link key={card.label} href={card.href} className="rounded-xl border border-[#e6e8ee] p-4 hover:border-[#c9c6f5]">
             <div className="text-[12px] text-[#8b90a0]">{card.label}</div>
@@ -370,6 +391,7 @@ function Overview({
           </Link>
         ))}
       </div>
+      <AgingTile rows={rows} basePath={basePath} />
       <div className="mt-4 rounded-xl border border-[#e6e8ee] p-4">
         <div className="text-[14px] font-medium text-[#1c2230]">Model health: {stats.completeness}% complete, {stats.missing} fields missing</div>
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#eef0f4]">

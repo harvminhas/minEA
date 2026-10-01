@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, Cable, ChevronRight, LayoutGrid, Server, Shield, Users } from "lucide-react";
+import { Boxes, Cable, ChevronRight, Cloud, LayoutGrid, Server, Shield, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { modelPath, type ModelSection } from "@/lib/mvp-paths";
@@ -61,7 +61,6 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
   const subnav = useSubnavOpen();
   const count = (segment: string) => counts?.[segment] ?? 0;
 
-  const infrastructure = count("infrastructure/cloud-services") + count("infrastructure/models");
   const connections =
     count("integration/flows") +
     count("integration/apis") +
@@ -86,25 +85,18 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
       match: ["/application/applications", "/application/components", "/model/applications"],
     },
     {
-      label: "Infrastructure",
-      href: `${basePath}/infrastructure/cloud-services`,
+      label: "Platforms & cloud",
+      href: modelPath(basePath, "platforms"),
+      icon: Cloud,
+      count: count("infrastructure/cloud-services"),
+      match: ["/model/platforms"],
+    },
+    {
+      label: "Servers & devices",
+      href: modelPath(basePath, "servers"),
       icon: Server,
-      count: infrastructure,
-      match: ["/infrastructure/", "/model/infrastructure"],
-      children: [
-        {
-          label: "Platforms",
-          href: `${basePath}/infrastructure/cloud-services`,
-          count: count("infrastructure/cloud-services"),
-          match: ["/infrastructure/cloud-services"],
-        },
-        {
-          label: "Runtimes",
-          href: `${basePath}/infrastructure/models`,
-          count: count("infrastructure/models"),
-          match: ["/infrastructure/models"],
-        },
-      ],
+      count: count("infrastructure/models"),
+      match: ["/model/servers", "/model/infrastructure"],
     },
     {
       label: "Connections",

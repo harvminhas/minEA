@@ -17,6 +17,10 @@ import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePan
 import { PLATFORM_SLA_LABEL } from "@/lib/platform-utils";
 import type { CatalogRow } from "@/lib/model-catalog";
 import { CostSection } from "@/components/mvp/CostSection";
+import { HostLink } from "@/components/mvp/HostLink";
+import { readRuntimeInfra, readPlatformInfra, hostSourceIds } from "@/lib/infra/read";
+import { infraStatus } from "@/lib/infra/status";
+import { askPath } from "@/lib/mvp-paths";
 import { AddChip, Pill } from "@/components/mvp/pills";
 
 export function ModelDetailPanel({
@@ -27,7 +31,7 @@ export function ModelDetailPanel({
   onClose: () => void;
 }) {
   const { getToken } = useAuth();
-  const { orgSlug, workspaceSlug } = useTenancy();
+  const { orgSlug, workspaceSlug, basePath } = useTenancy();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<"details" | "debt" | "history">("details");
   const [editing, setEditing] = useState(false);
@@ -155,10 +159,18 @@ export function ModelDetailPanel({
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {tab === "details" && (
           <div className="space-y-6">
+            {row.kind === "runtime" && <RuntimeFacts row={row} edges={impactGraph.edges} />}
+            {row.kind === "platform" && <PlatformFacts row={row} edges={impactGraph.edges} />}
+            <HostLink row={row} />
             <Section title="Hosting">
               <Field label="Hosted where" value={row.typeLabel} />
               <Field label="Location" value={row.subtitle} empty="Add location" onAdd={() => setEditing(true)} />
             </Section>
+            {row.kind === "runtime" && (
+              <a href={askPath(basePath, `What breaks if ${row.name} goes down?`)} className="block rounded-lg bg-[#f4f3ff] px-3 py-2 text-[13px] font-medium text-[#3f35b5]">
+                Impact if down: ask what breaks if {row.name} goes down →
+              </a>
+            )}
             <Section title="Contract">
               <div className="flex items-start justify-between gap-3 py-1.5">
                 <span className="text-[13px] text-[#6b7289]">Vendor</span>
@@ -248,6 +260,38 @@ export function ModelDetailPanel({
         )}
       </div>
     </aside>
+  );
+}
+
+function RuntimeFacts({ row, edges }: { row: CatalogRow; edges: { type: string; fromId: string; toId: string }[] }) {
+  const infra = readRuntimeInfra(row.object);
+  const status = infraStatus(infra, new Date());
+  const runs = hostSourceIds(row.id, edges);
+  return (
+    <Section title="Server & device">
+      <Field label="Kind" value={infra.kindLabel} empty="Not set" />
+      <Field label="Location" value={[infra.locationLabel, infra.locationDetail].filter(Boolean).join(" · ")} empty="Not set" />
+      <Field label="OS & version" value={[infra.osName, infra.osVersion].filter(Boolean).join(" ")} empty="Not set" />
+      <Field label="Support ends" value={status.effectiveDate ? `${status.effectiveDate} · ${status.label}` : ""} empty="Not set" />
+      <Field label="End of life" value={infra.endOfLife ?? ""} empty="Not set" />
+      <Field label="Supplier" value={infra.supplier} empty="Add supplier" />
+      <Field label="Provider" value={infra.provider} empty="Add provider" />
+      <Field label="Runs on it" value={runs.length ? `${runs.length}` : ""} empty="Nothing is linked to run on it yet" />
+    </Section>
+  );
+}
+
+function PlatformFacts({ row, edges }: { row: CatalogRow; edges: { type: string; fromId: string; toId: string }[] }) {
+  const infra = readPlatformInfra(row.object);
+  const built = hostSourceIds(row.id, edges);
+  return (
+    <Section title="Platform">
+      <Field label="Kind" value={infra.kindLabel} empty="Not set" />
+      <Field label="Hosting" value={infra.hostingLabel} empty="Not set" />
+      <Field label="Vendor" value={infra.vendor} empty="Not set" />
+      <Field label="Product" value={infra.product} empty="Not set" />
+      <Field label="Built on it" value={built.length ? `${built.length}` : ""} empty="Nothing is built on it yet" />
+    </Section>
   );
 }
 

@@ -8,8 +8,10 @@ import { ChevronRight, Sparkles, X } from "lucide-react";
 import { aiApi, objectsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
-import { askPath, modelItemPath, reportPath } from "@/lib/mvp-paths";
+import { askPath, modelItemPath, modelPath, reportPath } from "@/lib/mvp-paths";
 import { catalogStats, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
+import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
+import { useAppStore } from "@/lib/store";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
@@ -83,23 +85,19 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const answer = useMemo(() => {
     if (mode !== "answer" || !question) return local;
     const fromModel = remote.data ? answerFromModel(remote.data, rows, basePath) : null;
-    if (local.handler === "gaps" || local.handler === "impact" || local.handler === "importance" || local.handler === "cost" || local.handler === "ownership" || local.handler === "clarify") return local;
+    if (local.handler === "gaps" || local.handler === "impact" || local.handler === "importance" || local.handler === "cost" || local.handler === "ownership" || local.handler === "clarify" || local.handler === "aging") return local;
     if (!fromModel || fromModel.handler === "unsupported") return local;
     if (local.handler === "vendors" && fromModel.citations.length === 0) return local;
     return fromModel;
   }, [mode, question, remote.data, local, rows, basePath]);
 
-  const topInfra = rows
-    .filter((row) => row.kind !== "application")
-    .sort((a, b) => criticalityRank(b.criticality) - criticalityRank(a.criticality))[0];
-  const chips = [
-    "What renews in the next 90 days?",
-    topInfra ? `What breaks if the ${topInfra.name} goes down?` : "What breaks if a critical system goes down?",
-    "Where is our money going?",
-    "What has no owner?",
-    "Which vendors hold customer data?",
-    "What goes end of life next year?",
-  ];
+  const orgName = useAppStore((state) => state.activeOrg?.name) || "Your estate";
+  const emptyPreview = process.env.NODE_ENV !== "production" && params.get("demo") === "empty";
+  const chips = askChips(rows, impact.edges);
+  const cards = popularCards(rows, impact.edges, new Date(), emptyPreview);
+  const support = supportCounts(rows);
+  const platformCount = rows.filter((row) => row.kind === "platform").length;
+  const serverCount = rows.filter((row) => row.kind === "runtime").length;
 
   const submit = (value: string, nextFocusId?: string) => {
     const q = value.trim();
@@ -111,12 +109,18 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   if (mode === "home") {
     return (
       <div className="mx-auto flex max-w-3xl flex-col items-center px-6 pb-16 pt-16">
-        <p className="rounded-full bg-[#f4f3ff] px-3 py-1 text-[12px] text-[#5b4ce6]">Answers come from your applications, capabilities, and infrastructure, with sources</p>
+        <p className="rounded-full bg-[#f4f3ff] px-3 py-1 text-[12px] text-[#5b4ce6]">Answers come from your own records, with sources</p>
         <h1 className="mt-6 text-center text-[36px] font-semibold tracking-tight text-[#1c2230]">What do you want to know?</h1>
-        <p className="mt-2 text-center text-[14px] text-[#6b7289]">
-          {stats.systems} applications · {stats.infrastructure} infrastructure
-          {stats.vendorCount ? ` · ${stats.vendorCount} vendors` : ""}
-          {stats.spend ? ` · ${moneyLabel(stats.spend)} a year in tracked spend` : ""}
+        <p className="mt-2 max-w-full text-center text-[14px] text-[#6b7289]">
+          {orgName} · {stats.systems} applications · {platformCount} platforms · {serverCount} servers & devices · {stats.vendorCount} vendors · {moneyLabel(stats.spend || 0)} a year in tracked spend
+          {support.out > 0 && (
+            <>
+              {" "}
+              <Link href={`${modelPath(basePath, "servers")}?status=out_of_support_or_os`} className="whitespace-nowrap font-medium text-[#c2410c]">
+                · {support.out} out of support
+              </Link>
+            </>
+          )}
         </p>
         <form
           className="mt-6 flex w-full items-center gap-2 rounded-2xl border border-[#e6e8ee] bg-white px-3 py-2 shadow-sm"
@@ -154,20 +158,27 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             <Link href={`${basePath}/reports`} className="text-[13px] text-[#5b4ce6]">All reports →</Link>
           </div>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <ReportTile href={reportPath(basePath, "renewals")} title="Renewals next 90 days" value={`${stats.renewals.length} renewals`} detail={stats.renewalSpend ? moneyLabel(stats.renewalSpend) : "—"} />
-            <ReportTile href={reportPath(basePath, "spend")} title="Spend by vendor & category" value={stats.spend ? moneyLabel(stats.spend) : "—"} detail="/ yr" />
-            <ReportTile href={reportPath(basePath, "ownership-gaps")} title="Ownership gaps" value={`${stats.noOwner.length}`} detail="with no owner" />
-            <ReportTile href={reportPath(basePath, "end-of-life")} title="End of life & retiring" value={`${stats.endOfLife.length}`} detail="items" />
+            <ReportTile href={cards.renewals.detail === "Add" ? modelPath(basePath, "applications") : reportPath(basePath, "renewals")} title="Renewals next 90 days" value={cards.renewals.value} detail={cards.renewals.detail} />
+            <ReportTile href={cards.spend.detail === "Add" ? modelPath(basePath, "applications") : reportPath(basePath, "spend")} title="Spend by vendor & category" value={cards.spend.value} detail={cards.spend.detail} />
+            <ReportTile href={reportPath(basePath, "ownership-gaps")} title="Ownership gaps" value={cards.ownership.value} detail={cards.ownership.detail} />
+            <ReportTile href={`${modelPath(basePath, "servers")}?status=attention`} title="Aging infrastructure" value={cards.aging.value} detail={cards.aging.detail} alert={cards.aging.alert} />
           </div>
           <div className="mt-4 flex items-center justify-between rounded-2xl border border-[#e6e8ee] bg-[#fafafb] px-4 py-3">
             <div>
               <div className="text-[14px] font-medium text-[#1c2230]">Model health: {stats.completeness}% complete, {stats.missing} fields missing</div>
               <p className="text-[12px] text-[#6b7289]">Answers get better as you fill gaps.</p>
             </div>
-            <Link href={`${basePath}/model/infrastructure`} className="rounded-lg bg-[#fff4d6] px-3 py-1.5 text-[13px] font-medium text-[#92400e]">
+            <Link href={modelPath(basePath, "applications")} className="rounded-lg bg-[#fff4d6] px-3 py-1.5 text-[13px] font-medium text-[#92400e]">
               Fill missing →
             </Link>
           </div>
+          {process.env.NODE_ENV !== "production" && (
+            <div className="mt-4 flex items-center justify-center gap-2 text-[12px] text-[#8b90a0]">
+              <span>Prototype preview</span>
+              <Link href={askPath(basePath)} className={`rounded-full px-2 py-0.5 ${emptyPreview ? "" : "bg-[#ece9ff] text-[#3f35b5]"}`}>Your data</Link>
+              <Link href={`${askPath(basePath)}?demo=empty`} className={`rounded-full px-2 py-0.5 ${emptyPreview ? "bg-[#ece9ff] text-[#3f35b5]" : ""}`}>Empty states</Link>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -544,22 +555,14 @@ function RecordPreview({
   );
 }
 
-function ReportTile({ href, title, value, detail }: { href: string; title: string; value: string; detail: string }) {
+function ReportTile({ href, title, value, detail, alert }: { href: string; title: string; value: string; detail: string; alert?: boolean }) {
   return (
     <Link href={href} className="rounded-xl border border-[#e6e8ee] p-3 hover:border-[#c9c6f5]">
       <div className="text-[12px] text-[#6b7289]">{title}</div>
-      <div className="mt-2 text-[20px] font-semibold text-[#1c2230]">{value}</div>
+      <div className={`mt-2 text-[20px] font-semibold ${alert ? "text-[#b42318]" : "text-[#1c2230]"}`}>{value}</div>
       <div className="text-[12px] text-[#8b90a0]">{detail}</div>
     </Link>
   );
-}
-
-function criticalityRank(value: string): number {
-  if (value === "tier1" || value === "critical") return 4;
-  if (value === "high") return 3;
-  if (value === "medium") return 2;
-  if (value === "low") return 1;
-  return 0;
 }
 
 function FixActions({
@@ -704,7 +707,7 @@ function criticalityCell(item: AskCitation, focus: AskAnswer["focusBlank"]) {
 }
 
 function recordHref(basePath: string, row: { id: string; kind: string }): string {
-  return modelItemPath(basePath, row.kind === "application" ? "applications" : "infrastructure", row.id);
+  return modelItemPath(basePath, row.kind === "application" ? "applications" : row.kind === "platform" ? "platforms" : "servers", row.id);
 }
 
 function AnswerText({ text, nodes, onOpen }: { text: string; nodes: ImpactNode[]; onOpen: (id: string) => void }) {

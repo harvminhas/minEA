@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.objects import MinEAObject
 from app.models.people import Team
 from app.models.relationships import Relationship
+from app.services.cost_lines import object_annual_dollars
 
 APP_TYPES = {"application", "solution", "technical_capability"}
 HOSTING_NOT_VENDOR = {
@@ -132,21 +133,6 @@ def fold(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.lower())
 
 
-def _money(value: object) -> float | None:
-    if isinstance(value, (int, float)) and value > 0:
-        return float(value)
-    if isinstance(value, str):
-        cleaned = re.sub(r"[$,\s]", "", value)
-        if not cleaned or re.search(r"[a-zA-Z]", cleaned):
-            return None
-        try:
-            number = float(cleaned)
-        except ValueError:
-            return None
-        return number if number > 0 else None
-    return None
-
-
 def _kind(obj: MinEAObject, props: dict) -> str:
     name = obj.name or ""
     hosting = str(props.get("hosting_model") or "")
@@ -207,7 +193,7 @@ def _record(obj: MinEAObject, team_names: dict[str, str]) -> Rec | None:
 
     vendor_names = _vendor_names(props)
     vendor = vendor_names[0] if vendor_names else None
-    annual = _money(props.get("annual_cost"))
+    annual = object_annual_dollars(props)
     cost_model = str(props.get("cost_model") or "")
     cost_note = None
     if annual is None and cost_model == "capex":

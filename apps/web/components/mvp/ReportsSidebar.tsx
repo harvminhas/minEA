@@ -2,22 +2,25 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
-import { reportPath, reportsPath } from "@/lib/mvp-paths";
+import { reportsPath } from "@/lib/mvp-paths";
 import { catalogStats } from "@/lib/model-catalog";
 import { useModelCatalog } from "@/lib/use-model-catalog";
+import { reportCounts } from "@/lib/reports/home";
 
 const GROUPS = [
   { id: "all", label: "All reports", href: (base: string) => reportsPath(base) },
-  { id: "spend", label: "Cost & contracts", href: (base: string) => reportPath(base, "spend") },
-  { id: "end-of-life", label: "Risk & resilience", href: (base: string) => reportPath(base, "end-of-life") },
-  { id: "ownership-gaps", label: "Ownership & upkeep", href: (base: string) => reportPath(base, "ownership-gaps") },
+  { id: "cost", label: "Cost & contracts", href: (base: string) => `${reportsPath(base)}?group=cost` },
+  { id: "risk", label: "Risk & resilience", href: (base: string) => `${reportsPath(base)}?group=risk` },
+  { id: "ownership", label: "Ownership & upkeep", href: (base: string) => `${reportsPath(base)}?group=ownership` },
 ];
 
 export function ReportsSidebar() {
   const pathname = usePathname();
+  const activeGroup = useSearchParams().get("group");
+  const counts = reportCounts();
   const { basePath } = useTenancy();
   const catalog = useModelCatalog();
   const stats = catalogStats(catalog.data?.rows ?? []);
@@ -37,15 +40,8 @@ export function ReportsSidebar() {
       <nav className="space-y-0.5 px-2">
         {GROUPS.map((group) => {
           const href = group.href(basePath);
-          const selected = group.id === "all" ? pathname.endsWith("/reports") : pathname.includes(`/reports/${group.id}`);
-          const n =
-            group.id === "all"
-              ? 8
-              : group.id === "spend"
-                ? 2
-                : group.id === "end-of-life"
-                  ? 4
-                  : 2;
+          const selected = group.id === "all" ? pathname.endsWith("/reports") && !activeGroup : activeGroup === group.id;
+          const n = group.id === "all" ? counts.all : group.id === "cost" ? counts.cost : group.id === "risk" ? counts.risk : counts.ownership;
           return (
             <Link
               key={group.id}

@@ -76,6 +76,34 @@ def run_cents(lines: list[dict]) -> int:
     return total
 
 
+def parse_legacy_annual_cost(value: object) -> float | None:
+    """Same rules as parseLegacyAnnualCost: a number or digit string above zero."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value) if value > 0 else None
+    if isinstance(value, str):
+        cleaned = value.replace("$", "").replace(",", "").replace(" ", "")
+        if not cleaned or any(ch.isalpha() for ch in cleaned):
+            return None
+        try:
+            number = float(cleaned)
+        except ValueError:
+            return None
+        return number if number > 0 else None
+    return None
+
+
+def object_annual_dollars(properties: dict | None) -> float | None:
+    """Vendor run total when cost lines exist, otherwise the legacy annual_cost."""
+    props = properties or {}
+    raw = props.get("cost_lines")
+    if isinstance(raw, list) and raw:
+        dollars = run_cents([line for line in raw if isinstance(line, dict)]) / 100
+        return dollars if dollars > 0 else None
+    return parse_legacy_annual_cost(props.get("annual_cost"))
+
+
 def apply_cost_lines(object_type: str, properties: dict) -> dict:
     """When cost_lines is present, validate it and set annual_cost to the vendor run total."""
     if "cost_lines" not in properties:
