@@ -178,9 +178,7 @@ def _record(obj: MinEAObject, team_names: dict[str, str]) -> Rec | None:
     props = obj.properties or {}
     if obj.type in APP_TYPES:
         record_type = "application"
-    elif obj.type == "model" and props.get("compute_runtime_kind"):
-        record_type = "infrastructure"
-    elif obj.type == "cloud_service" and props.get("platform_type"):
+    elif obj.type in {"model", "cloud_service"}:
         record_type = "infrastructure"
     elif obj.type == "integration_flow":
         record_type = "flow"

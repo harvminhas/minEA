@@ -12,7 +12,7 @@ VALID_TYPES = {
     "application", "solution", "technical_capability", "component", "agent",
     "data_object", "data_store", "data_domain",
     "api", "event", "integration_flow", "message_broker", "tool",
-    "cloud_service", "model", "tech_debt",
+    "cloud_service", "model", "location", "external_party", "tech_debt",
 }
 
 VALID_STATUSES = {

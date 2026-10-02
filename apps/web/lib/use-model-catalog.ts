@@ -17,6 +17,8 @@ const TYPES: ObjectType[] = [
   "api",
   "event",
   "tool",
+  "location",
+  "external_party",
 ];
 
 export function useModelCatalog() {
@@ -42,7 +44,9 @@ export function useModelCatalog() {
       const connections = objects.filter((object) =>
         object.type === "integration_flow" || object.type === "api" || object.type === "event" || object.type === "tool"
       );
-      return { rows, connections };
+      const locations = objects.filter((object) => object.type === "location");
+      const parties = objects.filter((object) => object.type === "external_party");
+      return { rows, connections, locations, parties };
     },
   });
 }

@@ -22,6 +22,8 @@ RULES: dict[str, dict] = {
     "runs_on": {"when_target_fails": "direct", "label": "{source} runs on {target}"},
     "built_on": {"when_target_fails": "direct", "label": "{source} is built on {target}"},
     "hosts": {"when_source_fails": "direct", "label": "{source} hosts {target}"},
+    "located_at": {"when_target_fails": "direct", "label": "{source} is at {target}"},
+    "sends_data_to": {"label": "{source} sends data to {target}"},
 }
 
 SEVERITY_ORDER = {"direct": 0, "degraded": 1, "loses_support": 2}

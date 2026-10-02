@@ -22,6 +22,7 @@ from app.schemas.objects import (
 from app.services.authorization import require_limit
 from app.services.capability_validation import validate_object_write
 from app.services.cost_lines import apply_cost_lines
+from app.services.infra_fields import validate_infra_patch
 from app.services.object_history import describe_object_history
 from app.services.object_tech_debt import tech_debt_summary_for_object
 from app.services.owner_fields import apply_ownership_write_resolved, ownership_from_body, ownership_read_payload
@@ -148,6 +149,10 @@ async def create_object(
     assert ctx.workspace
 
     await validate_object_write(db, ctx.workspace.id, ctx.org_id, body, object_type=body.type)
+    try:
+        validate_infra_patch(body.type, body.properties or {})
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     obj = MinEAObject(
         workspace_id=ctx.workspace.id,
@@ -282,6 +287,10 @@ async def update_object(
     field_changes: dict[str, Any] = {}
     for field, value in updates.items():
         if field == "properties":
+            try:
+                validate_infra_patch(obj.type, value)
+            except ValueError as exc:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
             merged = {**(obj.properties or {}), **value}
             for key, val in value.items():
                 if val is None:

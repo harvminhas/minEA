@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, Cable, ChevronRight, Cloud, LayoutGrid, Server, Shield, Users } from "lucide-react";
+import { Boxes, Cable, ChevronRight, Cloud, LayoutGrid, MapPin, Server, Shield, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { modelPath, type ModelSection } from "@/lib/mvp-paths";
@@ -97,6 +97,13 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
       icon: Server,
       count: count("infrastructure/models"),
       match: ["/model/servers", "/model/infrastructure"],
+    },
+    {
+      label: "Locations",
+      href: modelPath(basePath, "locations"),
+      icon: MapPin,
+      count: catalog.data?.locations?.length ?? 0,
+      match: ["/model/locations"],
     },
     {
       label: "Connections",

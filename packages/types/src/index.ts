@@ -26,6 +26,8 @@ export type ObjectType =
   // Infrastructure Layer
   | "cloud_service"
   | "model"
+  | "location"
+  | "external_party"
   // Risk Layer
   | "tech_debt";
 
@@ -108,6 +110,8 @@ export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
   tool: "Tool",
   cloud_service: "Cloud Service",
   model: "Model",
+  location: "Location",
+  external_party: "Outside the company",
   tech_debt: "Tech Debt",
 };
 
@@ -753,7 +757,9 @@ export type RelationshipType =
   | "supports"
   | "escalates_to"
   | "accesses"
-  | "connects_to";
+  | "connects_to"
+  | "located_at"
+  | "sends_data_to";
 
 export interface Relationship {
   id: string;

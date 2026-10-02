@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { modelItemPath, modelPath, type ModelSection } from "@/lib/mvp-paths";
 import { AgingTile, PlatformsTable, ServersTable } from "@/components/mvp/InfraTables";
+import { LocationsTable } from "@/components/mvp/LocationsTable";
 import { describeTypes } from "@/lib/ask/deterministic";
 import { catalogStats, moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
 import { useModelCatalog } from "@/lib/use-model-catalog";
@@ -24,6 +25,7 @@ const SECTION_TITLE: Record<ModelSection, string> = {
   applications: "Applications",
   platforms: "Platforms & cloud",
   servers: "Servers & devices",
+  locations: "Locations",
   infrastructure: "Infrastructure",
   connections: "Connections",
   vendors: "Vendors & contracts",
@@ -92,6 +94,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
         {section === "overview" && <Overview stats={stats} rows={rows} basePath={basePath} />}
         {section === "platforms" && <PlatformsTable rows={rows} selectedId={selectedId} />}
         {section === "servers" && <ServersTable rows={rows} selectedId={selectedId} />}
+        {section === "locations" && <LocationsTable />}
         {section === "connections" && <ConnectionsList items={connections} basePath={basePath} />}
         {section === "vendors" && <VendorsTable vendors={vendors} />}
         {section === "owners" && <OwnersTable rows={rows} basePath={basePath} />}

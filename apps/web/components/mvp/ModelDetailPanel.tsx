@@ -18,7 +18,9 @@ import { PLATFORM_SLA_LABEL } from "@/lib/platform-utils";
 import type { CatalogRow } from "@/lib/model-catalog";
 import { CostSection } from "@/components/mvp/CostSection";
 import { HostLink } from "@/components/mvp/HostLink";
-import { readRuntimeInfra, readPlatformInfra, hostSourceIds } from "@/lib/infra/read";
+import { InfraFields } from "@/components/mvp/InfraEditors";
+import { platformFields, runtimeFields } from "@/lib/infra/fields";
+import { readRuntimeInfra, hostSourceIds } from "@/lib/infra/read";
 import { infraStatus } from "@/lib/infra/status";
 import { askPath } from "@/lib/mvp-paths";
 import { AddChip, Pill } from "@/components/mvp/pills";
@@ -269,27 +271,18 @@ function RuntimeFacts({ row, edges }: { row: CatalogRow; edges: { type: string; 
   const runs = hostSourceIds(row.id, edges);
   return (
     <Section title="Server & device">
-      <Field label="Kind" value={infra.kindLabel} empty="Not set" />
-      <Field label="Location" value={[infra.locationLabel, infra.locationDetail].filter(Boolean).join(" · ")} empty="Not set" />
-      <Field label="OS & version" value={[infra.osName, infra.osVersion].filter(Boolean).join(" ")} empty="Not set" />
-      <Field label="Support ends" value={status.effectiveDate ? `${status.effectiveDate} · ${status.label}` : ""} empty="Not set" />
-      <Field label="End of life" value={infra.endOfLife ?? ""} empty="Not set" />
-      <Field label="Supplier" value={infra.supplier} empty="Add supplier" />
-      <Field label="Provider" value={infra.provider} empty="Add provider" />
+      <InfraFields object={row.object} fields={runtimeFields} />
+      <Field label="Status" value={status.label} empty="Not set" />
       <Field label="Runs on it" value={runs.length ? `${runs.length}` : ""} empty="Nothing is linked to run on it yet" />
     </Section>
   );
 }
 
 function PlatformFacts({ row, edges }: { row: CatalogRow; edges: { type: string; fromId: string; toId: string }[] }) {
-  const infra = readPlatformInfra(row.object);
   const built = hostSourceIds(row.id, edges);
   return (
     <Section title="Platform">
-      <Field label="Kind" value={infra.kindLabel} empty="Not set" />
-      <Field label="Hosting" value={infra.hostingLabel} empty="Not set" />
-      <Field label="Vendor" value={infra.vendor} empty="Not set" />
-      <Field label="Product" value={infra.product} empty="Not set" />
+      <InfraFields object={row.object} fields={platformFields} />
       <Field label="Built on it" value={built.length ? `${built.length}` : ""} empty="Nothing is built on it yet" />
     </Section>
   );

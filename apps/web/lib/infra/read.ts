@@ -54,7 +54,7 @@ export function readRuntimeInfra(object: Pick<MinEAObject, "id" | "name" | "prop
     runtimeKind: runtimeKind || null,
     kindLabel: runtimeKindLabel(runtimeKind),
     managed: isManagedKind(runtimeKind),
-    locationLabel: locationLabel(str(props, "location")),
+    locationLabel: locationLabel(str(props, "location")) || str(props, "location"),
     locationDetail: str(props, "location_detail") || str(props, "region"),
     osName: str(props, "os_name"),
     osVersion: str(props, "os_version"),

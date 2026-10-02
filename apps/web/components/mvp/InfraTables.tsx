@@ -9,6 +9,8 @@ import { useTenancy } from "@/lib/tenancy";
 import { modelItemPath, modelPath } from "@/lib/mvp-paths";
 import type { CatalogRow } from "@/lib/model-catalog";
 import { infraConfig } from "@/lib/infra/infraConfig";
+import { platformFields, runtimeFields, sortBlanksLast } from "@/lib/infra/fields";
+import { InfraControl } from "@/components/mvp/InfraEditors";
 import { hostSourceIds, readPlatformInfra, readRuntimeInfra } from "@/lib/infra/read";
 import { agingSummary, infraStatus, type InfraStatusResult } from "@/lib/infra/status";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
@@ -55,7 +57,12 @@ export function PlatformsTable({ rows, selectedId }: { rows: CatalogRow[]; selec
   const [kind, setKind] = useState("All kinds");
   const [hosting, setHosting] = useState("Any hosting");
   const [missingOnly, setMissingOnly] = useState(false);
-  const platforms = rows.filter((row) => row.kind === "platform");
+  const platforms = sortBlanksLast(
+    rows.filter((row) => row.kind === "platform"),
+    (row) => readPlatformInfra(row.object).platformKind ?? "",
+    (row) => row.name
+  );
+  const platformKind = platformFields.find((field) => field.key === "platform_kind");
   const views = platforms.map((row) => ({ row, infra: readPlatformInfra(row.object) }));
   const filtered = views.filter(({ row, infra }) => {
     const hay = `${row.name} ${infra.vendor} ${row.ownerTeam} ${row.ownerPerson}`.toLowerCase();
@@ -74,7 +81,7 @@ export function PlatformsTable({ rows, selectedId }: { rows: CatalogRow[]; selec
         <div>
           <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">SUITES AND CLOUDS YOU BUILD ON</p>
           <h1 className="text-[22px] font-semibold text-[#1c2230]">
-            Platforms & cloud <span className="text-[14px] font-normal text-[#8b90a0]">{platforms.length} records</span>
+            Platforms & cloud <span className="text-[14px] font-normal text-[#8b90a0]">{platforms.length}</span>
           </h1>
         </div>
         <button
@@ -113,7 +120,9 @@ export function PlatformsTable({ rows, selectedId }: { rows: CatalogRow[]; selec
                 <tr key={row.id} onClick={() => router.push(modelItemPath(basePath, "platforms", row.id))} className={cn("cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]", selectedId === row.id && "bg-[#f6f5ff]")}>
                   <td className="px-2 py-3 font-medium text-[#1c2230]">{row.name}</td>
                   <td className="px-2 py-3">{infra.vendor ? <><div>{infra.vendor}</div>{infra.product && <div className="truncate text-[12px] text-[#8b90a0]">{infra.vendorCode} · {infra.product}</div>}</> : dash("")}</td>
-                  <td className="px-2 py-3" title={infra.kindInferred ? "From hosting model" : undefined}>{dash(infra.kindLabel)}</td>
+                  <td className="px-2 py-3" title={infra.kindInferred ? "From hosting model" : undefined}>
+                    {platformKind ? <InfraControl object={row.object} field={platformKind} compact /> : dash(infra.kindLabel)}
+                  </td>
                   <td className="px-2 py-3">{infra.hostingLabel ? <span className="rounded-full bg-[#f3f4f8] px-2 py-0.5 text-[11px]">{infra.hostingLabel}</span> : dash("")}</td>
                   <td className="px-2 py-3">{row.missing.owner ? <AddChip label="Add" onClick={() => router.push(modelItemPath(basePath, "platforms", row.id))} /> : row.ownerTeam || row.ownerPerson}</td>
                   <td className="px-2 py-3">{built || dash("")}</td>
@@ -149,7 +158,13 @@ export function ServersTable({ rows, selectedId }: { rows: CatalogRow[]; selecte
   const [addKind, setAddKind] = useState("physical_server");
   const [addError, setAddError] = useState("");
   const today = useMemo(() => new Date(), []);
-  const servers = rows.filter((row) => row.kind === "runtime");
+  const servers = sortBlanksLast(
+    rows.filter((row) => row.kind === "runtime"),
+    (row) => readRuntimeInfra(row.object).runtimeKind ?? "",
+    (row) => row.name
+  );
+  const runtimeKind = runtimeFields.find((field) => field.key === "runtime_kind");
+  const supportEnds = runtimeFields.find((field) => field.key === "support_ends");
   const views = servers.map((row) => {
     const infra = readRuntimeInfra(row.object);
     return { row, infra, status: infraStatus(infra, today) };
@@ -211,7 +226,7 @@ export function ServersTable({ rows, selectedId }: { rows: CatalogRow[]; selecte
       <div className="mb-4">
         <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">WHERE THINGS RUN</p>
         <h1 className="text-[22px] font-semibold text-[#1c2230]">
-          Servers & devices <span className="text-[14px] font-normal text-[#8b90a0]">{servers.length} records</span>
+          Servers & devices <span className="text-[14px] font-normal text-[#8b90a0]">{servers.length}</span>
         </h1>
       </div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -244,7 +259,7 @@ export function ServersTable({ rows, selectedId }: { rows: CatalogRow[]; selecte
               return (
                 <tr key={row.id} onClick={() => router.push(modelItemPath(basePath, "servers", row.id))} className={cn("cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]", selectedId === row.id && "bg-[#f6f5ff]")}>
                   <td className="px-2 py-3 font-medium text-[#1c2230]">{row.name}</td>
-                  <td className="px-2 py-3">{dash(infra.kindLabel)}</td>
+                  <td className="px-2 py-3">{runtimeKind ? <InfraControl object={row.object} field={runtimeKind} compact /> : dash(infra.kindLabel)}</td>
                   <td className="px-2 py-3">
                     <div>{dash(infra.locationLabel)}</div>
                     {infra.locationDetail && <div className="truncate text-[12px] text-[#8b90a0]" title={infra.locationDetail}>{infra.locationDetail}</div>}
@@ -253,7 +268,7 @@ export function ServersTable({ rows, selectedId }: { rows: CatalogRow[]; selecte
                   <td className="px-2 py-3">{runs || dash("")}</td>
                   <td className="px-2 py-3">{row.missing.owner ? <AddChip label="Add" onClick={() => router.push(modelItemPath(basePath, "servers", row.id))} /> : row.ownerTeam || row.ownerPerson}</td>
                   <td className={cn("px-2 py-3", status.severity === "bad" && "text-[#b42318]", status.severity === "warn" && "text-[#92400e]")} title={status.reason}>
-                    {status.effectiveDate ? new Date(`${status.effectiveDate}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : dash("")}
+                    {supportEnds ? <InfraControl object={row.object} field={supportEnds} compact /> : dash("")}
                   </td>
                   <td className="px-2 py-3"><StatusBadge status={status} /></td>
                 </tr>

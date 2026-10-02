@@ -87,3 +87,46 @@ test("AS400 hosting fixture", () => {
   assert.ok(hits.every((hit) => hit.severity === "direct" && hit.indirect === false));
   assert.equal(hits[0]?.path[0]?.label, "EDI Gateway runs on AS400");
 });
+
+test("a location failure reaches the servers there and the apps on them", () => {
+  const nodes = [
+    { id: "loc", name: "Fremont plant" },
+    { id: "as400", name: "AS400" },
+    { id: "oe", name: "Order Entry" },
+    { id: "inv", name: "Inventory" },
+    { id: "edi", name: "EDI Gateway" },
+  ];
+  const edges: ImpactEdge[] = [
+    { type: "located_at", fromId: "as400", toId: "loc" },
+    { type: "runs_on", fromId: "oe", toId: "as400" },
+    { type: "runs_on", fromId: "inv", toId: "as400" },
+    { type: "runs_on", fromId: "edi", toId: "as400" },
+  ];
+  const names = impactOf(nodes, edges, "loc").map((hit) => hit.name).sort();
+  assert.deepEqual(names, ["AS400", "EDI Gateway", "Inventory", "Order Entry"]);
+});
+
+test("a VM on a host fails with the host", () => {
+  const nodes = [
+    { id: "host", name: "HV01" },
+    { id: "vm", name: "FS01" },
+    { id: "app", name: "File share" },
+  ];
+  const edges: ImpactEdge[] = [
+    { type: "runs_on", fromId: "vm", toId: "host" },
+    { type: "runs_on", fromId: "app", toId: "vm" },
+  ];
+  const hits = impactOf(nodes, edges, "host");
+  assert.equal(hits.find((hit) => hit.name === "FS01")?.severity, "direct");
+  assert.equal(hits.find((hit) => hit.name === "File share")?.severity, "direct");
+});
+
+test("sends_data_to does not change who is affected", () => {
+  const nodes = [
+    { id: "a", name: "Order Entry" },
+    { id: "b", name: "Invoicing" },
+  ];
+  const edges: ImpactEdge[] = [{ type: "sends_data_to", fromId: "a", toId: "b" }];
+  assert.equal(impactOf(nodes, edges, "a").length, 0);
+  assert.equal(impactOf(nodes, edges, "b").length, 0);
+});

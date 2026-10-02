@@ -89,7 +89,31 @@ ALLOWED_TRIPLES: set[tuple[str, str, str]] = {
     ("escalates_to", "agent", "application"),
     ("accesses", "tool", "data_object"),
     ("connects_to", "tool", "application"),
+    ("runs_on", "model", "model"),
+    ("runs_on", "model", "cloud_service"),
+    ("runs_on", "cloud_service", "model"),
+    ("runs_on", "cloud_service", "cloud_service"),
+    ("located_at", "model", "location"),
+    ("located_at", "cloud_service", "location"),
 }
+
+_FLOW_ENDS = ("application", "solution", "technical_capability", "cloud_service", "external_party")
+ALLOWED_TRIPLES |= {("sends_data_to", source, target) for source in _FLOW_ENDS for target in _FLOW_ENDS}
+
+_FLOW_HOW = {"api", "file", "manual", "integration_tool"}
+_FLOW_FREQUENCY = {"realtime", "daily", "ad_hoc"}
+
+
+def validate_flow_attributes(rel_type: str, attributes: dict[str, Any] | None) -> None:
+    if rel_type != "sends_data_to":
+        return
+    attrs = attributes or {}
+    how = attrs.get("how")
+    frequency = attrs.get("frequency")
+    if how is not None and how not in _FLOW_HOW:
+        raise ValueError("how must be api, file, manual, or integration_tool.")
+    if frequency is not None and frequency not in _FLOW_FREQUENCY:
+        raise ValueError("frequency must be realtime, daily, or ad_hoc.")
 
 
 class RelationshipCreate(BaseModel):
@@ -108,6 +132,7 @@ class RelationshipCreate(BaseModel):
                 f"Relationship ({self.type}, {self.from_type} → {self.to_type}) is not allowed. "
                 "Check the allowed triples list."
             )
+        validate_flow_attributes(self.type, self.attributes)
         return self
 
 

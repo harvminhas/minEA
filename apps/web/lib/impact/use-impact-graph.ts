@@ -46,6 +46,12 @@ export function useImpactGraph() {
     for (const object of named.data ?? []) {
       nodes.set(object.id, { id: object.id, name: object.name, typeLabel: OBJECT_TYPE_LABELS[object.type] ?? "Item" });
     }
+    for (const object of catalog.data?.locations ?? []) {
+      nodes.set(object.id, { id: object.id, name: object.name, typeLabel: "Location" });
+    }
+    for (const object of catalog.data?.parties ?? []) {
+      nodes.set(object.id, { id: object.id, name: object.name, typeLabel: "Outside the company" });
+    }
     const unnamed = (type: ObjectType) => {
       const label = OBJECT_TYPE_LABELS[type] ?? "Item";
       return { typeLabel: label, name: `Unnamed ${label.toLowerCase()}` };
@@ -55,10 +61,11 @@ export function useImpactGraph() {
       if (!nodes.has(rel.to_object_id)) nodes.set(rel.to_object_id, { id: rel.to_object_id, ...unnamed(rel.to_type) });
     }
     return graphFrom([...nodes.values()], relationships.data ?? []);
-  }, [catalog.data?.rows, named.data, relationships.data]);
+  }, [catalog.data?.rows, catalog.data?.locations, catalog.data?.parties, named.data, relationships.data]);
 
   return {
     ...graph,
+    relationships: relationships.data ?? [],
     isLoading: relationships.isLoading || named.isLoading || catalog.isLoading,
   };
 }

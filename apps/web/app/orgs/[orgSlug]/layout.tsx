@@ -12,7 +12,7 @@ import { useAppStore } from "@/lib/store";
 import { orgsApi, workspacesApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { GlobalRefetchIndicator } from "@/components/ui/GlobalRefetchIndicator";
-import { isViewsAreaPath, isViewsModePath, viewIdFromPathname, workspaceHomePath } from "@/lib/views";
+import { isEstateViewsPath, isViewsAreaPath, isViewsModePath, viewIdFromPathname, workspaceHomePath } from "@/lib/views";
 import { MvpFrame } from "@/components/mvp/MvpFrame";
 
 export default function OrgLayout({ children }: { children: React.ReactNode }) {
@@ -103,7 +103,10 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const sidebarW = sidebarExpanded ? "ml-[200px]" : "ml-[52px]";
   const bgClass = "bg-gray-50";
   const mvpShell =
-    pathname.includes("/workspaces/") && !isEmbed && viewMode !== "split" && !isViewsModePath(pathname);
+    pathname.includes("/workspaces/") &&
+    !isEmbed &&
+    viewMode !== "split" &&
+    (!isViewsModePath(pathname) || isEstateViewsPath(pathname));
 
   return (
     <RequireAuth>

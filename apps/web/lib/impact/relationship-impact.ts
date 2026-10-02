@@ -62,6 +62,15 @@ export const relationshipImpactRules: Record<string, ImpactRule> = {
     label: (source, target) => `${source} hosts ${target}`,
     step: (source) => `Runs on ${source}`,
   },
+  located_at: {
+    whenTargetFails: "direct",
+    label: (source, target) => `${source} is at ${target}`,
+    step: (_source, target) => `Located at ${target}`,
+  },
+  sends_data_to: {
+    label: (source, target) => `${source} sends data to ${target}`,
+    step: (_source, target) => `Sends data to ${target}`,
+  },
 };
 
 export const impactSectionTitle: Record<ImpactSeverity, string> = {

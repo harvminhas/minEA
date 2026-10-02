@@ -1,7 +1,7 @@
 import type { MinEAObject } from "@minea/types";
 import { annualCost, vendorAmounts } from "@/lib/cost/service";
-import { isEnterprisePlatform, PLATFORM_VENDOR_LABEL } from "@/lib/platform-utils";
-import { isComputeRuntime, RUNTIME_COST_MODEL_LABEL } from "@/lib/runtime-utils";
+import { PLATFORM_VENDOR_LABEL } from "@/lib/platform-utils";
+import { RUNTIME_COST_MODEL_LABEL } from "@/lib/runtime-utils";
 
 export type CatalogKind = "application" | "runtime" | "platform";
 
@@ -124,9 +124,9 @@ export function rowFromObject(object: MinEAObject): CatalogRow | null {
   let kind: CatalogKind | null = null;
   if (object.type === "application" || object.type === "solution" || object.type === "technical_capability") {
     kind = "application";
-  } else if (object.type === "model" && isComputeRuntime(props as never)) {
+  } else if (object.type === "model") {
     kind = "runtime";
-  } else if (object.type === "cloud_service" && isEnterprisePlatform(props as never)) {
+  } else if (object.type === "cloud_service") {
     kind = "platform";
   }
   if (!kind) return null;
@@ -150,6 +150,8 @@ export function rowFromObject(object: MinEAObject): CatalogRow | null {
     typeLabel = "Cloud";
   } else if (kind === "platform") {
     typeLabel = "SaaS platform";
+  } else if (kind === "runtime") {
+    typeLabel = "Server";
   } else {
     typeLabel = "Cloud";
   }

@@ -25,7 +25,7 @@ Valid object types:
   Application Layer: application, solution, technical_capability, agent
   Data Layer: data_object, data_store
   Integration Layer: api, event, integration_flow, message_broker, tool
-  Infrastructure Layer: cloud_service, model
+  Infrastructure Layer: cloud_service, model, location, external_party
   Risk Layer: tech_debt
 
 Valid relationship types and allowed triples:
@@ -51,7 +51,9 @@ Valid relationship types and allowed triples:
   contains: data_store → data_object
   connects: integration_flow → api | event
   routes: message_broker → event
-  runs_on: application | data_store | message_broker → cloud_service (compute / hosting)
+  runs_on: application | data_store | message_broker → cloud_service | model; model → model (a VM on a host)
+  located_at: model | cloud_service → location
+  sends_data_to: application | cloud_service | external_party → application | cloud_service | external_party (data movement; does not change impact)
   built_on: application | solution | technical_capability | component → cloud_service (enterprise platform)
   uses_model: agent → model
   can_call: agent → tool
