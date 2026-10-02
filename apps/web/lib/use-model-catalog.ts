@@ -1,52 +1,102 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import type { MinEAObject, ObjectType } from "@minea/types";
-import { objectsApi } from "@/lib/api-client";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
+import type { MinEAObject, Relationship } from "@minea/types";
+import { catalogApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { shouldRefreshOnEnter } from "@/lib/catalog-refresh";
 import { rowFromObject, type CatalogRow } from "@/lib/model-catalog";
 import { useTenancy } from "@/lib/tenancy";
+import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 
-const TYPES: ObjectType[] = [
-  "application",
-  "solution",
-  "technical_capability",
-  "cloud_service",
-  "model",
-  "integration_flow",
-  "api",
-  "event",
-  "tool",
-  "location",
-  "external_party",
-];
+export { shouldRefreshOnEnter };
+
+export type WorkspaceCatalog = {
+  version: number;
+  builtAt: string | null;
+  dirty: boolean;
+  objects: MinEAObject[];
+  relationships: Relationship[];
+  rows: CatalogRow[];
+  connections: MinEAObject[];
+  locations: MinEAObject[];
+  parties: MinEAObject[];
+};
+
+type CatalogBody = {
+  version?: number;
+  builtAt?: string | null;
+  dirty?: boolean;
+  objects?: MinEAObject[];
+  relationships?: Relationship[];
+};
+
+export function catalogQueryKey(orgSlug: string, workspaceSlug: string) {
+  return ["model-catalog", orgSlug, workspaceSlug] as const;
+}
+
+export function shapeCatalog(body: CatalogBody): WorkspaceCatalog {
+  const objects = body.objects ?? [];
+  const rows = objects.map(rowFromObject).filter((row): row is CatalogRow => row != null);
+  return {
+    version: body.version ?? 0,
+    builtAt: body.builtAt ?? null,
+    dirty: Boolean(body.dirty),
+    objects,
+    relationships: body.relationships ?? [],
+    rows,
+    connections: objects.filter((object) =>
+      object.type === "integration_flow" || object.type === "api" || object.type === "event" || object.type === "tool"
+    ),
+    locations: objects.filter((object) => object.type === "location"),
+    parties: objects.filter((object) => object.type === "external_party"),
+  };
+}
+
+export function applyCatalogWrite(
+  queryClient: QueryClient,
+  orgSlug: string,
+  workspaceSlug: string,
+  change: { object?: MinEAObject; removeId?: string; relationship?: Relationship; removeRelationshipId?: string }
+) {
+  queryClient.setQueryData<WorkspaceCatalog>(catalogQueryKey(orgSlug, workspaceSlug), (current) => {
+    if (!current) return current;
+    let objects = current.objects;
+    if (change.removeId) objects = objects.filter((object) => object.id !== change.removeId);
+    if (change.object) {
+      const next = change.object;
+      objects = objects.some((object) => object.id === next.id)
+        ? objects.map((object) => (object.id === next.id ? next : object))
+        : [...objects, next];
+    }
+    let relationships = current.relationships;
+    if (change.removeRelationshipId) {
+      relationships = relationships.filter((rel) => rel.id !== change.removeRelationshipId);
+    }
+    if (change.relationship) {
+      const next = change.relationship;
+      relationships = relationships.some((rel) => rel.id === next.id)
+        ? relationships.map((rel) => (rel.id === next.id ? next : rel))
+        : [...relationships, next];
+    }
+    return shapeCatalog({ ...current, objects, relationships, dirty: true });
+  });
+}
 
 export function useModelCatalog() {
   const { orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
-  const enabled = Boolean(orgSlug && workspaceSlug);
+  const enabled = useAuthQueryEnabled(orgSlug, workspaceSlug);
 
   return useQuery({
-    queryKey: ["model-catalog", orgSlug, workspaceSlug],
+    queryKey: catalogQueryKey(orgSlug, workspaceSlug),
     enabled,
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const token = await getToken();
-      if (!token || !orgSlug || !workspaceSlug) {
-        return { rows: [] as CatalogRow[], connections: [] as MinEAObject[] };
-      }
-      const pages = await Promise.all(
-        TYPES.map((type) =>
-          objectsApi.list(orgSlug, workspaceSlug, { type, page_size: 200 }, token).catch(() => ({ items: [] as MinEAObject[] }))
-        )
-      );
-      const objects = pages.flatMap((page) => page.items ?? []);
-      const rows = objects.map(rowFromObject).filter((row): row is CatalogRow => row != null);
-      const connections = objects.filter((object) =>
-        object.type === "integration_flow" || object.type === "api" || object.type === "event" || object.type === "tool"
-      );
-      const locations = objects.filter((object) => object.type === "location");
-      const parties = objects.filter((object) => object.type === "external_party");
-      return { rows, connections, locations, parties };
+      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
+      return shapeCatalog(await catalogApi.get(orgSlug, workspaceSlug, token));
     },
   });
 }

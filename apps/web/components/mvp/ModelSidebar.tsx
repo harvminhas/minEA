@@ -7,7 +7,7 @@ import { Boxes, Cable, ChevronRight, Cloud, LayoutGrid, MapPin, Server, Shield, 
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { modelPath, type ModelSection } from "@/lib/mvp-paths";
-import { useRepositoryNavCounts } from "@/lib/use-repository-nav-counts";
+import { useModelNavExtras } from "@/lib/use-repository-nav-counts";
 import { catalogStats } from "@/lib/model-catalog";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 
@@ -55,20 +55,23 @@ function useSubnavOpen() {
 export function ModelSidebar({ active }: { active?: ModelSection }) {
   const pathname = usePathname();
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
-  const { data: counts } = useRepositoryNavCounts(orgSlug ?? "", workspaceSlug ?? "");
+  const { data: extras } = useModelNavExtras(orgSlug ?? "", workspaceSlug ?? "");
   const catalog = useModelCatalog();
   const stats = catalogStats(catalog.data?.rows ?? []);
   const subnav = useSubnavOpen();
-  const count = (segment: string) => counts?.[segment] ?? 0;
+  const objects = catalog.data?.objects;
+  const countTypes = (types: string[]) => {
+    if (!objects) return undefined;
+    const wanted = new Set(types);
+    return objects.filter((object) => wanted.has(object.type)).length;
+  };
+  const extra = (segment: string) => (extras ? extras[segment] ?? 0 : undefined);
 
-  const connections =
-    count("integration/flows") +
-    count("integration/apis") +
-    count("integration/events") +
-    count("integration/tools");
-  const data =
-    count("data/data-objects") + count("data/data-stores") + count("data/data-domains");
-  const people = count("people/teams") + count("people/roles") + count("people/contacts");
+  const connections = countTypes(["integration_flow", "api", "event", "tool"]);
+  const people = extras
+    ? (extras["people/teams"] ?? 0) + (extras["people/roles"] ?? 0) + (extras["people/contacts"] ?? 0)
+    : undefined;
+  const data = countTypes(["data_object", "data_store", "data_domain"]);
 
   const estate: NavItem[] = [
     {
@@ -81,28 +84,28 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
       label: "Applications",
       href: `${basePath}/application/applications`,
       icon: Boxes,
-      count: count("application/applications"),
+      count: countTypes(["application", "solution", "technical_capability"]),
       match: ["/application/applications", "/application/components", "/model/applications"],
     },
     {
       label: "Platforms & cloud",
       href: modelPath(basePath, "platforms"),
       icon: Cloud,
-      count: count("infrastructure/cloud-services"),
+      count: countTypes(["cloud_service"]),
       match: ["/model/platforms"],
     },
     {
       label: "Servers & devices",
       href: modelPath(basePath, "servers"),
       icon: Server,
-      count: count("infrastructure/models"),
+      count: countTypes(["model"]),
       match: ["/model/servers", "/model/infrastructure"],
     },
     {
       label: "Locations",
       href: modelPath(basePath, "locations"),
       icon: MapPin,
-      count: catalog.data?.locations?.length ?? 0,
+      count: catalog.data ? catalog.data.locations?.length ?? 0 : undefined,
       match: ["/model/locations"],
     },
     {
@@ -115,25 +118,25 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
         {
           label: "Flows",
           href: `${basePath}/integration/flows`,
-          count: count("integration/flows"),
+          count: countTypes(["integration_flow"]),
           match: ["/integration/flows"],
         },
         {
           label: "APIs",
           href: `${basePath}/integration/apis`,
-          count: count("integration/apis"),
+          count: countTypes(["api"]),
           match: ["/integration/apis"],
         },
         {
           label: "Events",
           href: `${basePath}/integration/events`,
-          count: count("integration/events"),
+          count: countTypes(["event"]),
           match: ["/integration/events"],
         },
         {
           label: "Integration infra",
           href: `${basePath}/integration/tools`,
-          count: count("integration/tools"),
+          count: countTypes(["tool"]),
           match: ["/integration/tools"],
         },
       ],
@@ -142,7 +145,7 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
       label: "Vendors & contracts",
       href: modelPath(basePath, "vendors"),
       icon: Shield,
-      count: stats.vendorCount,
+      count: catalog.data ? stats.vendorCount : undefined,
       match: ["/model/vendors"],
     },
     {
@@ -155,19 +158,19 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
         {
           label: "Teams",
           href: `${basePath}/people/teams`,
-          count: count("people/teams"),
+          count: extra("people/teams"),
           match: ["/people/teams"],
         },
         {
           label: "Roles",
           href: `${basePath}/people/roles`,
-          count: count("people/roles"),
+          count: extra("people/roles"),
           match: ["/people/roles"],
         },
         {
           label: "Contacts",
           href: `${basePath}/people/contacts`,
-          count: count("people/contacts"),
+          count: extra("people/contacts"),
           match: ["/people/contacts"],
         },
       ],
@@ -178,25 +181,25 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
     {
       label: "Capabilities",
       href: `${basePath}/business/capabilities`,
-      count: count("business/capabilities"),
+      count: extra("business/capabilities"),
       match: ["/business/capabilities"],
     },
     {
       label: "Processes",
       href: `${basePath}/views/processes`,
-      count: count("views/processes"),
+      count: extra("views/processes"),
       match: ["/views/processes"],
     },
     {
       label: "Roadmaps",
       href: `${basePath}/strategy/roadmaps`,
-      count: count("strategy/roadmaps"),
+      count: countTypes(["roadmap_item"]),
       match: ["/strategy/roadmaps"],
     },
     {
       label: "Products",
       href: `${basePath}/strategy/products`,
-      count: count("strategy/products"),
+      count: extra("strategy/products"),
       match: ["/strategy/products"],
     },
     {
@@ -208,19 +211,19 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
         {
           label: "Entities",
           href: `${basePath}/data/data-objects`,
-          count: count("data/data-objects"),
+          count: countTypes(["data_object"]),
           match: ["/data/data-objects"],
         },
         {
           label: "Stores",
           href: `${basePath}/data/data-stores`,
-          count: count("data/data-stores"),
+          count: countTypes(["data_store"]),
           match: ["/data/data-stores"],
         },
         {
           label: "Domains",
           href: `${basePath}/data/data-domains`,
-          count: count("data/data-domains"),
+          count: countTypes(["data_domain"]),
           match: ["/data/data-domains"],
         },
       ],
@@ -234,13 +237,19 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
         <Section label="Architecture" items={architecture} pathname={pathname} active={active} subnav={subnav} />
       </nav>
       <div className="border-t border-[#e7e8ee] px-4 py-3">
-        <p className="text-[12px] font-medium text-[#3c4254]">Model {stats.completeness}% complete</p>
-        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#e6e8ee]">
-          <div className="h-full rounded-full bg-[#5b4ce6]" style={{ width: `${stats.completeness}%` }} />
-        </div>
-        <Link href={`${basePath}/application/applications`} className="mt-1 inline-block text-[12px] text-[#5b4ce6]">
-          {stats.missing} key fields missing
-        </Link>
+        {catalog.data ? (
+          <>
+            <p className="text-[12px] font-medium text-[#3c4254]">Model {stats.completeness}% complete</p>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#e6e8ee]">
+              <div className="h-full rounded-full bg-[#5b4ce6]" style={{ width: `${stats.completeness}%` }} />
+            </div>
+            <Link href={`${basePath}/application/applications`} className="mt-1 inline-block text-[12px] text-[#5b4ce6]">
+              {stats.missing} key fields missing
+            </Link>
+          </>
+        ) : (
+          <p className="text-[12px] text-[#8b90a0]">{catalog.isError ? "Model didn't load" : "Loading the model…"}</p>
+        )}
       </div>
     </aside>
   );

@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { objectsApi } from "@/lib/api-client";
 import { VendorField } from "@/components/mvp/VendorField";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import type { CatalogRow } from "@/lib/model-catalog";
+import { applyCatalogWrite } from "@/lib/use-model-catalog";
 import {
   COST_TYPE_LABEL,
   type CostFrequency,
@@ -37,6 +38,7 @@ export function QuickCost({ row, onSaved }: { row: CatalogRow; onSaved: () => vo
   const { getToken, user } = useAuth();
   const actor = user?.uid || "user";
   const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
@@ -60,9 +62,10 @@ export function QuickCost({ row, onSaved }: { row: CatalogRow; onSaved: () => vo
         updated_at: now,
         updated_by: actor,
       };
-      await objectsApi.update(orgSlug, workspaceSlug, row.id, { properties: { cost_lines: [line] } }, token);
+      return objectsApi.update(orgSlug, workspaceSlug, row.id, { properties: { cost_lines: [line] } }, token);
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
       setOpen(false);
       setValue("");
       onSaved();
@@ -199,6 +202,7 @@ export function CostSection({ row, onSaved }: { row: CatalogRow; onSaved: () => 
   const { getToken, user } = useAuth();
   const actor = user?.uid || "user";
   const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
   const properties = (row.object.properties ?? {}) as Record<string, unknown>;
   const lines = readCostLines(properties) ?? [];
   const legacy = lines.length ? null : parseLegacyAnnualCost(properties.annual_cost);
@@ -209,9 +213,10 @@ export function CostSection({ row, onSaved }: { row: CatalogRow; onSaved: () => 
     mutationFn: async (next: CostLine[]) => {
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
-      await objectsApi.update(orgSlug, workspaceSlug, row.id, { properties: { cost_lines: next } }, token);
+      return objectsApi.update(orgSlug, workspaceSlug, row.id, { properties: { cost_lines: next } }, token);
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
       setAdding(false);
       setError("");
       onSaved();

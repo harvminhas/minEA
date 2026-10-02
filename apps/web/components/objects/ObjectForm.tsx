@@ -14,6 +14,7 @@ import {
 } from "@minea/types";
 import { useTenancy } from "@/lib/tenancy";
 import { capabilityMapApi, objectsApi } from "@/lib/api-client";
+import { applyCatalogWrite } from "@/lib/use-model-catalog";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import {
   filterEnterprisePlatforms,
@@ -401,6 +402,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
       return saved;
     },
     onSuccess: async (saved) => {
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
       if (isApplication) {
         await invalidateSystemCaches(queryClient, orgSlug, workspaceSlug, saved.id);
       }

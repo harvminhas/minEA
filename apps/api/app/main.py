@@ -18,6 +18,7 @@ from app.routers import (
     ai,
     auth,
     billing,
+    catalog,
     contact,
     capability_map,
     data_layer,
@@ -97,6 +98,7 @@ app.include_router(data_layer.router, prefix="/api/v1")
 app.include_router(capability_map.router, prefix="/api/v1")
 app.include_router(journeys.router, prefix="/api/v1")
 app.include_router(relationships.router, prefix="/api/v1")
+app.include_router(catalog.router, prefix="/api/v1")
 app.include_router(ai.router, prefix="/api/v1")
 app.include_router(webhooks.router, prefix="/api/v1")
 

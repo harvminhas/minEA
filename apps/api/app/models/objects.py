@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ARRAY, Float, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import ARRAY, Boolean, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -20,6 +20,11 @@ class Workspace(Base):
     biz_layer_term: Mapped[str] = mapped_column(Text, default="Capability")
     app_layer_term: Mapped[str] = mapped_column(Text, default="Application")
     constraint_mode: Mapped[str] = mapped_column(Text, default="guided")
+    catalog_dirty: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    catalog_building: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    catalog_building_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    catalog_built_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    catalog_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     org: Mapped["Org"] = relationship(back_populates="workspaces")

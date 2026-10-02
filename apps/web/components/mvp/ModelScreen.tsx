@@ -17,7 +17,6 @@ import { ModelDetailPanel } from "@/components/mvp/ModelDetailPanel";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { ObjectForm } from "@/components/objects/ObjectForm";
-import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 
 const SECTION_TITLE: Record<ModelSection, string> = {
@@ -34,8 +33,7 @@ const SECTION_TITLE: Record<ModelSection, string> = {
 
 export function ModelScreen({ section, selectedId }: { section: ModelSection; selectedId?: string }) {
   const router = useRouter();
-  const { basePath, orgSlug, workspaceSlug } = useTenancy();
-  const queryClient = useQueryClient();
+  const { basePath } = useTenancy();
   const catalog = useModelCatalog();
   const rows = catalog.data?.rows ?? [];
   const connections = catalog.data?.connections ?? [];
@@ -71,7 +69,6 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const missingTotal = source.reduce((sum, row) => sum + row.missingCount, 0);
   const trackedCost = filtered.reduce((sum, row) => sum + (row.annualCostNumber ?? 0), 0);
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] });
   const open = (row: CatalogRow) => router.push(modelItemPath(basePath, section, row.id));
   const close = () => router.push(modelPath(basePath, section));
 
@@ -91,7 +88,15 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   return (
     <div className="flex h-full min-h-0">
       <div className="min-w-0 flex-1">
-        {section === "overview" && <Overview stats={stats} rows={rows} basePath={basePath} />}
+        {section === "overview" && (
+          <Overview
+            stats={stats}
+            rows={rows}
+            basePath={basePath}
+            pending={catalog.isPending}
+            failed={catalog.isError && !catalog.data}
+          />
+        )}
         {section === "platforms" && <PlatformsTable rows={rows} selectedId={selectedId} />}
         {section === "servers" && <ServersTable rows={rows} selectedId={selectedId} />}
         {section === "locations" && <LocationsTable />}
@@ -218,7 +223,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                         </td>
                         <td className="px-2 py-3">
                           {row.missing.cost ? (
-                            <QuickCost row={row} onSaved={() => queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] })} />
+                            <QuickCost row={row} onSaved={() => undefined} />
                           ) : (
                             <span className={row.annualCostNumber == null ? "text-[#6b7289]" : "text-[#1c2230]"}>{row.annualCostLabel}</span>
                           )}
@@ -285,29 +290,20 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
       {creating === "runtime" && (
         <CreateRuntimePanel
           onClose={() => setCreating(null)}
-          onSuccess={() => {
-            setCreating(null);
-            refresh();
-          }}
+          onSuccess={() => setCreating(null)}
         />
       )}
       {creating === "platform" && (
         <CreatePlatformPanel
           onClose={() => setCreating(null)}
-          onSuccess={() => {
-            setCreating(null);
-            refresh();
-          }}
+          onSuccess={() => setCreating(null)}
         />
       )}
       {creating === "application" && (
         <ObjectForm
           objectType="application"
           onClose={() => setCreating(null)}
-          onSuccess={() => {
-            setCreating(null);
-            refresh();
-          }}
+          onSuccess={() => setCreating(null)}
         />
       )}
     </div>
@@ -365,26 +361,34 @@ function Overview({
   stats,
   rows,
   basePath,
+  pending,
+  failed,
 }: {
   stats: ReturnType<typeof catalogStats>;
   rows: CatalogRow[];
   basePath: string;
+  pending: boolean;
+  failed: boolean;
 }) {
   const platforms = rows.filter((row) => row.kind === "platform").length;
   const servers = rows.filter((row) => row.kind === "runtime").length;
+  const show = !pending && !failed;
   const cards = [
-    { href: modelPath(basePath, "applications"), label: "Applications", value: String(stats.systems) },
-    { href: modelPath(basePath, "platforms"), label: "Platforms & cloud", value: String(platforms) },
-    { href: modelPath(basePath, "servers"), label: "Servers & devices", value: String(servers) },
-    { href: `${basePath}/reports/spend`, label: "Annual spend tracked", value: stats.spend ? moneyLabel(stats.spend) : "—" },
-    { href: modelPath(basePath, "applications"), label: "Missing fields", value: String(stats.missing) },
+    { href: modelPath(basePath, "applications"), label: "Applications", value: show ? String(stats.systems) : "—" },
+    { href: modelPath(basePath, "platforms"), label: "Platforms & cloud", value: show ? String(platforms) : "—" },
+    { href: modelPath(basePath, "servers"), label: "Servers & devices", value: show ? String(servers) : "—" },
+    { href: `${basePath}/reports/spend`, label: "Annual spend tracked", value: show && stats.spend ? moneyLabel(stats.spend) : "—" },
+    { href: modelPath(basePath, "applications"), label: "Missing fields", value: show ? String(stats.missing) : "—" },
   ];
   return (
     <div className="px-8 py-8">
       <h1 className="text-[28px] font-semibold text-[#1c2230]">Model overview</h1>
       <p className="mt-1 text-[14px] text-[#6b7289]">
-        {stats.systems} applications, {stats.infrastructure} infrastructure
-        {stats.vendorCount ? `, ${stats.vendorCount} vendors` : ""}.
+        {failed
+          ? "The model didn't load. Refresh the page to try again."
+          : pending
+            ? "Loading the model…"
+            : `${stats.systems} applications, ${stats.infrastructure} infrastructure${stats.vendorCount ? `, ${stats.vendorCount} vendors` : ""}.`}
       </p>
       <div className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-5">
         {cards.map((card) => (
@@ -394,13 +398,15 @@ function Overview({
           </Link>
         ))}
       </div>
-      <AgingTile rows={rows} basePath={basePath} />
-      <div className="mt-4 rounded-xl border border-[#e6e8ee] p-4">
-        <div className="text-[14px] font-medium text-[#1c2230]">Model health: {stats.completeness}% complete, {stats.missing} fields missing</div>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#eef0f4]">
-          <div className="h-full rounded-full bg-[#5b4ce6]" style={{ width: `${stats.completeness}%` }} />
+      {show && <AgingTile rows={rows} basePath={basePath} />}
+      {show && (
+        <div className="mt-4 rounded-xl border border-[#e6e8ee] p-4">
+          <div className="text-[14px] font-medium text-[#1c2230]">Model health: {stats.completeness}% complete, {stats.missing} fields missing</div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#eef0f4]">
+            <div className="h-full rounded-full bg-[#5b4ce6]" style={{ width: `${stats.completeness}%` }} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

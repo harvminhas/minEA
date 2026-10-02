@@ -10,7 +10,7 @@ import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, modelItemPath, modelPath } from "@/lib/mvp-paths";
-import { useModelCatalog } from "@/lib/use-model-catalog";
+import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { connectionPhrase, impactOf, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
 import { moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
@@ -301,52 +301,48 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
         const app = bands.stop[0] ?? bands.slow[0];
         const targetId = app?.id ?? (selected.kind === "application" ? selected.id : "");
         if (!targetId) throw new Error("Link an application in this chain first");
-        await relationshipsApi.create(orgSlug, workspaceSlug, {
+        return relationshipsApi.create(orgSlug, workspaceSlug, {
           type: "supported_by",
           from_object_id: otherId,
           from_type: otherType,
           to_object_id: targetId,
           to_type: objectTypeOf(targetId),
         }, token);
-        return;
       }
       if (picker === "server") {
         if (selected.kind === "location") {
-          await relationshipsApi.create(orgSlug, workspaceSlug, {
+          return relationshipsApi.create(orgSlug, workspaceSlug, {
             type: "located_at",
             from_object_id: otherId,
             from_type: otherType,
             to_object_id: selected.id,
             to_type: "location",
           }, token);
-          return;
         }
-        await relationshipsApi.create(orgSlug, workspaceSlug, {
+        return relationshipsApi.create(orgSlug, workspaceSlug, {
           type: "runs_on",
           from_object_id: otherId,
           from_type: otherType,
           to_object_id: selected.id,
           to_type: objectTypeOf(selected.id),
         }, token);
-        return;
       }
       if (picker === "calls") {
         const target = bands.stop[0];
         const targetId = target?.id ?? (selected.kind === "application" ? selected.id : "");
         if (!targetId) throw new Error("Link an application that stops first");
-        await relationshipsApi.create(orgSlug, workspaceSlug, {
+        return relationshipsApi.create(orgSlug, workspaceSlug, {
           type: "calls",
           from_object_id: otherId,
           from_type: otherType,
           to_object_id: targetId,
           to_type: objectTypeOf(targetId),
         }, token);
-        return;
       }
       const hostId = selected.kind === "location" ? (bands.infra.find((hit) => byId.get(hit.id)?.kind === "runtime")?.id ?? "") : selected.id;
       if (!hostId) throw new Error("Add a server in this chain first");
       const hostKind = byId.get(hostId)?.kind;
-      await relationshipsApi.create(orgSlug, workspaceSlug, {
+      return relationshipsApi.create(orgSlug, workspaceSlug, {
         type: hostKind === "platform" ? "built_on" : "runs_on",
         from_object_id: otherId,
         from_type: otherType,
@@ -354,11 +350,12 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
         to_type: objectTypeOf(hostId),
       }, token);
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       setPicker(null);
       setError("");
-      queryClient.invalidateQueries({ queryKey: ["impact-relationships", orgSlug, workspaceSlug] });
-      queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] });
+      if (created && orgSlug && workspaceSlug) {
+        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: created });
+      }
     },
     onError: (err: Error) => setError(err.message),
   });
@@ -368,11 +365,13 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
       if (opening.example || !selected) return;
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
-      await objectsApi.update(orgSlug, workspaceSlug, selected.id, {
+      return objectsApi.update(orgSlug, workspaceSlug, selected.id, {
         properties: { impact_confirmed_at: new Date().toISOString().slice(0, 10) },
       }, token);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] }),
+    onSuccess: (saved) => {
+      if (saved && orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
+    },
   });
 
   const select = (id: string) => router.replace(`${basePath}/views?tab=impact&sel=${id}`);
@@ -785,7 +784,7 @@ function DataFlowView() {
       const from = [...rows, ...parties.map((party) => ({ id: party.id, object: party as MinEAObject }))].find((item) => item.id === fromId);
       const to = [...rows, ...parties.map((party) => ({ id: party.id, object: party as MinEAObject }))].find((item) => item.id === toId);
       if (!token || !orgSlug || !workspaceSlug || !from || !to) throw new Error("Pick both ends");
-      await relationshipsApi.create(orgSlug, workspaceSlug, {
+      return relationshipsApi.create(orgSlug, workspaceSlug, {
         type: "sends_data_to",
         from_object_id: from.id,
         from_type: from.object.type,
@@ -794,10 +793,12 @@ function DataFlowView() {
         attributes: { what, how, frequency: often },
       }, token);
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       setDraw(false);
       setWhat("");
-      queryClient.invalidateQueries({ queryKey: ["impact-relationships", orgSlug, workspaceSlug] });
+      if (created && orgSlug && workspaceSlug) {
+        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: created });
+      }
     },
     onError: (err: Error) => setError(err.message),
   });
@@ -807,8 +808,11 @@ function DataFlowView() {
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
       await relationshipsApi.delete(orgSlug, workspaceSlug, rel.id, token);
+      return rel.id;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["impact-relationships", orgSlug, workspaceSlug] }),
+    onSuccess: (id) => {
+      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
+    },
   });
 
   const connected = new Set(flows.flatMap((rel) => [rel.from_object_id, rel.to_object_id]));
@@ -929,7 +933,7 @@ function HostingView() {
       const host = rows.find((row) => row.id === hostId);
       if (!token || !orgSlug || !workspaceSlug || !app || !host) throw new Error("Could not link those");
       if (!window.confirm(`${app.name} runs on ${host.name}?`)) return;
-      await relationshipsApi.create(orgSlug, workspaceSlug, {
+      return relationshipsApi.create(orgSlug, workspaceSlug, {
         type: host.kind === "platform" ? "built_on" : "runs_on",
         from_object_id: app.id,
         from_type: app.object.type,
@@ -937,7 +941,11 @@ function HostingView() {
         to_type: host.object.type,
       }, token);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["impact-relationships", orgSlug, workspaceSlug] }),
+    onSuccess: (created) => {
+      if (created && orgSlug && workspaceSlug) {
+        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: created });
+      }
+    },
     onError: (err: Error) => setError(err.message),
   });
 

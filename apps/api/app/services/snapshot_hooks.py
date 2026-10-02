@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.catalog_cache import mark_catalog_dirty
 from app.services.workspace_snapshot_store import mark_snapshot_dirty, schedule_snapshot_rebuild
 
 
@@ -13,4 +14,5 @@ async def notify_workspace_data_changed(
 ) -> None:
     """Mark snapshot stale in the current transaction; schedule debounced rebuild after commit."""
     await mark_snapshot_dirty(db, workspace_id, org_id)
+    await mark_catalog_dirty(db, workspace_id)
     schedule_snapshot_rebuild(workspace_id, org_id)

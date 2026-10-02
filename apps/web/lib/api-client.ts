@@ -89,6 +89,7 @@ import type {
   SharePreview,
 } from "@minea/types";
 import { apiV1Url } from "@/lib/api-base";
+import { apiRequestGate, shouldRetryRequest } from "@/lib/request-gate";
 import { getShareApiPath } from "@/lib/share-context";
 
 function wsBase(orgSlug: string, workspaceSlug: string) {
@@ -96,6 +97,25 @@ function wsBase(orgSlug: string, workspaceSlug: string) {
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit & { token?: string }): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const maxAttempts = method === "GET" || method === "HEAD" ? 3 : 1;
+  return apiRequestGate.run(async () => {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        return await apiFetchOnce<T>(path, init);
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        const status = Number(lastError.message.slice(0, 3));
+        if (!shouldRetryRequest(method, status, attempt, maxAttempts)) throw lastError;
+        await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+      }
+    }
+    throw lastError ?? new Error("API error");
+  });
+}
+
+async function apiFetchOnce<T>(path: string, init?: RequestInit & { token?: string }): Promise<T> {
   const { token, ...fetchInit } = init ?? {};
   const sharePath = getShareApiPath(path);
   const resolvedPath = sharePath ?? path;
@@ -207,6 +227,25 @@ export const invitesApi = {
 };
 
 // ─── Workspaces ───────────────────────────────────────────────────────────────
+
+export const catalogApi = {
+  get: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<{
+      version: number;
+      builtAt: string | null;
+      dirty: boolean;
+      objects: MinEAObject[];
+      relationships: Relationship[];
+    }>(`${wsBase(orgSlug, workspaceSlug)}/catalog`, { token }),
+  refresh: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<{
+      version: number;
+      builtAt: string | null;
+      dirty: boolean;
+      objects: MinEAObject[];
+      relationships: Relationship[];
+    }>(`${wsBase(orgSlug, workspaceSlug)}/catalog/refresh`, { method: "POST", token }),
+};
 
 export const workspacesApi = {
   list: (orgSlug: string, token: string) =>

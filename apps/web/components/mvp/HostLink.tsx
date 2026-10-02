@@ -9,7 +9,7 @@ import type { CatalogRow } from "@/lib/model-catalog";
 import { noHostLinked, readRuntimeInfra } from "@/lib/infra/read";
 import { infraStatus } from "@/lib/infra/status";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
-import { useModelCatalog } from "@/lib/use-model-catalog";
+import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 
 export function HostLink({ row }: { row: CatalogRow }) {
   const impact = useImpactGraph();
@@ -32,7 +32,7 @@ export function HostLink({ row }: { row: CatalogRow }) {
       const edgeType = host.kind === "platform" ? "built_on" : "runs_on";
       const already = impact.edges.some((edge) => edge.fromId === row.id && edge.toId === host.id && (edge.type === "runs_on" || edge.type === "built_on"));
       if (already) return;
-      await relationshipsApi.create(orgSlug, workspaceSlug, {
+      return relationshipsApi.create(orgSlug, workspaceSlug, {
         type: edgeType,
         from_object_id: row.id,
         from_type: row.object.type,
@@ -40,10 +40,12 @@ export function HostLink({ row }: { row: CatalogRow }) {
         to_type: host.object.type,
       }, token);
     },
-    onSuccess: (_data, host) => {
+    onSuccess: (created, host) => {
       setMessage(`${row.name} now runs on ${host.name}`);
       setOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["impact-relationships", orgSlug, workspaceSlug] });
+      if (created && orgSlug && workspaceSlug) {
+        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: created });
+      }
     },
     onError: (error: Error) => setMessage(error.message),
   });

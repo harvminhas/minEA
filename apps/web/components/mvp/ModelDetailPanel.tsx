@@ -16,6 +16,7 @@ import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformP
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { PLATFORM_SLA_LABEL } from "@/lib/platform-utils";
 import type { CatalogRow } from "@/lib/model-catalog";
+import { applyCatalogWrite } from "@/lib/use-model-catalog";
 import { CostSection } from "@/components/mvp/CostSection";
 import { HostLink } from "@/components/mvp/HostLink";
 import { InfraFields } from "@/components/mvp/InfraEditors";
@@ -52,18 +53,16 @@ export function ModelDetailPanel({
     },
   });
 
-  const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] });
-  };
-
   const acceptVendor = useMutation({
     mutationFn: async (vendor: string) => {
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) return;
       const properties = { ...(row.object.properties ?? {}), vendor };
-      await objectsApi.update(orgSlug, workspaceSlug, row.id, { properties }, token);
+      return objectsApi.update(orgSlug, workspaceSlug, row.id, { properties }, token);
     },
-    onSuccess: refresh,
+    onSuccess: (saved) => {
+      if (saved && orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
+    },
   });
 
   const remove = useMutation({
@@ -73,7 +72,7 @@ export function ModelDetailPanel({
       await objectsApi.delete(orgSlug, workspaceSlug, row.id, token);
     },
     onSuccess: () => {
-      refresh();
+      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeId: row.id });
       onClose();
     },
   });
@@ -84,10 +83,7 @@ export function ModelDetailPanel({
 
   if (editing) {
     const close = () => setEditing(false);
-    const done = () => {
-      setEditing(false);
-      refresh();
-    };
+    const done = () => setEditing(false);
     if (row.kind === "runtime") {
       return <CreateRuntimePanel initialValues={row.object} onClose={close} onSuccess={done} />;
     }
@@ -201,7 +197,7 @@ export function ModelDetailPanel({
               <Field label="Renewal date" value={row.renewalLabel} empty="Add renewal date" onAdd={() => setEditing(true)} />
               <Field label="Notice period" value="" empty="Coming soon" />
             </Section>
-            <CostSection row={row} onSaved={refresh} />
+            <CostSection row={row} onSaved={() => undefined} />
             <Section title="Governance">
               <Field
                 label="Owner"

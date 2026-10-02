@@ -13,7 +13,7 @@ import { ASK_BAR_ID } from "@/components/nav/ask-shortcut";
 import { catalogStats, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
 import { useAppStore } from "@/lib/store";
-import { useModelCatalog } from "@/lib/use-model-catalog";
+import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { Pill } from "@/components/mvp/pills";
@@ -592,8 +592,8 @@ function FixActions({
       const token = await getToken();
       if (!token) return;
       const body = action.field === "criticality" ? { properties: { criticality: value } } : { owner: value };
-      await objectsApi.update(orgSlug, workspaceSlug, action.recordId, body, token);
-      await queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] });
+      const saved = await objectsApi.update(orgSlug, workspaceSlug, action.recordId, body, token);
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
       onSaved(action.field === "criticality" ? `Criticality set to ${labelFor(value)}` : `Owner set to ${value}`);
       setOpen(null);
     } catch {

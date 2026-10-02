@@ -6,6 +6,7 @@ import type { MinEAObject } from "@minea/types";
 import { objectsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
+import { applyCatalogWrite } from "@/lib/use-model-catalog";
 import type { InfraField } from "@/lib/infra/fields";
 
 function stored(object: MinEAObject, key: string): string {
@@ -49,14 +50,14 @@ export function InfraControl({
       return;
     }
     try {
-      await objectsApi.update(
+      const saved = await objectsApi.update(
         orgSlug,
         workspaceSlug,
         object.id,
         { properties: { [field.key]: next || null } },
         token
       );
-      queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] });
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
     }

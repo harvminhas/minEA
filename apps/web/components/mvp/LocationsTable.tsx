@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { MinEAObject } from "@minea/types";
+import type { MinEAObject, Relationship } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
@@ -12,6 +12,7 @@ import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { impactOf } from "@/lib/impact/relationship-impact";
 import { infraConfig } from "@/lib/infra/infraConfig";
 import { locationMigrationPlan, locationTypeLabel, locationTypes } from "@/lib/infra/locations";
+import { applyCatalogWrite } from "@/lib/use-model-catalog";
 
 function ownerName(object: MinEAObject): string {
   return object.owner_team_name?.trim() || object.point_of_contact_name?.trim() || object.owner?.trim() || "";
@@ -49,11 +50,6 @@ export function LocationsTable() {
     (group) => !locations.some((location) => location.name.trim().toLowerCase() === group.name.trim().toLowerCase())
   );
 
-  const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] });
-    queryClient.invalidateQueries({ queryKey: ["impact-relationships", orgSlug, workspaceSlug] });
-  };
-
   const create = useMutation({
     mutationFn: async () => {
       const trimmed = name.trim();
@@ -66,12 +62,12 @@ export function LocationsTable() {
         properties: { location_type: kind, ...(address.trim() ? { address: address.trim() } : {}) },
       }, token);
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       setName("");
       setAddress("");
       setError("");
       setOpen(false);
-      refresh();
+      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: created });
     },
     onError: (err: Error) => setError(err.message),
   });
@@ -80,26 +76,34 @@ export function LocationsTable() {
     mutationFn: async () => {
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
+      const createdObjects: MinEAObject[] = [];
+      const createdRels: Relationship[] = [];
       for (const group of plan) {
         const created = await objectsApi.create(orgSlug, workspaceSlug, {
           type: "location",
           name: group.name,
           properties: { location_type: "other" },
         }, token);
+        createdObjects.push(created);
         for (const serverId of group.serverIds) {
           const server = rowById.get(serverId);
           if (!server) continue;
-          await relationshipsApi.create(orgSlug, workspaceSlug, {
+          createdRels.push(await relationshipsApi.create(orgSlug, workspaceSlug, {
             type: "located_at",
             from_object_id: server.id,
             from_type: server.object.type,
             to_object_id: created.id,
             to_type: "location",
-          }, token);
+          }, token));
         }
       }
+      return { createdObjects, createdRels };
     },
-    onSuccess: () => refresh(),
+    onSuccess: ({ createdObjects, createdRels }) => {
+      if (!orgSlug || !workspaceSlug) return;
+      for (const object of createdObjects) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object });
+      for (const relationship of createdRels) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship });
+    },
     onError: (err: Error) => setError(err.message),
   });
 

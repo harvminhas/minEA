@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/lib/auth-context";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layers, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
+import { applyCatalogWrite } from "@/lib/use-model-catalog";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { useOwnershipForm } from "@/hooks/use-ownership-form";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
@@ -110,6 +111,7 @@ export function CreatePlatformPanel({ initialValues, initialName = "", onClose, 
 
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
   const [mounted, setMounted] = useState(false);
 
@@ -205,7 +207,10 @@ export function CreatePlatformPanel({ initialValues, initialName = "", onClose, 
         token
       );
     },
-    onSuccess: (platform) => onSuccess(platform.id),
+    onSuccess: (platform) => {
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: platform });
+      onSuccess(platform.id);
+    },
     onError: (err) =>
       setError(
         err instanceof Error ? err.message : `Could not ${isEdit ? "save" : "create"} platform`

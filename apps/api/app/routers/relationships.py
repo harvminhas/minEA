@@ -20,6 +20,7 @@ from app.services.data_domain_rollup import (
     replace_system_domain_assignment,
     sync_entity_domain_property,
 )
+from app.services.catalog_cache import mark_catalog_dirty
 from app.services.data_layer import add_data_link
 from app.services.tenancy import TenancyContext, get_workspace_context
 
@@ -254,6 +255,7 @@ async def create_relationship(
     db.add(rel)
     await db.flush()
     await db.refresh(rel)
+    await mark_catalog_dirty(db, ctx.workspace.id)
     return rel
 
 
@@ -291,3 +293,4 @@ async def delete_relationship(
 
     await db.delete(rel)
     await db.flush()
+    await mark_catalog_dirty(db, ctx.workspace.id)

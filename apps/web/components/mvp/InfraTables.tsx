@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import { modelItemPath, modelPath } from "@/lib/mvp-paths";
 import type { CatalogRow } from "@/lib/model-catalog";
+import { applyCatalogWrite } from "@/lib/use-model-catalog";
 import { infraConfig } from "@/lib/infra/infraConfig";
 import { platformFields, runtimeFields, sortBlanksLast } from "@/lib/infra/fields";
 import { InfraControl } from "@/components/mvp/InfraEditors";
@@ -50,8 +51,7 @@ function dash(value: string) {
 
 export function PlatformsTable({ rows, selectedId }: { rows: CatalogRow[]; selectedId?: string }) {
   const router = useRouter();
-  const { basePath, orgSlug, workspaceSlug } = useTenancy();
-  const queryClient = useQueryClient();
+  const { basePath } = useTenancy();
   const impact = useImpactGraph();
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("All kinds");
@@ -127,7 +127,7 @@ export function PlatformsTable({ rows, selectedId }: { rows: CatalogRow[]; selec
                   <td className="px-2 py-3">{row.missing.owner ? <AddChip label="Add" onClick={() => router.push(modelItemPath(basePath, "platforms", row.id))} /> : row.ownerTeam || row.ownerPerson}</td>
                   <td className="px-2 py-3">{built || dash("")}</td>
                   <td className="px-2 py-3" onClick={(event) => event.stopPropagation()}>
-                    {row.missing.cost ? <QuickCost row={row} onSaved={() => queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] })} /> : row.annualCostLabel}
+                    {row.missing.cost ? <QuickCost row={row} onSaved={() => undefined} /> : row.annualCostLabel}
                   </td>
                   <td className="px-2 py-3">{row.renewalLabel && !row.missing.renewal ? row.renewalLabel : dash("")}</td>
                 </tr>
@@ -206,7 +206,7 @@ export function ServersTable({ rows, selectedId }: { rows: CatalogRow[]; selecte
     onSuccess: (created) => {
       setName("");
       setAddError("");
-      queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] });
+      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: created });
       if (created?.id) router.push(modelItemPath(basePath, "servers", created.id));
     },
     onError: (error: Error) => setAddError(error.message),

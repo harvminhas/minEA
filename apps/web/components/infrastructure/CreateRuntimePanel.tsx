@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/lib/auth-context";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cpu, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
+import { applyCatalogWrite } from "@/lib/use-model-catalog";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { VendorField } from "@/components/mvp/VendorField";
 import { useOwnershipForm } from "@/hooks/use-ownership-form";
@@ -119,6 +120,7 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
 
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
   const [mounted, setMounted] = useState(false);
 
@@ -225,7 +227,10 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
 
       return objectsApi.create(orgSlug, workspaceSlug, { type: "model", ...body }, token);
     },
-    onSuccess: (runtime) => onSuccess(runtime.id),
+    onSuccess: (runtime) => {
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: runtime });
+      onSuccess(runtime.id);
+    },
     onError: (err) =>
       setError(err instanceof Error ? err.message : `Could not ${isEdit ? "save" : "create"} runtime`),
   });

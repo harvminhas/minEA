@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { CatalogRefreshBar } from "@/components/mvp/CatalogRefreshBar";
 import { ModelSidebar } from "@/components/mvp/ModelSidebar";
 import { ReportsSidebar } from "@/components/mvp/ReportsSidebar";
 import { isModelSection, type ModelSection } from "@/lib/mvp-paths";
@@ -15,14 +16,22 @@ export function MvpFrame({ children }: { children: React.ReactNode }) {
   const showModel = !ask && !reports && !isEstateViewsPath(pathname);
 
   if (isEstateViewsPath(pathname)) {
-    return <main className="min-w-0 flex-1 overflow-y-auto bg-white">{children}</main>;
+    return (
+      <main className="min-w-0 flex-1 overflow-y-auto bg-white">
+        <CatalogRefreshBar />
+        {children}
+      </main>
+    );
   }
 
   return (
     <div className="flex h-full min-w-0 flex-1">
       {reports && <ReportsSidebar />}
       {showModel && <ModelSidebar active={section} />}
-      <main className="min-w-0 flex-1 overflow-y-auto bg-white">{children}</main>
+      <main className="min-w-0 flex-1 overflow-y-auto bg-white">
+        <CatalogRefreshBar />
+        {children}
+      </main>
     </div>
   );
 }

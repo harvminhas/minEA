@@ -183,6 +183,40 @@ async function fetchNavCounts(
   return counts;
 }
 
+/** People, products, processes, and the capability map stay on SQL. Object totals come from the catalog. */
+export function useModelNavExtras(orgSlug: string, workspaceSlug: string) {
+  const { getToken } = useAuth();
+  const enabled = useAuthQueryEnabled(orgSlug, workspaceSlug);
+
+  return useQuery({
+    queryKey: ["model-nav-extras", orgSlug, workspaceSlug],
+    enabled,
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+      const [roles, teams, contacts, products, processes, capability] = await Promise.all([
+        peopleApi.listRoles(orgSlug, workspaceSlug, token),
+        peopleApi.listTeams(orgSlug, workspaceSlug, token),
+        peopleApi.listContacts(orgSlug, workspaceSlug, token),
+        productsApi.list(orgSlug, workspaceSlug, token),
+        processesApi.list(orgSlug, workspaceSlug, token),
+        capabilityMapApi.getStatus(orgSlug, workspaceSlug, token),
+      ]);
+      return {
+        "people/roles": roles.total,
+        "people/teams": teams.total,
+        "people/contacts": contacts.total,
+        "strategy/products": products.total,
+        "views/processes": processes.total,
+        "business/capabilities": capability.domain_count + capability.capability_count,
+      } as Record<string, number>;
+    },
+    staleTime: WORKSPACE_SUMMARY_STALE_MS,
+    gcTime: WORKSPACE_SUMMARY_GC_MS,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useRepositoryNavCounts(orgSlug: string, workspaceSlug: string) {
   const { getToken } = useAuth();
   const enabled = useAuthQueryEnabled(orgSlug, workspaceSlug);
