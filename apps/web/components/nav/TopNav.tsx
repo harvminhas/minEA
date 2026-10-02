@@ -3,13 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { ChevronDown, Bell, HelpCircle, Search, LogOut, Settings, Columns2, Plus } from "lucide-react";
+import { ChevronDown, Bell, HelpCircle, LogOut, Settings, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useAppStore } from "@/lib/store";
 import { useTenancy } from "@/lib/tenancy";
-import { isViewsAreaPath, viewIdFromPathname, workspaceHomePath } from "@/lib/views";
 import { askPath, modelPath, reportsPath } from "@/lib/mvp-paths";
+import { ASK_BAR_ID, askShortcut, stripSplitUrl } from "@/components/nav/ask-shortcut";
 import { useQuery } from "@tanstack/react-query";
 import { billingApi, orgsApi, workspacesApi } from "@/lib/api-client";
 import { usePermissions } from "@/lib/use-permissions";
@@ -23,13 +23,11 @@ export function TopNav() {
   const pathname = usePathname();
   const { getToken, user, signOut } = useAuth();
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
-  const { activeOrg, activeWorkspace, viewMode, setViewMode, setSplitViewId } = useAppStore();
+  const { activeOrg, activeWorkspace, viewMode, setViewMode } = useAppStore();
 
   const [wsOpen, setWsOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
-  const [jumpQuery, setJumpQuery] = useState("");
-  const jumpRef = useRef<HTMLInputElement>(null);
   const wsRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
@@ -46,16 +44,54 @@ export function TopNav() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // The header no longer opens side-by-side. Split layout code is still mounted from
+  // the org layout when viewMode is "split" (persisted). Exit it here so a removed
+  // button cannot leave someone stuck. Still used by: app/orgs/[orgSlug]/layout.tsx,
+  // components/sidebar/SplitViewPanel.tsx, components/sidebar/ResizableSplitLayout.tsx,
+  // lib/store.ts, lib/view-embed-context.tsx, lib/last-app-path.ts, app/home/page.tsx.
+  // TODO: remove that layout if nothing else sets viewMode to "split".
+  useEffect(() => {
+    if (viewMode === "split") setViewMode("repository");
+  }, [viewMode, setViewMode]);
+
+  useEffect(() => {
+    const next = stripSplitUrl(pathname, window.location.search);
+    if (next) router.replace(next);
+  }, [pathname, router]);
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        jumpRef.current?.focus();
+      const action = askShortcut(event, pathname, basePath);
+      if (!action) return;
+      event.preventDefault();
+      if (action.type === "focus") {
+        document.getElementById(ASK_BAR_ID)?.focus();
+        return;
       }
+      router.push(action.href);
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, []);
+  }, [pathname, basePath, router]);
+
+  useEffect(() => {
+    if (!window.location.search.includes("focus=ask")) return;
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      const bar = document.getElementById(ASK_BAR_ID);
+      if (bar instanceof HTMLElement) {
+        bar.focus();
+        window.clearInterval(timer);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("focus");
+        const query = url.searchParams.toString();
+        router.replace(query ? `${url.pathname}?${query}` : url.pathname);
+        return;
+      }
+      if (Date.now() - started > 4000) window.clearInterval(timer);
+    }, 50);
+    return () => window.clearInterval(timer);
+  }, [pathname, router]);
 
   const { data: org } = useQuery({
     queryKey: ["org", orgSlug],
@@ -201,9 +237,9 @@ export function TopNav() {
           {(
             [
               { id: "ask", label: "Ask", href: askPath(basePath) },
-              { id: "reports", label: "Reports", href: reportsPath(basePath) },
               { id: "model", label: "Model", href: modelPath(basePath, "overview") },
               { id: "views", label: "Views", href: `${basePath}/views` },
+              { id: "reports", label: "Reports", href: reportsPath(basePath) },
             ] as const
           ).map((tab) => {
             const inModel =
@@ -233,58 +269,11 @@ export function TopNav() {
                 {tab.label}
               </button>
             );
-          })}
-          <button
-            type="button"
-            title={viewMode === "split" ? "Close side by side" : "Open beside"}
-            onClick={() => {
-              if (!basePath || !orgSlug || !workspaceSlug) return;
-              if (viewMode === "split") {
-                setViewMode("repository");
-                return;
-              }
-              const activeViewId = viewIdFromPathname(pathname);
-              setSplitViewId(activeViewId ?? "foundations");
-              setViewMode("split");
-              if (isViewsAreaPath(pathname)) {
-                router.push(workspaceHomePath(orgSlug, workspaceSlug));
-              }
-            }}
-            className={cn(
-              "ml-1 flex items-center justify-center h-7 w-7 rounded text-white/45 hover:text-white/80 hover:bg-white/8",
-              viewMode === "split" && "bg-indigo-600 text-white hover:text-white"
-            )}
-          >
-            <Columns2 size={13} />
-          </button>
+            })}
         </div>
       )}
 
-      {/* Search bar */}
-      <div className="flex-1 flex justify-center px-4">
-        <form
-          className="flex items-center gap-2 w-full max-w-md rounded-md bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-white/70"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!basePath) return;
-            const q = jumpQuery.trim();
-            router.push(q ? askPath(basePath, q) : askPath(basePath));
-            setJumpQuery("");
-          }}
-        >
-          <Search size={13} className="flex-shrink-0 text-white/35" />
-          <input
-            ref={jumpRef}
-            value={jumpQuery}
-            onChange={(event) => setJumpQuery(event.target.value)}
-            placeholder="Ask or jump to..."
-            className="flex-1 bg-transparent outline-none placeholder:text-white/35"
-          />
-          <kbd className="text-[10px] bg-white/10 rounded px-1.5 py-0.5 text-white/30 font-mono">Ctrl K</kbd>
-        </form>
-      </div>
-
-      {/* Right actions */}
+      {/* Right actions. Needs attention count is not built; the slot is the gap before the avatar. */}
       <div className="flex items-center gap-0.5 ml-auto flex-shrink-0">
         <button
           type="button"

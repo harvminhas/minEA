@@ -9,6 +9,7 @@ import { aiApi, objectsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, modelItemPath, modelPath, reportPath } from "@/lib/mvp-paths";
+import { ASK_BAR_ID } from "@/components/nav/ask-shortcut";
 import { catalogStats, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
 import { useAppStore } from "@/lib/store";
@@ -131,6 +132,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         >
           <Sparkles size={16} className="ml-1 text-[#5b4ce6]" />
           <input
+            id={ASK_BAR_ID}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Ask anything about your systems, vendors, costs, or risks"
@@ -194,7 +196,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         }}
       >
         <Sparkles size={16} className="text-[#5b4ce6]" />
-        <input value={draft} onChange={(event) => setDraft(event.target.value)} className="h-10 flex-1 bg-transparent text-[15px] outline-none" />
+        <input id={ASK_BAR_ID} value={draft} onChange={(event) => setDraft(event.target.value)} className="h-10 flex-1 bg-transparent text-[15px] outline-none" />
         <button type="submit" className="rounded-xl bg-[#5b4ce6] px-4 py-2 text-[14px] font-semibold text-white">Ask →</button>
       </form>
       <section className="overflow-hidden rounded-2xl border border-[#e4e0ff] bg-white shadow-sm">

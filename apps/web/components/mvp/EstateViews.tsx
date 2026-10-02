@@ -1,18 +1,39 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Building2, Cloud, Database, Server } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { MinEAObject, Relationship } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
-import { askPath, modelItemPath, modelPath, sectionForKind } from "@/lib/mvp-paths";
+import { askPath, modelItemPath, modelPath } from "@/lib/mvp-paths";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { connectionPhrase, impactOf, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
 import { moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
+import { singlePoints, hostingMap } from "@/lib/reports/home";
+import {
+  backupGapCount,
+  chainRunDollars,
+  chainTodos,
+  collapsedCopy,
+  groupChain,
+  impactCandidates,
+  laneDelayMs,
+  manualFlowCount,
+  openingCards,
+  resolveSelection,
+  showExampleEstate,
+  spofCaption,
+  viewBadges,
+  viewsMotionCss,
+  type ChainItem,
+  type ChainTodo,
+} from "@/lib/views/opening";
+import { sampleEdges, sampleItems, sampleNodes } from "@/lib/views/sample-estate";
 import { noHostLinked, readPlatformInfra, readRuntimeInfra } from "@/lib/infra/read";
 import { infraStatus } from "@/lib/infra/status";
 import { cn } from "@/lib/utils";
@@ -39,44 +60,50 @@ const OFTEN = [
   ["ad_hoc", "Ad hoc"],
 ] as const;
 
-type Line = { x1: number; y1: number; x2: number; y2: number; stroke: string; dash?: string };
-
-function ownerOf(row: CatalogRow | undefined): string {
-  if (!row) return "";
-  return row.ownerTeam || row.ownerPerson;
-}
+type Line = { x1: number; y1: number; x2: number; y2: number; stroke: string; dash?: string; delay: number };
 
 export function EstateViews() {
   const params = useSearchParams();
   const tab = params.get("tab") || "impact";
   const { basePath } = useTenancy();
-  const sel = params.get("sel") ?? "";
+  const opening = useOpeningModel();
+  const sel = opening.example ? "" : (params.get("sel") ?? "");
 
   return (
     <div className="px-8 py-6">
+      <style>{viewsMotionCss}</style>
       <div className="mb-4 flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="shrink-0 text-[11px] font-semibold tracking-[0.16em] text-[#8b90a0]">VIEWS</span>
-          <ViewTitle tab={tab} />
+          <ViewTitle tab={tab} opening={opening} />
         </div>
         {tab === "flow" ? <DrawFlowButton /> : tab === "hosting" ? (
           <Link href={modelPath(basePath, "locations")} className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px] text-[#1c2230]">Locations</Link>
-        ) : (
-          <AskAbout tab={tab} sel={sel} />
-        )}
+        ) : tab === "impact" ? (
+          <AskAbout name={opening.items.find((item) => item.id === opening.selectedId)?.name ?? ""} />
+        ) : null}
       </div>
       <div className="mb-4 flex items-end justify-between gap-4 border-b border-[#eef0f4]">
         <div className="flex gap-5 text-[14px]">
-          {TABS.map(([id, label]) => (
-            <Link
-              key={id}
-              href={`${basePath}/views?tab=${id}${sel ? `&sel=${sel}` : ""}`}
-              className={cn("-mb-px pb-2.5", tab === id ? "border-b-2 border-[#5b4ce6] font-semibold text-[#1c2230]" : "text-[#6b7280]")}
-            >
-              {label}
-              {id === "protection" && <span className="ml-1.5 rounded bg-[#f3f4f8] px-1.5 py-0.5 text-[10px] font-medium text-[#8b90a0]">phase 2</span>}
-            </Link>
-          ))}
+          {TABS.map(([id, label]) => {
+            const badge = opening.badges.find((item) => item.tab === id);
+            const warm = id === "flow" || id === "hosting";
+            return (
+              <Link
+                key={id}
+                href={`${basePath}/views?tab=${id}${sel ? `&sel=${sel}` : ""}`}
+                className={cn("-mb-px flex items-center pb-2.5", tab === id ? "border-b-2 border-[#5b4ce6] font-semibold text-[#1c2230]" : "text-[#6b7280]")}
+              >
+                {label}
+                {badge && (
+                  <span className={cn("ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium", warm ? "bg-[#fff7ed] text-[#c2410c]" : "bg-[#fff1f2] text-[#e11d48]")}>
+                    {badge.label}
+                  </span>
+                )}
+                {id === "protection" && <span className="ml-1.5 rounded bg-[#f3f4f8] px-1.5 py-0.5 text-[10px] font-medium text-[#8b90a0]">phase 2</span>}
+              </Link>
+            );
+          })}
         </div>
         <Link href={`${basePath}/views/foundations`} className="mb-2 text-[12px] text-[#8b90a0]">Estate map <span className="rounded bg-[#f3f4f8] px-1.5 py-0.5">optional</span></Link>
       </div>
@@ -87,26 +114,20 @@ export function EstateViews() {
       {tab === "protection" && (
         <p className="max-w-xl text-[14px] leading-6 text-[#4b5163]">Backup and firewall links are phase 2. They will not change what happens when something goes down.</p>
       )}
-      {(tab === "impact" || !TABS.some(([id]) => id === tab)) && <ImpactView />}
+      {(tab === "impact" || !TABS.some(([id]) => id === tab)) && <ImpactView opening={opening} />}
     </div>
   );
 }
 
-function AskAbout({ tab, sel }: { tab: string; sel: string }) {
+function AskAbout({ name }: { name: string }) {
   const { basePath } = useTenancy();
-  const impact = useImpactGraph();
-  const name = impact.nodes.find((node) => node.id === sel)?.name;
-  const question = tab === "impact" && name ? `What happens if ${name} goes down?` : "";
-  if (!question) return null;
-  return <Link href={askPath(basePath, question)} className="shrink-0 text-[13px] text-[#5b4ce6]">Ask about this →</Link>;
+  if (!name) return null;
+  return <Link href={askPath(basePath, `What happens if ${name} goes down?`)} className="shrink-0 text-[13px] text-[#5b4ce6]">Ask about this →</Link>;
 }
 
-function ViewTitle({ tab }: { tab: string }) {
-  const params = useSearchParams();
+function ViewTitle({ tab, opening }: { tab: string; opening: OpeningModel }) {
   const router = useRouter();
   const { basePath } = useTenancy();
-  const impact = useImpactGraph();
-  const sel = params.get("sel") ?? "";
   if (tab !== "impact") {
     const titles: Record<string, string> = {
       flow: "How does our data move?",
@@ -122,12 +143,12 @@ function ViewTitle({ tab }: { tab: string }) {
       What happens if
       <select
         aria-label="What goes down"
-        value={sel}
+        value={opening.selectedId}
         onChange={(event) => router.replace(`${basePath}/views?tab=impact&sel=${event.target.value}`)}
         className="h-10 max-w-[280px] rounded-lg border border-[#e6e8ee] bg-white px-3 text-[16px] font-semibold text-[#1c2230] shadow-sm"
       >
-        <option value="">Choose…</option>
-        {impact.nodes.map((node) => (
+        {!opening.selectedId && <option value="">Choose…</option>}
+        {opening.nodes.map((node) => (
           <option key={node.id} value={node.id}>{node.name}</option>
         ))}
       </select>
@@ -136,217 +157,451 @@ function ViewTitle({ tab }: { tab: string }) {
   );
 }
 
-function ImpactView() {
+type OpeningModel = ReturnType<typeof useOpeningModel>;
+
+function useOpeningModel() {
   const params = useSearchParams();
+  const catalog = useModelCatalog();
+  const impact = useImpactGraph();
+  const dev = process.env.NODE_ENV !== "production";
+  const ready = !impact.isLoading && !catalog.isLoading;
+  const rows = catalog.data?.rows ?? [];
+  const locations = catalog.data?.locations ?? [];
+  const hostEdges = impact.edges.filter((edge) => edge.type === "runs_on" || edge.type === "built_on").length;
+  const example = ready && showExampleEstate(hostEdges, params.get("demo") === "empty", dev);
+
+  const liveItems = useMemo(() => {
+    const items: ChainItem[] = [
+      ...rows.map(rowToItem),
+      ...locations.map((object) => ({
+        id: object.id,
+        name: object.name,
+        kind: "location" as const,
+        ownerTeam: object.owner_team_name || object.point_of_contact_name || object.owner || "",
+        criticality: "",
+        description: object.description ?? "",
+        properties: (object.properties ?? {}) as Record<string, unknown>,
+      })),
+    ];
+    const known = new Set(items.map((item) => item.id));
+    for (const node of impact.nodes) {
+      if (known.has(node.id)) continue;
+      items.push({
+        id: node.id,
+        name: node.name,
+        kind: /capability/i.test(node.typeLabel ?? "") ? "capability" : "other",
+        ownerTeam: "",
+        criticality: "",
+        description: "",
+        properties: {},
+      });
+    }
+    return items;
+  }, [rows, locations, impact.nodes]);
+
+  const items = example ? sampleItems : liveItems;
+  const nodes = example ? sampleNodes : impact.nodes;
+  const edges = example ? sampleEdges : impact.edges;
+  const candidates = useMemo(() => (ready || example ? impactCandidates(items, nodes, edges) : []), [items, nodes, edges, ready, example]);
+  const knownIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
+  const selectedId = resolveSelection(params.get("sel"), candidates, knownIds);
+  const badges = viewBadges(
+    {
+      spof: singlePoints(rows, impact.edges).length,
+      manual: manualFlowCount(impact.relationships.map((rel) => ({ type: rel.type, how: String(rel.attributes?.how ?? "") }))),
+      noHome: hostingMap(rows, impact.edges).unlinked,
+      noBackup: backupGapCount(liveItems, impact.edges),
+    },
+    example || !ready,
+  );
+  const reduced = useReducedMotion();
+  return {
+    example,
+    ready,
+    items,
+    nodes,
+    edges,
+    candidates,
+    selectedId,
+    showingDefault: Boolean(selectedId) && selectedId === candidates[0]?.id,
+    badges,
+    reduced,
+    rows,
+    locations,
+    parties: catalog.data?.parties ?? [],
+  };
+}
+
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => setReduced(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
+  return reduced;
+}
+
+function rowToItem(row: CatalogRow): ChainItem {
+  return {
+    id: row.id,
+    name: row.name,
+    kind: row.kind,
+    ownerTeam: row.ownerTeam || row.ownerPerson,
+    criticality: row.criticalityLabel,
+    description: row.object.description ?? "",
+    properties: (row.object.properties ?? {}) as Record<string, unknown>,
+  };
+}
+
+function ImpactView({ opening }: { opening: OpeningModel }) {
+  const router = useRouter();
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
-  const catalog = useModelCatalog();
-  const impact = useImpactGraph();
-  const sel = params.get("sel") ?? "";
-  const rows = catalog.data?.rows ?? [];
-  const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
-  const source = impact.nodes.find((node) => node.id === sel);
-  const sourceRow = rowById.get(sel);
-  const hits = source ? impactOf(impact.nodes, impact.edges, sel) : [];
-  const bands = useMemo(() => groupBands(hits, rowById), [hits, rowById]);
-  const [picker, setPicker] = useState<"runs" | "calls" | null>(null);
+  const [picker, setPicker] = useState<"app" | "calls" | "capability" | "server" | null>(null);
   const [error, setError] = useState("");
   const canvasRef = useRef<HTMLDivElement>(null);
+  const byId = useMemo(() => new Map(opening.items.map((item) => [item.id, item])), [opening.items]);
+  const selected = byId.get(opening.selectedId);
+  const hits = opening.selectedId ? impactOf(opening.nodes, opening.edges, opening.selectedId) : [];
+  const bands = groupChain(hits, (id) => byId.get(id)?.kind ?? "other");
+  const dollars = chainRunDollars(selected, hits, opening.items);
+  const caption = spofCaption(opening.candidates[0], opening.showingDefault);
+  const todos = chainTodos(selected, hits, opening.items, opening.edges);
+  const cards = openingCards(opening.candidates);
+  const confirmed = String(selected?.properties.impact_confirmed_at ?? "");
+  const openCount = todos.filter((todo) => todo.id !== "confirm").length + (confirmed ? 0 : 1);
+  const teams = teamBoxes([...bands.stop, ...bands.slow].map((hit) => byId.get(hit.id)).filter((item): item is ChainItem => Boolean(item)));
+  const lines = useConnectors(canvasRef, `${opening.selectedId}:${hits.map((hit) => hit.id).join(",")}:${picker ?? ""}:${teams.length}`);
+  const delay = (fromBottom: number) => laneDelayMs(fromBottom, opening.reduced);
+
+  const objectTypeOf = (id: string) => {
+    const row = opening.rows.find((item) => item.id === id);
+    if (row) return row.object.type;
+    if (opening.locations.some((item) => item.id === id)) return "location";
+    if (opening.parties.some((item) => item.id === id)) return "external_party";
+    const node = opening.nodes.find((item) => item.id === id);
+    if (node?.typeLabel === "Capability") return "capability";
+    if (node?.typeLabel === "Location") return "location";
+    if (byId.get(id)?.kind === "platform") return "cloud_service";
+    if (byId.get(id)?.kind === "runtime") return "model";
+    return "application";
+  };
 
   const link = useMutation({
-    mutationFn: async (other: CatalogRow) => {
+    mutationFn: async (otherId: string) => {
+      if (opening.example) return;
       const token = await getToken();
-      if (!token || !orgSlug || !workspaceSlug || !source) throw new Error("Not signed in");
-      const target = rowById.get(source.id);
-      if (picker === "calls") {
+      if (!token || !orgSlug || !workspaceSlug || !selected) throw new Error("Not signed in");
+      const otherType = objectTypeOf(otherId);
+      if (picker === "capability") {
+        const app = bands.stop[0] ?? bands.slow[0];
+        const targetId = app?.id ?? (selected.kind === "application" ? selected.id : "");
+        if (!targetId) throw new Error("Link an application in this chain first");
         await relationshipsApi.create(orgSlug, workspaceSlug, {
-          type: "calls",
-          from_object_id: other.id,
-          from_type: other.object.type,
-          to_object_id: source.id,
-          to_type: target?.object.type ?? "application",
+          type: "supported_by",
+          from_object_id: otherId,
+          from_type: otherType,
+          to_object_id: targetId,
+          to_type: objectTypeOf(targetId),
         }, token);
         return;
       }
+      if (picker === "server") {
+        if (selected.kind === "location") {
+          await relationshipsApi.create(orgSlug, workspaceSlug, {
+            type: "located_at",
+            from_object_id: otherId,
+            from_type: otherType,
+            to_object_id: selected.id,
+            to_type: "location",
+          }, token);
+          return;
+        }
+        await relationshipsApi.create(orgSlug, workspaceSlug, {
+          type: "runs_on",
+          from_object_id: otherId,
+          from_type: otherType,
+          to_object_id: selected.id,
+          to_type: objectTypeOf(selected.id),
+        }, token);
+        return;
+      }
+      if (picker === "calls") {
+        const target = bands.stop[0];
+        const targetId = target?.id ?? (selected.kind === "application" ? selected.id : "");
+        if (!targetId) throw new Error("Link an application that stops first");
+        await relationshipsApi.create(orgSlug, workspaceSlug, {
+          type: "calls",
+          from_object_id: otherId,
+          from_type: otherType,
+          to_object_id: targetId,
+          to_type: objectTypeOf(targetId),
+        }, token);
+        return;
+      }
+      const hostId = selected.kind === "location" ? (bands.infra.find((hit) => byId.get(hit.id)?.kind === "runtime")?.id ?? "") : selected.id;
+      if (!hostId) throw new Error("Add a server in this chain first");
+      const hostKind = byId.get(hostId)?.kind;
       await relationshipsApi.create(orgSlug, workspaceSlug, {
-        type: "runs_on",
-        from_object_id: other.id,
-        from_type: other.object.type,
-        to_object_id: source.id,
-        to_type: target?.object.type ?? "model",
+        type: hostKind === "platform" ? "built_on" : "runs_on",
+        from_object_id: otherId,
+        from_type: otherType,
+        to_object_id: hostId,
+        to_type: objectTypeOf(hostId),
       }, token);
     },
     onSuccess: () => {
       setPicker(null);
       setError("");
       queryClient.invalidateQueries({ queryKey: ["impact-relationships", orgSlug, workspaceSlug] });
+      queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] });
     },
     onError: (err: Error) => setError(err.message),
   });
 
   const confirm = useMutation({
     mutationFn: async () => {
+      if (opening.example || !selected) return;
       const token = await getToken();
-      if (!token || !orgSlug || !workspaceSlug || !sourceRow) throw new Error("This item is not in the model yet");
-      await objectsApi.update(orgSlug, workspaceSlug, sourceRow.id, {
+      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
+      await objectsApi.update(orgSlug, workspaceSlug, selected.id, {
         properties: { impact_confirmed_at: new Date().toISOString().slice(0, 10) },
       }, token);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["model-catalog", orgSlug, workspaceSlug] }),
   });
 
-  const affectedApps = [...bands.stop, ...bands.slow].map((hit) => rowById.get(hit.id)).filter((row): row is CatalogRow => Boolean(row));
-  const noOwner = affectedApps.filter((row) => row.missing.owner);
-  const noCriticality = affectedApps.filter((row) => row.missing.criticality);
-  const outOfSupport = [sourceRow, ...hits.map((hit) => rowById.get(hit.id))]
-    .filter((row): row is CatalogRow => row?.kind === "runtime")
-    .filter((row) => {
-      const status = infraStatus(readRuntimeInfra(row.object), new Date());
-      return status.status === "out_of_support" || status.status === "unsupported_os";
-    });
-  const confirmed = String((sourceRow?.object.properties ?? {}).impact_confirmed_at ?? "");
-  const teams = teamBoxes(affectedApps);
-  const openCount = (noOwner.length ? 1 : 0) + (noCriticality.length ? 1 : 0) + (outOfSupport.length ? 1 : 0) + (confirmed ? 0 : 1);
-  const lines = useConnectors(canvasRef, `${sel}:${hits.map((hit) => hit.id).join(",")}:${picker ?? ""}:${teams.length}:${noOwner.length}`);
+  const select = (id: string) => router.replace(`${basePath}/views?tab=impact&sel=${id}`);
+  const stopAdd = selected?.kind === "platform" ? "+ Add an app" : "+ Something else runs on it";
 
-  const sourceStatus = sourceRow?.kind === "runtime" ? infraStatus(readRuntimeInfra(sourceRow.object), new Date()) : null;
-  const sourceKind = sourceRow?.kind === "runtime"
-    ? readRuntimeInfra(sourceRow.object).kindLabel || sourceRow.typeLabel
-    : sourceRow?.kind === "platform"
-      ? readPlatformInfra(sourceRow.object).kindLabel || sourceRow.typeLabel
-      : source?.typeLabel ?? "";
-  const sourceNote = [sourceKind, sourceStatus && sourceStatus.severity === "bad" ? "out of support" : ""].filter(Boolean).join(" · ");
+  if (!opening.ready && !opening.example) {
+    return <p className="text-[13px] text-[#8b90a0]">Loading the estate…</p>;
+  }
 
   return (
-    <div className="flex items-start gap-5">
-      <div className="min-w-0 flex-1">
-        <p className="mb-1 text-[13px]">
-          {hits.length === 0 && source ? (
-            <span className="text-[#6b7280]">Nothing in your model depends on {source.name}.</span>
-          ) : (
-            <span className="flex flex-wrap gap-x-3">
-              {bands.stop.length > 0 && <span className="font-medium text-[#e11d48]">{bands.stop.length} apps stop</span>}
-              {bands.slow.length > 0 && <span className="font-medium text-[#b45309]">{bands.slow.length} slows down</span>}
-              {bands.capabilities.length > 0 && <span className="font-medium text-[#7c3aed]">{bands.capabilities.length} capabilities hit</span>}
-              {teams.length > 0 && <span className="font-medium text-[#4b5163]">{teams.length} teams to call</span>}
-              {noOwner.length > 0 && <span className="font-medium text-[#b45309]">{noOwner.length} with no owner</span>}
-            </span>
-          )}
-        </p>
-        <p className="mb-3 text-[12px] text-[#8b90a0]">Read bottom to top. Lines show why each item is hit (hover a box for the full path).</p>
-        <div ref={canvasRef} className="relative overflow-hidden rounded-xl border border-[#e6e8ee] bg-white">
-          <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
-            {lines.map((line, index) => (
-              <path
-                key={index}
-                d={`M ${line.x1} ${line.y1} C ${line.x1} ${(line.y1 + line.y2) / 2}, ${line.x2} ${(line.y1 + line.y2) / 2}, ${line.x2} ${line.y2}`}
-                fill="none"
-                stroke={line.stroke}
-                strokeWidth="1.4"
-                strokeDasharray={line.dash}
-              />
-            ))}
-          </svg>
-          <Lane label="Teams to call">
-            {teams.map((team) => (
-              <Box key={team.name} node={`team:${team.name}`} tone="team" title={team.name} subtitle={team.apps} />
-            ))}
-            {noOwner.map((row) => (
-              <Box key={row.id} node={`gap:${row.id}`} tone="gap" title="No owner" subtitle={row.name} />
-            ))}
-          </Lane>
-          <Lane label="Capabilities hit">
-            {bands.capabilities.map((hit) => (
-              <HitBox key={hit.id} hit={hit} nodes={impact.nodes} row={rowById.get(hit.id)} tone="capability" />
-            ))}
-          </Lane>
-          <Lane label="Apps that slow down">
-            {bands.slow.map((hit) => (
-              <HitBox key={hit.id} hit={hit} nodes={impact.nodes} row={rowById.get(hit.id)} tone="slow" />
-            ))}
-            {source && <AddButton label="+ Another app needs one" onClick={() => setPicker(picker === "calls" ? null : "calls")} />}
-          </Lane>
-          <Lane label="Apps that stop">
-            {bands.stop.map((hit) => (
-              <HitBox key={hit.id} hit={hit} nodes={impact.nodes} row={rowById.get(hit.id)} tone="stop" />
-            ))}
-            {source && <AddButton label="+ Something else runs on it" onClick={() => setPicker(picker === "runs" ? null : "runs")} />}
-          </Lane>
-          {bands.infra.length > 0 && (
-            <Lane label="Infrastructure that goes with it">
-              {bands.infra.map((hit) => (
-                <HitBox key={hit.id} hit={hit} nodes={impact.nodes} row={rowById.get(hit.id)} tone="infra" />
-              ))}
-            </Lane>
-          )}
-          <Lane label="Goes down">
-            {source && <Box node={source.id} tone="down" title={source.name} subtitle={sourceNote} />}
-          </Lane>
-        </div>
-        {picker && (
-          <div className="mt-3 max-w-md rounded-xl border border-[#e6e8ee] bg-white p-3 shadow-sm">
-            <p className="mb-2 text-[13px] font-medium text-[#1c2230]">{picker === "runs" ? "What else runs on it?" : "Which app needs it?"}</p>
-            <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
-              {rows.filter((row) => row.kind === "application" && row.id !== sel).map((row) => (
-                <button key={row.id} type="button" onClick={() => link.mutate(row)} className="rounded-full border border-[#e6e8ee] bg-white px-2.5 py-1 text-[12px] text-[#1c2230] hover:border-[#c4b5fd]">{row.name}</button>
-              ))}
-            </div>
-            {error && <p className="mt-2 text-[12px] text-[#b42318]">{error}</p>}
+    <div className="relative">
+      <div className={opening.example ? "pointer-events-none select-none opacity-40" : ""}>
+        {cards.length > 0 && (
+          <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+            {cards.map((card) => {
+              const item = byId.get(card.id);
+              const on = card.id === opening.selectedId;
+              return (
+                <button
+                  key={card.id}
+                  type="button"
+                  onClick={() => select(card.id)}
+                  className={cn("min-w-0 rounded-xl border bg-white p-3 text-left", on ? "border-[#5b4ce6] ring-1 ring-[#5b4ce6]" : "border-[#e6e8ee]")}
+                >
+                  <div className="flex items-center gap-2">
+                    <KindIcon kind={card.kind} runtimeKind={String(item?.properties.runtime_kind ?? "")} />
+                    <span className="truncate text-[13px] font-semibold text-[#1c2230]">{card.name}</span>
+                  </div>
+                  <p className="mt-2 text-[13px] text-[#4b5163]"><span className="font-semibold text-[#1c2230]">{card.reached}</span> depend on it</p>
+                  <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-[#eef0f4]">
+                    {card.reached > 0 && (
+                      <>
+                        <span className="bg-[#e11d48]" style={{ flexGrow: card.direct }} />
+                        <span className="bg-[#f5b942]" style={{ flexGrow: card.degraded }} />
+                        <span className="bg-[#7c3aed]" style={{ flexGrow: card.losesSupport }} />
+                      </>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
-      </div>
-      <aside className="w-[300px] shrink-0 rounded-xl border border-[#e6e8ee] bg-white p-4">
-        <p className="mb-3 flex items-center gap-2 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">
-          <span className="text-[#16a34a]">✓</span> TO DO FOR THIS VIEW <span className="text-[#1c2230]">{openCount}</span>
+        {caption && <p className="mb-3 rounded-lg bg-[#fff7ed] px-3 py-2 text-[13px] text-[#9a3412]">{caption}</p>}
+        <p className="mb-3 flex flex-wrap gap-x-2 text-[13px]">
+          <Count n={bands.stop.length} text="apps stop" color="text-[#e11d48]" />
+          <Dot />
+          <Count n={bands.slow.length} text="slow down" color="text-[#b45309]" />
+          <Dot />
+          <Count n={bands.capabilities.length} text="capabilities hit" color="text-[#7c3aed]" />
+          <Dot />
+          <Count n={teams.length} text={teams.length === 1 ? "team to call" : "teams to call"} color="text-[#4b5163]" />
+          <Dot />
+          <span className={dollars > 0 ? "font-medium text-[#1c2230]" : "text-[#8b90a0]"}>{moneyLabel(dollars)}/yr of systems affected</span>
         </p>
-        {noOwner.map((row) => (
-          <TodoItem key={row.id} title={`${row.name} has no owner`} body="Nobody to call when it stops." action="Add owner team" href={modelItemPath(basePath, sectionForKind(row.kind), row.id)} />
-        ))}
-        {noCriticality.length > 0 && (
-          <TodoItem title="Criticality is not set" body={noCriticality.map((row) => row.name).join(", ")} action="Open the first one" href={modelItemPath(basePath, "applications", noCriticality[0]!.id)} />
-        )}
-        {outOfSupport.map((row) => {
-          const status = infraStatus(readRuntimeInfra(row.object), new Date());
-          return <TodoItem key={row.id} title={`${row.name} is out of support`} body={status.reason} action="Open record" href={modelItemPath(basePath, "servers", row.id)} />;
-        })}
-        <label className="mt-1 flex items-start gap-2 text-[13px]">
-          <input type="checkbox" className="mt-1" checked={Boolean(confirmed)} onChange={() => { if (!confirmed) confirm.mutate(); }} />
-          <span>
-            <span className="font-medium text-[#1c2230]">Is this list complete?</span>
-            <span className="mt-0.5 block text-[12px] leading-5 text-[#8b90a0]">Check that nothing else runs on {source?.name ?? "it"}.</span>
-            {confirmed && <span className="mt-0.5 block text-[12px] text-[#16a34a]">Confirmed {confirmed}</span>}
-          </span>
-        </label>
-      </aside>
+        <div className="flex items-start gap-5">
+          <div className="min-w-0 flex-1">
+            <div key={opening.selectedId} ref={canvasRef} className="relative overflow-hidden rounded-xl border border-[#e6e8ee] bg-white">
+              <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
+                {lines.map((line, index) => (
+                  <path
+                    key={index}
+                    className="views-edge-in"
+                    style={{ animationDelay: `${line.delay}ms` }}
+                    d={`M ${line.x1} ${line.y1} C ${line.x1} ${(line.y1 + line.y2) / 2}, ${line.x2} ${(line.y1 + line.y2) / 2}, ${line.x2} ${line.y2}`}
+                    fill="none"
+                    stroke={line.stroke}
+                    strokeWidth="1.4"
+                    strokeDasharray={line.dash}
+                  />
+                ))}
+              </svg>
+              <Lane label="Teams to call" delay={delay(5)} thin={teams.length === 0}>
+                {teams.map((team) => (
+                  <Box key={team.name} node={`team:${team.name}`} delay={delay(5)} tone="team" title={team.name} subtitle={team.apps} />
+                ))}
+              </Lane>
+              <Lane label="Capabilities hit" delay={delay(4)} thin={bands.capabilities.length === 0}>
+                {bands.capabilities.length === 0 ? (
+                  <CollapsedLine text={collapsedCopy("capabilities", 0)} action="Link one" onClick={() => setPicker(picker === "capability" ? null : "capability")} />
+                ) : bands.capabilities.map((hit) => (
+                  <HitBox key={hit.id} hit={hit} nodes={opening.nodes} item={byId.get(hit.id)} tone="capability" delay={delay(4)} />
+                ))}
+              </Lane>
+              <Lane label="Apps that slow down" delay={delay(3)} thin={bands.slow.length === 0}>
+                {bands.slow.map((hit) => (
+                  <HitBox key={hit.id} hit={hit} nodes={opening.nodes} item={byId.get(hit.id)} tone="slow" delay={delay(3)} />
+                ))}
+                {bands.slow.length === 0 ? (
+                  <CollapsedLine text={collapsedCopy("slow", 0)} action="Add one" onClick={() => setPicker(picker === "calls" ? null : "calls")} />
+                ) : (
+                  <AddButton label="+ Another app needs one" onClick={() => setPicker(picker === "calls" ? null : "calls")} />
+                )}
+              </Lane>
+              <Lane label="Apps that stop" delay={delay(2)} thin={bands.stop.length === 0}>
+                {bands.stop.map((hit) => (
+                  <HitBox key={hit.id} hit={hit} nodes={opening.nodes} item={byId.get(hit.id)} tone="stop" delay={delay(2)} />
+                ))}
+                {bands.stop.length === 0 ? (
+                  <CollapsedLine text={collapsedCopy("stop", 0)} action="Link an app" onClick={() => setPicker(picker === "app" ? null : "app")} />
+                ) : (
+                  <AddButton label={stopAdd} onClick={() => setPicker(picker === "app" ? null : "app")} />
+                )}
+              </Lane>
+              <Lane label="Goes down with it" delay={delay(1)} thin={bands.infra.length === 0}>
+                {bands.infra.length === 0 ? (
+                  <CollapsedLine text={collapsedCopy("infra", 0)} action="Add a server" onClick={() => setPicker(picker === "server" ? null : "server")} />
+                ) : bands.infra.map((hit) => (
+                  <HitBox key={hit.id} hit={hit} nodes={opening.nodes} item={byId.get(hit.id)} tone="infra" delay={delay(1)} />
+                ))}
+              </Lane>
+              <Lane label="Goes down" delay={delay(0)}>
+                {selected && <Box node={selected.id} delay={delay(0)} tone="down" title={selected.name} subtitle={sourceSubtitle(selected, opening.rows)} />}
+              </Lane>
+            </div>
+            <p className="mt-2 text-[12px] text-[#8b90a0]">Read bottom to top. Lines show why each item is hit; hover a box for the full path.</p>
+            {picker && (
+              <div className="mt-3 max-w-md rounded-xl border border-[#e6e8ee] bg-white p-3 shadow-sm">
+                <p className="mb-2 text-[13px] font-medium text-[#1c2230]">
+                  {picker === "server" ? "Which server?" : picker === "capability" ? "Which capability?" : picker === "calls" ? "Which app needs it?" : "Which app?"}
+                </p>
+                <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+                  {pickerChoices(picker, opening, bands.stop.map((hit) => hit.id)).map((choice) => (
+                    <button key={choice.id} type="button" onClick={() => link.mutate(choice.id)} className="rounded-full border border-[#e6e8ee] bg-white px-2.5 py-1 text-[12px] text-[#1c2230] hover:border-[#c4b5fd]">{choice.name}</button>
+                  ))}
+                </div>
+                {error && <p className="mt-2 text-[12px] text-[#b42318]">{error}</p>}
+              </div>
+            )}
+          </div>
+          <aside className="w-[300px] shrink-0 rounded-xl border border-[#e6e8ee] bg-white p-4">
+            <p className="mb-3 flex items-center gap-2 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">
+              <span className="text-[#16a34a]">✓</span> TO DO FOR THIS CHAIN <span className="text-[#1c2230]">{openCount}</span>
+            </p>
+            {todos.map((todo) => todo.id === "confirm" ? (
+              <label key={todo.id} className="mt-1 flex items-start gap-2 text-[13px]">
+                <input type="checkbox" className="mt-1" checked={Boolean(confirmed)} onChange={() => { if (!confirmed) confirm.mutate(); }} />
+                <span>
+                  <span className="font-medium text-[#1c2230]">{todo.title}</span>
+                  <span className="mt-0.5 block text-[12px] leading-5 text-[#8b90a0]">{todo.body}</span>
+                  {confirmed && <span className="mt-0.5 block text-[12px] text-[#16a34a]">Confirmed {confirmed}</span>}
+                </span>
+              </label>
+            ) : (
+              <TodoItem key={todo.id} title={todo.title} body={todo.body} action={todo.action} href={todoHref(basePath, todo)} />
+            ))}
+          </aside>
+        </div>
+      </div>
+      {opening.example && (
+        <div className="absolute inset-0 flex items-start justify-center pt-24">
+          <div className="max-w-md rounded-2xl border border-[#e6e8ee] bg-white px-6 py-5 text-center shadow-lg">
+            <p className="text-[15px] font-semibold text-[#1c2230]">Example data</p>
+            <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">Link your first app to a server to see yours. Until then this is a sample estate; nothing here is saved to your workspace.</p>
+            <Link href={`${basePath}/views?tab=hosting`} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Open Hosting & location</Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function teamBoxes(apps: CatalogRow[]): { name: string; apps: string }[] {
+function pickerChoices(picker: "app" | "calls" | "capability" | "server", opening: OpeningModel, stopIds: string[]) {
+  if (picker === "capability") {
+    return opening.nodes.filter((node) => node.typeLabel === "Capability").map((node) => ({ id: node.id, name: node.name }));
+  }
+  if (picker === "server") {
+    return opening.rows.filter((row) => row.kind === "runtime").map((row) => ({ id: row.id, name: row.name }));
+  }
+  return opening.rows
+    .filter((row) => row.kind === "application" && !stopIds.includes(row.id))
+    .map((row) => ({ id: row.id, name: row.name }));
+}
+
+function todoHref(basePath: string, todo: ChainTodo): string {
+  const section = todo.action === "Plan replacement" || todo.action === "Plan upgrade" || todo.action === "Add backup" ? "servers" : "applications";
+  return modelItemPath(basePath, section, todo.recordId);
+}
+
+function sourceSubtitle(item: ChainItem, rows: CatalogRow[]): string {
+  const row = rows.find((entry) => entry.id === item.id);
+  if (item.kind === "runtime" && row) {
+    const runtime = readRuntimeInfra(row.object);
+    const status = infraStatus(runtime, new Date());
+    return [runtime.kindLabel || row.typeLabel, status.severity === "bad" ? "out of support" : ""].filter(Boolean).join(" · ");
+  }
+  if (item.kind === "platform" && row) return readPlatformInfra(row.object).kindLabel || row.typeLabel;
+  if (item.kind === "location") {
+    const type = String(item.properties.location_type ?? "");
+    if (type === "office") return "Office";
+    if (type === "data_center") return "Data center";
+    if (type === "colo") return "Colo";
+    if (type === "cloud_region") return "Cloud region";
+    return "Location";
+  }
+  return row?.typeLabel ?? "";
+}
+
+function teamBoxes(apps: ChainItem[]): { name: string; apps: string }[] {
   const map = new Map<string, string[]>();
   for (const app of apps) {
-    const owner = ownerOf(app);
-    if (!owner) continue;
-    map.set(owner, [...(map.get(owner) ?? []), app.name]);
+    if (!app.ownerTeam) continue;
+    map.set(app.ownerTeam, [...(map.get(app.ownerTeam) ?? []), app.name]);
   }
   return [...map.entries()].map(([name, names]) => ({ name, apps: names.join(", ") }));
 }
 
-function groupBands(hits: ImpactHit[], rowById: Map<string, CatalogRow>) {
-  const stop: ImpactHit[] = [];
-  const slow: ImpactHit[] = [];
-  const capabilities: ImpactHit[] = [];
-  const infra: ImpactHit[] = [];
-  for (const hit of hits) {
-    const row = rowById.get(hit.id);
-    if (hit.severity === "loses_support") capabilities.push(hit);
-    else if (row?.kind === "application" && hit.severity === "degraded") slow.push(hit);
-    else if (row?.kind === "application") stop.push(hit);
-    else if (row?.kind === "runtime" || row?.kind === "platform") infra.push(hit);
-    else capabilities.push(hit);
-  }
-  return { stop, slow, capabilities, infra };
+function Count({ n, text, color }: { n: number; text: string; color: string }) {
+  return <span className={n > 0 ? `font-medium ${color}` : "text-[#8b90a0]"}>{n} {text}</span>;
+}
+
+function Dot() {
+  return <span className="text-[#c5c8d4]">·</span>;
+}
+
+function KindIcon({ kind, runtimeKind }: { kind: ChainItem["kind"]; runtimeKind: string }) {
+  const className = "h-4 w-4 shrink-0 text-[#6b7280]";
+  if (kind === "location") return <Building2 className={className} />;
+  if (kind === "platform") return <Cloud className={className} />;
+  if (runtimeKind === "database") return <Database className={className} />;
+  return <Server className={className} />;
+}
+
+function CollapsedLine({ text, action, onClick }: { text: string; action: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="text-[13px] text-[#8b90a0]">
+      {text} <span className="text-[#5b4ce6]">· {action}</span>
+    </button>
+  );
 }
 
 function useConnectors(rootRef: React.RefObject<HTMLDivElement | null>, key: string) {
@@ -384,6 +639,7 @@ function useConnectors(rootRef: React.RefObject<HTMLDivElement | null>, key: str
           y2: upper.bottom,
           stroke: el.dataset.stroke || "#c5c8d4",
           dash: el.dataset.dash,
+          delay: Number(el.dataset.delay ?? 0),
         });
       });
       setLines((prev) => (sameLines(prev, next) ? prev : next));
@@ -399,13 +655,13 @@ function useConnectors(rootRef: React.RefObject<HTMLDivElement | null>, key: str
 function sameLines(prev: Line[], next: Line[]): boolean {
   return prev.length === next.length && prev.every((line, index) => {
     const other = next[index];
-    return other && line.x1 === other.x1 && line.y1 === other.y1 && line.x2 === other.x2 && line.y2 === other.y2 && line.stroke === other.stroke;
+    return other && line.x1 === other.x1 && line.y1 === other.y1 && line.x2 === other.x2 && line.y2 === other.y2 && line.stroke === other.stroke && line.delay === other.delay;
   });
 }
 
-function Lane({ label, children }: { label: string; children: React.ReactNode }) {
+function Lane({ label, delay, thin, children }: { label: string; delay: number; thin?: boolean; children: React.ReactNode }) {
   return (
-    <div className="relative flex min-h-[76px] items-center border-b border-[#f3f4f8] last:border-b-0">
+    <div className={cn("views-lane-in relative flex items-center border-b border-[#f3f4f8] last:border-b-0", thin ? "min-h-[48px]" : "min-h-[76px]")} style={{ animationDelay: `${delay}ms` }}>
       <div className="w-[148px] shrink-0 px-4 text-[12px] text-[#8b90a0]">{label}</div>
       <div className="flex flex-1 flex-wrap items-center justify-center gap-3 px-4 py-3">{children}</div>
     </div>
@@ -419,6 +675,7 @@ function Box({
   title,
   subtitle,
   hover,
+  delay = 0,
 }: {
   node: string;
   parent?: string;
@@ -426,6 +683,7 @@ function Box({
   title: string;
   subtitle?: string;
   hover?: string;
+  delay?: number;
 }) {
   const stroke = tone === "stop" ? "#e11d48" : tone === "slow" || tone === "gap" ? "#d97706" : tone === "capability" ? "#7c3aed" : "#94a3b8";
   const dash = tone === "stop" ? undefined : "4 4";
@@ -435,6 +693,7 @@ function Box({
       data-parent={parent}
       data-stroke={parent ? stroke : undefined}
       data-dash={parent ? dash : undefined}
+      data-delay={delay}
       title={hover}
       className={cn(
         "relative z-[1] min-w-[132px] rounded-lg px-3 py-2 text-center",
@@ -453,12 +712,11 @@ function Box({
   );
 }
 
-function HitBox({ hit, nodes, row, tone }: { hit: ImpactHit; nodes: ImpactNode[]; row?: CatalogRow; tone: "capability" | "slow" | "stop" | "infra" }) {
+function HitBox({ hit, nodes, item, tone, delay }: { hit: ImpactHit; nodes: ImpactNode[]; item?: ChainItem; tone: "capability" | "slow" | "stop" | "infra"; delay: number }) {
   const phrase = connectionPhrase(hit, nodes);
   const last = hit.path[hit.path.length - 1];
   const parent = last ? (last.fromId === hit.id ? last.toId : last.fromId) : undefined;
-  const crit = row?.criticalityLabel || "";
-  const detail = [crit, phrase ? phrase.charAt(0).toLowerCase() + phrase.slice(1) : ""].filter(Boolean).join(" · ");
+  const detail = [item?.criticality ?? "", phrase ? phrase.charAt(0).toLowerCase() + phrase.slice(1) : ""].filter(Boolean).join(" · ");
   return (
     <Box
       node={hit.id}
@@ -467,6 +725,7 @@ function HitBox({ hit, nodes, row, tone }: { hit: ImpactHit; nodes: ImpactNode[]
       title={hit.name}
       subtitle={detail}
       hover={hit.path.map((step) => step.label).join(" → ")}
+      delay={delay}
     />
   );
 }
