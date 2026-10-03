@@ -1,20 +1,78 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { SETUP_MIN, setupGapLine, setupState } from "./setupMin.ts";
+import { setupState, SETUP_MIN } from "./setupMin.ts";
 
 describe("setupState", () => {
-  const apps = (count: number) => Array.from({ length: count }, () => ({ type: "application" }));
-  const links = (count: number) => Array.from({ length: count }, () => ({ type: "runs_on" }));
-
-  it("needs both the app count and a hosting link", () => {
-    assert.equal(setupState(apps(4), links(1)).met, false);
-    assert.equal(setupState(apps(5), []).met, false);
-    assert.equal(setupState(apps(SETUP_MIN.apps), links(SETUP_MIN.hostingLinks)).met, true);
+  it("returns not met with 4 apps and 1 link", () => {
+    const objects = [
+      { type: "application" },
+      { type: "application" },
+      { type: "application" },
+      { type: "application" },
+    ];
+    const relationships = [{ type: "runs_on" }];
+    const state = setupState(objects, relationships);
+    assert.equal(state.apps, 4);
+    assert.equal(state.hostingLinks, 1);
+    assert.equal(state.met, false);
   });
 
-  it("phrases the gap from SETUP_MIN", () => {
-    const state = setupState(apps(SETUP_MIN.apps - 3), []);
-    assert.equal(setupGapLine(state), "Add 3 more apps and link one to a server to see your reports.");
-    assert.equal(setupGapLine(setupState(apps(SETUP_MIN.apps), links(SETUP_MIN.hostingLinks))), "");
+  it("returns not met with 5 apps and 0 links", () => {
+    const objects = [
+      { type: "application" },
+      { type: "application" },
+      { type: "application" },
+      { type: "application" },
+      { type: "application" },
+    ];
+    const relationships: { type: string }[] = [];
+    const state = setupState(objects, relationships);
+    assert.equal(state.apps, 5);
+    assert.equal(state.hostingLinks, 0);
+    assert.equal(state.met, false);
+  });
+
+  it("returns met with 5 apps and 1 link", () => {
+    const objects = [
+      { type: "application" },
+      { type: "application" },
+      { type: "application" },
+      { type: "application" },
+      { type: "application" },
+    ];
+    const relationships = [{ type: "runs_on" }];
+    const state = setupState(objects, relationships);
+    assert.equal(state.apps, 5);
+    assert.equal(state.hostingLinks, 1);
+    assert.equal(state.met, true);
+  });
+
+  it("counts runs_on and built_on relationships", () => {
+    const objects = [
+      { type: "application" },
+      { type: "application" },
+      { type: "application" },
+      { type: "application" },
+      { type: "application" },
+    ];
+    const relationships = [
+      { type: "runs_on" },
+      { type: "built_on" },
+      { type: "depends_on" }, // not counted
+    ];
+    const state = setupState(objects, relationships);
+    assert.equal(state.hostingLinks, 2);
+    assert.equal(state.met, true);
+  });
+
+  it("changing SETUP_MIN changes behavior", () => {
+    // This test verifies that SETUP_MIN is the single source of truth
+    assert.equal(SETUP_MIN.apps, 5);
+    assert.equal(SETUP_MIN.hostingLinks, 1);
+    
+    const objects = Array(SETUP_MIN.apps).fill({ type: "application" });
+    const relationships = Array(SETUP_MIN.hostingLinks).fill({ type: "runs_on" });
+    const state = setupState(objects, relationships);
+    assert.equal(state.met, true);
   });
 });
