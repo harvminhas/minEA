@@ -420,18 +420,23 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
   }
 
   const selectedName = selected?.name ?? "this server";
+  const readyServers = opening.items.filter((item) => item.kind === "runtime").length;
+  const readyLinks = opening.counts.hostingLinks;
   return (
     <div className="relative">
       {!opening.example && readyOpen && params.get("ready") === "1" && (
-        <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-[#c9c6f5] bg-[#f7f6ff] px-4 py-3">
-          <div>
-            <p className="text-[14px] font-semibold text-[#1c2230]">Your map is ready</p>
-            <p className="mt-1 text-[13px] text-[#4b5163]">{opening.counts.apps} apps · {opening.counts.hostingLinks} linked to a server</p>
-            <Link href={askPath(basePath, `What breaks if our ${selectedName} goes down?`, opening.selectedId)} className="mt-2 inline-flex rounded-full border border-[#c9c6f5] bg-white px-3 py-1 text-[13px] text-[#3f35b5]">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#a7f3d0] bg-[#ecfdf3] px-4 py-3">
+          <p className="text-[14px] text-[#1c2230]">
+            <span className="mr-1 text-[#047857]">✓</span>
+            <span className="font-semibold">Your map is ready.</span>{" "}
+            {opening.counts.apps} apps, {readyServers} server{readyServers === 1 ? "" : "s"}, {readyLinks} hosting link{readyLinks === 1 ? "" : "s"}. This is what depends on your riskiest item: {selectedName}.
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link href={askPath(basePath, `What breaks if our ${selectedName} goes down?`, opening.selectedId)} className="rounded-full border border-[#a7f3d0] bg-white px-3 py-1 text-[13px] text-[#047857]">
               What breaks if our {selectedName} goes down?
             </Link>
+            <button type="button" aria-label="Dismiss" onClick={() => setReadyOpen(false)} className="text-[16px] leading-none text-[#6b7289]">×</button>
           </div>
-          <button type="button" onClick={() => setReadyOpen(false)} className="text-[12px] text-[#6b7289]">Dismiss</button>
         </div>
       )}
       <div className={opening.example ? "pointer-events-none select-none opacity-40" : ""}>
