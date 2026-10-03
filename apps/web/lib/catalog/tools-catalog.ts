@@ -7,6 +7,7 @@ export const TOOL_CATALOG = [
   { name: "AS400", aliases: ["as400", "as/400", "ibm i"], vendor: "IBM", category: "Server", hosting: "own", kind: "server", typicalAnnual: null, unit: "year" },
   { name: "SPS Commerce", aliases: ["sps commerce", "edi"], vendor: "SPS Commerce", category: "Integration", hosting: "either", kind: "app", typicalAnnual: null, unit: "year" },
   { name: "TrueCommerce", aliases: ["truecommerce", "edi"], vendor: "TrueCommerce", category: "Integration", hosting: "either", kind: "app", typicalAnnual: null, unit: "year" },
+  { name: "Cleo", aliases: ["cleo", "cleo integration cloud", "edi"], vendor: "Cleo", category: "Integration", hosting: "either", kind: "app", typicalAnnual: null, unit: "year" },
   { name: "BarTender", aliases: ["bartender", "bar tender"], vendor: "Seagull", category: "Operations", hosting: "either", kind: "app", typicalAnnual: 1200, unit: "year", hints: ["label", "printing", "barcode"] },
   { name: "Zoom Workplace", aliases: ["zoom", "zoom workplace"], vendor: "Zoom", category: "Meetings", hosting: "saas", kind: "app", typicalAnnual: 1800, unit: "year" },
   { name: "Oracle NetSuite", aliases: ["netsuite", "oracle netsuite"], vendor: "Oracle", category: "Finance", hosting: "saas", kind: "app", typicalAnnual: 12000, unit: "year" },

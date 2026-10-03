@@ -23,6 +23,13 @@ describe("tool matcher", () => {
     assert.equal(harbor.filter((item) => item.tool?.kind === "server").length, 1);
   });
 
+  it("offers Cleo with the other EDI tools", () => {
+    const names = matchEntries("EDI")[0]?.options.map((option) => option.name) ?? [];
+    assert.ok(names.includes("SPS Commerce"));
+    assert.ok(names.includes("TrueCommerce"));
+    assert.ok(names.includes("Cleo"));
+  });
+
   it("collapses duplicates", () => {
     assert.equal(matchEntries("Salesforce, salesforce, Salesforce").length, 1);
   });

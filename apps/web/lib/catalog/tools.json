@@ -70,6 +70,16 @@
     "unit": "year"
   },
   {
+    "name": "Cleo",
+    "aliases": ["cleo", "cleo integration cloud", "edi"],
+    "vendor": "Cleo",
+    "category": "Integration",
+    "hosting": "either",
+    "kind": "app",
+    "typicalAnnual": null,
+    "unit": "year"
+  },
+  {
     "name": "BarTender",
     "aliases": ["bartender", "bar tender"],
     "vendor": "Seagull",
