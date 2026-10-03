@@ -1,5 +1,5 @@
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
+import { getAuth, connectAuthEmulator, type Auth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "",
@@ -12,6 +12,7 @@ const firebaseConfig = {
 
 let app: FirebaseApp | undefined;
 let auth: Auth | undefined;
+let emulatorConfigured = false;
 
 export function isFirebaseConfigured(): boolean {
   return Boolean(
@@ -32,5 +33,15 @@ export function getFirebaseAuth(): Auth {
   }
   app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
   auth = getAuth(app);
+  
+  // Connect to emulator if configured (dev/test only, never in production)
+  if (!emulatorConfigured && process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === "true") {
+    const emulatorHost = process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_HOST || "localhost";
+    const emulatorPort = process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_PORT || "9099";
+    connectAuthEmulator(auth, `http://${emulatorHost}:${emulatorPort}`, { disableWarnings: true });
+    emulatorConfigured = true;
+    console.log(`[Firebase Auth] Connected to emulator at ${emulatorHost}:${emulatorPort}`);
+  }
+  
   return auth;
 }
