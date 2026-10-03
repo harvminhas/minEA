@@ -40,6 +40,7 @@ import {
 import { catalogLifecycleLabel, catalogOwnerLabel } from "@/lib/catalog-fields";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
+import { catalogQueryKey } from "@/lib/use-model-catalog";
 import type { MinEAObject } from "@minea/types";
 import { cn, formatCurrency, getStatusLabel } from "@/lib/utils";
 
@@ -190,6 +191,7 @@ function SystemListContent() {
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: systemsQueryKey });
+    queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
     void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
   };
 

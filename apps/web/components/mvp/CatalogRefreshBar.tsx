@@ -1,20 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { catalogApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
-import {
-  catalogQueryKey,
-  shapeCatalog,
-  shouldRefreshOnEnter,
-  useModelCatalog,
-} from "@/lib/use-model-catalog";
-
-function enterKey(orgSlug: string, workspaceSlug: string) {
-  return `bubomap-catalog-enter:${orgSlug}:${workspaceSlug}`;
-}
+import { catalogQueryKey, shapeCatalog } from "@/lib/use-model-catalog";
 
 type Phase = "idle" | "refreshing" | "complete";
 
@@ -22,10 +13,8 @@ export function CatalogRefreshBar() {
   const { orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
-  const catalog = useModelCatalog();
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState("");
-  const enteredKey = useRef("");
 
   const refresh = async () => {
     if (!orgSlug || !workspaceSlug || phase === "refreshing") return;
@@ -52,19 +41,7 @@ export function CatalogRefreshBar() {
     return () => window.clearTimeout(timer);
   }, [phase]);
 
-  useEffect(() => {
-    if (!catalog.data || !orgSlug || !workspaceSlug) return;
-    const key = enterKey(orgSlug, workspaceSlug);
-    if (enteredKey.current === key) return;
-    enteredKey.current = key;
-    const already = sessionStorage.getItem(key) === "1";
-    sessionStorage.setItem(key, "1");
-    if (shouldRefreshOnEnter(catalog.data.dirty, already)) void refresh();
-    // The first catalog response for this workspace decides. Later edits use the button.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [catalog.data, orgSlug, workspaceSlug]);
-
-  const show = Boolean(catalog.data?.dirty || phase !== "idle" || error);
+  const show = phase !== "idle" || Boolean(error);
   if (!show) return null;
 
   const message =

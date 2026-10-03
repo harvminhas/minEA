@@ -32,7 +32,7 @@ async def mark_catalog_dirty(db: AsyncSession, workspace_id: UUID) -> None:
 async def get_catalog(db: AsyncSession, workspace_id: UUID, org_id: UUID) -> dict[str, Any]:
     state = await _state(db, workspace_id)
     stored = await _read_stored(workspace_id)
-    if stored is None:
+    if stored is None or state["catalog_dirty"]:
         return await refresh_catalog(db, workspace_id, org_id)
     stored["dirty"] = bool(state["catalog_dirty"])
     return stored

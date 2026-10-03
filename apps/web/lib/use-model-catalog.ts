@@ -79,7 +79,7 @@ export function applyCatalogWrite(
         ? relationships.map((rel) => (rel.id === next.id ? next : rel))
         : [...relationships, next];
     }
-    return shapeCatalog({ ...current, objects, relationships, dirty: true });
+    return shapeCatalog({ ...current, objects, relationships, dirty: current.dirty });
   });
 }
 
