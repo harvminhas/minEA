@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { catalogApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
