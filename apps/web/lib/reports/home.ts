@@ -31,6 +31,21 @@ export const REPORT_REGISTRY = [
   { id: "tech-debt", category: "ownership", title: "Tech debt summary", body: "What known problems are we carrying, and where?" },
 ] as const;
 
+/** Sample-company figures shown on Reports until the workspace meets the setup minimum. */
+export const EXAMPLE_REPORT_STATS: Record<string, { value: string; detail: string; alert?: boolean }> = {
+  renewals: { value: "4", detail: "renewals · $41,980" },
+  spend: { value: "$86,200", detail: "/ yr · 6 vendors" },
+  "infrastructure-cost": { value: "$94,390", detail: "/ yr" },
+  impact: { value: "AS400 → 4 apps run on it", detail: "" },
+  aging: { value: "4 out of support", detail: "2 ending in 90 days", alert: true },
+  hosting: { value: "5 hosts", detail: "1 app with no host linked" },
+  "end-of-life": { value: "2", detail: "" },
+  "single-points": { value: "4", detail: "", alert: true },
+  "ownership-gaps": { value: "3", detail: "" },
+  "sensitive-vendors": { value: "5", detail: "" },
+  "tech-debt": { value: "5", detail: "" },
+};
+
 export function reportCounts() {
   const all = REPORT_REGISTRY.length;
   const cost = REPORT_REGISTRY.filter((item) => item.category === "cost").length;
