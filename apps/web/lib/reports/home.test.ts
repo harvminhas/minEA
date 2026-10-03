@@ -88,6 +88,16 @@ test("a host needs 3 distinct dependents, and a duplicate edge does not count tw
   assert.equal(found[0].dependents.length, 3);
 });
 
+test("an application with no hosting model and no edge is unlinked", () => {
+  const app = row({
+    id: "unknown",
+    name: "Unknown",
+    kind: "application",
+    object: { id: "unknown", name: "Unknown", type: "application", properties: {} } as CatalogRow["object"],
+  });
+  assert.equal(hostingMap([app], []).unlinked, 1);
+});
+
 test("an on-prem application with no edge is only in the unlinked count", () => {
   const app = row({
     id: "labels",

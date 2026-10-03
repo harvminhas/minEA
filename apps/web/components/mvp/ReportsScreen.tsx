@@ -12,6 +12,7 @@ import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { EXAMPLE_REPORT_STATS, hostingMap, infraCost, popularCards, REPORT_REGISTRY, singlePoints, topHostLine } from "@/lib/reports/home";
+import { countLabel } from "@/lib/labels";
 
 export function ReportsScreen() {
   const { basePath } = useTenancy();
@@ -50,7 +51,7 @@ export function ReportsScreen() {
     if (id === "infrastructure-cost") return { value: moneyLabel(cost.total), detail: `/ yr · platforms ${moneyLabel(cost.platforms)} · servers ${moneyLabel(cost.servers)}` };
     if (id === "impact") return { value: topHostLine(rows, impact.edges), detail: "" };
     if (id === "aging") return cards.aging;
-    if (id === "hosting") return { value: `${hosts.hosts} hosts`, detail: `${hosts.unlinked} app${hosts.unlinked === 1 ? "" : "s"} with no host linked` };
+    if (id === "hosting") return { value: countLabel(hosts.hosts, "host", "hosts"), detail: `${hosts.unlinked} app${hosts.unlinked === 1 ? "" : "s"} with no host linked` };
     if (id === "end-of-life") {
       const retiring = catalogStats(rows).endOfLife.length;
       return { value: retiring ? `${retiring} items` : "Nothing is retiring", detail: "" };

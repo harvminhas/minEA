@@ -8,6 +8,7 @@ import { askPath, modelItemPath, reportsPath, sectionForKind } from "@/lib/mvp-p
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { agingSummary } from "@/lib/infra/status";
 import { hostingMap, infraCost, singlePoints, withArticle } from "@/lib/reports/home";
+import { countLabel } from "@/lib/labels";
 import { criticalityClass } from "@/components/mvp/pills";
 import { describeTypes } from "@/lib/ask/deterministic";
 import { catalogStats, moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
@@ -129,7 +130,7 @@ function HostingReport({ rows }: { rows: CatalogRow[] }) {
   const map = hostingMap(rows, impact.edges);
   return (
     <Shell title="Hosting map" basePath={basePath}>
-      <p className="text-[14px] text-[#6b7289]">{map.hosts} hosts · {map.unlinked} app{map.unlinked === 1 ? "" : "s"} with no host linked. Hosts come from runs-on and built-on links.</p>
+      <p className="text-[14px] text-[#6b7289]">{countLabel(map.hosts, "host", "hosts")} · {map.unlinked} app{map.unlinked === 1 ? "" : "s"} with no host linked. Hosts come from runs-on and built-on links.</p>
     </Shell>
   );
 }

@@ -246,6 +246,13 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
       }, token);
       if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: created });
     }
+    for (const app of apps) {
+      if (!app.objectId) continue;
+      const hosting_model = app.choice === "saas" ? "saas" : app.choice === "own" ? "on_premise" : "";
+      if (!hosting_model) continue;
+      const saved = await objectsApi.update(orgSlug!, workspaceSlug!, app.objectId, { properties: { hosting_model } }, token);
+      remember(saved);
+    }
     setServerIds(ids);
     setStep(3);
   };

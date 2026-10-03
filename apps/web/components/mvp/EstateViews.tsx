@@ -19,6 +19,7 @@ import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { connectionPhrase, impactOf, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
 import { moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
 import { singlePoints, hostingMap } from "@/lib/reports/home";
+import { countLabel } from "@/lib/labels";
 import {
   backupGapCount,
   chainRunDollars,
@@ -1047,8 +1048,8 @@ function HostingView() {
   return (
     <div>
       <p className="mb-4 text-[13px] text-[#4b5163]">
-        <span className="font-semibold">{locations.length} locations</span>
-        <span className="ml-3 font-semibold">{placed} servers & devices placed</span>
+        <span className="font-semibold">{countLabel(locations.length, "location", "locations")}</span>
+        <span className="ml-3 font-semibold">{countLabel(placed, "server or device placed", "servers & devices placed")}</span>
         {homeless.length > 0 && <span className="ml-3 font-semibold text-[#b45309]">{homeless.length} app{homeless.length === 1 ? "" : "s"} with no home</span>}
         <span className="ml-3 text-[#8b90a0]">Drag an app into a box to say it runs there.</span>
       </p>

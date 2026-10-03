@@ -286,7 +286,8 @@ function createProperties(row: PlanInput): Record<string, unknown> {
   Object.assign(properties, categoryFields(tool?.category));
   if (catalogTool) properties.catalog_tool = catalogTool;
   if (row.customBuilt) properties.is_custom_built = true;
-  if (row.kind === "platform" && row.choice === "saas") properties.hosting_model = "saas";
+  if ((row.kind === "app" || row.kind === "platform") && row.choice === "saas") properties.hosting_model = "saas";
+  if (row.kind === "app" && row.choice === "own") properties.hosting_model = "on_premise";
   if (tool && Number.isFinite(yearly) && yearly > 0) properties.cost_lines = [typicalLine(yearly, tool.vendor)];
   if (row.renewal) properties.contract_renewal = row.renewal;
   return properties;

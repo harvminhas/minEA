@@ -62,3 +62,5 @@ export const glossary = [
     definition: "A lens over the repository. Views never own data — they project it.",
   },
 ] as const;
+
+export const countLabel = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;

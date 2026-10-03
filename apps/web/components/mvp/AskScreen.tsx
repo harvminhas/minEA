@@ -24,6 +24,7 @@ import { addListText, classifyAddIntent } from "@/lib/setup/add-intent";
 import { clearAddReceipt, readAddReceipt, writeAddReceipt, type AddReceipt } from "@/lib/setup/add-cards";
 import { normalizeTerm, TOOL_CATALOG } from "@/lib/setup/match-tools";
 import { Pill } from "@/components/mvp/pills";
+import { countLabel } from "@/lib/labels";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { relationshipVerb } from "@/lib/relationship-display";
 import type { ImpactEdge, ImpactNode } from "@/lib/impact/relationship-impact";
@@ -181,7 +182,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         <h1 className="mt-6 text-center text-[36px] font-semibold tracking-tight text-[#1c2230]">What do you want to know?</h1>
         {!keepSetup && (
           <p className="mt-2 max-w-full text-center text-[14px] text-[#6b7289]">
-            {orgName} · {stats.systems} applications · {platformCount} platforms · {serverCount} servers & devices · {stats.vendorCount} vendors · {moneyLabel(stats.spend || 0)} a year in tracked spend
+            {orgName} · {countLabel(stats.systems, "application", "applications")} · {countLabel(platformCount, "platform", "platforms")} · {countLabel(serverCount, "server or device", "servers & devices")} · {countLabel(stats.vendorCount, "vendor", "vendors")} · {moneyLabel(stats.spend || 0)} a year in tracked spend
             {support.out > 0 && (
               <>
                 {" "}
@@ -252,7 +253,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               Fill missing →
             </Link>
           </div>
-          {process.env.NODE_ENV !== "production" && (
+          {params.get("dev") === "1" && (
             <div className="mt-4 flex items-center justify-center gap-2 text-[12px] text-[#8b90a0]">
               <span>Prototype preview</span>
               <Link href={askPath(basePath)} className={`rounded-full px-2 py-0.5 ${emptyPreview ? "" : "bg-[#ece9ff] text-[#3f35b5]"}`}>Your data</Link>

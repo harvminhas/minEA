@@ -1,7 +1,8 @@
 import type { CatalogRow } from "@/lib/model-catalog";
 import { catalogStats, moneyLabel } from "@/lib/model-catalog";
 import { runDollarsTotal } from "@/lib/cost/service";
-import { hostSourceIds, noHostLinked, readPlatformInfra, readRuntimeInfra } from "@/lib/infra/read";
+import { hostSourceIds, readPlatformInfra, readRuntimeInfra } from "@/lib/infra/read";
+import { countLabel } from "@/lib/labels";
 import { agingSummary, infraStatus } from "@/lib/infra/status";
 import { impactOf, type ImpactEdge, type ImpactNode } from "@/lib/impact/relationship-impact";
 
@@ -114,9 +115,8 @@ export function hostingMap(rows: CatalogRow[], edges: HomeEdge[]) {
     const linked = edges.filter(
       (edge) => edge.fromId === app.id && (edge.type === "runs_on" || edge.type === "built_on"),
     );
-    if (noHostLinked({ type: app.object.type, properties: (app.object.properties ?? {}) as Record<string, unknown> }, edges, app.id)) {
-      unlinked += 1;
-    }
+    const hosting = String((app.object.properties as Record<string, unknown> | undefined)?.hosting_model ?? "").toLowerCase();
+    if (linked.length === 0 && hosting !== "saas" && hosting !== "cloud") unlinked += 1;
     for (const edge of linked) hosts.add(edge.toId);
   }
   return { hosts: hosts.size, unlinked };
@@ -208,5 +208,5 @@ export function topHostLine(rows: CatalogRow[], edges: HomeEdge[]): string {
   if (!top) return "From your relationships";
   const count = hostSourceIds(top.id, edges).length;
   if (!count) return "From your relationships";
-  return `${top.name} → ${count} apps run on it`;
+  return `${top.name} → ${countLabel(count, "app runs on it", "apps run on it")}`;
 }
