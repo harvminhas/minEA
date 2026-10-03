@@ -22,12 +22,15 @@ import {
   type EstateItem,
   type PlanInput,
 } from "@/lib/setup/add-plan";
+import { addListText, splitAddList } from "@/lib/setup/add-intent";
 import { defaultHosting, type ToolRecord } from "@/lib/setup/match-tools";
 import { setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { SetupFlow } from "@/components/mvp/setup-flow";
+import { AddResult } from "@/components/add/AddResult";
+import { planToResultItems } from "@/lib/setup/add-result-adapter";
 
 const UNDO_MS = 10 * 60 * 1000;
 const KINDS: AddKind[] = ["app", "platform", "server", "location", "vendor"];
@@ -117,9 +120,11 @@ function AnywhereAdd({
   const [rows, setRows] = useState<PlanInput[]>([]);
   const [started, setStarted] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState<{ added: string; home: string; todos: string[]; undoUntil: number; objectIds: string[]; relationshipIds: string[]; mapReady: boolean } | null>(null);
   const dirty = useRef(false);
+  const typedTexts = useRef(new Map<string, string>());
 
   useEffect(() => {
     const incoming = (initialText ?? "").trim();
@@ -166,80 +171,97 @@ function AnywhereAdd({
   };
 
   const begin = () => {
-    setRows(toPlan(text, preset, estate));
+    const newRows = toPlan(text, preset, estate);
+    // Capture the original typed text for each row
+    const texts = splitAddList(addListText(text));
+    newRows.forEach((row, i) => {
+      if (texts[i]) {
+        typedTexts.current.set(row.key, texts[i]);
+      }
+    });
+    setRows(newRows);
     setStarted(true);
     setReceipt(null);
+    setSaveState("idle");
   };
 
   const save = async () => {
     if (!orgSlug || !workspaceSlug) return;
-    const token = await getToken();
-    if (!token) throw new Error("Not signed in");
-    const planned = rows;
-    const batch = buildBatch(planned, estate);
-    const before = setupState(catalog.data?.objects ?? [], catalog.data?.relationships ?? []);
-    const saved = await addApi.save(orgSlug, workspaceSlug, {
-      creates: batch.creates.map((item) => ({
-        key: item.key,
-        type: item.type,
-        name: item.name,
-        properties: item.properties,
-        owner: item.owner,
-        owner_team_name: item.ownerTeam,
-        point_of_contact_name: item.ownerName,
-      })),
-      updates: batch.updates.map((item) => ({
-        id: item.id,
-        properties: item.properties,
-        owner: item.owner,
-        owner_team_name: item.ownerTeam,
-        point_of_contact_name: item.ownerName,
-      })),
-      relationships: batch.relationships.map((item) => ({
-        type: item.type,
-        from_key: item.fromKey,
-        to_key: item.toKey,
-        from_id: item.fromId,
-        to_id: item.toId,
-        from_type: item.fromType,
-        to_type: item.toType,
-      })),
-    }, token);
-    for (const object of saved.objects) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object });
-    for (const relationship of saved.relationships) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship });
-    const created = planned.filter((row) => !row.existing).map((row) => ({ name: row.name, kind: row.kind }));
-    const kept = planned.filter((row) => row.existing && row.keep).map((row) => row.name);
-    const apps = planned.filter((row) => !row.existing && (row.kind === "app" || row.kind === "platform"));
-    const afterObjects = [
-      ...(catalog.data?.objects ?? []),
-      ...saved.objects.filter((object) => object.type === "application").map((object) => ({ type: object.type })),
-    ];
-    const afterRels = [
-      ...(catalog.data?.relationships ?? []),
-      ...saved.relationships.map((rel) => ({ type: rel.type })),
-    ];
-    const metNow = !before.met && setupState(afterObjects, afterRels).met && !setup.mapReadyShownAt;
-    if (metNow) void setup.save({ mapReadyShownAt: new Date().toISOString() });
-    setReceipt({
-      added: addedSentence(created, kept),
-      home: homeSentence(apps.map((row) => ({ choice: row.choice, linked: row.choice !== "own" || Boolean(row.serverName.trim()) }))),
-      todos: todoLines(planned.map((row) => ({
-        name: row.name,
-        kind: row.kind,
-        kept: Boolean(row.existing && row.keep),
-        updating: Boolean(row.existing && !row.keep),
-        owner: row.ownerTeam || row.ownerName,
-        renewal: row.renewal,
-        choice: row.choice,
-        hint: row.hint,
-      }))),
-      undoUntil: Date.now() + UNDO_MS,
-      objectIds: saved.created_object_ids,
-      relationshipIds: saved.created_relationship_ids,
-      mapReady: metNow,
-    });
-    setStarted(false);
-    setRows([]);
+    setSaveState("saving");
+    setError("");
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const planned = rows;
+      const batch = buildBatch(planned, estate);
+      const before = setupState(catalog.data?.objects ?? [], catalog.data?.relationships ?? []);
+      const saved = await addApi.save(orgSlug, workspaceSlug, {
+        creates: batch.creates.map((item) => ({
+          key: item.key,
+          type: item.type,
+          name: item.name,
+          properties: item.properties,
+          owner: item.owner,
+          owner_team_name: item.ownerTeam,
+          point_of_contact_name: item.ownerName,
+        })),
+        updates: batch.updates.map((item) => ({
+          id: item.id,
+          properties: item.properties,
+          owner: item.owner,
+          owner_team_name: item.ownerTeam,
+          point_of_contact_name: item.ownerName,
+        })),
+        relationships: batch.relationships.map((item) => ({
+          type: item.type,
+          from_key: item.fromKey,
+          to_key: item.toKey,
+          from_id: item.fromId,
+          to_id: item.toId,
+          from_type: item.fromType,
+          to_type: item.toType,
+        })),
+      }, token);
+      for (const object of saved.objects) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object });
+      for (const relationship of saved.relationships) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship });
+      const created = planned.filter((row) => !row.existing).map((row) => ({ name: row.name, kind: row.kind }));
+      const kept = planned.filter((row) => row.existing && row.keep).map((row) => row.name);
+      const apps = planned.filter((row) => !row.existing && (row.kind === "app" || row.kind === "platform"));
+      const afterObjects = [
+        ...(catalog.data?.objects ?? []),
+        ...saved.objects.filter((object) => object.type === "application").map((object) => ({ type: object.type })),
+      ];
+      const afterRels = [
+        ...(catalog.data?.relationships ?? []),
+        ...saved.relationships.map((rel) => ({ type: rel.type })),
+      ];
+      const metNow = !before.met && setupState(afterObjects, afterRels).met && !setup.mapReadyShownAt;
+      if (metNow) void setup.save({ mapReadyShownAt: new Date().toISOString() });
+      setReceipt({
+        added: addedSentence(created, kept),
+        home: homeSentence(apps.map((row) => ({ choice: row.choice, linked: row.choice !== "own" || Boolean(row.serverName.trim()) }))),
+        todos: todoLines(planned.map((row) => ({
+          name: row.name,
+          kind: row.kind,
+          kept: Boolean(row.existing && row.keep),
+          updating: Boolean(row.existing && !row.keep),
+          owner: row.ownerTeam || row.ownerName,
+          renewal: row.renewal,
+          choice: row.choice,
+          hint: row.hint,
+        }))),
+        undoUntil: Date.now() + UNDO_MS,
+        objectIds: saved.created_object_ids,
+        relationshipIds: saved.created_relationship_ids,
+        mapReady: metNow,
+      });
+      setSaveState("saved");
+      setStarted(false);
+      setRows([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save");
+      setSaveState("error");
+    }
   };
 
   const undo = async () => {
@@ -299,7 +321,47 @@ function AnywhereAdd({
         </>
       )}
 
-      {started && rows.length > 0 && (
+      {started && origin === "ask" && (
+        <div className="mt-3">
+          <AddResult
+            items={planToResultItems(rows, typedTexts.current).items}
+            typedTexts={typedTexts.current}
+            servers={servers}
+            onHostingChange={(key, choice) => patch(key, { choice })}
+            onServerChange={(key, serverName) => patch(key, { serverName })}
+            onFuzzyYes={(key) => patch(key, { status: "matched" })}
+            onFuzzyNo={(key) => patch(key, { status: "custom", tool: null, yearly: "" })}
+            onRemove={(key) => setRows((current) => current.filter((row) => row.key !== key))}
+            onSave={save}
+            saveState={saveState}
+            savedResult={
+              receipt && saveState === "saved"
+                ? {
+                    addedNames: receipt.added.split(": ")[1]?.split(".")[0]?.split(", ") || [],
+                    keptNames: [],
+                    addedLogos: rows.filter((row) => !row.existing).map((row) => ({
+                      name: row.name,
+                      logo: null,
+                      color: null,
+                    })),
+                    homeSentence: receipt.home,
+                    newTodos: receipt.todos.length,
+                    canUndo,
+                    mapReady: receipt.mapReady,
+                  }
+                : undefined
+            }
+            onUndo={undo}
+            error={error}
+            onRetry={() => {
+              setSaveState("idle");
+              void save();
+            }}
+          />
+        </div>
+      )}
+
+      {started && origin !== "ask" && rows.length > 0 && (
         <>
           <ul className="mt-3 space-y-3">
             {rows.map((row) => (
