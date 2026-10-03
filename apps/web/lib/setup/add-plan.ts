@@ -6,6 +6,12 @@ export type AddKind = "app" | "platform" | "server" | "location" | "vendor";
 
 const EDITION = new Set(["online", "cloud", "workplace"]);
 
+/** Keep the catalog name. A name that is not a built-in domain is still stored, and can be changed later. */
+export function categoryFields(value: string | null | undefined): { category?: string } {
+  const trimmed = value?.trim() ?? "";
+  return trimmed ? { category: trimmed } : {};
+}
+
 export type EstateItem = {
   id: string;
   type: string;
@@ -75,7 +81,7 @@ export function collapseMatches(items: MatchItem[]): MatchItem[] {
 }
 
 export function findExisting(item: MatchItem, kind: AddKind, estate: EstateItem[]): EstateItem | null {
-  const type = objectTypeFor(kind);
+  const types = kind === "app" ? new Set(["application", "cloud_service"]) : new Set([objectTypeFor(kind)]);
   const keys = new Set<string>([dedupeKey(item.input)]);
   if (item.tool) {
     keys.add(dedupeKey(item.tool.name));
@@ -84,7 +90,7 @@ export function findExisting(item: MatchItem, kind: AddKind, estate: EstateItem[
   const toolKey = item.tool ? dedupeKey(item.tool.name) : "";
   return (
     estate.find((record) => {
-      if (record.type !== type) return false;
+      if (!types.has(record.type)) return false;
       if (toolKey && record.catalogTool && dedupeKey(record.catalogTool) === toolKey) return true;
       return keys.has(dedupeKey(record.name));
     }) ?? null
@@ -231,6 +237,19 @@ export type PlanInput = AddRow & {
   yearly: string;
 };
 
+export function planInputs(rows: AddRow[]): PlanInput[] {
+  return rows.map((row) => ({
+    ...row,
+    keep: Boolean(row.existing),
+    serverName: "",
+    where: "",
+    ownerTeam: "",
+    ownerName: "",
+    renewal: "",
+    yearly: row.status === "matched" && row.tool?.typicalAnnual ? String(row.tool.typicalAnnual) : "",
+  }));
+}
+
 function typicalLine(annual: number, vendor: string): CostLine {
   const now = new Date().toISOString();
   return {
@@ -264,7 +283,7 @@ function createProperties(row: PlanInput): Record<string, unknown> {
   if (row.kind === "vendor") return {};
   const properties: Record<string, unknown> = {};
   if (tool?.vendor) properties.vendor = tool.vendor;
-  if (tool?.category) properties.category = tool.category;
+  Object.assign(properties, categoryFields(tool?.category));
   if (catalogTool) properties.catalog_tool = catalogTool;
   if (row.customBuilt) properties.is_custom_built = true;
   if (row.kind === "platform" && row.choice === "saas") properties.hosting_model = "saas";
@@ -278,7 +297,7 @@ export function emptyFill(existing: EstateItem, row: PlanInput): BatchUpdate | n
   const properties: Record<string, unknown> = {};
   const tool = row.status === "matched" ? row.tool : null;
   if (!existing.vendor && tool?.vendor) properties.vendor = tool.vendor;
-  if (!existing.category && tool?.category) properties.category = tool.category;
+  if (!existing.category) Object.assign(properties, categoryFields(tool?.category));
   if (!existing.catalogTool && tool) properties.catalog_tool = normalizeTerm(tool.name);
   if (!existing.renewal && row.renewal) properties.contract_renewal = row.renewal;
   const yearly = Number(row.yearly);

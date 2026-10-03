@@ -114,15 +114,9 @@ def validate_system_properties(props: dict) -> None:
     category = props.get("category")
     if category is None or category == "":
         return
-    if category in SYSTEM_CATEGORIES:
-        return
-    # Grandfathered rows flagged by migration — allow edits until re-categorized.
-    if props.get("category_review_required"):
+    if isinstance(category, str) and category.strip():
         return
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=(
-            f"Invalid system category '{category}'. "
-            f"Choose a functional domain or leave category empty until reviewed."
-        ),
+        detail="Category must be a name, or left empty.",
     )

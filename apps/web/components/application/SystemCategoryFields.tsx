@@ -28,6 +28,8 @@ export function SystemCategoryFields({
   className,
 }: Props) {
   const options = systemCategorySelectOptions();
+  const known = options.some((option) => option.value === category);
+  const choices = category.trim() && !known ? [{ value: category, label: category }, ...options] : options;
 
   return (
     <div className={cn("space-y-3", className)}>
@@ -38,7 +40,7 @@ export function SystemCategoryFields({
           className={formFieldClass}
         >
           <option value="">— Select functional domain —</option>
-          {options.map((option) => (
+          {choices.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>

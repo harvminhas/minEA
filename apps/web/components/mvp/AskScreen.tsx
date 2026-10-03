@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ChevronRight, Sparkles, X } from "lucide-react";
-import { aiApi, objectsApi } from "@/lib/api-client";
+import { addApi, aiApi, objectsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, modelItemPath, modelPath, reportPath } from "@/lib/mvp-paths";
@@ -16,10 +16,12 @@ import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
+import { AddSaved } from "@/components/add/AddCards";
 import { AddFlow } from "@/components/add/AddFlow";
 import { FirstRunAsk, SetupCard } from "@/components/mvp/FirstRunAsk";
 import { addAnywhereEnabled } from "@/lib/flags";
 import { addListText, classifyAddIntent } from "@/lib/setup/add-intent";
+import { clearAddReceipt, readAddReceipt, writeAddReceipt, type AddReceipt } from "@/lib/setup/add-cards";
 import { normalizeTerm, TOOL_CATALOG } from "@/lib/setup/match-tools";
 import { Pill } from "@/components/mvp/pills";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
@@ -40,6 +42,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const [note, setNote] = useState("");
   const [previewId, setPreviewId] = useState<string | null>(null);
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
   const catalog = useModelCatalog();
@@ -64,9 +67,33 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const addDecision = anywhere && question ? classifyAddIntent(question, (term) => knownNames.has(normalizeTerm(term))) : "question";
   const showingAdd = anywhere && mode === "answer" && (readAs === "add" || (readAs === "auto" && addDecision === "add"));
   const ambiguous = anywhere && mode === "answer" && readAs === "auto" && addDecision === "ambiguous";
+  const [addReceipt, setAddReceipt] = useState<AddReceipt | null>(null);
+  const visibleReceipt = addReceipt && addReceipt.question === question ? addReceipt : null;
   useEffect(() => {
     setReadAs("auto");
   }, [question]);
+  useEffect(() => {
+    const stored = readAddReceipt(orgSlug, workspaceSlug, question);
+    setAddReceipt((current) => (current?.question === question ? current : stored));
+  }, [orgSlug, workspaceSlug, question]);
+
+  const rememberAdd = (receipt: AddReceipt) => {
+    const stored = { ...receipt, question };
+    writeAddReceipt(orgSlug, workspaceSlug, stored);
+    setAddReceipt(stored);
+  };
+
+  const undoAdd = async () => {
+    if (!addReceipt || !orgSlug || !workspaceSlug) return;
+    const token = await getToken();
+    if (token && Date.now() <= addReceipt.undoUntil) {
+      await addApi.undo(orgSlug, workspaceSlug, { object_ids: addReceipt.objectIds, relationship_ids: addReceipt.relationshipIds }, token);
+      for (const id of addReceipt.objectIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeId: id });
+      for (const id of addReceipt.relationshipIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
+    }
+    clearAddReceipt(orgSlug, workspaceSlug);
+    setAddReceipt(null);
+  };
 
   const remote = useQuery({
     queryKey: ["ask-model", orgSlug, workspaceSlug, question],
@@ -241,14 +268,10 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         )}
         <button type="submit" className="rounded-xl bg-[#5b4ce6] px-4 py-2 text-[14px] font-semibold text-white">Ask →</button>
       </form>
-      {showingAdd ? (
-        <div>
-          <p className="mb-3 text-[13px] text-[#6b7289]">
-            Read as a list of apps
-            <button type="button" className="ml-2 font-medium text-[#3f35b5]" onClick={() => setReadAs("ask")}>Ask about them instead</button>
-          </p>
-          <AddFlow origin="ask" kind="app" initialText={addListText(question)} />
-        </div>
+      {visibleReceipt ? (
+        <AddSaved added={visibleReceipt.added} kept={visibleReceipt.kept} todos={visibleReceipt.todos} canUndo={visibleReceipt.canUndo && Date.now() < visibleReceipt.undoUntil} motion={false} onUndo={() => void undoAdd()} />
+      ) : showingAdd ? (
+        <AddFlow origin="ask" kind="app" initialText={addListText(question)} onSaved={rememberAdd} />
       ) : ambiguous ? (
         <div className="rounded-2xl border border-[#e6e8ee] bg-white px-5 py-4">
           <p className="text-[15px] text-[#1c2230]">Is this a list of things to add, or a question?</p>

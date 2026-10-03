@@ -27,6 +27,8 @@ import { setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
+import { AskAdd } from "@/components/add/AddCards";
+import type { AddReceipt } from "@/lib/setup/add-cards";
 import { SetupFlow } from "@/components/mvp/setup-flow";
 
 const UNDO_MS = 10 * 60 * 1000;
@@ -45,14 +47,17 @@ export function AddFlow({
   kind = "app",
   initialText,
   compact = false,
+  onSaved,
 }: {
   origin: "setup" | "ask" | "model" | "views";
   inline?: boolean;
   kind?: AddKind;
   initialText?: string;
   compact?: boolean;
+  onSaved?: (receipt: AddReceipt) => void;
 }) {
   if (origin === "setup") return <SetupFlow inline={inline} />;
+  if (origin === "ask") return <AskAdd initialText={initialText ?? ""} onSaved={onSaved} />;
   return <AnywhereAdd origin={origin} kind={kind} initialText={initialText} compact={compact} />;
 }
 

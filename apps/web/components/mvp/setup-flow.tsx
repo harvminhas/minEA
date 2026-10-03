@@ -17,6 +17,7 @@ import {
   type MatchItem,
   type ToolRecord,
 } from "@/lib/setup/match-tools";
+import { categoryFields } from "@/lib/setup/add-plan";
 import { SETUP_MIN, setupMeter, setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
@@ -143,7 +144,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
         ? { runtime_kind: "physical_server", compute_runtime_kind: "on_prem" }
         : {
             ...(tool?.vendor ? { vendor: tool.vendor } : {}),
-            ...(tool?.category ? { category: tool.category } : {}),
+            ...categoryFields(tool?.category),
             ...(draft.customBuilt ? { is_custom_built: true } : {}),
             ...(tool && Number.isFinite(yearly) && yearly > 0 ? { cost_lines: [typicalLine(yearly, tool.vendor)] } : {}),
           };

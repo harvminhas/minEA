@@ -110,6 +110,11 @@ describe("dedupe and steps", () => {
     assert.equal(resolveKind(as400, "app"), "server");
   });
 
+  it("stores a new category name as itself", () => {
+    const batch = buildBatch(plan("Slack", []), []);
+    assert.equal(batch.creates[0]?.properties.category, "Productivity");
+  });
+
   it("puts two apps on one server", () => {
     const rows = plan("Order Entry, label printing", []).map((row, index) => ({
       ...row,
