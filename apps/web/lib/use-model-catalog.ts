@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, type QueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { MinEAObject, Relationship } from "@minea/types";
 import { catalogApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -53,6 +53,23 @@ export function shapeCatalog(body: CatalogBody): WorkspaceCatalog {
   };
 }
 
+/** Keep records written in this tab when a catalog fetch started before those writes. */
+export function mergeFreshCatalog(current: WorkspaceCatalog | undefined, fetched: WorkspaceCatalog): WorkspaceCatalog {
+  if (!current) return fetched;
+  const seen = new Set(fetched.objects.map((object) => object.id));
+  const objects = [...fetched.objects];
+  for (const object of current.objects) {
+    if (!seen.has(object.id)) objects.push(object);
+  }
+  const seenRel = new Set(fetched.relationships.map((rel) => rel.id));
+  const relationships = [...fetched.relationships];
+  for (const rel of current.relationships) {
+    if (!seenRel.has(rel.id)) relationships.push(rel);
+  }
+  if (objects.length === fetched.objects.length && relationships.length === fetched.relationships.length) return fetched;
+  return shapeCatalog({ ...fetched, objects, relationships });
+}
+
 export function applyCatalogWrite(
   queryClient: QueryClient,
   orgSlug: string,
@@ -60,7 +77,13 @@ export function applyCatalogWrite(
   change: { object?: MinEAObject; removeId?: string; relationship?: Relationship; removeRelationshipId?: string }
 ) {
   queryClient.setQueryData<WorkspaceCatalog>(catalogQueryKey(orgSlug, workspaceSlug), (current) => {
-    if (!current) return current;
+    if (!current) {
+      return shapeCatalog({
+        objects: change.object ? [change.object] : [],
+        relationships: change.relationship ? [change.relationship] : [],
+        dirty: true,
+      });
+    }
     let objects = current.objects;
     if (change.removeId) objects = objects.filter((object) => object.id !== change.removeId);
     if (change.object) {
@@ -86,6 +109,7 @@ export function applyCatalogWrite(
 export function useModelCatalog() {
   const { orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
+  const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled(orgSlug, workspaceSlug);
 
   return useQuery({
@@ -96,7 +120,9 @@ export function useModelCatalog() {
     queryFn: async () => {
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
-      return shapeCatalog(await catalogApi.get(orgSlug, workspaceSlug, token));
+      const fetched = shapeCatalog(await catalogApi.get(orgSlug, workspaceSlug, token));
+      const current = queryClient.getQueryData<WorkspaceCatalog>(catalogQueryKey(orgSlug, workspaceSlug));
+      return mergeFreshCatalog(current, fetched);
     },
   });
 }

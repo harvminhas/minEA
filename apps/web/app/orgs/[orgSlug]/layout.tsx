@@ -12,7 +12,7 @@ import { useAppStore } from "@/lib/store";
 import { orgsApi, workspacesApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { GlobalRefetchIndicator } from "@/components/ui/GlobalRefetchIndicator";
-import { isEstateViewsPath, isViewsAreaPath, isViewsModePath, viewIdFromPathname, workspaceHomePath } from "@/lib/views";
+import { isEstateViewsPath, isViewsAreaPath, isViewsModePath, viewIdFromPathname } from "@/lib/views";
 import { MvpFrame } from "@/components/mvp/MvpFrame";
 
 export default function OrgLayout({ children }: { children: React.ReactNode }) {
@@ -79,18 +79,15 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, viewMode, setViewMode]);
 
-  // Split mode: main pane is repository-only; views live in the right panel.
+  // Split mode used to send Views back to the workspace root, which then opens Ask.
+  // Stay on the page the top tab opened.
   useEffect(() => {
-    if (viewMode !== "split" || !orgSlug || !pathname.includes("/workspaces/")) return;
+    if (viewMode !== "split" || !pathname.includes("/workspaces/")) return;
     if (!isViewsAreaPath(pathname)) return;
-
     const activeViewId = viewIdFromPathname(pathname);
     if (activeViewId) setSplitViewId(activeViewId);
-
-    const wsMatch = pathname.match(/\/workspaces\/([^/]+)/);
-    const wsSlug = wsMatch?.[1];
-    if (wsSlug) router.replace(workspaceHomePath(orgSlug, wsSlug));
-  }, [viewMode, pathname, orgSlug, router, setSplitViewId]);
+    setViewMode("views");
+  }, [viewMode, pathname, setSplitViewId, setViewMode]);
 
   if (isEmbed) {
     return (

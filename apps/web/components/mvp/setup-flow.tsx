@@ -151,8 +151,16 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
     return () => window.clearTimeout(timer);
   }, [text, step]);
 
+  const openReadyMap = () => {
+    router.push(`${basePath}/views?tab=impact&ready=1`);
+  };
+
   const skip = async () => {
     await setup.save({ setupDismissedAt: new Date().toISOString(), setupStep: step });
+    if (step === 3) {
+      openReadyMap();
+      return;
+    }
     setStep(0);
   };
 
@@ -182,6 +190,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
         ? { runtime_kind: "physical_server", compute_runtime_kind: "on_prem" }
         : {
             ...(tool?.vendor ? { vendor: tool.vendor } : {}),
+            ...(tool ? { catalog_tool: normalizeTerm(tool.name) } : {}),
             ...categoryFields(tool?.category),
             ...(draft.customBuilt ? { is_custom_built: true } : {}),
             ...(tool && Number.isFinite(yearly) && yearly > 0 ? { cost_lines: [typicalLine(yearly, tool.vendor)] } : {}),
@@ -275,19 +284,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
       }, token);
       remember(saved);
     }
-    const objects = [
-      ...(catalog.data?.objects ?? []).filter((object) => !apps.some((app) => app.objectId === object.id)),
-      ...apps.filter((app) => app.objectId).map((app) => ({ type: "application" })),
-    ];
-    const relationships = [
-      ...(catalog.data?.relationships ?? []),
-      ...planned.links.map(() => ({ type: "runs_on" })),
-    ];
-    if (setupState(objects, relationships).met) {
-      router.push(`${basePath}/views?tab=impact&ready=1`);
-      return;
-    }
-    setError(setup.gap || "Add a few more apps, then link one to a server.");
+    openReadyMap();
   };
 
   const run = async (task: () => Promise<void>) => {

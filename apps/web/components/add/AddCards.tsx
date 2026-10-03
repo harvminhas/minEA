@@ -154,14 +154,16 @@ export function RecordCard({
 
 export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: AddRow; index: number; dim: boolean; motion: boolean; onRemove: () => void; onChange: (patch: Partial<AddRow>) => void }) {
   const question = cardQuestion(row);
-  const typical = row.status === "matched" && row.tool?.typicalAnnual ? `typical $${row.tool.typicalAnnual.toLocaleString("en-US")}` : "";
+  const known = row.status === "matched" && row.tool;
+  const subtitle = known ? [row.tool?.category, row.tool?.vendor].filter(Boolean).join(" · ") : "New";
+  const typical = known && row.tool?.typicalAnnual ? `typical $${row.tool.typicalAnnual.toLocaleString("en-US")}` : "";
   return (
     <article className={`rounded-2xl border border-[#e6e8ee] bg-white p-4 ${dim ? "opacity-60" : ""} ${motion ? "add-card-rise" : ""}`} style={motion ? { ["--add-i" as string]: index } : undefined}>
       <div className="flex items-start gap-3">
         <ItemLogo name={row.name} custom={row.status === "custom"} size={48} />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[16px] font-semibold text-[#1c2230]">{row.name}</h3>
-          <p className="truncate text-[13px] text-[#6b7289]">{[row.tool?.category, row.tool?.vendor].filter(Boolean).join(" · ")}</p>
+          <p className="truncate text-[13px] text-[#6b7289]">{subtitle || "New"}</p>
           {typical && <span className="mt-1 inline-flex rounded-full bg-[#f3f4f8] px-2 py-0.5 text-[12px] text-[#3c4254]">{typical} /yr</span>}
         </div>
         <button type="button" aria-label={`Remove ${row.name}`} className="text-[16px] text-[#6b7289]" onClick={onRemove}>×</button>
@@ -184,6 +186,7 @@ export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: 
             </div>
           </div>
         )}
+        {row.hint && <p className="mt-2 text-[13px] text-[#9a3412]">{row.hint}</p>}
       </div>
     </article>
   );

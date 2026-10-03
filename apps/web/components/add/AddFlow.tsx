@@ -57,8 +57,8 @@ export function AddFlow({
   onSaved?: (receipt: AddReceipt) => void;
 }) {
   if (origin === "setup") return <SetupFlow inline={inline} />;
-  if (origin === "ask") return <AskAdd initialText={initialText ?? ""} onSaved={onSaved} />;
-  return <AnywhereAdd origin={origin} kind={kind} initialText={initialText} compact={compact} />;
+  if (origin === "ask" || (origin === "model" && kind === "app")) return <AskAdd initialText={initialText ?? ""} onSaved={onSaved} />;
+  return <AnywhereAdd origin={origin} kind={kind} initialText={initialText} compact={compact} inline={inline} />;
 }
 
 function estateItems(objects: { id: string; type: string; name: string; owner?: string | null; properties?: Record<string, unknown> | null }[], rows: { id: string; ownerTeam: string; ownerPerson: string; annualCostNumber: number | null; lifecycleLabel: string; vendor: string; renewalLabel: string; category?: string }[]): EstateItem[] {
@@ -102,11 +102,13 @@ function AnywhereAdd({
   kind,
   initialText,
   compact,
+  inline = false,
 }: {
   origin: "ask" | "model" | "views";
   kind: AddKind;
   initialText?: string;
   compact?: boolean;
+  inline?: boolean;
 }) {
   const { orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
@@ -273,6 +275,7 @@ function AnywhereAdd({
 
   return (
     <section className="rounded-2xl border border-[#e6e8ee] bg-white p-4">
+      {(!inline || started) && preset === kind && KINDS.length > 1 && (
       <div className="flex flex-wrap gap-1.5">
         {KINDS.map((item) => (
           <button
@@ -288,6 +291,7 @@ function AnywhereAdd({
           </button>
         ))}
       </div>
+      )}
 
       {!started && (
         <>
@@ -360,7 +364,6 @@ function AnywhereAdd({
               </li>
             ))}
           </ul>
-          {skip && skip > 0 && <p className="mt-3 text-[13px] text-[#6b7289]">skipped: all {skip} are SaaS</p>}
           {!one && skip === null && (
             <div className="mt-3 space-y-3">
               <h3 className="text-[14px] font-semibold text-[#1c2230]">Where does each one live?</h3>

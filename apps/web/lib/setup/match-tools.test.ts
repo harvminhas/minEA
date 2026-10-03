@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { matchEntries, planHosting, SAMPLE_COMPANY } from "./match-tools.ts";
+import { matchEntries, planHosting, SAMPLE_COMPANY, TOOL_CATALOG } from "./match-tools.ts";
 
 describe("tool matcher", () => {
   const harbor = matchEntries(SAMPLE_COMPANY);
@@ -21,6 +21,20 @@ describe("tool matcher", () => {
     assert.equal(byName.as400?.status, "matched");
     assert.equal(harbor.filter((item) => item.status === "matched" && item.tool?.kind === "app").length, 4);
     assert.equal(harbor.filter((item) => item.tool?.kind === "server").length, 1);
+  });
+
+  it("matches Slack to its own vendor and cost", () => {
+    const item = matchEntries("Slack")[0];
+    assert.equal(item?.tool?.name, "Slack");
+    assert.equal(item?.tool?.typicalAnnual, 900);
+    const salesforce = TOOL_CATALOG.find((tool) => tool.name === "Salesforce");
+    assert.notEqual(item?.tool?.typicalAnnual, salesforce?.typicalAnnual);
+    assert.equal(
+      TOOL_CATALOG.some(
+        (tool) => tool.name !== "Slack" && tool.vendor === item?.tool?.vendor && tool.typicalAnnual === item?.tool?.typicalAnnual,
+      ),
+      false,
+    );
   });
 
   it("offers Cleo with the other EDI tools", () => {

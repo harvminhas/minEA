@@ -98,13 +98,13 @@ export function findExisting(item: MatchItem, kind: AddKind, estate: EstateItem[
 }
 
 export function categoryHint(tool: ToolRecord | null, estate: EstateItem[]): string | null {
-  if (!tool?.category || tool.kind === "server") return null;
-  const match = estate.find(
-    (item) =>
-      item.type === "application" &&
-      item.category.toLowerCase() === tool.category.toLowerCase() &&
-      dedupeKey(item.name) !== dedupeKey(tool.name),
-  );
+  if (!tool || tool.kind === "server") return null;
+  const category = tool.category.trim().toLowerCase();
+  if (!category) return null;
+  const match = estate.find((item) => {
+    const theirs = item.category.trim().toLowerCase();
+    return item.type === "application" && theirs.length > 0 && theirs === category && dedupeKey(item.name) !== dedupeKey(tool.name);
+  });
   if (!match) return null;
   return `${tool.name} is the same kind of app as ${match.name}. Is one replacing the other?`;
 }

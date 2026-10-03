@@ -254,20 +254,17 @@ export function TopNav() {
                   ? pathname.includes("/reports")
                   : inModel;
             return (
-              <button
+              <Link
                 key={tab.id}
-                type="button"
-                onClick={() => {
-                  setViewMode(tab.id === "views" ? "views" : "repository");
-                  router.push(tab.href);
-                }}
+                href={tab.href}
+                onClick={() => setViewMode(tab.id === "views" ? "views" : "repository")}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1 rounded-md text-[13px] font-medium transition-colors",
                   selected ? "bg-[#5b4ce6] text-white" : "text-white/55 hover:text-white hover:bg-white/8"
                 )}
               >
                 {tab.label}
-              </button>
+              </Link>
             );
             })}
         </div>

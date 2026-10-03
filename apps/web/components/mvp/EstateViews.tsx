@@ -273,14 +273,14 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
+  const params = useSearchParams();
   const [picker, setPicker] = useState<"app" | "calls" | "capability" | "server" | null>(null);
   const [addApps, setAddApps] = useState(false);
   const [serverAdd, setServerAdd] = useState(false);
-  const [readyOpen, setReadyOpen] = useState(false);
+  const [readyOpen, setReadyOpen] = useState(() => params.get("ready") === "1");
   const anywhere = addAnywhereEnabled();
   const setup = useWorkspaceSetup();
   const stamped = useRef(false);
-  const params = useSearchParams();
   const [error, setError] = useState("");
   const canvasRef = useRef<HTMLDivElement>(null);
   const byId = useMemo(() => new Map(opening.items.map((item) => [item.id, item])), [opening.items]);
@@ -310,7 +310,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
       void setup.save({ mapReadyShownAt: new Date().toISOString() });
       return;
     }
-    if (asked && !opening.example && !setup.mapReadyShownAt && !stamped.current) {
+    if (asked && !setup.mapReadyShownAt && !stamped.current && (setup.state.met || !opening.example)) {
       stamped.current = true;
       setReadyOpen(true);
       void setup.save({ mapReadyShownAt: new Date().toISOString() });
@@ -421,20 +421,22 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
   }
 
   const selectedName = selected?.name ?? "this server";
-  const readyServers = opening.items.filter((item) => item.kind === "runtime").length;
+  const liveRisk = opening.rows.find((row) => row.id === opening.selectedId) ?? opening.rows.find((row) => row.kind === "runtime");
+  const stripName = liveRisk?.name ?? selectedName;
+  const readyServers = opening.rows.filter((row) => row.kind === "runtime").length;
   const readyLinks = opening.counts.hostingLinks;
   return (
     <div className="relative">
-      {!opening.example && readyOpen && params.get("ready") === "1" && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#a7f3d0] bg-[#ecfdf3] px-4 py-3">
+      {readyOpen && params.get("ready") === "1" && (setup.state.met || !opening.example) && (
+        <div className="relative z-10 mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#a7f3d0] bg-[#ecfdf3] px-4 py-3">
           <p className="text-[14px] text-[#1c2230]">
             <span className="mr-1 text-[#047857]">✓</span>
             <span className="font-semibold">Your map is ready.</span>{" "}
-            {opening.counts.apps} apps, {readyServers} server{readyServers === 1 ? "" : "s"}, {readyLinks} hosting link{readyLinks === 1 ? "" : "s"}. This is what depends on your riskiest item: {selectedName}.
+            {opening.counts.apps} apps, {readyServers} server{readyServers === 1 ? "" : "s"}, {readyLinks} hosting link{readyLinks === 1 ? "" : "s"}. This is what depends on your riskiest item: {stripName}.
           </p>
           <div className="flex shrink-0 items-center gap-2">
-            <Link href={askPath(basePath, `What breaks if our ${selectedName} goes down?`, opening.selectedId)} className="rounded-full border border-[#a7f3d0] bg-white px-3 py-1 text-[13px] text-[#047857]">
-              What breaks if our {selectedName} goes down?
+            <Link href={askPath(basePath, `What breaks if our ${stripName} goes down?`, liveRisk?.id ?? opening.selectedId)} className="rounded-full border border-[#a7f3d0] bg-white px-3 py-1 text-[13px] text-[#047857]">
+              What breaks if our {stripName} goes down?
             </Link>
             <button type="button" aria-label="Dismiss" onClick={() => setReadyOpen(false)} className="text-[16px] leading-none text-[#6b7289]">×</button>
           </div>

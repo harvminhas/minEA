@@ -58,6 +58,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const [view, setView] = useState<"table" | "cards">("table");
   const [creating, setCreating] = useState<"runtime" | "platform" | "application" | null>(null);
   const [appAdd, setAppAdd] = useState(false);
+  const [addText, setAddText] = useState("");
   const anywhere = addAnywhereEnabled();
 
   const source = rows.filter((row) => {
@@ -161,7 +162,14 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
             </div>
             {anywhere && appAdd && section === "applications" && (
               <div className="mb-4">
-                <AddFlow origin="model" kind="app" compact />
+                <textarea
+                  value={addText}
+                  onChange={(event) => setAddText(event.target.value)}
+                  rows={2}
+                  placeholder="Slack, Zoom, the server in the back room"
+                  className="mb-3 w-full rounded-xl border border-[#e6e8ee] px-3 py-2 text-[14px] outline-none focus:border-[#5b4ce6]"
+                />
+                <AddFlow origin="model" kind="app" compact initialText={addText} />
               </div>
             )}
 

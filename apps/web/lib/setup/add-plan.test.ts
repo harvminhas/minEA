@@ -67,6 +67,29 @@ describe("dedupe and steps", () => {
     assert.equal(dedupeKey("QuickBooks Online"), "quickbooks");
   });
 
+  it("asks about replacing only when the catalog category matches", () => {
+    const salesforce: EstateItem = {
+      id: "sf",
+      type: "application",
+      name: "Salesforce",
+      owner: "",
+      cost: "$18,000",
+      lifecycle: "Active",
+      category: "CRM",
+      catalogTool: "salesforce",
+      vendor: "Salesforce",
+      renewal: "",
+    };
+    const slack = prepareRows("Slack", "app", [salesforce])[0];
+    assert.equal(slack?.tool?.name, "Slack");
+    assert.equal(slack?.tool?.vendor, "Salesforce");
+    assert.equal(slack?.tool?.typicalAnnual, 900);
+    assert.equal(slack?.hint, null);
+    const office: EstateItem = { ...salesforce, id: "m", name: "Microsoft 365", category: "Productivity", catalogTool: "microsoft 365", vendor: "Microsoft" };
+    const hinted = prepareRows("Slack", "app", [office])[0];
+    assert.match(hinted?.hint ?? "", /same kind of app as Microsoft 365/);
+  });
+
   it("marks an existing HubSpot and keeps it out of the save", () => {
     const rows = plan("HubSpot", [hubspot]);
     assert.equal(rows[0]?.existing?.owner, "Tom Becker");
