@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LayoutGrid, Plus, Table2 } from "lucide-react";
+import { Info, LayoutGrid, Plus, Table2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { modelItemPath, modelPath, type ModelSection } from "@/lib/mvp-paths";
@@ -40,7 +40,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const { basePath } = useTenancy();
   const catalog = useModelCatalog();
   const setup = useWorkspaceSetup();
-  const showPaste = setup.enabled && Boolean(catalog.data) && !setup.state.met && (section === "applications" || section === "servers" || section === "overview");
+  const showPaste = setup.enabled && Boolean(catalog.data) && !setup.state.met && (section === "applications" || section === "servers");
   const [setupLatched, setSetupLatched] = useState(false);
   useEffect(() => {
     if (showPaste) setSetupLatched(true);
@@ -100,13 +100,16 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   return (
     <div className="flex h-full min-h-0">
       <div className="min-w-0 flex-1">
-        {(showPaste || setupLatched) && (
+        {section !== "overview" && (showPaste || setupLatched) && (
           <div className="px-6 pt-5">
             <FirstRunAsk inline />
           </div>
         )}
         {section === "overview" && (
           <Overview
+            example={setup.enabled && !setup.state.met}
+            gap={setup.gap}
+            appsSoFar={setup.state.apps}
             stats={stats}
             rows={rows}
             basePath={basePath}
@@ -380,52 +383,82 @@ function AddMenu({ onPick }: { onPick: (kind: "runtime" | "platform") => void })
 }
 
 function Overview({
+  example,
+  gap,
+  appsSoFar,
   stats,
   rows,
   basePath,
   pending,
   failed,
 }: {
+  example: boolean;
+  gap: string;
+  appsSoFar: number;
   stats: ReturnType<typeof catalogStats>;
   rows: CatalogRow[];
   basePath: string;
   pending: boolean;
   failed: boolean;
 }) {
+  const [addApps, setAddApps] = useState(false);
   const platforms = rows.filter((row) => row.kind === "platform").length;
   const servers = rows.filter((row) => row.kind === "runtime").length;
-  const show = !pending && !failed;
-  const cards = [
-    { href: modelPath(basePath, "applications"), label: "Applications", value: show ? String(stats.systems) : "—" },
-    { href: modelPath(basePath, "platforms"), label: "Platforms & cloud", value: show ? String(platforms) : "—" },
-    { href: modelPath(basePath, "servers"), label: "Servers & devices", value: show ? String(servers) : "—" },
-    { href: `${basePath}/reports/spend`, label: "Annual spend tracked", value: show && stats.spend ? moneyLabel(stats.spend) : "—" },
-    { href: modelPath(basePath, "applications"), label: "Missing fields", value: show ? String(stats.missing) : "—" },
-  ];
+  const show = !pending && !failed && !example;
+  const cards = example
+    ? [
+        { href: modelPath(basePath, "applications"), label: "Applications", value: "13" },
+        { href: modelPath(basePath, "platforms"), label: "Platforms & cloud", value: "6" },
+        { href: modelPath(basePath, "servers"), label: "Servers & devices", value: "11" },
+        { href: `${basePath}/reports/spend`, label: "Annual spend tracked", value: "$140,270" },
+        { href: modelPath(basePath, "applications"), label: "Missing fields", value: "7" },
+      ]
+    : [
+        { href: modelPath(basePath, "applications"), label: "Applications", value: show ? String(stats.systems) : "—" },
+        { href: modelPath(basePath, "platforms"), label: "Platforms & cloud", value: show ? String(platforms) : "—" },
+        { href: modelPath(basePath, "servers"), label: "Servers & devices", value: show ? String(servers) : "—" },
+        { href: `${basePath}/reports/spend`, label: "Annual spend tracked", value: show && stats.spend ? moneyLabel(stats.spend) : "—" },
+        { href: modelPath(basePath, "applications"), label: "Missing fields", value: show ? String(stats.missing) : "—" },
+      ];
   return (
-    <div className="px-8 py-8">
-      <h1 className="text-[28px] font-semibold text-[#1c2230]">Model overview</h1>
-      <p className="mt-1 text-[14px] text-[#6b7289]">
-        {failed
-          ? "The model didn't load. Refresh the page to try again."
-          : pending
-            ? "Loading the model…"
-            : `${stats.systems} applications, ${stats.infrastructure} infrastructure${stats.vendorCount ? `, ${stats.vendorCount} vendors` : ""}.`}
-      </p>
-      <div className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-5">
-        {cards.map((card) => (
-          <Link key={card.label} href={card.href} className="rounded-xl border border-[#e6e8ee] p-4 hover:border-[#c9c6f5]">
-            <div className="text-[12px] text-[#8b90a0]">{card.label}</div>
-            <div className="mt-1 text-[22px] font-semibold text-[#1c2230]">{card.value}</div>
-          </Link>
-        ))}
+    <div className="relative px-8 py-8">
+      <div className={example ? "pointer-events-none opacity-40" : ""}>
+        <h1 className="text-[28px] font-semibold text-[#1c2230]">Model overview</h1>
+        <p className="mt-1 text-[14px] text-[#6b7289]">
+          {example
+            ? "13 applications, 6 platforms, 11 servers."
+            : failed
+              ? "The model didn't load. Refresh the page to try again."
+              : pending
+                ? "Loading the model…"
+                : `${stats.systems} applications, ${stats.infrastructure} infrastructure${stats.vendorCount ? `, ${stats.vendorCount} vendors` : ""}.`}
+        </p>
+        <div className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-5">
+          {cards.map((card) => (
+            <Link key={card.label} href={card.href} className="rounded-xl border border-[#e6e8ee] p-4 hover:border-[#c9c6f5]">
+              <div className="text-[12px] text-[#8b90a0]">{card.label}</div>
+              <div className="mt-1 text-[22px] font-semibold text-[#1c2230]">{card.value}</div>
+            </Link>
+          ))}
+        </div>
+        {show && <AgingTile rows={rows} basePath={basePath} />}
+        {show && (
+          <div className="mt-4 rounded-xl border border-[#e6e8ee] p-4">
+            <div className="text-[14px] font-medium text-[#1c2230]">Model health: {stats.completeness}% complete, {stats.missing} fields missing</div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#eef0f4]">
+              <div className="h-full rounded-full bg-[#5b4ce6]" style={{ width: `${stats.completeness}%` }} />
+            </div>
+          </div>
+        )}
       </div>
-      {show && <AgingTile rows={rows} basePath={basePath} />}
-      {show && (
-        <div className="mt-4 rounded-xl border border-[#e6e8ee] p-4">
-          <div className="text-[14px] font-medium text-[#1c2230]">Model health: {stats.completeness}% complete, {stats.missing} fields missing</div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#eef0f4]">
-            <div className="h-full rounded-full bg-[#5b4ce6]" style={{ width: `${stats.completeness}%` }} />
+      {example && (
+        <div className="absolute inset-0 flex items-start justify-center pt-16">
+          <div className="max-w-md rounded-2xl border border-[#e6e8ee] bg-white px-6 py-5 text-center shadow-lg">
+            <p className="flex items-center justify-center gap-2 text-[15px] font-semibold text-[#1c2230]"><Info size={16} className="text-[#5b4ce6]" /> Example data</p>
+            <p className="mt-2 text-[13px] font-semibold leading-5 text-[#1c2230]">{gap}</p>
+            <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">You have {appsSoFar} app{appsSoFar === 1 ? "" : "s"} so far. Until then this is a sample company; nothing here is saved to your workspace.</p>
+            <button type="button" onClick={() => setAddApps(true)} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Add apps here</button>
+            {addApps && <div className="mt-4 text-left"><FirstRunAsk inline /></div>}
           </div>
         </div>
       )}
