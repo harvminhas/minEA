@@ -247,6 +247,58 @@ export const catalogApi = {
     }>(`${wsBase(orgSlug, workspaceSlug)}/catalog/refresh`, { method: "POST", token }),
 };
 
+export type SetupProgress = {
+  setupDismissedAt: string | null;
+  setupStep: number | null;
+  mapReadyShownAt: string | null;
+};
+
+export const setupApi = {
+  get: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<SetupProgress>(`${wsBase(orgSlug, workspaceSlug)}/setup`, { token }),
+  save: (
+    orgSlug: string,
+    workspaceSlug: string,
+    body: { setupDismissedAt?: string | null; setupStep?: number | null; clearDismissed?: boolean; mapReadyShownAt?: string | null },
+    token: string,
+  ) =>
+    apiFetch<SetupProgress>(`${wsBase(orgSlug, workspaceSlug)}/setup`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(body),
+    }),
+};
+
+export const addApi = {
+  save: (
+    orgSlug: string,
+    workspaceSlug: string,
+    body: {
+      creates: { key: string; type: string; name: string; properties: Record<string, unknown>; owner?: string; owner_team_name?: string; point_of_contact_name?: string }[];
+      updates: { id: string; properties?: Record<string, unknown>; owner?: string; owner_team_name?: string; point_of_contact_name?: string }[];
+      relationships: { type: string; from_key?: string; to_key?: string; from_id?: string; to_id?: string; from_type: string; to_type: string }[];
+    },
+    token: string,
+  ) =>
+    apiFetch<{
+      objects: MinEAObject[];
+      relationships: Relationship[];
+      created_object_ids: string[];
+      created_relationship_ids: string[];
+    }>(`${wsBase(orgSlug, workspaceSlug)}/objects/batch`, { method: "POST", token, body: JSON.stringify(body) }),
+  undo: (
+    orgSlug: string,
+    workspaceSlug: string,
+    body: { object_ids: string[]; relationship_ids: string[] },
+    token: string,
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/objects/batch/undo`, {
+      method: "POST",
+      token,
+      body: JSON.stringify(body),
+    }),
+};
+
 export const workspacesApi = {
   list: (orgSlug: string, token: string) =>
     apiFetch<Workspace[]>(`/orgs/${orgSlug}/workspaces`, { token }),

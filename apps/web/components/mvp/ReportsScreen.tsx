@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, reportPath } from "@/lib/mvp-paths";
 import { catalogStats, moneyLabel } from "@/lib/model-catalog";
+import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
+import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { hostingMap, infraCost, popularCards, REPORT_REGISTRY, singlePoints, topHostLine } from "@/lib/reports/home";
@@ -18,6 +20,9 @@ export function ReportsScreen() {
   const impact = useImpactGraph();
   const rows = catalog.data?.rows ?? [];
   const [saved, setSaved] = useState<{ q: string; prose: string; at: string }[]>([]);
+  const [addApps, setAddApps] = useState(false);
+  const setup = useWorkspaceSetup();
+  const blocked = setup.enabled && Boolean(catalog.data) && !setup.state.met;
 
   useEffect(() => {
     try {
@@ -60,6 +65,8 @@ export function ReportsScreen() {
           Ask a new question
         </Link>
       </div>
+      <div className="relative">
+        <div className={blocked ? "pointer-events-none opacity-40" : ""}>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {shown.map((card) => {
           const stat = statFor(card.id);
@@ -73,6 +80,18 @@ export function ReportsScreen() {
             </Link>
           );
         })}
+      </div>
+        </div>
+        {blocked && (
+          <div className="absolute inset-0 flex items-start justify-center pt-16">
+            <div className="max-w-md rounded-2xl border border-[#e6e8ee] bg-white px-6 py-5 text-center shadow-lg">
+              <p className="text-[15px] font-semibold text-[#1c2230]">Example data</p>
+              <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">{setup.gap}</p>
+              <button type="button" onClick={() => setAddApps(true)} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Add apps here</button>
+              {addApps && <div className="mt-4 text-left"><FirstRunAsk inline /></div>}
+            </div>
+          </div>
+        )}
       </div>
       <div className="mt-8">
         <h2 className="mb-2 text-[13px] font-semibold text-[#1c2230]">Saved from Ask · {saved.length}</h2>

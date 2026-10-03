@@ -16,7 +16,13 @@ import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
+import { AddFlow } from "@/components/add/AddFlow";
+import { FirstRunAsk, SetupCard } from "@/components/mvp/FirstRunAsk";
+import { addAnywhereEnabled } from "@/lib/flags";
+import { addListText, classifyAddIntent } from "@/lib/setup/add-intent";
+import { normalizeTerm, TOOL_CATALOG } from "@/lib/setup/match-tools";
 import { Pill } from "@/components/mvp/pills";
+import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { relationshipVerb } from "@/lib/relationship-display";
 import type { ImpactEdge, ImpactNode } from "@/lib/impact/relationship-impact";
 import type { RelationshipType } from "@minea/types";
@@ -44,10 +50,27 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
 
   const impactQuery = /break|fail|goes down|is down|outage|depend|impact|important|how critical|live without|who owns/i.test(question);
   const impact = useImpactGraph();
+  const anywhere = addAnywhereEnabled();
+  const [readAs, setReadAs] = useState<"auto" | "add" | "ask">("auto");
+  const knownNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const tool of TOOL_CATALOG) {
+      names.add(normalizeTerm(tool.name));
+      for (const alias of tool.aliases) names.add(normalizeTerm(alias));
+    }
+    for (const object of catalog.data?.objects ?? []) names.add(normalizeTerm(object.name));
+    return names;
+  }, [catalog.data?.objects]);
+  const addDecision = anywhere && question ? classifyAddIntent(question, (term) => knownNames.has(normalizeTerm(term))) : "question";
+  const showingAdd = anywhere && mode === "answer" && (readAs === "add" || (readAs === "auto" && addDecision === "add"));
+  const ambiguous = anywhere && mode === "answer" && readAs === "auto" && addDecision === "ambiguous";
+  useEffect(() => {
+    setReadAs("auto");
+  }, [question]);
 
   const remote = useQuery({
     queryKey: ["ask-model", orgSlug, workspaceSlug, question],
-    enabled: mode === "answer" && question.length > 0 && Boolean(orgSlug && workspaceSlug),
+    enabled: mode === "answer" && question.length > 0 && !showingAdd && !ambiguous && Boolean(orgSlug && workspaceSlug),
     retry: false,
     queryFn: async () => {
       const token = await getToken();
@@ -69,7 +92,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     [question, rows, impact.nodes, impact.edges, impact.isLoading, impactQuery, basePath, focusId]
   );
 
-  const thinking = mode === "answer" && question.length > 0 && remote.isPending;
+  const thinking = mode === "answer" && question.length > 0 && remote.isPending && !showingAdd && !ambiguous;
   const [thinkStep, setThinkStep] = useState(0);
   useEffect(() => {
     setDraft(question);
@@ -93,6 +116,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   }, [mode, question, remote.data, local, rows, basePath]);
 
   const orgName = useAppStore((state) => state.activeOrg?.name) || "Your estate";
+  const setup = useWorkspaceSetup();
+  const [setupOpen, setSetupOpen] = useState(false);
+  const showSetup = setup.enabled && setup.ready && !setup.state.met && (!setup.dismissed || setupOpen);
   const emptyPreview = process.env.NODE_ENV !== "production" && params.get("demo") === "empty";
   const chips = askChips(rows, impact.edges);
   const cards = popularCards(rows, impact.edges, new Date(), emptyPreview);
@@ -112,17 +138,19 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
       <div className="mx-auto flex max-w-3xl flex-col items-center px-6 pb-16 pt-16">
         <p className="rounded-full bg-[#f4f3ff] px-3 py-1 text-[12px] text-[#5b4ce6]">Answers come from your own records, with sources</p>
         <h1 className="mt-6 text-center text-[36px] font-semibold tracking-tight text-[#1c2230]">What do you want to know?</h1>
-        <p className="mt-2 max-w-full text-center text-[14px] text-[#6b7289]">
-          {orgName} · {stats.systems} applications · {platformCount} platforms · {serverCount} servers & devices · {stats.vendorCount} vendors · {moneyLabel(stats.spend || 0)} a year in tracked spend
-          {support.out > 0 && (
-            <>
-              {" "}
-              <Link href={`${modelPath(basePath, "servers")}?status=out_of_support_or_os`} className="whitespace-nowrap font-medium text-[#c2410c]">
-                · {support.out} out of support
-              </Link>
-            </>
-          )}
-        </p>
+        {!showSetup && (
+          <p className="mt-2 max-w-full text-center text-[14px] text-[#6b7289]">
+            {orgName} · {stats.systems} applications · {platformCount} platforms · {serverCount} servers & devices · {stats.vendorCount} vendors · {moneyLabel(stats.spend || 0)} a year in tracked spend
+            {support.out > 0 && (
+              <>
+                {" "}
+                <Link href={`${modelPath(basePath, "servers")}?status=out_of_support_or_os`} className="whitespace-nowrap font-medium text-[#c2410c]">
+                  · {support.out} out of support
+                </Link>
+              </>
+            )}
+          </p>
+        )}
         <form
           className="mt-6 flex w-full items-center gap-2 rounded-2xl border border-[#e6e8ee] bg-white px-3 py-2 shadow-sm"
           onSubmit={(event) => {
@@ -138,6 +166,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             placeholder="Ask anything about your systems, vendors, costs, or risks"
             className="h-11 flex-1 bg-transparent text-[15px] outline-none"
           />
+          {anywhere && (
+            <button type="button" className="rounded-lg px-2 py-1 text-[13px] font-semibold text-[#5b4ce6]" onClick={() => { setDraft("add "); document.getElementById(ASK_BAR_ID)?.focus(); }}>
+              + Add
+            </button>
+          )}
           <button type="submit" className="rounded-xl bg-[#5b4ce6] px-4 py-2 text-[14px] font-semibold text-white">
             Ask →
           </button>
@@ -154,7 +187,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             </button>
           ))}
         </div>
-        <div className="mt-12 w-full">
+        {showSetup && <FirstRunAsk />}
+        {setup.enabled && setup.ready && !setup.state.met && setup.dismissed && !setupOpen && (
+          <SetupCard onOpen={() => { setSetupOpen(true); void setup.save({ clearDismissed: true }); }} />
+        )}
+        {!showSetup && <div className="mt-12 w-full">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[14px] font-semibold text-[#1c2230]">Popular reports</h2>
             <Link href={`${basePath}/reports`} className="text-[13px] text-[#5b4ce6]">All reports →</Link>
@@ -181,7 +218,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               <Link href={`${askPath(basePath)}?demo=empty`} className={`rounded-full px-2 py-0.5 ${emptyPreview ? "bg-[#ece9ff] text-[#3f35b5]" : ""}`}>Empty states</Link>
             </div>
           )}
-        </div>
+        </div>}
       </div>
     );
   }
@@ -197,8 +234,30 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
       >
         <Sparkles size={16} className="text-[#5b4ce6]" />
         <input id={ASK_BAR_ID} value={draft} onChange={(event) => setDraft(event.target.value)} className="h-10 flex-1 bg-transparent text-[15px] outline-none" />
+        {anywhere && (
+          <button type="button" className="rounded-lg px-2 py-1 text-[13px] font-semibold text-[#5b4ce6]" onClick={() => { setDraft("add "); document.getElementById(ASK_BAR_ID)?.focus(); }}>
+            + Add
+          </button>
+        )}
         <button type="submit" className="rounded-xl bg-[#5b4ce6] px-4 py-2 text-[14px] font-semibold text-white">Ask →</button>
       </form>
+      {showingAdd ? (
+        <div>
+          <p className="mb-3 text-[13px] text-[#6b7289]">
+            Read as a list of apps
+            <button type="button" className="ml-2 font-medium text-[#3f35b5]" onClick={() => setReadAs("ask")}>Ask about them instead</button>
+          </p>
+          <AddFlow origin="ask" kind="app" initialText={addListText(question)} />
+        </div>
+      ) : ambiguous ? (
+        <div className="rounded-2xl border border-[#e6e8ee] bg-white px-5 py-4">
+          <p className="text-[15px] text-[#1c2230]">Is this a list of things to add, or a question?</p>
+          <div className="mt-3 flex gap-2">
+            <button type="button" className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white" onClick={() => setReadAs("add")}>Add these as apps</button>
+            <button type="button" className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px]" onClick={() => setReadAs("ask")}>Ask about them</button>
+          </div>
+        </div>
+      ) : (
       <section className="overflow-hidden rounded-2xl border border-[#e4e0ff] bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-[#efeaff] bg-[#f7f6ff] px-5 py-3">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.14em] text-[#5b4ce6]">
@@ -334,8 +393,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
           </div>
         )}
       </section>
+      )}
 
-      {!thinking && answer.handler !== "clarify" && answer.followUps.length > 0 && (
+      {!showingAdd && !ambiguous && !thinking && answer.handler !== "clarify" && answer.followUps.length > 0 && (
         <div className="mt-5 rounded-2xl border border-[#e6e8ee] bg-[#fafafb] px-5 py-4">
           <p className="mb-2 text-[13px] font-medium text-[#1c2230]">Ask next</p>
           <div className="flex flex-wrap gap-2">

@@ -70,6 +70,13 @@ export function resolveSelection(explicit: string | null | undefined, candidates
   return candidates[0]?.id ?? "";
 }
 
+/** A location that holds one item opens on that item. An explicit selection stays. */
+export function replaceLoneLocation(selectedId: string, explicit: boolean, edges: ImpactEdge[]): string {
+  if (explicit || !selectedId) return selectedId;
+  const held = edges.filter((edge) => edge.type === "located_at" && edge.toId === selectedId);
+  return held.length === 1 ? held[0]!.fromId : selectedId;
+}
+
 export function spofCaption(candidate: Candidate | undefined, showingDefault: boolean): string {
   if (!showingDefault || !candidate) return "";
   const apps = candidate.apps === 1 ? "1 app" : `${candidate.apps} apps`;

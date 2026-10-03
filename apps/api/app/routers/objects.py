@@ -44,6 +44,7 @@ from app.services.object_stats import (
     enrich_system_objects,
     enrich_updated_by_objects,
 )
+from app.services.add_batch import AddBatchRequest, AddBatchResult, AddUndoRequest, apply_add_batch, undo_add_batch
 from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
 
@@ -209,6 +210,49 @@ async def create_object(
     await db.commit()
     await db.refresh(obj)
     return await _to_read(db, obj)
+
+
+@router.post("/batch", response_model=AddBatchResult)
+async def add_batch(
+    body: AddBatchRequest,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> AddBatchResult:
+    """Create, fill, and link in one transaction. Undo deletes only what this call created."""
+    await ctx.require_permission(db, "object.create")
+    assert ctx.workspace
+    if body.creates:
+        await require_limit(
+            db, ctx.org_id, "max_objects_per_workspace", workspace_id=ctx.workspace.id, pending_delta=len(body.creates)
+        )
+    result = await apply_add_batch(
+        db,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        user_id=ctx.user_id,
+        body=body,
+        to_read=_to_read,
+    )
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
+    return result
+
+
+@router.post("/batch/undo", status_code=status.HTTP_204_NO_CONTENT)
+async def undo_batch(
+    body: AddUndoRequest,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await ctx.require_permission(db, "object.delete")
+    assert ctx.workspace
+    await undo_add_batch(
+        db,
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        user_id=ctx.user_id,
+        body=body,
+    )
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
 
 
 @router.get("/{object_id}", response_model=ObjectRead)

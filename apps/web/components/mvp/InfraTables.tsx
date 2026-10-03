@@ -17,6 +17,7 @@ import { agingSummary, infraStatus, type InfraStatusResult } from "@/lib/infra/s
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { QuickCost } from "@/components/mvp/CostSection";
 import { AddChip } from "@/components/mvp/pills";
+import { AddFlow } from "@/components/add/AddFlow";
 import { cn } from "@/lib/utils";
 
 const COMPUTE_FOR_KIND: Record<string, string> = {
@@ -49,7 +50,7 @@ function dash(value: string) {
   return value || <span className="text-[#c5c8d4]">—</span>;
 }
 
-export function PlatformsTable({ rows, selectedId }: { rows: CatalogRow[]; selectedId?: string }) {
+export function PlatformsTable({ rows, selectedId, anywhere = false }: { rows: CatalogRow[]; selectedId?: string; anywhere?: boolean }) {
   const router = useRouter();
   const { basePath } = useTenancy();
   const impact = useImpactGraph();
@@ -57,6 +58,7 @@ export function PlatformsTable({ rows, selectedId }: { rows: CatalogRow[]; selec
   const [kind, setKind] = useState("All kinds");
   const [hosting, setHosting] = useState("Any hosting");
   const [missingOnly, setMissingOnly] = useState(false);
+  const [adding, setAdding] = useState(false);
   const platforms = sortBlanksLast(
     rows.filter((row) => row.kind === "platform"),
     (row) => readPlatformInfra(row.object).platformKind ?? "",
@@ -84,14 +86,22 @@ export function PlatformsTable({ rows, selectedId }: { rows: CatalogRow[]; selec
             Platforms & cloud <span className="text-[14px] font-normal text-[#8b90a0]">{platforms.length}</span>
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={() => setMissingOnly((value) => !value)}
-          className={cn("rounded-lg border px-3 py-1.5 text-[13px] font-medium", missingOnly ? "border-[#fdba74] bg-[#fff7ed] text-[#c2410c]" : "border-[#e6e8ee] text-[#4b5163]")}
-        >
-          Fill missing ({missing})
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setMissingOnly((value) => !value)}
+            className={cn("rounded-lg border px-3 py-1.5 text-[13px] font-medium", missingOnly ? "border-[#fdba74] bg-[#fff7ed] text-[#c2410c]" : "border-[#e6e8ee] text-[#4b5163]")}
+          >
+            Fill missing ({missing})
+          </button>
+          {anywhere && (
+            <button type="button" onClick={() => setAdding((value) => !value)} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">
+              + Add
+            </button>
+          )}
+        </div>
       </div>
+      {adding && <div className="mb-4"><AddFlow origin="model" kind="platform" compact /></div>}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, vendor, or owner" className="h-9 w-[260px] max-w-full rounded-lg border border-[#e6e8ee] px-3 text-[13px] outline-none focus:border-[#5b4ce6]" />
         <select value={kind} onChange={(event) => setKind(event.target.value)} className="h-9 rounded-lg border border-[#e6e8ee] px-2 text-[13px]">
@@ -144,7 +154,7 @@ export function PlatformsTable({ rows, selectedId }: { rows: CatalogRow[]; selec
   );
 }
 
-export function ServersTable({ rows, selectedId }: { rows: CatalogRow[]; selectedId?: string }) {
+export function ServersTable({ rows, selectedId, anywhere = false }: { rows: CatalogRow[]; selectedId?: string; anywhere?: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
@@ -155,6 +165,7 @@ export function ServersTable({ rows, selectedId }: { rows: CatalogRow[]; selecte
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("All kinds");
   const [name, setName] = useState("");
+  const [adding, setAdding] = useState(false);
   const [addKind, setAddKind] = useState("physical_server");
   const [addError, setAddError] = useState("");
   const today = useMemo(() => new Date(), []);
@@ -223,12 +234,20 @@ export function ServersTable({ rows, selectedId }: { rows: CatalogRow[]; selecte
 
   return (
     <div className="px-6 py-5">
-      <div className="mb-4">
-        <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">WHERE THINGS RUN</p>
-        <h1 className="text-[22px] font-semibold text-[#1c2230]">
-          Servers & devices <span className="text-[14px] font-normal text-[#8b90a0]">{servers.length}</span>
-        </h1>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">WHERE THINGS RUN</p>
+          <h1 className="text-[22px] font-semibold text-[#1c2230]">
+            Servers & devices <span className="text-[14px] font-normal text-[#8b90a0]">{servers.length}</span>
+          </h1>
+        </div>
+        {anywhere && (
+          <button type="button" onClick={() => setAdding((value) => !value)} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">
+            + Add
+          </button>
+        )}
       </div>
+      {adding && <div className="mb-4"><AddFlow origin="model" kind="server" compact /></div>}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, OS, or owner" className="h-9 w-[260px] max-w-full rounded-lg border border-[#e6e8ee] px-3 text-[13px] outline-none focus:border-[#5b4ce6]" />
         <select value={kind} onChange={(event) => setKind(event.target.value)} className="h-9 rounded-lg border border-[#e6e8ee] px-2 text-[13px]">
@@ -274,7 +293,7 @@ export function ServersTable({ rows, selectedId }: { rows: CatalogRow[]; selecte
                 </tr>
               );
             })}
-            <tr className="border-b border-[#f3f4f8]">
+            {!anywhere && <tr className="border-b border-[#f3f4f8]">
               <td className="px-2 py-3" colSpan={8}>
                 <form className="flex flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); add.mutate(); }}>
                   <span className="text-[#5b4ce6]">+</span>
@@ -287,7 +306,7 @@ export function ServersTable({ rows, selectedId }: { rows: CatalogRow[]; selecte
                 </form>
                 {addError && <p className="mt-1 text-[12px] text-[#b42318]">{addError}</p>}
               </td>
-            </tr>
+            </tr>}
           </tbody>
         </table>
       </div>

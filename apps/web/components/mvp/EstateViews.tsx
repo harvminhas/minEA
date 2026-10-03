@@ -10,7 +10,11 @@ import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, modelItemPath, modelPath } from "@/lib/mvp-paths";
+import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
+import { AddFlow } from "@/components/add/AddFlow";
+import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
+import { addAnywhereEnabled } from "@/lib/flags";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { connectionPhrase, impactOf, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
 import { moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
@@ -25,6 +29,7 @@ import {
   laneDelayMs,
   manualFlowCount,
   openingCards,
+  replaceLoneLocation,
   resolveSelection,
   showExampleEstate,
   spofCaption,
@@ -167,8 +172,10 @@ function useOpeningModel() {
   const ready = !impact.isLoading && !catalog.isLoading;
   const rows = catalog.data?.rows ?? [];
   const locations = catalog.data?.locations ?? [];
+  const setup = useWorkspaceSetup();
   const hostEdges = impact.edges.filter((edge) => edge.type === "runs_on" || edge.type === "built_on").length;
-  const example = ready && showExampleEstate(hostEdges, params.get("demo") === "empty", dev);
+  const blocked = setup.enabled && Boolean(catalog.data) && !setup.state.met;
+  const example = blocked || (ready && showExampleEstate(hostEdges, params.get("demo") === "empty", dev));
 
   const liveItems = useMemo(() => {
     const items: ChainItem[] = [
@@ -204,7 +211,8 @@ function useOpeningModel() {
   const edges = example ? sampleEdges : impact.edges;
   const candidates = useMemo(() => (ready || example ? impactCandidates(items, nodes, edges) : []), [items, nodes, edges, ready, example]);
   const knownIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
-  const selectedId = resolveSelection(params.get("sel"), candidates, knownIds);
+  const explicit = params.get("sel");
+  const selectedId = replaceLoneLocation(resolveSelection(explicit, candidates, knownIds), Boolean(explicit), edges);
   const badges = viewBadges(
     {
       spof: singlePoints(rows, impact.edges).length,
@@ -217,6 +225,9 @@ function useOpeningModel() {
   const reduced = useReducedMotion();
   return {
     example,
+    blocked,
+    gap: setup.gap,
+    counts: setup.state,
     ready,
     items,
     nodes,
@@ -262,6 +273,13 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const [picker, setPicker] = useState<"app" | "calls" | "capability" | "server" | null>(null);
+  const [addApps, setAddApps] = useState(false);
+  const [serverAdd, setServerAdd] = useState(false);
+  const [readyOpen, setReadyOpen] = useState(false);
+  const anywhere = addAnywhereEnabled();
+  const setup = useWorkspaceSetup();
+  const stamped = useRef(false);
+  const params = useSearchParams();
   const [error, setError] = useState("");
   const canvasRef = useRef<HTMLDivElement>(null);
   const byId = useMemo(() => new Map(opening.items.map((item) => [item.id, item])), [opening.items]);
@@ -277,6 +295,26 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
   const teams = teamBoxes([...bands.stop, ...bands.slow].map((hit) => byId.get(hit.id)).filter((item): item is ChainItem => Boolean(item)));
   const lines = useConnectors(canvasRef, `${opening.selectedId}:${hits.map((hit) => hit.id).join(",")}:${picker ?? ""}:${teams.length}`);
   const delay = (fromBottom: number) => laneDelayMs(fromBottom, opening.reduced);
+  const backfilled = useRef(false);
+  useEffect(() => {
+    if (!setup.ready) return;
+    const asked = params.get("ready") === "1";
+    if (!setup.enabled) {
+      if (asked) setReadyOpen(true);
+      return;
+    }
+    if (setup.state.met && !setup.mapReadyShownAt && !asked) {
+      if (backfilled.current) return;
+      backfilled.current = true;
+      void setup.save({ mapReadyShownAt: new Date().toISOString() });
+      return;
+    }
+    if (asked && !opening.example && !setup.mapReadyShownAt && !stamped.current) {
+      stamped.current = true;
+      setReadyOpen(true);
+      void setup.save({ mapReadyShownAt: new Date().toISOString() });
+    }
+  }, [setup, opening.example, params]);
 
   const objectTypeOf = (id: string) => {
     const row = opening.rows.find((item) => item.id === id);
@@ -381,8 +419,21 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
     return <p className="text-[13px] text-[#8b90a0]">Loading the estate…</p>;
   }
 
+  const selectedName = selected?.name ?? "this server";
   return (
     <div className="relative">
+      {!opening.example && readyOpen && params.get("ready") === "1" && (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-[#c9c6f5] bg-[#f7f6ff] px-4 py-3">
+          <div>
+            <p className="text-[14px] font-semibold text-[#1c2230]">Your map is ready</p>
+            <p className="mt-1 text-[13px] text-[#4b5163]">{opening.counts.apps} apps · {opening.counts.hostingLinks} linked to a server</p>
+            <Link href={askPath(basePath, `What breaks if our ${selectedName} goes down?`, opening.selectedId)} className="mt-2 inline-flex rounded-full border border-[#c9c6f5] bg-white px-3 py-1 text-[13px] text-[#3f35b5]">
+              What breaks if our {selectedName} goes down?
+            </Link>
+          </div>
+          <button type="button" onClick={() => setReadyOpen(false)} className="text-[12px] text-[#6b7289]">Dismiss</button>
+        </div>
+      )}
       <div className={opening.example ? "pointer-events-none select-none opacity-40" : ""}>
         {cards.length > 0 && (
           <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
@@ -413,8 +464,20 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
                 </button>
               );
             })}
+            {!opening.example && opening.candidates.length < 4 && (
+              anywhere ? (
+                <button type="button" onClick={() => setServerAdd((value) => !value)} className="flex min-w-0 items-center justify-center rounded-xl border border-dashed border-[#c9c6f5] p-3 text-center text-[13px] text-[#5b4ce6]">
+                  Add your other servers
+                </button>
+              ) : (
+                <Link href={modelPath(basePath, "servers")} className="flex min-w-0 items-center justify-center rounded-xl border border-dashed border-[#c9c6f5] p-3 text-center text-[13px] text-[#5b4ce6]">
+                  Add your other servers
+                </Link>
+              )
+            )}
           </div>
         )}
+        {serverAdd && <div className="mb-4"><AddFlow origin="views" kind="server" compact /></div>}
         {caption && <p className="mb-3 rounded-lg bg-[#fff7ed] px-3 py-2 text-[13px] text-[#9a3412]">{caption}</p>}
         <p className="mb-3 flex flex-wrap gap-x-2 text-[13px]">
           <Count n={bands.stop.length} text="apps stop" color="text-[#e11d48]" />
@@ -524,9 +587,20 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
       {opening.example && (
         <div className="absolute inset-0 flex items-start justify-center pt-24">
           <div className="max-w-md rounded-2xl border border-[#e6e8ee] bg-white px-6 py-5 text-center shadow-lg">
-            <p className="text-[15px] font-semibold text-[#1c2230]">Example data</p>
-            <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">Link your first app to a server to see yours. Until then this is a sample estate; nothing here is saved to your workspace.</p>
-            <Link href={`${basePath}/views?tab=hosting`} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Open Hosting & location</Link>
+            {opening.blocked ? (
+              <>
+                <p className="text-[15px] font-semibold text-[#1c2230]">Example data</p>
+                <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">{opening.gap}</p>
+                <button type="button" onClick={() => setAddApps(true)} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Add apps here</button>
+                {addApps && <div className="mt-4 text-left"><FirstRunAsk inline /></div>}
+              </>
+            ) : (
+              <>
+                <p className="text-[15px] font-semibold text-[#1c2230]">Example data</p>
+                <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">Link your first app to a server to see yours. Until then this is a sample estate; nothing here is saved to your workspace.</p>
+                <Link href={`${basePath}/views?tab=hosting`} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Open Hosting & location</Link>
+              </>
+            )}
           </div>
         </div>
       )}

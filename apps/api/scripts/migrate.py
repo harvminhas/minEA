@@ -56,6 +56,7 @@ MIGRATION_FILES = [
     "038_system_belongs_to_data_domain.sql",
     "039_entity_owns_backfill.sql",
     "043_catalog_dirty.sql",
+    "044_membership_setup.sql",
 ]
 
 

@@ -17,6 +17,10 @@ import { ModelDetailPanel } from "@/components/mvp/ModelDetailPanel";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { ObjectForm } from "@/components/objects/ObjectForm";
+import { AddFlow } from "@/components/add/AddFlow";
+import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
+import { addAnywhereEnabled } from "@/lib/flags";
+import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import Link from "next/link";
 
 const SECTION_TITLE: Record<ModelSection, string> = {
@@ -35,6 +39,8 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const router = useRouter();
   const { basePath } = useTenancy();
   const catalog = useModelCatalog();
+  const setup = useWorkspaceSetup();
+  const showPaste = setup.enabled && Boolean(catalog.data) && !setup.state.met && (section === "applications" || section === "servers" || section === "overview");
   const rows = catalog.data?.rows ?? [];
   const connections = catalog.data?.connections ?? [];
   const stats = catalogStats(rows);
@@ -47,6 +53,8 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const [missingOnly, setMissingOnly] = useState(false);
   const [view, setView] = useState<"table" | "cards">("table");
   const [creating, setCreating] = useState<"runtime" | "platform" | "application" | null>(null);
+  const [appAdd, setAppAdd] = useState(false);
+  const anywhere = addAnywhereEnabled();
 
   const source = rows.filter((row) => {
     if (section === "applications") return row.kind === "application";
@@ -88,6 +96,11 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   return (
     <div className="flex h-full min-h-0">
       <div className="min-w-0 flex-1">
+        {showPaste && (
+          <div className="px-6 pt-5">
+            <FirstRunAsk inline />
+          </div>
+        )}
         {section === "overview" && (
           <Overview
             stats={stats}
@@ -97,11 +110,11 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
             failed={catalog.isError && !catalog.data}
           />
         )}
-        {section === "platforms" && <PlatformsTable rows={rows} selectedId={selectedId} />}
-        {section === "servers" && <ServersTable rows={rows} selectedId={selectedId} />}
-        {section === "locations" && <LocationsTable />}
+        {section === "platforms" && <PlatformsTable rows={rows} selectedId={selectedId} anywhere={anywhere} />}
+        {section === "servers" && <ServersTable rows={rows} selectedId={selectedId} anywhere={anywhere} />}
+        {section === "locations" && <LocationsTable anywhere={anywhere} />}
         {section === "connections" && <ConnectionsList items={connections} basePath={basePath} />}
-        {section === "vendors" && <VendorsTable vendors={vendors} />}
+        {section === "vendors" && <VendorsTable vendors={vendors} anywhere={anywhere} />}
         {section === "owners" && <OwnersTable rows={rows} basePath={basePath} />}
         {(section === "applications" || section === "infrastructure") && (
           <div className="px-6 py-5">
@@ -131,7 +144,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setCreating("application")}
+                    onClick={() => (anywhere ? setAppAdd((open) => !open) : setCreating("application"))}
                     className="inline-flex items-center gap-1 rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white"
                   >
                     <Plus size={14} /> Add
@@ -139,6 +152,11 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                 )}
               </div>
             </div>
+            {anywhere && appAdd && section === "applications" && (
+              <div className="mb-4">
+                <AddFlow origin="model" kind="app" compact />
+              </div>
+            )}
 
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <input
@@ -437,13 +455,24 @@ function ConnectionsList({ items, basePath }: { items: { id: string; name: strin
 
 function VendorsTable({
   vendors,
+  anywhere = false,
 }: {
   vendors: ReturnType<typeof vendorRollup>;
+  anywhere?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const total = vendors.reduce((sum, vendor) => sum + vendor.annual, 0);
   return (
     <div className="px-6 py-5">
-      <h1 className="text-[22px] font-semibold text-[#1c2230]">Vendors & contracts</h1>
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <h1 className="text-[22px] font-semibold text-[#1c2230]">Vendors & contracts</h1>
+        {anywhere && (
+          <button type="button" onClick={() => setOpen((value) => !value)} className="inline-flex items-center gap-1 rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">
+            <Plus size={14} /> Add
+          </button>
+        )}
+      </div>
+      {open && <div className="mb-4"><AddFlow origin="model" kind="vendor" compact /></div>}
       <p className="mb-4 mt-1 text-[13px] text-[#6b7289]">
         Derived from the vendor field on applications and infrastructure. {vendors.length} vendors
         {total > 0 ? ` · ${moneyLabel(total)} tracked` : ""}.

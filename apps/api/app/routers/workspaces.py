@@ -3,6 +3,7 @@ from app.utils.time import utc_now, utc_now_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -164,6 +165,79 @@ async def create_workspace(
         role="admin",
         created_at=ws.created_at,
     )
+
+
+class SetupProgress(BaseModel):
+    setupDismissedAt: str | None = None
+    setupStep: int | None = None
+    mapReadyShownAt: str | None = None
+
+
+class SetupProgressWrite(BaseModel):
+    setupDismissedAt: str | None = None
+    setupStep: int | None = None
+    clearDismissed: bool = False
+    mapReadyShownAt: str | None = None
+
+
+def _setup_payload(raw: dict | None) -> SetupProgress:
+    data = raw or {}
+    step = data.get("setupStep")
+    shown = data.get("mapReadyShownAt")
+    return SetupProgress(
+        setupDismissedAt=data.get("setupDismissedAt"),
+        setupStep=step if isinstance(step, int) else None,
+        mapReadyShownAt=shown if isinstance(shown, str) else None,
+    )
+
+
+@router.get("/{workspace_slug}/setup", response_model=SetupProgress)
+async def read_setup(
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> SetupProgress:
+    await ctx.require_read(db)
+    assert ctx.workspace
+    result = await db.execute(
+        select(WorkspaceMembership).where(
+            WorkspaceMembership.user_id == ctx.user_id,
+            WorkspaceMembership.workspace_id == ctx.workspace.id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    return _setup_payload(row.setup if row else {})
+
+
+@router.patch("/{workspace_slug}/setup", response_model=SetupProgress)
+async def write_setup(
+    body: SetupProgressWrite,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> SetupProgress:
+    await ctx.require_read(db)
+    assert ctx.workspace
+    result = await db.execute(
+        select(WorkspaceMembership).where(
+            WorkspaceMembership.user_id == ctx.user_id,
+            WorkspaceMembership.workspace_id == ctx.workspace.id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        row = WorkspaceMembership(user_id=ctx.user_id, workspace_id=ctx.workspace.id, role="member", setup={})
+        db.add(row)
+        await db.flush()
+    current = dict(row.setup or {})
+    if body.clearDismissed:
+        current.pop("setupDismissedAt", None)
+    elif body.setupDismissedAt is not None:
+        current["setupDismissedAt"] = body.setupDismissedAt
+    if body.setupStep is not None:
+        current["setupStep"] = body.setupStep
+    if body.mapReadyShownAt and not current.get("mapReadyShownAt"):
+        current["mapReadyShownAt"] = body.mapReadyShownAt
+    row.setup = current
+    return _setup_payload(current)
 
 
 @router.get("/{workspace_slug}/copy-preview", response_model=WorkspaceCopyPreview)

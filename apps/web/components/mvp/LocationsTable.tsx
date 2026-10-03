@@ -13,6 +13,7 @@ import { impactOf } from "@/lib/impact/relationship-impact";
 import { infraConfig } from "@/lib/infra/infraConfig";
 import { locationMigrationPlan, locationTypeLabel, locationTypes } from "@/lib/infra/locations";
 import { applyCatalogWrite } from "@/lib/use-model-catalog";
+import { AddFlow } from "@/components/add/AddFlow";
 
 function ownerName(object: MinEAObject): string {
   return object.owner_team_name?.trim() || object.point_of_contact_name?.trim() || object.owner?.trim() || "";
@@ -22,7 +23,7 @@ function dash(value: string) {
   return value || <span className="text-[#c5c8d4]">—</span>;
 }
 
-export function LocationsTable() {
+export function LocationsTable({ anywhere = false }: { anywhere?: boolean }) {
   const router = useRouter();
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
@@ -35,6 +36,7 @@ export function LocationsTable() {
   const [address, setAddress] = useState("");
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   const rows = catalog.data?.rows ?? [];
   const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
@@ -113,10 +115,20 @@ export function LocationsTable() {
 
   return (
     <div className="px-6 py-5">
-      <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">SITES AND REGIONS</p>
-      <h1 className="mb-4 text-[22px] font-semibold text-[#1c2230]">
-        Locations <span className="text-[14px] font-normal text-[#8b90a0]">{locations.length}</span>
-      </h1>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">SITES AND REGIONS</p>
+          <h1 className="text-[22px] font-semibold text-[#1c2230]">
+            Locations <span className="text-[14px] font-normal text-[#8b90a0]">{locations.length}</span>
+          </h1>
+        </div>
+        {anywhere && (
+          <button type="button" onClick={() => setAdding((value) => !value)} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">
+            + Add
+          </button>
+        )}
+      </div>
+      {adding && <div className="mb-4"><AddFlow origin="model" kind="location" compact /></div>}
       {plan.length > 0 && (
         <div className="mb-4 rounded-xl border border-[#f3e2b3] bg-[#fffaf0] px-4 py-3 text-[13px] text-[#6b5420]">
           <p>{plan.length} place {plan.length === 1 ? "name is" : "names are"} still only a note on a server. Creating them does not remove the note.</p>
@@ -156,7 +168,7 @@ export function LocationsTable() {
                 </tr>
               );
             })}
-            <tr className="border-b border-[#f3f4f8]">
+            {!anywhere && <tr className="border-b border-[#f3f4f8]">
               <td className="px-2 py-3" colSpan={6}>
                 <form className="flex flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); create.mutate(); }}>
                   <span className="text-[#5b4ce6]">+</span>
@@ -189,7 +201,7 @@ export function LocationsTable() {
                 <p className="mt-1 text-[12px] text-[#8b90a0]">Every location picker works this way: pick a match or create one as you type.</p>
                 {error && <p className="mt-1 text-[12px] text-[#b42318]">{error}</p>}
               </td>
-            </tr>
+            </tr>}
           </tbody>
         </table>
       </div>
