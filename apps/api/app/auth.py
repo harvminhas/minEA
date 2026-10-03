@@ -5,6 +5,7 @@ Firebase handles passwords/sessions. We verify the ID token and map firebase_uid
 Org/workspace context is derived from URL path — never from JWT claims.
 """
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +68,9 @@ def _parse_service_account_json(raw: str) -> dict:
 
 
 def _load_firebase_cred():
+    if os.getenv("FIREBASE_AUTH_EMULATOR_HOST"):
+        return None
+    
     if settings.firebase_service_account_json:
         return credentials.Certificate(_parse_service_account_json(settings.firebase_service_account_json))
 
@@ -82,6 +86,10 @@ def init_firebase() -> None:
     if firebase_admin._apps:
         return
     try:
+        if os.getenv("FIREBASE_AUTH_EMULATOR_HOST"):
+            firebase_admin.initialize_app(options={"projectId": "demo-minea"})
+            return
+        
         cred = _load_firebase_cred()
         if cred is None:
             return
@@ -95,6 +103,10 @@ def init_firebase() -> None:
 
 def _ensure_firebase() -> None:
     if firebase_admin._apps:
+        return
+
+    if os.getenv("FIREBASE_AUTH_EMULATOR_HOST"):
+        firebase_admin.initialize_app(options={"projectId": "demo-minea"})
         return
 
     try:
