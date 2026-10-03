@@ -340,7 +340,7 @@ function AnywhereAdd({
                 )}
                 {row.status === "weak" && (
                   <div className="mt-2 flex gap-2">
-                    <button type="button" className="rounded-full border border-[#c9c6f5] px-2 py-0.5 text-[12px]" onClick={() => patch(row.key, { status: "matched" })}>Yes</button>
+                    <button type="button" className="rounded-full border border-[#c9c6f5] px-2 py-0.5 text-[12px]" onClick={() => patch(row.key, { status: "matched", name: row.tool?.name || row.name })}>Yes</button>
                     <button type="button" className="rounded-full border border-[#e6e8ee] px-2 py-0.5 text-[12px]" onClick={() => patch(row.key, { status: "custom", tool: null, yearly: "" })}>No, it's custom</button>
                   </div>
                 )}

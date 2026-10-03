@@ -118,7 +118,7 @@ export function prepareRows(text: string, preset: AddKind, estate: EstateItem[])
     return {
       key: item.tool ? dedupeKey(item.tool.name) : dedupeKey(item.input),
       input: item.input,
-      name: item.tool?.name || item.input,
+      name: item.status === "matched" && item.tool ? item.tool.name : item.input,
       status: item.status,
       tool: item.tool,
       options: item.options,

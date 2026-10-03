@@ -57,9 +57,13 @@ function typicalLine(annual: number, vendor: string): CostLine {
   };
 }
 
+function displayName(item: { status: string; input: string; tool?: { name: string } | null }): string {
+  return item.status === "matched" && item.tool ? item.tool.name : item.input;
+}
+
 function toDrafts(items: MatchItem[]): Draft[] {
   return items.map((item) => {
-    const yearly = item.tool?.typicalAnnual;
+    const yearly = item.status === "matched" ? item.tool?.typicalAnnual : null;
     return {
       ...item,
       key: normalizeTerm(item.input),
@@ -347,7 +351,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
           <ul className="mt-3 space-y-3">
             {apps.map((app) => (
               <li key={app.key} className="rounded-xl border border-[#e6e8ee] px-3 py-2">
-                <div className="text-[13px] font-medium text-[#1c2230]">{app.tool?.name || app.input}</div>
+                <div className="text-[13px] font-medium text-[#1c2230]">{displayName(app)}</div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {(["saas", "own", "unknown"] as const).map((choice) => (
                     <button
@@ -408,7 +412,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
               <tbody>
                 {apps.map((app) => (
                   <tr key={app.key}>
-                    <td className="px-2 py-1">{app.tool?.name || app.input}</td>
+                    <td className="px-2 py-1">{displayName(app)}</td>
                     <Cell value={app.ownerTeam} onChange={(ownerTeam) => patch(app.key, { ownerTeam })} />
                     <Cell value={app.ownerName} onChange={(ownerName) => patch(app.key, { ownerName })} />
                     <Cell value={app.renewal} onChange={(renewal) => patch(app.key, { renewal })} type="date" />

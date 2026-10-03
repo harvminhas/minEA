@@ -110,6 +110,15 @@ describe("dedupe and steps", () => {
     assert.equal(resolveKind(as400, "app"), "server");
   });
 
+  it("keeps the typed name until a weak match is confirmed", () => {
+    const rows = prepareRows("label printing", "app", []);
+    assert.equal(rows[0]?.status, "weak");
+    assert.equal(rows[0]?.name, "label printing");
+    const batch = buildBatch(plan("label printing", []), []);
+    assert.equal(batch.creates[0]?.name, "label printing");
+    assert.equal(batch.creates[0]?.properties.catalog_tool, undefined);
+  });
+
   it("stores a new category name as itself", () => {
     const batch = buildBatch(plan("Slack", []), []);
     assert.equal(batch.creates[0]?.properties.category, "Productivity");
