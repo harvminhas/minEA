@@ -82,7 +82,7 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
     },
     {
       label: "Applications",
-      href: `${basePath}/application/applications`,
+      href: modelPath(basePath, "applications"),
       icon: Boxes,
       count: countTypes(["application", "solution", "technical_capability"]),
       match: ["/application/applications", "/application/components", "/model/applications"],
