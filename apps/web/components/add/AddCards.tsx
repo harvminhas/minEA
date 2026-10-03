@@ -160,10 +160,10 @@ export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: 
       <div className="flex items-start gap-3">
         <ItemLogo name={row.name} custom={row.status === "custom"} size={48} />
         <div className="min-w-0 flex-1">
-          <h3 className="text-[16px] font-semibold text-[#1c2230]">{row.name}</h3>
-          <p className="text-[13px] text-[#6b7289]">{[row.tool?.category, row.tool?.vendor].filter(Boolean).join(" · ")}</p>
+          <h3 className="truncate text-[16px] font-semibold text-[#1c2230]">{row.name}</h3>
+          <p className="truncate text-[13px] text-[#6b7289]">{[row.tool?.category, row.tool?.vendor].filter(Boolean).join(" · ")}</p>
+          {typical && <span className="mt-1 inline-flex rounded-full bg-[#f3f4f8] px-2 py-0.5 text-[12px] text-[#3c4254]">{typical} /yr</span>}
         </div>
-        {typical && <span className="rounded-full bg-[#fff7ed] px-2 py-0.5 text-[12px] text-[#9a3412]">{typical}</span>}
         <button type="button" aria-label={`Remove ${row.name}`} className="text-[16px] text-[#6b7289]" onClick={onRemove}>×</button>
       </div>
       <div className="mt-3 text-[13px] text-[#4b5163]">
