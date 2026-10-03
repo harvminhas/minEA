@@ -146,6 +146,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const setup = useWorkspaceSetup();
   const [setupOpen, setSetupOpen] = useState(false);
   const showSetup = setup.enabled && setup.ready && !setup.state.met && (!setup.dismissed || setupOpen);
+  const [setupLatched, setSetupLatched] = useState(false);
+  useEffect(() => {
+    if (showSetup) setSetupLatched(true);
+  }, [showSetup]);
+  const keepSetup = showSetup || setupLatched;
   const emptyPreview = process.env.NODE_ENV !== "production" && params.get("demo") === "empty";
   const chips = askChips(rows, impact.edges);
   const cards = popularCards(rows, impact.edges, new Date(), emptyPreview);
@@ -165,7 +170,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
       <div className="mx-auto flex max-w-3xl flex-col items-center px-6 pb-16 pt-16">
         <p className="rounded-full bg-[#f4f3ff] px-3 py-1 text-[12px] text-[#5b4ce6]">Answers come from your own records, with sources</p>
         <h1 className="mt-6 text-center text-[36px] font-semibold tracking-tight text-[#1c2230]">What do you want to know?</h1>
-        {!showSetup && (
+        {!keepSetup && (
           <p className="mt-2 max-w-full text-center text-[14px] text-[#6b7289]">
             {orgName} · {stats.systems} applications · {platformCount} platforms · {serverCount} servers & devices · {stats.vendorCount} vendors · {moneyLabel(stats.spend || 0)} a year in tracked spend
             {support.out > 0 && (
@@ -214,11 +219,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             </button>
           ))}
         </div>
-        {showSetup && <FirstRunAsk />}
+        {keepSetup && <FirstRunAsk />}
         {setup.enabled && setup.ready && !setup.state.met && setup.dismissed && !setupOpen && (
           <SetupCard onOpen={() => { setSetupOpen(true); void setup.save({ clearDismissed: true }); }} />
         )}
-        {!showSetup && <div className="mt-12 w-full">
+        {!keepSetup && <div className="mt-12 w-full">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[14px] font-semibold text-[#1c2230]">Popular reports</h2>
             <Link href={`${basePath}/reports`} className="text-[13px] text-[#5b4ce6]">All reports →</Link>

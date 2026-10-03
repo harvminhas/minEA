@@ -41,6 +41,10 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const catalog = useModelCatalog();
   const setup = useWorkspaceSetup();
   const showPaste = setup.enabled && Boolean(catalog.data) && !setup.state.met && (section === "applications" || section === "servers" || section === "overview");
+  const [setupLatched, setSetupLatched] = useState(false);
+  useEffect(() => {
+    if (showPaste) setSetupLatched(true);
+  }, [showPaste]);
   const rows = catalog.data?.rows ?? [];
   const connections = catalog.data?.connections ?? [];
   const stats = catalogStats(rows);
@@ -96,7 +100,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   return (
     <div className="flex h-full min-h-0">
       <div className="min-w-0 flex-1">
-        {showPaste && (
+        {(showPaste || setupLatched) && (
           <div className="px-6 pt-5">
             <FirstRunAsk inline />
           </div>

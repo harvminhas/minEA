@@ -23,6 +23,10 @@ export function ReportsScreen() {
   const [addApps, setAddApps] = useState(false);
   const setup = useWorkspaceSetup();
   const blocked = setup.enabled && Boolean(catalog.data) && !setup.state.met;
+  const [setupLatched, setSetupLatched] = useState(false);
+  useEffect(() => {
+    if (blocked) setSetupLatched(true);
+  }, [blocked]);
 
   useEffect(() => {
     try {
@@ -82,7 +86,7 @@ export function ReportsScreen() {
         })}
       </div>
         </div>
-        {blocked && (
+        {(blocked || setupLatched) && (
           <div className="absolute inset-0 flex items-start justify-center pt-16">
             <div className="max-w-md rounded-2xl border border-[#e6e8ee] bg-white px-6 py-5 text-center shadow-lg">
               <p className="text-[15px] font-semibold text-[#1c2230]">Example data</p>
