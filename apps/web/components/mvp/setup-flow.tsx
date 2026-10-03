@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { MinEAObject } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { useAppStore } from "@/lib/store";
 import type { CostLine } from "@/lib/cost/math";
 import {
   SAMPLE_COMPANY,
@@ -81,7 +82,9 @@ function toDrafts(items: MatchItem[]): Draft[] {
 export function SetupFlow({ inline = false }: { inline?: boolean }) {
   const router = useRouter();
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
-  const { getToken } = useAuth();
+  const { getToken, user } = useAuth();
+  const orgName = useAppStore((state) => state.activeOrg?.name) || "Your estate";
+  const firstName = (user?.displayName || user?.email?.split("@")[0] || "there").trim().split(/\s+/)[0] || "there";
   const queryClient = useQueryClient();
   const catalog = useModelCatalog();
   const setup = useWorkspaceSetup();
@@ -263,7 +266,57 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
 
   return (
     <section className={inline ? "rounded-2xl border border-[#e6e8ee] bg-white p-4" : "mt-8 w-full"}>
-      {step === 0 && (
+      {step === 0 && !inline && (
+        <div>
+          <p className="text-center">
+            <span className="inline-flex rounded-full bg-[#f4f3ff] px-3 py-1 text-[12px] text-[#5b4ce6]">Welcome to BuboMap, {firstName}</span>
+          </p>
+          <h1 className="mt-6 text-center text-[36px] font-semibold tracking-tight text-[#1c2230]">What runs your business?</h1>
+          <p className="mx-auto mt-3 max-w-xl text-center text-[14px] leading-6 text-[#6b7289]">
+            List the software and systems {orgName} uses. We&apos;ll fill in vendors, categories and typical costs, then show you what depends on what.
+          </p>
+          <textarea
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            rows={5}
+            placeholder="e.g. Salesforce, QuickBooks, M365, AS400, Order Entry, …  (one per line or separated by commas)"
+            className="mt-6 w-full rounded-xl border border-[#e6e8ee] px-3 py-2 text-[14px] outline-none focus:border-[#5b4ce6]"
+          />
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <p className="text-[13px] text-[#6b7289]">Apps, websites, servers, anything with a login or a bill. Rough names are fine.</p>
+            <button
+              type="button"
+              disabled={!text.trim()}
+              onClick={() => {
+                setDrafts(toDrafts(matchEntries(text)));
+                setStep(1);
+              }}
+              className="shrink-0 rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50"
+            >
+              Continue →
+            </button>
+          </div>
+          <p className="mt-4 text-center text-[13px]">
+            <button type="button" onClick={() => setText(SAMPLE_COMPANY)} className="font-medium text-[#5b4ce6]">Load sample company</button>
+            <span className="mx-2 text-[#8b90a0]">·</span>
+            <button type="button" onClick={() => void skip()} className="text-[#6b7289]">Skip for now</button>
+          </p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            {[
+              ["What you use", "Paste or type a list. About 2 minutes."],
+              ["Where each one lives", "Cloud, your own server, or not sure."],
+              ["Owners & renewals", "Optional. Fill what you know."],
+            ].map(([title, body]) => (
+              <div key={title} className="rounded-xl border border-[#e6e8ee] px-3 py-3">
+                <p className="text-[14px] font-semibold text-[#1c2230]">{title}</p>
+                <p className="mt-1 text-[13px] text-[#6b7289]">{body}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-center text-[13px] text-[#6b7289]">Then you&apos;ll see what breaks if your most important server goes down.</p>
+        </div>
+      )}
+      {step === 0 && inline && (
         <>
           <h2 className="text-[22px] font-semibold text-[#1c2230]">What runs your business?</h2>
           <p className="mt-1 text-[13px] text-[#6b7289]">Paste or type apps and servers. Commas or new lines both work.</p>
@@ -293,14 +346,6 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
               Skip for now
             </button>
           </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            {["Name what you run", "Where it lives", "Owners and renewals"].map((label, index) => (
-              <div key={label} className="rounded-xl border border-[#e6e8ee] px-3 py-2 text-[13px]">
-                <span className="text-[#8b90a0]">{index + 1}</span> {label}
-              </div>
-            ))}
-          </div>
-          <p className="mt-3 text-[13px] text-[#6b7289]">Then you'll see what breaks if your most important server goes down.</p>
         </>
       )}
 

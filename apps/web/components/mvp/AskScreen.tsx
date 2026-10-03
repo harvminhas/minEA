@@ -149,7 +149,8 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const [setupLatched, setSetupLatched] = useState(false);
   useEffect(() => {
     if (showSetup) setSetupLatched(true);
-  }, [showSetup]);
+    else if (setup.dismissed && !setupOpen) setSetupLatched(false);
+  }, [showSetup, setup.dismissed, setupOpen]);
   const keepSetup = showSetup || setupLatched;
   const emptyPreview = process.env.NODE_ENV !== "production" && params.get("demo") === "empty";
   const chips = askChips(rows, impact.edges);
@@ -164,6 +165,14 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     setDraft(q);
     router.push(askPath(basePath, q, nextFocusId));
   };
+
+  if (mode === "home" && (showSetup || setupLatched)) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 pb-16 pt-12">
+        <FirstRunAsk />
+      </div>
+    );
+  }
 
   if (mode === "home") {
     return (
