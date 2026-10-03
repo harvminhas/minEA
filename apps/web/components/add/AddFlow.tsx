@@ -273,21 +273,23 @@ function AnywhereAdd({
 
   return (
     <section className="rounded-2xl border border-[#e6e8ee] bg-white p-4">
-      <div className="flex flex-wrap gap-1.5">
-        {KINDS.map((item) => (
-          <button
-            key={item}
-            type="button"
-            onClick={() => {
-              setPreset(item);
-              if (text.trim()) setRows(toPlan(text, item, estate));
-            }}
-            className={`rounded-full border px-2.5 py-0.5 text-[12px] ${preset === item ? "border-[#5b4ce6] bg-[#ece9ff] font-semibold text-[#3f35b5]" : "border-[#e6e8ee] text-[#4b5163]"}`}
-          >
-            {KIND_TITLE[item]}
-          </button>
-        ))}
-      </div>
+      {(!inline || started) && preset === kind && KINDS.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          {KINDS.map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => {
+                setPreset(item);
+                if (text.trim()) setRows(toPlan(text, item, estate));
+              }}
+              className={`rounded-full border px-2.5 py-0.5 text-[12px] ${preset === item ? "border-[#5b4ce6] bg-[#ece9ff] font-semibold text-[#3f35b5]" : "border-[#e6e8ee] text-[#4b5163]"}`}
+            >
+              {KIND_TITLE[item]}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!started && (
         <>
@@ -360,7 +362,6 @@ function AnywhereAdd({
               </li>
             ))}
           </ul>
-          {skip && skip > 0 && <p className="mt-3 text-[13px] text-[#6b7289]">skipped: all {skip} are SaaS</p>}
           {!one && skip === null && (
             <div className="mt-3 space-y-3">
               <h3 className="text-[14px] font-semibold text-[#1c2230]">Where does each one live?</h3>

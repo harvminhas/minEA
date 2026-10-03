@@ -16,9 +16,11 @@
     "db:proxy": "cd apps/api && npm run db:proxy"
   },
   "devDependencies": {
-    "turbo": "^2.3.3",
-    "prettier": "^3.4.2",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.10.0",
+    "firebase-tools": "^15.32.1",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
     "typescript": "^5.7.2"
   },
   "engines": {

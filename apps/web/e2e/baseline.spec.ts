@@ -96,7 +96,7 @@ test.describe('BuboMap Baseline Screenshots', () => {
     await bypassAuthAndNavigate(page, `${BASE_URL}/orgs/test-org/workspaces/empty-workspace/ask`);
     await page.waitForTimeout(1000);
     await page.screenshot({ 
-      path: '/tmp/screenshots/38-before-empty-ask.png',
+      path: '/opt/cursor/artifacts/screenshots/38-before-empty-ask.png',
       fullPage: false 
     });
   });
@@ -105,7 +105,7 @@ test.describe('BuboMap Baseline Screenshots', () => {
     await bypassAuthAndNavigate(page, `${BASE_URL}/orgs/test-org/workspaces/meridian-fasteners/ask`);
     await page.waitForTimeout(1000);
     await page.screenshot({ 
-      path: '/tmp/screenshots/meridian-ask-baseline.png',
+      path: '/opt/cursor/artifacts/screenshots/meridian-ask-baseline.png',
       fullPage: false 
     });
   });
@@ -121,7 +121,7 @@ test.describe('BuboMap Baseline Screenshots', () => {
     await page.waitForTimeout(3000);
     
     await page.screenshot({ 
-      path: '/tmp/screenshots/add-ms365-current-issue.png',
+      path: '/opt/cursor/artifacts/screenshots/add-ms365-current-issue.png',
       fullPage: false 
     });
   });
@@ -130,7 +130,7 @@ test.describe('BuboMap Baseline Screenshots', () => {
     await bypassAuthAndNavigate(page, `${BASE_URL}/orgs/test-org/workspaces/meridian-fasteners/model/applications`);
     await page.waitForTimeout(1000);
     await page.screenshot({ 
-      path: '/tmp/screenshots/45-before-model-applications.png',
+      path: '/opt/cursor/artifacts/screenshots/45-before-model-applications.png',
       fullPage: false 
     });
   });
@@ -139,7 +139,7 @@ test.describe('BuboMap Baseline Screenshots', () => {
     await bypassAuthAndNavigate(page, `${BASE_URL}/orgs/test-org/workspaces/meridian-fasteners/views/impact`);
     await page.waitForTimeout(1000);
     await page.screenshot({ 
-      path: '/tmp/screenshots/42-before-views-impact.png',
+      path: '/opt/cursor/artifacts/screenshots/42-before-views-impact.png',
       fullPage: false 
     });
   });
@@ -148,7 +148,7 @@ test.describe('BuboMap Baseline Screenshots', () => {
     await bypassAuthAndNavigate(page, `${BASE_URL}/orgs/test-org/workspaces/meridian-fasteners/reports`);
     await page.waitForTimeout(1000);
     await page.screenshot({ 
-      path: '/tmp/screenshots/43-before-reports.png',
+      path: '/opt/cursor/artifacts/screenshots/43-before-reports.png',
       fullPage: false 
     });
   });
