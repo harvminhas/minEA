@@ -28,6 +28,11 @@ import {
   loadSystemCapabilityIds,
   syncSystemCapabilityRelations,
 } from "@/lib/system-capability-utils";
+import {
+  APPLICATION_HOSTING_OPTIONS,
+  OBJECT_FORM_FLOW_DIRECTION,
+  SYSTEM_LIFECYCLE_OPTIONS,
+} from "@/lib/fields/registry";
 import { FormDrawer, FormField, FormSection, formFieldClass } from "@/components/ui/FormDrawer";
 import { CostLinesEditor } from "@/components/mvp/CostSection";
 import { VendorField } from "@/components/mvp/VendorField";
@@ -53,13 +58,6 @@ interface Props {
   onClose: () => void;
   onSuccess: () => void;
 }
-
-const SYSTEM_LIFECYCLE_OPTIONS = [
-  { value: "planned", label: "Planned" },
-  { value: "active", label: "Active" },
-  { value: "retiring", label: "Retiring" },
-  { value: "retired", label: "End of life" },
-];
 
 function systemLifecycleOptions(current: string) {
   if (!current || SYSTEM_LIFECYCLE_OPTIONS.some((option) => option.value === current)) {
@@ -101,13 +99,8 @@ const SYSTEM_CATALOG_FIELDS: FormPropertyField[] = [
     key: "hosting_model",
     label: "Hosting model",
     type: "select",
-    options: ["cloud", "on_premise", "hybrid", "saas"],
-    optionLabels: {
-      cloud: "Cloud",
-      on_premise: "On-premises",
-      hybrid: "Hybrid",
-      saas: "SaaS",
-    },
+    options: APPLICATION_HOSTING_OPTIONS.map((option) => option.value),
+    optionLabels: Object.fromEntries(APPLICATION_HOSTING_OPTIONS.map((option) => [option.value, option.label])),
   },
 ];
 
@@ -152,7 +145,7 @@ const TYPE_FIELDS: Record<string, FormPropertyField[]> = {
     { key: "protocol", label: "Protocol", type: "select", options: ["rest", "graphql", "grpc", "soap"] },
   ],
   integration_flow: [
-    { key: "direction", label: "Direction", type: "select", options: ["inbound", "outbound", "bidirectional"] },
+    { key: "direction", label: "Direction", type: "select", options: OBJECT_FORM_FLOW_DIRECTION.map((option) => option.value) },
     { key: "protocol", label: "Protocol", type: "text" },
     {
       key: "frequency",

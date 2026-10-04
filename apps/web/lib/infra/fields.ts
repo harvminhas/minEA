@@ -1,4 +1,4 @@
-import { infraConfig } from "@/lib/infra/infraConfig";
+import { REGISTRY, type Editor, type FieldDef } from "@/lib/fields/registry";
 
 /** One list drives the table columns and the panel editors. A shown field always has an editor type. */
 
@@ -15,34 +15,56 @@ export type InfraField = {
 
 const EDITABLE: InfraFieldType[] = ["text", "date", "enum", "number", "owner"];
 
-export const runtimeFields: InfraField[] = [
-  { key: "runtime_kind", label: "Kind", type: "enum", options: infraConfig.runtimeKinds, table: true, inline: true },
-  { key: "location", label: "Location", type: "enum", options: infraConfig.locations, table: true, inline: true },
-  { key: "os_name", label: "OS name", type: "text", table: true, inline: true },
-  { key: "os_version", label: "OS version", type: "text", table: true, inline: true },
-  { key: "support_ends", label: "Support ends", type: "date", table: true, inline: true },
-  { key: "end_of_life", label: "End of life", type: "date", table: false, inline: false },
-  { key: "commitment_ends", label: "Renewal", type: "date", table: true, inline: false },
-  { key: "notice_period", label: "Notice period", type: "text", table: false, inline: false },
-  { key: "vendor", label: "Supplier", type: "text", table: false, inline: false },
-  { key: "runtime_provider", label: "Provider", type: "text", table: false, inline: false },
-];
+const INLINE = new Set(["runtime_kind", "location", "os_name", "os_version", "support_ends", "platform_kind"]);
 
-export const platformFields: InfraField[] = [
-  { key: "platform_kind", label: "Kind", type: "enum", options: infraConfig.platformKinds, table: true, inline: true },
-  {
-    key: "hosting_model",
-    label: "Hosting",
-    type: "enum",
-    options: Object.entries(infraConfig.platformHostingLabels).map(([key, label]) => ({ key, label })),
-    table: true,
-    inline: false,
-  },
-  { key: "vendor", label: "Vendor", type: "text", table: true, inline: false },
-  { key: "vendor_product", label: "Product", type: "text", table: false, inline: false },
-  { key: "contract_renewal", label: "Renewal", type: "date", table: true, inline: false },
-  { key: "notice_period", label: "Notice period", type: "text", table: false, inline: false },
-];
+function infraType(editor: Editor): InfraFieldType {
+  if (editor === "date") return "date";
+  if (editor === "number") return "number";
+  if (editor === "owner") return "owner";
+  if (editor === "select") return "enum";
+  return "text";
+}
+
+function fromRegistry(type: "server" | "platform", keys: readonly string[]): InfraField[] {
+  return keys.map((key) => {
+    const def = REGISTRY[type].find((field) => field.key === key);
+    if (!def) throw new Error(`Missing ${type} field ${key}`);
+    return toInfraField(def);
+  });
+}
+
+function toInfraField(def: FieldDef): InfraField {
+  return {
+    key: def.key,
+    label: def.label,
+    type: infraType(def.editor),
+    options: def.options?.map((option) => ({ key: option.value, label: option.label })),
+    table: Boolean(def.table),
+    inline: INLINE.has(def.key),
+  };
+}
+
+export const runtimeFields: InfraField[] = fromRegistry("server", [
+  "runtime_kind",
+  "location",
+  "os_name",
+  "os_version",
+  "support_ends",
+  "end_of_life",
+  "commitment_ends",
+  "notice_period",
+  "vendor",
+  "runtime_provider",
+]);
+
+export const platformFields: InfraField[] = fromRegistry("platform", [
+  "platform_kind",
+  "hosting_model",
+  "vendor",
+  "vendor_product",
+  "contract_renewal",
+  "notice_period",
+]);
 
 export function fieldHasEditor(field: InfraField): boolean {
   if (!EDITABLE.includes(field.type)) return false;
