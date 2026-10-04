@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
@@ -31,7 +31,10 @@ import {
 import {
   APPLICATION_HOSTING_OPTIONS,
   OBJECT_FORM_FLOW_DIRECTION,
+  SECTION_LABEL,
   SYSTEM_LIFECYCLE_OPTIONS,
+  createFormSeed,
+  groupCreateFields,
 } from "@/lib/fields/registry";
 import { FormDrawer, FormField, FormSection, formFieldClass } from "@/components/ui/FormDrawer";
 import { CostLinesEditor } from "@/components/mvp/CostSection";
@@ -49,6 +52,7 @@ import {
   SystemGovernanceFields,
 } from "@/components/application/SystemGovernanceFields";
 import { isShadowGovernance } from "@/lib/system-governance";
+import { PLATFORM_SLA } from "@/lib/platform-utils";
 import { aiRoleForProperties, aiRoleFromProperties, SYSTEM_OBJECT_TYPES } from "@/lib/ai-role-utils";
 import type { AiRole, SystemGovernanceStatus } from "@minea/types";
 
@@ -82,7 +86,14 @@ type FormPropertyField = {
 
 const SYSTEM_CATALOG_FIELDS: FormPropertyField[] = [
   { key: "vendor", label: "Vendor", type: "text" },
-  { key: "contract_renewal", label: "Contract end", type: "text" },
+  { key: "contract_renewal", label: "Renewal", type: "text" },
+  {
+    key: "hosting_model",
+    label: "Hosting model",
+    type: "select",
+    options: APPLICATION_HOSTING_OPTIONS.map((option) => option.value),
+    optionLabels: Object.fromEntries(APPLICATION_HOSTING_OPTIONS.map((option) => [option.value, option.label])),
+  },
   {
     key: "criticality",
     label: "Criticality",
@@ -92,15 +103,15 @@ const SYSTEM_CATALOG_FIELDS: FormPropertyField[] = [
       low: "Low",
       medium: "Medium",
       high: "High",
-      tier1: "Tier 1 / business-critical",
+      tier1: "Critical",
     },
   },
   {
-    key: "hosting_model",
-    label: "Hosting model",
+    key: "sla_target",
+    label: "SLA target",
     type: "select",
-    options: APPLICATION_HOSTING_OPTIONS.map((option) => option.value),
-    optionLabels: Object.fromEntries(APPLICATION_HOSTING_OPTIONS.map((option) => [option.value, option.label])),
+    options: PLATFORM_SLA.map((option) => option.value),
+    optionLabels: Object.fromEntries(PLATFORM_SLA.map((option) => [option.value, option.label])),
   },
 ];
 
@@ -209,7 +220,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
   const [name, setName] = useState(initialValues?.name ?? "");
   const [description, setDescription] = useState(initialValues?.description ?? "");
   const [status, setStatus] = useState(
-    initialValues?.status ?? (SYSTEM_OBJECT_TYPES.has(objectType) ? "planned" : "")
+    initialValues?.status ?? (SYSTEM_OBJECT_TYPES.has(objectType) ? createFormSeed("application").lifecycle : "")
   );
   const [tags, setTags] = useState((initialValues?.tags ?? []).join(", "));
   const [properties, setProperties] = useState<Record<string, string>>(
@@ -354,22 +365,22 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
         name,
         description: description || undefined,
         ...ownership.toPayload(),
-        status: status ? (status as ObjectUpdate["status"]) : undefined,
         tags: tags
           .split(",")
           .map((t) => t.trim())
           .filter(Boolean),
         properties: props,
       };
+      const statusValue = status ? (status as ObjectUpdate["status"]) : undefined;
       let saved: MinEAObject;
       if (isEdit) {
-        const updateBody: ObjectUpdate = shared;
+        const updateBody: ObjectUpdate = { ...shared, status: statusValue };
         saved = await objectsApi.update(orgSlug, workspaceSlug, initialValues!.id, updateBody, token!);
       } else {
         saved = await objectsApi.create(
           orgSlug,
           workspaceSlug,
-          { ...shared, type: objectType } as Parameters<typeof objectsApi.create>[2],
+          { ...shared, ...(statusValue ? { status: statusValue } : {}), type: objectType } as Parameters<typeof objectsApi.create>[2],
           token!
         );
       }
@@ -403,88 +414,57 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
     },
   });
 
-  return (
-    <FormDrawer
-      title={`${isEdit ? "Edit" : "New"} ${typeLabel}`}
-      onClose={onClose}
-      onSubmit={() => mutation.mutate()}
-      submitLabel={isEdit ? "Save changes" : "Create"}
-      isSubmitting={mutation.isPending}
-      submitDisabled={!name || (!isShadowSystem && !ownership.isValid)}
-      error={mutation.isError ? (mutation.error as Error).message : null}
-    >
-      <FormField label="Name" required>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className={formFieldClass}
-          placeholder={`e.g. ${objectType === "application" ? "Salesforce" : objectType === "capability" ? "Customer Management" : "Name"}`}
-        />
-      </FormField>
+  const catalogSpec = (key: string) => SYSTEM_CATALOG_FIELDS.find((field) => field.key === key);
 
-      {isSystemApp && (
-        <SystemGovernanceFields
-          governanceStatus={governanceStatus}
-          onGovernanceStatusChange={setGovernanceStatus}
-          discovery={discovery}
-          onDiscoveryChange={setDiscovery}
-        />
-      )}
-
-      <FormField label="Description">
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={2}
-          className={`${formFieldClass} resize-none`}
-        />
-      </FormField>
-
-      <FormField label={isSystemType ? "Lifecycle" : "Status"}>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className={formFieldClass}>
-          {!isSystemType && <option value="">— No status —</option>}
-          {(isSystemType ? systemLifecycleOptions(status) : STATUSES.map((s) => ({
-            value: s,
-            label: s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-          }))).map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </FormField>
-
-      <OwnershipFields value={ownership.value} onChange={ownership.setValue} required={!isShadowSystem} />
-
-      {isSystemApp && (
-        <SystemCategoryFields
-          category={category}
-          onCategoryChange={setCategory}
-          isCustomBuilt={isCustomBuilt}
-          onCustomBuiltChange={setIsCustomBuilt}
-          reviewRequired={initCategoryFields.reviewRequired}
-          legacyCategory={initCategoryFields.legacyCategory}
-        />
-      )}
-
-      {isApplication && (
-        <>
-          <FormField label="Capabilities supported">
+  const systemField = (key: string, label: string): ReactNode => {
+    if (key === "is_custom_built" || key === "discovery") return null;
+    switch (key) {
+      case "name":
+        return (
+          <FormField label={label} required>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={formFieldClass}
+              placeholder={`e.g. ${objectType === "application" ? "Salesforce" : "Name"}`}
+            />
+          </FormField>
+        );
+      case "category":
+        return (
+          <SystemCategoryFields
+            category={category}
+            onCategoryChange={setCategory}
+            isCustomBuilt={isCustomBuilt}
+            onCustomBuiltChange={setIsCustomBuilt}
+            reviewRequired={initCategoryFields.reviewRequired}
+            legacyCategory={initCategoryFields.legacyCategory}
+          />
+        );
+      case "governance_status":
+        return (
+          <SystemGovernanceFields
+            governanceStatus={governanceStatus}
+            onGovernanceStatusChange={setGovernanceStatus}
+            discovery={discovery}
+            onDiscoveryChange={setDiscovery}
+          />
+        );
+      case "ai_role":
+        return <AiRoleField value={aiRole} onChange={setAiRole} variant="drawer" />;
+      case "capabilities":
+        return (
+          <FormField label={label}>
             <div className="flex items-baseline justify-between mb-1">
               {selectedCapabilityIds.length > 0 && (
-                <span className="text-xs font-medium text-indigo-600">
-                  {selectedCapabilityIds.length} selected
-                </span>
+                <span className="text-xs font-medium text-indigo-600">{selectedCapabilityIds.length} selected</span>
               )}
             </div>
             <p className="text-[11px] text-gray-400 mb-2">
               Pick L2 capabilities from your capability map (e.g. Products → Success management). These drive the domain mapping matrix.
             </p>
             <div className="relative mb-2">
-              <Search
-                size={13}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-              />
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input
                 value={capSearch}
                 onChange={(e) => setCapSearch(e.target.value)}
@@ -504,35 +484,22 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
                   groupedCapabilities.map(([group, items]) => (
                     <div key={group}>
                       <div className="bg-gray-50 px-3 py-1.5 sticky top-0">
-                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-                          {group}
-                        </span>
+                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{group}</span>
                       </div>
                       {items.map(({ capability }) => {
                         const maturity = capability.maturity;
                         return (
-                          <label
-                            key={capability.id}
-                            className="flex items-center justify-between px-3 py-2.5 hover:bg-indigo-50/50 cursor-pointer border-t border-gray-100"
-                          >
+                          <label key={capability.id} className="flex items-center justify-between px-3 py-2.5 hover:bg-indigo-50/50 cursor-pointer border-t border-gray-100">
                             <div className="flex items-center gap-2.5 min-w-0">
                               <input
                                 type="checkbox"
                                 checked={selectedCapabilityIds.includes(capability.id)}
-                                onChange={(e) =>
-                                  toggleCapability(capability.id, e.target.checked)
-                                }
+                                onChange={(e) => toggleCapability(capability.id, e.target.checked)}
                                 className="accent-indigo-600 flex-shrink-0"
                               />
-                              <span className="text-sm text-gray-800 truncate">
-                                {capability.name}
-                              </span>
+                              <span className="text-sm text-gray-800 truncate">{capability.name}</span>
                             </div>
-                            {maturity && (
-                              <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
-                                maturity {maturity}
-                              </span>
-                            )}
+                            {maturity && <span className="text-xs text-gray-400 flex-shrink-0 ml-2">maturity {maturity}</span>}
                           </label>
                         );
                       })}
@@ -542,87 +509,180 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
               </div>
             )}
           </FormField>
-
-          <FormField label="Built on platform">
-            <select
-              value={platformId}
-              onChange={(e) => setPlatformId(e.target.value)}
-              className={formFieldClass}
-            >
+        );
+      case "tags":
+        return (
+          <FormField label={label}>
+            <input value={tags} onChange={(e) => setTags(e.target.value)} className={formFieldClass} placeholder="e.g. crm, sales, critical" />
+          </FormField>
+        );
+      case "owner":
+        return <OwnershipFields value={ownership.value} onChange={ownership.setValue} required={!isShadowSystem} />;
+      case "cost":
+        return (
+          <CostLinesEditor
+            lines={costLines}
+            vendor={properties.vendor ?? ""}
+            legacyDollars={legacyCost}
+            actor={user?.uid || "user"}
+            onChange={(next) => {
+              setCostLines(next);
+              setCostTouched(true);
+            }}
+          />
+        );
+      case "vendor":
+      case "contract_renewal":
+      case "hosting_model":
+      case "criticality":
+      case "sla_target": {
+        const spec = catalogSpec(key);
+        if (!spec) return null;
+        return (
+          <FormField label={label}>
+            {spec.type === "select" ? (
+              <select
+                value={properties[key] ?? ""}
+                onChange={(e) => setProperties((current) => ({ ...current, [key]: e.target.value }))}
+                className={formFieldClass}
+              >
+                <option value="">—</option>
+                {spec.options?.map((option) => (
+                  <option key={option} value={option}>{spec.optionLabels?.[option] ?? option}</option>
+                ))}
+              </select>
+            ) : key === "vendor" ? (
+              <VendorField
+                value={properties.vendor ?? ""}
+                onChange={(vendor) => setProperties((current) => ({ ...current, vendor }))}
+                placeholder="Start typing a vendor"
+                className={formFieldClass}
+              />
+            ) : (
+              <input
+                type={spec.type}
+                value={properties[key] ?? ""}
+                onChange={(e) => setProperties((current) => ({ ...current, [key]: e.target.value }))}
+                className={formFieldClass}
+              />
+            )}
+          </FormField>
+        );
+      }
+      case "built_on":
+        return (
+          <FormField label={label}>
+            <select value={platformId} onChange={(e) => setPlatformId(e.target.value)} className={formFieldClass}>
               <option value="">— None —</option>
-              {platformOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
+              {platformOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
-            <p className="text-[11px] text-gray-400 mt-1">
-              Link this system to an enterprise platform (e.g. Salesforce, ServiceNow).
-            </p>
+            <p className="text-[11px] text-gray-400 mt-1">Link this system to an enterprise platform (e.g. Salesforce, ServiceNow).</p>
+          </FormField>
+        );
+      case "status":
+        return (
+          <FormField label={label}>
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className={formFieldClass}>
+              <option value="">Not set</option>
+              {systemLifecycleOptions(status).map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </FormField>
+        );
+      case "description":
+        return (
+          <FormField label={label}>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className={`${formFieldClass} resize-none`} />
+          </FormField>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <FormDrawer
+      title={`${isEdit ? "Edit" : "New"} ${typeLabel}`}
+      onClose={onClose}
+      onSubmit={() => mutation.mutate()}
+      submitLabel={isEdit ? "Save changes" : "Create"}
+      isSubmitting={mutation.isPending}
+      submitDisabled={!name || (!isShadowSystem && !ownership.isValid)}
+      error={mutation.isError ? (mutation.error as Error).message : null}
+    >
+      {isSystemApp ? (
+        groupCreateFields("application").map((group) => {
+          const fields = group.fields.filter(
+            (field) => !field.showIf || field.showIf({ properties: {}, type: objectType })
+          );
+          if (fields.length === 0) return null;
+          const body = fields.map((field) => {
+            const node = systemField(field.key, field.label);
+            return node ? <div key={field.key}>{node}</div> : null;
+          });
+          if (group.section === "cost") return <FormSection key={group.section} title={SECTION_LABEL.cost}>{body}</FormSection>;
+          return <div key={group.section} className="space-y-3">{body}</div>;
+        })
+      ) : (
+        <>
+          <FormField label="Name" required>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={formFieldClass}
+              placeholder={`e.g. ${objectType === "capability" ? "Customer Management" : "Name"}`}
+            />
+          </FormField>
+          <FormField label="Description">
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className={`${formFieldClass} resize-none`} />
+          </FormField>
+          <FormField label="Status">
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className={formFieldClass}>
+              <option value="">— No status —</option>
+              {STATUSES.map((item) => ({
+                value: item,
+                label: item.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+              })).map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </FormField>
+          <OwnershipFields value={ownership.value} onChange={ownership.setValue} required={!isShadowSystem} />
+          {typeFields.length > 0 && (
+            <FormSection title={`${typeLabel} Properties`}>
+              {typeFields.map((field) => (
+                <FormField key={field.key} label={field.label}>
+                  {field.type === "select" ? (
+                    <select
+                      value={properties[field.key] ?? ""}
+                      onChange={(e) => setProperties((current) => ({ ...current, [field.key]: e.target.value }))}
+                      className={`${formFieldClass} mb-3`}
+                    >
+                      <option value="">—</option>
+                      {field.options?.map((option) => (
+                        <option key={option} value={option}>{field.optionLabels?.[option] ?? option}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={field.type}
+                      value={properties[field.key] ?? ""}
+                      onChange={(e) => setProperties((current) => ({ ...current, [field.key]: e.target.value }))}
+                      className={`${formFieldClass} mb-3`}
+                    />
+                  )}
+                </FormField>
+              ))}
+            </FormSection>
+          )}
+          <FormField label="Tags (comma-separated)">
+            <input value={tags} onChange={(e) => setTags(e.target.value)} className={formFieldClass} placeholder="e.g. crm, sales, critical" />
           </FormField>
         </>
       )}
-
-      {(typeFields.length > 0 || isSystemType) && (
-        <FormSection title={`${typeLabel} Properties`}>
-          {typeFields.map((field) => (
-            <div key={field.key}>
-              <FormField label={field.label}>
-                {field.type === "select" ? (
-                  <select
-                    value={properties[field.key] ?? ""}
-                    onChange={(e) => setProperties((p) => ({ ...p, [field.key]: e.target.value }))}
-                    className={`${formFieldClass} mb-3`}
-                  >
-                    <option value="">—</option>
-                    {field.options?.map((o) => (
-                      <option key={o} value={o}>
-                        {field.optionLabels?.[o] ?? o}
-                      </option>
-                    ))}
-                  </select>
-                ) : field.key === "vendor" ? (
-                  <VendorField
-                    value={properties.vendor ?? ""}
-                    onChange={(vendor) => setProperties((current) => ({ ...current, vendor }))}
-                    placeholder="Start typing a vendor"
-                    className={`${formFieldClass} mb-3`}
-                  />
-                ) : (
-                  <input
-                    type={field.type}
-                    value={properties[field.key] ?? ""}
-                    onChange={(e) => setProperties((p) => ({ ...p, [field.key]: e.target.value }))}
-                    className={`${formFieldClass} mb-3`}
-                  />
-                )}
-              </FormField>
-              {isSystemType && field.key === "vendor" && (
-                <CostLinesEditor
-                  lines={costLines}
-                  vendor={properties.vendor ?? ""}
-                  legacyDollars={legacyCost}
-                  actor={user?.uid || "user"}
-                  onChange={(next) => {
-                    setCostLines(next);
-                    setCostTouched(true);
-                  }}
-                />
-              )}
-            </div>
-          ))}
-          {isSystemType && <AiRoleField value={aiRole} onChange={setAiRole} variant="drawer" />}
-        </FormSection>
-      )}
-
-      <FormField label="Tags (comma-separated)">
-        <input
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-          className={formFieldClass}
-          placeholder="e.g. crm, sales, critical"
-        />
-      </FormField>
     </FormDrawer>
   );
 }

@@ -10,8 +10,10 @@ import { noHostLinked, readRuntimeInfra } from "@/lib/infra/read";
 import { infraStatus } from "@/lib/infra/status";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
+import { usePermissions } from "@/lib/use-permissions";
 
 export function HostLink({ row, onAddHost }: { row: CatalogRow; onAddHost?: () => void }) {
+  const { canEdit } = usePermissions();
   const impact = useImpactGraph();
   const catalog = useModelCatalog();
   const { getToken } = useAuth();
@@ -62,25 +64,27 @@ export function HostLink({ row, onAddHost }: { row: CatalogRow; onAddHost?: () =
     <div className="rounded-xl border border-[#f5d7a8] bg-[#fffaf0] p-3 text-[13px]">
       <div className="flex items-center justify-between gap-2">
         <strong className="text-[#92400e]">No host linked</strong>
-        <button
-          type="button"
-          className="font-medium text-[#c2410c]"
-          onClick={() => {
-            if (onAddHost) {
-              onAddHost();
-              return;
-            }
-            setOpen((value) => !value);
-          }}
-        >
-          + Add host
-        </button>
+        {canEdit && (
+          <button
+            type="button"
+            className="font-medium text-[#c2410c]"
+            onClick={() => {
+              if (onAddHost) {
+                onAddHost();
+                return;
+              }
+              setOpen((value) => !value);
+            }}
+          >
+            + Add host
+          </button>
+        )}
       </div>
       <p className="mt-1 text-[#7a5b32]">
         Hosting says {hosting}, but nothing links {row.name} to a server or device, so what breaks if it stops and infrastructure cost cannot include it.
         {mentioned ? ` Your note says "${mentioned[0]}".` : ""}
       </p>
-      {open && (
+      {canEdit && open && (
         <div className="mt-3 rounded-lg border border-[#f0e2c8] bg-white p-2">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search servers & devices" className="mb-2 h-8 w-full rounded-md border border-[#e6e8ee] px-2 text-[13px]" />
           <div className="max-h-48 space-y-1 overflow-y-auto">

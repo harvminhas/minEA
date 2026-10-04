@@ -8,17 +8,10 @@ import type { CloudServiceProperties, MinEAObject } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
-import { CatalogDetailFields } from "@/components/catalog/CatalogDetailFields";
 import {
   DetailPanel,
-  DetailRow,
   DetailSection,
 } from "@/components/ui/DetailPanel";
-import {
-  catalogOwnerLabel,
-  formatCatalogAnnualCost,
-  formatCatalogContractEnd,
-} from "@/lib/catalog-fields";
 import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
 import { usePermissions } from "@/lib/use-permissions";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
@@ -27,8 +20,11 @@ import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/Obje
 import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
 import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { HistoryEntry } from "@/components/shared/EntityHistory";
-import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { PlatformLinkDialog } from "@/components/infrastructure/PlatformLinkDialog";
+import { RecordFields, toFieldEdges } from "@/components/mvp/InfraEditors";
+import { recordTypeOf } from "@/lib/fields/registry";
+import { rowFromObject } from "@/lib/model-catalog";
+import { useModelCatalog } from "@/lib/use-model-catalog";
 import {
   COMPONENT_PLATFORM_REL,
   isSystemObjectType,
@@ -36,12 +32,7 @@ import {
 } from "@/lib/platform-relationship-utils";
 import {
   formatPlatformSubtitle,
-  PLATFORM_HOSTING_LABEL,
   PLATFORM_ICON_STYLE,
-  PLATFORM_LICENSE_LABEL,
-  PLATFORM_SLA_LABEL,
-  PLATFORM_VENDOR_LABEL,
-  platformTypeLabel,
 } from "@/lib/platform-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import { cn } from "@/lib/utils";
@@ -62,13 +53,13 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
 
   const [activeTab, setActiveTab] = useState<ObjectDrawerTabId>("details");
   const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(platform.id);
-  const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const catalog = useModelCatalog();
+  const live = catalog.data?.objects.find((item) => item.id === platform.id) ?? platform;
+  const recordType = recordTypeOf(live.type);
 
-  const props = (platform.properties ?? {}) as CloudServiceProperties;
-  const typeLabel = platformTypeLabel(props);
-  const vendorLabel = PLATFORM_VENDOR_LABEL[props.vendor ?? ""] ?? props.vendor;
+  const props = (live.properties ?? {}) as CloudServiceProperties;
 
   const historyQueryKey = ["object-history", orgSlug, workspaceSlug, platform.id] as const;
 
@@ -98,13 +89,15 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
     queryKey: ["platform-linked", orgSlug, workspaceSlug, platform.id],
     queryFn: async () => {
       const token = await getToken();
-      const [rels, apps, solutions, techCaps, components] = await Promise.all([
+      const [incoming, outgoing, apps, solutions, techCaps, components] = await Promise.all([
         relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: platform.id }, token!),
+        relationshipsApi.list(orgSlug, workspaceSlug, { from_object_id: platform.id }, token!),
         objectsApi.list(orgSlug, workspaceSlug, { type: "application" }, token!),
         objectsApi.list(orgSlug, workspaceSlug, { type: "solution" }, token!),
         objectsApi.list(orgSlug, workspaceSlug, { type: "technical_capability" }, token!),
         objectsApi.list(orgSlug, workspaceSlug, { type: "component" }, token!),
       ]);
+      const rels = [...incoming, ...outgoing.filter((rel) => !incoming.some((item) => item.id === rel.id))];
       const systemIds = new Set(
         rels
           .filter(
@@ -121,6 +114,7 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
       );
       const allSystems = [...apps.items, ...solutions.items, ...techCaps.items];
       return {
+        relationships: rels,
         systems: allSystems.filter((item) => systemIds.has(item.id)),
         components: components.items.filter((item) => componentIds.has(item.id)),
       };
@@ -159,17 +153,15 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
                   <Layers size={16} strokeWidth={2.25} />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="font-semibold text-gray-900 truncate">{platform.name}</h2>
+                  <h2 className="font-semibold text-gray-900 truncate">{live.name}</h2>
                   <p className="text-sm text-gray-400">{formatPlatformSubtitle(props)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <DetailObjectActions
                   onClose={onClose}
-                  onEdit={() => setShowEditForm(true)}
                   onDelete={() => setShowDeleteConfirm(true)}
                   deletePending={deleteMutation.isPending}
-                  editLabel="Edit platform"
                   deleteLabel="Delete platform"
                 />
               </div>
@@ -195,11 +187,11 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
         {activeTab === "tech_debt" ? (
           <ObjectTechDebtTab
             objectId={platform.id}
-            objectName={platform.name}
+            objectName={live.name}
             objectKind="cloud_service"
             summary={techDebtSummary}
             isLoading={techDebtLoading}
-            defaultOwner={platform.owner}
+            defaultOwner={live.owner}
             onRefresh={refreshPlatform}
           />
         ) : activeTab === "history" ? (
@@ -210,54 +202,14 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
           />
         ) : (
           <>
-            <DetailSection title="Identity">
-              {typeLabel && <DetailRow label="Type" value={typeLabel} />}
-              {props.vendor_product && <DetailRow label="Vendor product" value={props.vendor_product} />}
-              {platform.description && <DetailRow label="Description" value={platform.description} />}
-              {platform.tags.length > 0 && <DetailRow label="Tags" value={platform.tags.join(", ")} />}
-            </DetailSection>
-
-            <DetailSection title="Record">
-              <CatalogDetailFields
-                owner={catalogOwnerLabel(platform)}
-                vendor={vendorLabel || "—"}
-                annualCost={formatCatalogAnnualCost(props.annual_cost)}
-                contractEnd={formatCatalogContractEnd(props.contract_renewal)}
-                lifecycle={props.lifecycle ?? platform.status}
-                criticality={props.criticality}
+            {recordType && (catalog.data?.relationships ?? linkedData?.relationships) && (
+              <RecordFields
+                type={recordType}
+                object={live}
+                edges={toFieldEdges(catalog.data?.relationships ?? linkedData?.relationships ?? [])}
+                row={rowFromObject(live) ?? undefined}
               />
-            </DetailSection>
-
-            <DetailSection title="More details">
-              {props.hosting_model && (
-                <DetailRow
-                  label="Hosting model"
-                  value={PLATFORM_HOSTING_LABEL[props.hosting_model] ?? props.hosting_model}
-                />
-              )}
-              {props.region && <DetailRow label="Region" value={props.region} />}
-              {props.environments && props.environments.length > 0 && (
-                <DetailRow label="Environments" value={props.environments.join(", ")} />
-              )}
-              {props.admin_url && <DetailRow label="Admin URL" value={props.admin_url} />}
-              {props.license_model && (
-                <DetailRow
-                  label="License model"
-                  value={PLATFORM_LICENSE_LABEL[props.license_model] ?? props.license_model}
-                />
-              )}
-              {props.sla_target && (
-                <DetailRow label="SLA target" value={PLATFORM_SLA_LABEL[props.sla_target] ?? props.sla_target} />
-              )}
-              {!props.hosting_model &&
-                !props.region &&
-                !(props.environments && props.environments.length > 0) &&
-                !props.admin_url &&
-                !props.license_model &&
-                !props.sla_target && (
-                  <p className="text-sm text-gray-400">No additional details yet.</p>
-                )}
-            </DetailSection>
+            )}
 
             <DetailSection
               title={`Built on this platform (${systems.length + components.length})`}
@@ -322,17 +274,6 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
           onConfirm={() => deleteMutation.mutate()}
           onCancel={() => setShowDeleteConfirm(false)}
           isPending={deleteMutation.isPending}
-        />
-      )}
-
-      {canEdit && showEditForm && (
-        <CreatePlatformPanel
-          initialValues={platform}
-          onClose={() => setShowEditForm(false)}
-          onSuccess={() => {
-            setShowEditForm(false);
-            refreshPlatform();
-          }}
         />
       )}
 

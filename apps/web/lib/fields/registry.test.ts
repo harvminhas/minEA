@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { INTERNAL_KEYS, REGISTRY, fieldIsRequired, recordTypeOf, type FieldDef, type RecordType } from "./registry.ts";
+import { CREATE_FORM_KEYS, INTERNAL_KEYS, REGISTRY, createFormFields, createFormSeed, fieldIsRequired, recordTypeOf, type FieldDef, type RecordType } from "./registry.ts";
 import { emptyOwnership, type OwnershipValue } from "../owner-fields.ts";
 import { buildPlatformProperties, lifecycleToStatus } from "../platform-utils.ts";
 import { buildRuntimeProperties } from "../runtime-utils.ts";
@@ -380,4 +380,55 @@ test("recordTypeOf maps stored object types", () => {
   assert.equal(recordTypeOf("tool"), "integration_infra");
   assert.equal(recordTypeOf("integration_flow"), "flow");
   assert.equal(recordTypeOf("domain"), null);
+});
+
+test("create forms follow registry order and leave optional fields blank", () => {
+  for (const type of ["application", "server", "platform"] as const) {
+    assert.deepEqual(createFormFields(type).map((field) => field.key), [...CREATE_FORM_KEYS[type]]);
+    const indexes = CREATE_FORM_KEYS[type].map((key) => REGISTRY[type].findIndex((field) => field.key === key));
+    assert.ok(indexes.every((index) => index >= 0), type);
+    for (let i = 1; i < indexes.length; i += 1) {
+      assert.ok(indexes[i]! > indexes[i - 1]!, `${type} ${CREATE_FORM_KEYS[type][i]}`);
+    }
+    const seed = createFormSeed(type);
+    assert.equal(seed.criticality, "");
+    assert.equal(seed.sla_target, "");
+    assert.equal(seed.vendor, "");
+    assert.equal(seed.hosting_model, "");
+    assert.equal(seed.license_model, "");
+    assert.equal(seed.cost_model, "");
+    assert.equal(seed.lifecycle, "");
+  }
+  assert.equal(createFormSeed("application").kind, "");
+  assert.equal(createFormSeed("application").provider, "");
+  assert.equal(createFormSeed("platform").kind, "");
+  assert.equal(createFormSeed("platform").provider, "");
+  assert.equal(createFormSeed("server").kind, "kubernetes");
+  assert.equal(createFormSeed("server").provider, "aws");
+  assert.equal(REGISTRY.server.find((field) => field.key === "compute_runtime_kind")?.label, "Compute type");
+  assert.equal(REGISTRY.application.find((field) => field.key === "contract_renewal")?.label, "Renewal");
+  assert.equal(REGISTRY.platform.find((field) => field.key === "vendor_product")?.label, "Product");
+});
+
+test("a blank platform create omits vendor, license model, and lifecycle", () => {
+  const props = buildPlatformProperties({
+    vendor: "",
+    vendorProduct: "",
+    platformType: "low_code",
+    platformTypeOther: "",
+    hostingModel: "",
+    region: "",
+    environments: [],
+    adminUrl: "",
+    licenseModel: "",
+    contractRenewal: "",
+    annualCost: "",
+    slaTarget: "",
+    lifecycle: "",
+    criticality: "",
+  });
+  assert.equal("vendor" in props, false);
+  assert.equal("license_model" in props, false);
+  assert.equal("lifecycle" in props, false);
+  assert.equal(props.platform_type, "low_code");
 });

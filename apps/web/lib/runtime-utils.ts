@@ -103,6 +103,10 @@ export function collectCustomProviders(items: MinEAObject[]): string[] {
   return [...new Set(names)];
 }
 
+function omitUndefined<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
+}
+
 export function buildRuntimeProperties(params: {
   kind: string;
   vendor: string;
@@ -120,21 +124,23 @@ export function buildRuntimeProperties(params: {
   criticality: string;
 }): ModelProperties {
   const accessMethod = params.accessMethod.trim() || undefined;
-  return {
+  return omitUndefined({
     compute_runtime_kind: params.kind as ModelProperties["compute_runtime_kind"],
     vendor: params.vendor.trim() || undefined,
     runtime_provider: params.provider || undefined,
     service_product: params.serviceProduct.trim() || undefined,
-    hosting_model: params.hostingModel as ModelProperties["hosting_model"],
+    hosting_model: params.hostingModel
+      ? (params.hostingModel as ModelProperties["hosting_model"])
+      : undefined,
     region: params.region.trim() || undefined,
     environments: params.environments.length > 0 ? params.environments : undefined,
     access_method: accessMethod,
     console_url: accessMethod,
-    cost_model: params.costModel as ModelProperties["cost_model"],
+    cost_model: (params.costModel || undefined) as ModelProperties["cost_model"],
     commitment_ends: params.commitmentEnds.trim() || undefined,
     annual_cost: params.annualCost.trim() || undefined,
-    sla_target: params.slaTarget as ModelProperties["sla_target"],
-    lifecycle: params.lifecycle as ModelProperties["lifecycle"],
-    criticality: params.criticality as ModelProperties["criticality"],
-  };
+    sla_target: params.slaTarget ? (params.slaTarget as ModelProperties["sla_target"]) : undefined,
+    lifecycle: params.lifecycle ? (params.lifecycle as ModelProperties["lifecycle"]) : undefined,
+    criticality: params.criticality ? (params.criticality as ModelProperties["criticality"]) : undefined,
+  });
 }

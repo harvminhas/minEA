@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit2, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import { getObjectInitial } from "@/lib/utils";
@@ -26,7 +26,6 @@ import { CreateFlowPanel } from "@/components/integration/CreateFlowPanel";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { FlowDetail } from "@/components/integration/FlowDetail";
-import { ObjectForm } from "@/components/objects/ObjectForm";
 import { SystemDiagramModal, type NodeLayout } from "@/components/application/SystemDiagram";
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
 import { excludeTechDebtRelationships } from "@/lib/relationship-display";
@@ -58,7 +57,6 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const { canEdit, canDelete } = usePermissions();
   const [activeTab, setActiveTab] = useState<SystemDrawerTabId>("details");
   const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(objectId);
-  const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRelForm, setShowRelForm] = useState(false);
   const [relFormTargetType, setRelFormTargetType] = useState<string | undefined>();
@@ -412,16 +410,6 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => setShowEditForm(true)}
-                    className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                    aria-label="Edit system"
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                )}
                 {canDelete && (
                   <button
                     type="button"
@@ -534,18 +522,6 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
           isPending={deleteMutation.isPending}
           onCancel={() => setShowDeleteConfirm(false)}
           onConfirm={() => deleteMutation.mutate()}
-        />
-      )}
-
-      {showEditForm && (
-        <ObjectForm
-          objectType={object.type}
-          initialValues={object}
-          onClose={() => setShowEditForm(false)}
-          onSuccess={() => {
-            setShowEditForm(false);
-            void refreshObject();
-          }}
         />
       )}
 

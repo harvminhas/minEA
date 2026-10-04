@@ -8,17 +8,10 @@ import type { MinEAObject, ModelProperties } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useTenancy } from "@/lib/tenancy";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
-import { CatalogDetailFields } from "@/components/catalog/CatalogDetailFields";
 import {
   DetailPanel,
-  DetailRow,
   DetailSection,
 } from "@/components/ui/DetailPanel";
-import {
-  catalogOwnerLabel,
-  formatCatalogAnnualCost,
-  formatCatalogContractEnd,
-} from "@/lib/catalog-fields";
 import { DetailObjectActions } from "@/components/ui/DetailObjectActions";
 import { usePermissions } from "@/lib/use-permissions";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
@@ -27,16 +20,13 @@ import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/Obje
 import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
 import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import type { HistoryEntry } from "@/components/shared/EntityHistory";
-import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
+import { RecordFields, toFieldEdges } from "@/components/mvp/InfraEditors";
+import { recordTypeOf } from "@/lib/fields/registry";
+import { rowFromObject } from "@/lib/model-catalog";
+import { useModelCatalog } from "@/lib/use-model-catalog";
 import {
   formatRuntimeSubtitle,
-  PLATFORM_SLA_LABEL,
-  RUNTIME_COST_MODEL_LABEL,
-  RUNTIME_HOSTING_LABEL,
   RUNTIME_ICON_STYLE,
-  runtimeAccessMethod,
-  runtimeKindLabel,
-  runtimeProviderLabel,
 } from "@/lib/runtime-utils";
 import { formatUpdatedAgo } from "@/lib/system-utils";
 import { cn } from "@/lib/utils";
@@ -53,16 +43,16 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled();
-  const { canEdit, canDelete } = usePermissions();
+  const { canDelete } = usePermissions();
 
   const [activeTab, setActiveTab] = useState<ObjectDrawerTabId>("details");
   const { data: techDebtSummary, isLoading: techDebtLoading } = useObjectTechDebtSummary(runtime.id);
-  const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const catalog = useModelCatalog();
+  const live = catalog.data?.objects.find((item) => item.id === runtime.id) ?? runtime;
+  const recordType = recordTypeOf(live.type);
 
-  const props = (runtime.properties ?? {}) as ModelProperties;
-  const kindLabel = runtimeKindLabel(props);
-  const providerLabel = runtimeProviderLabel(props.runtime_provider);
+  const props = (live.properties ?? {}) as ModelProperties;
 
   const historyQueryKey = ["object-history", orgSlug, workspaceSlug, runtime.id] as const;
 
@@ -92,12 +82,14 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
     queryKey: ["runtime-workloads", orgSlug, workspaceSlug, runtime.id],
     queryFn: async () => {
       const token = await getToken();
-      const [rels, components, flows, applications] = await Promise.all([
+      const [incoming, outgoing, components, flows, applications] = await Promise.all([
         relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: runtime.id }, token!),
+        relationshipsApi.list(orgSlug, workspaceSlug, { from_object_id: runtime.id }, token!),
         objectsApi.list(orgSlug, workspaceSlug, { type: "component" }, token!),
         objectsApi.list(orgSlug, workspaceSlug, { type: "integration_flow" }, token!),
         objectsApi.list(orgSlug, workspaceSlug, { type: "application" }, token!),
       ]);
+      const rels = [...incoming, ...outgoing.filter((rel) => !incoming.some((item) => item.id === rel.id))];
 
       const idsFor = (fromType: string) =>
         new Set(
@@ -110,6 +102,7 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
       const applicationIds = idsFor("application");
 
       return {
+        relationships: rels,
         components: components.items.filter((c) => componentIds.has(c.id)),
         flows: flows.items.filter((f) => flowIds.has(f.id)),
         applications: applications.items.filter((item) => applicationIds.has(item.id)),
@@ -150,17 +143,15 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
                   <Cpu size={16} strokeWidth={2.25} />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="font-semibold text-gray-900 truncate">{runtime.name}</h2>
+                  <h2 className="font-semibold text-gray-900 truncate">{live.name}</h2>
                   <p className="text-sm text-gray-400">{formatRuntimeSubtitle(props)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <DetailObjectActions
                   onClose={onClose}
-                  onEdit={() => setShowEditForm(true)}
                   onDelete={() => setShowDeleteConfirm(true)}
                   deletePending={deleteMutation.isPending}
-                  editLabel="Edit runtime"
                   deleteLabel="Delete runtime"
                 />
               </div>
@@ -186,11 +177,11 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
         {activeTab === "tech_debt" ? (
           <ObjectTechDebtTab
             objectId={runtime.id}
-            objectName={runtime.name}
+            objectName={live.name}
             objectKind="model"
             summary={techDebtSummary}
             isLoading={techDebtLoading}
-            defaultOwner={runtime.owner}
+            defaultOwner={live.owner}
             onRefresh={refreshRuntime}
           />
         ) : activeTab === "history" ? (
@@ -201,61 +192,14 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
           />
         ) : (
           <>
-            <DetailSection title="Kind">
-              {kindLabel && <DetailRow label="Type" value={kindLabel} />}
-            </DetailSection>
-
-            <DetailSection title="Identity">
-              {props.service_product && <DetailRow label="Service / product" value={props.service_product} />}
-              {runtime.description && <DetailRow label="Description" value={runtime.description} />}
-              {runtime.tags.length > 0 && <DetailRow label="Tags" value={runtime.tags.join(", ")} />}
-            </DetailSection>
-
-            <DetailSection title="Record">
-              <CatalogDetailFields
-                owner={catalogOwnerLabel(runtime)}
-                vendor={props.vendor?.trim() || "—"}
-                annualCost={formatCatalogAnnualCost(props.annual_cost)}
-                contractEnd={formatCatalogContractEnd(props.commitment_ends)}
-                lifecycle={props.lifecycle ?? runtime.status}
-                criticality={props.criticality}
+            {recordType && (catalog.data?.relationships ?? workloadsData?.relationships) && (
+              <RecordFields
+                type={recordType}
+                object={live}
+                edges={toFieldEdges(catalog.data?.relationships ?? workloadsData?.relationships ?? [])}
+                row={rowFromObject(live) ?? undefined}
               />
-            </DetailSection>
-
-            <DetailSection title="More details">
-              {providerLabel && <DetailRow label="Provider" value={providerLabel} />}
-              {props.hosting_model && (
-                <DetailRow
-                  label="Hosting model"
-                  value={RUNTIME_HOSTING_LABEL[props.hosting_model] ?? props.hosting_model}
-                />
-              )}
-              {props.region && <DetailRow label="Location" value={props.region} />}
-              {props.environments && props.environments.length > 0 && (
-                <DetailRow label="Environments" value={props.environments.join(", ")} />
-              )}
-              {runtimeAccessMethod(props) && (
-                <DetailRow label="Access method" value={runtimeAccessMethod(props)!} />
-              )}
-              {props.cost_model && (
-                <DetailRow
-                  label="Cost model"
-                  value={RUNTIME_COST_MODEL_LABEL[props.cost_model] ?? props.cost_model}
-                />
-              )}
-              {props.sla_target && (
-                <DetailRow label="SLA target" value={PLATFORM_SLA_LABEL[props.sla_target] ?? props.sla_target} />
-              )}
-              {!providerLabel &&
-                !props.hosting_model &&
-                !props.region &&
-                !(props.environments && props.environments.length > 0) &&
-                !runtimeAccessMethod(props) &&
-                !props.cost_model &&
-                !props.sla_target && (
-                  <p className="text-sm text-gray-400">No additional details yet.</p>
-                )}
-            </DetailSection>
+            )}
 
             <DetailSection title="Applications">
               {applications.length === 0 ? (
@@ -314,16 +258,6 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
         />
       )}
 
-      {canEdit && showEditForm && (
-        <CreateRuntimePanel
-          initialValues={runtime}
-          onClose={() => setShowEditForm(false)}
-          onSuccess={() => {
-            setShowEditForm(false);
-            refreshRuntime();
-          }}
-        />
-      )}
     </>
   );
 }

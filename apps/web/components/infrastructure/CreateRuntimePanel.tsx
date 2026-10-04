@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,7 +18,6 @@ import {
   collectCustomProviders,
   isBareMetalRuntimeKind,
   lifecycleToStatus,
-  normalizeLifecycle,
   PLATFORM_CRITICALITY,
   PLATFORM_LIFECYCLE,
   PLATFORM_SLA,
@@ -26,14 +25,12 @@ import {
   RUNTIME_HOSTING,
   RUNTIME_KINDS,
   RUNTIME_PROVIDERS,
-  runtimeAccessMethod,
-  statusToLifecycle,
 } from "@/lib/runtime-utils";
-import type { MinEAObject, ModelProperties } from "@minea/types";
+import type { ModelProperties } from "@minea/types";
+import { SECTION_LABEL, createFormSeed, groupCreateFields } from "@/lib/fields/registry";
 import { cn } from "@/lib/utils";
 
 interface Props {
-  initialValues?: MinEAObject;
   initialName?: string;
   onClose: () => void;
   onSuccess: (runtimeId: string) => void;
@@ -60,10 +57,12 @@ function SelectField({
   value,
   onChange,
   options,
+  allowEmpty = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
+  allowEmpty?: boolean;
 }) {
   return (
     <div className="relative">
@@ -72,6 +71,7 @@ function SelectField({
         onChange={(e) => onChange(e.target.value)}
         className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-slate-500 pr-8"
       >
+        {allowEmpty && <option value="">Not set</option>}
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
@@ -89,34 +89,8 @@ function FieldHint({ children }: { children: React.ReactNode }) {
   return <p className="text-[11px] text-gray-400 mt-1">{children}</p>;
 }
 
-function initFromRuntime(runtime?: MinEAObject) {
-  const props = (runtime?.properties ?? {}) as ModelProperties;
-  return {
-    name: runtime?.name ?? "",
-    description: runtime?.description ?? "",
-    tags: (runtime?.tags ?? []).join(", "),
-    kind: props.compute_runtime_kind ?? "kubernetes",
-    vendor: props.vendor ?? "",
-    provider: props.runtime_provider ?? "aws",
-    serviceProduct: props.service_product ?? "",
-    hostingModel: props.hosting_model ?? "public_cloud",
-    region: props.region ?? "",
-    environments: props.environments ?? [],
-    accessMethod: runtimeAccessMethod(props) ?? "",
-    costModel: props.cost_model ?? "per_vcpu_memory",
-    commitmentEnds: props.commitment_ends ?? "",
-    annualCost: props.annual_cost ?? "",
-    hasCostLines: Array.isArray((runtime?.properties as { cost_lines?: unknown } | undefined)?.cost_lines),
-    slaTarget: props.sla_target ?? "99_9",
-    lifecycle: normalizeLifecycle(props.lifecycle ?? statusToLifecycle(runtime?.status)),
-    criticality: props.criticality ?? "low",
-    owner: runtime?.owner ?? "",
-  };
-}
-
-export function CreateRuntimePanel({ initialValues, initialName = "", onClose, onSuccess }: Props) {
-  const isEdit = !!initialValues;
-  const init = initFromRuntime(initialValues);
+export function CreateRuntimePanel({ initialName = "", onClose, onSuccess }: Props) {
+  const seed = createFormSeed("server");
 
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
@@ -124,25 +98,25 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
   const enabled = useAuthQueryEnabled();
   const [mounted, setMounted] = useState(false);
 
-  const [name, setName] = useState(isEdit ? init.name : initialName || init.name);
-  const [description, setDescription] = useState(init.description);
-  const [tags, setTags] = useState(init.tags);
-  const [kind, setKind] = useState<string>(init.kind);
-  const [vendor, setVendor] = useState(init.vendor);
-  const [provider, setProvider] = useState<string>(init.provider);
-  const [serviceProduct, setServiceProduct] = useState(init.serviceProduct);
-  const [hostingModel, setHostingModel] = useState<string>(init.hostingModel);
-  const [region, setRegion] = useState(init.region);
-  const [environments, setEnvironments] = useState<string[]>(init.environments);
+  const [name, setName] = useState(initialName);
+  const [description, setDescription] = useState("");
+  const [tags, setTags] = useState("");
+  const [kind, setKind] = useState(seed.kind);
+  const [vendor, setVendor] = useState(seed.vendor);
+  const [provider, setProvider] = useState(seed.provider);
+  const [serviceProduct, setServiceProduct] = useState("");
+  const [hostingModel, setHostingModel] = useState(seed.hosting_model);
+  const [region, setRegion] = useState("");
+  const [environments, setEnvironments] = useState<string[]>([]);
   const [envInput, setEnvInput] = useState("");
-  const [accessMethod, setAccessMethod] = useState(init.accessMethod);
-  const [costModel, setCostModel] = useState<string>(init.costModel);
-  const [commitmentEnds, setCommitmentEnds] = useState(init.commitmentEnds);
-  const [annualCost, setAnnualCost] = useState(init.annualCost);
-  const [slaTarget, setSlaTarget] = useState<string>(init.slaTarget);
-  const [lifecycle, setLifecycle] = useState<string>(init.lifecycle);
-  const [criticality, setCriticality] = useState<string>(init.criticality);
-  const ownership = useOwnershipForm(init);
+  const [accessMethod, setAccessMethod] = useState("");
+  const [costModel, setCostModel] = useState(seed.cost_model);
+  const [commitmentEnds, setCommitmentEnds] = useState("");
+  const [annualCost, setAnnualCost] = useState("");
+  const [slaTarget, setSlaTarget] = useState(seed.sla_target);
+  const [lifecycle, setLifecycle] = useState(seed.lifecycle);
+  const [criticality, setCriticality] = useState(seed.criticality);
+  const ownership = useOwnershipForm();
   const [error, setError] = useState<string | null>(null);
   const [showAddProvider, setShowAddProvider] = useState(false);
   const [sessionProviders, setSessionProviders] = useState<string[]>([]);
@@ -216,14 +190,10 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
         name: name.trim(),
         description: description.trim() || undefined,
         ...ownership.toPayload(),
-        status: lifecycleToStatus(lifecycle),
+        ...(lifecycle ? { status: lifecycleToStatus(lifecycle) } : {}),
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         properties: properties as Record<string, unknown>,
       };
-
-      if (isEdit && initialValues) {
-        return objectsApi.update(orgSlug, workspaceSlug, initialValues.id, body, token);
-      }
 
       return objectsApi.create(orgSlug, workspaceSlug, { type: "model", ...body }, token);
     },
@@ -232,7 +202,7 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
       onSuccess(runtime.id);
     },
     onError: (err) =>
-      setError(err instanceof Error ? err.message : `Could not ${isEdit ? "save" : "create"} runtime`),
+      setError(err instanceof Error ? err.message : "Could not create runtime"),
   });
 
   const addEnvironment = () => {
@@ -267,23 +237,215 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
     ? "e.g. HQ data closet"
     : "e.g. eu-west-1";
 
+  const textClass =
+    "w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500";
+
+  const renderRuntimeField = (key: string, label: string): ReactNode => {
+    switch (key) {
+      case "name":
+        return (
+          <div>
+            <FieldLabel required>{label}</FieldLabel>
+            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={namePlaceholder} className={textClass} />
+          </div>
+        );
+      case "compute_runtime_kind":
+        return (
+          <div>
+            <FieldLabel required>{label}</FieldLabel>
+            <div className="grid grid-cols-2 gap-2">
+              {RUNTIME_KINDS.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => selectKind(item.value)}
+                  className={cn(
+                    "text-left rounded-lg border px-3 py-2.5 transition-colors",
+                    kind === item.value ? "border-slate-500 bg-slate-50 ring-1 ring-slate-500" : "border-gray-200 hover:border-slate-300"
+                  )}
+                >
+                  <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                  <span className="text-[11px] text-gray-400 mt-0.5 block">{item.hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      case "service_product":
+        return (
+          <div>
+            <FieldLabel>{label}</FieldLabel>
+            <input value={serviceProduct} onChange={(e) => setServiceProduct(e.target.value)} placeholder={serviceProductPlaceholder} className={textClass} />
+          </div>
+        );
+      case "tags":
+        return (
+          <div>
+            <FieldLabel>{label}</FieldLabel>
+            <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="prod, eu, multi-tenant" className={textClass} />
+          </div>
+        );
+      case "owner":
+        return <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />;
+      case "vendor":
+        return (
+          <div>
+            <FieldLabel>{label}</FieldLabel>
+            <VendorField value={vendor} onChange={setVendor} placeholder="Start typing a vendor" className={textClass} />
+          </div>
+        );
+      case "runtime_provider":
+        return (
+          <div>
+            <FieldLabel required>{label}</FieldLabel>
+            <div className="relative">
+              <select
+                value={provider}
+                onChange={(e) => {
+                  if (e.target.value === "__add_provider__") {
+                    setShowAddProvider(true);
+                    return;
+                  }
+                  setProvider(e.target.value);
+                }}
+                className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-slate-500 pr-8"
+              >
+                <optgroup label="Providers">
+                  {RUNTIME_PROVIDERS.map((item) => (
+                    <option key={item.value} value={item.value}>{item.label}</option>
+                  ))}
+                </optgroup>
+                {customProviders.length > 0 && (
+                  <optgroup label="Custom providers">
+                    {customProviders.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {provider && !RUNTIME_PROVIDERS.some((item) => item.value === provider) && !customProviders.includes(provider) && (
+                  <option value={provider}>{provider}</option>
+                )}
+                <option value="__add_provider__">+ Add provider</option>
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">▾</span>
+            </div>
+          </div>
+        );
+      case "cost":
+        return (
+          <div>
+            <FieldLabel>{label}</FieldLabel>
+            <input value={annualCost} onChange={(e) => setAnnualCost(e.target.value)} placeholder="e.g. $180,000 or support fee" className={textClass} />
+          </div>
+        );
+      case "cost_model":
+        return (
+          <div>
+            <FieldLabel>{label}</FieldLabel>
+            <SelectField value={costModel} onChange={setCostModel} options={RUNTIME_COST_MODEL} allowEmpty />
+            <FieldHint>Consumption-based costs may be approximate</FieldHint>
+          </div>
+        );
+      case "commitment_ends":
+        return (
+          <div>
+            <FieldLabel>{label}</FieldLabel>
+            <input value={commitmentEnds} onChange={(e) => setCommitmentEnds(e.target.value)} placeholder="YYYY-MM-DD" className={textClass} />
+          </div>
+        );
+      case "region":
+        return (
+          <div>
+            <FieldLabel>{label}</FieldLabel>
+            <input value={region} onChange={(e) => setRegion(e.target.value)} placeholder={locationPlaceholder} className={textClass} />
+            <FieldHint>Cloud region or physical site</FieldHint>
+          </div>
+        );
+      case "hosting_model":
+        return (
+          <div>
+            <FieldLabel>{label}</FieldLabel>
+            <SelectField value={hostingModel} onChange={setHostingModel} options={RUNTIME_HOSTING} allowEmpty />
+            <FieldHint>Who owns and shares the infrastructure</FieldHint>
+          </div>
+        );
+      case "environments":
+        return (
+          <div>
+            <FieldLabel>{label}</FieldLabel>
+            <div className="rounded-lg border border-gray-200 min-h-[44px] p-2.5 flex flex-wrap gap-1.5 items-center">
+              {environments.map((env) => (
+                <span key={env} className="inline-flex items-center gap-1 text-xs bg-slate-50 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full">
+                  {env}
+                  <button type="button" onClick={() => setEnvironments((list) => list.filter((item) => item !== env))} className="opacity-60 hover:opacity-100" aria-label={`Remove ${env}`}>
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+              <div className="inline-flex items-center gap-1">
+                <input
+                  value={envInput}
+                  onChange={(e) => setEnvInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addEnvironment();
+                    }
+                  }}
+                  placeholder="prod"
+                  className="w-16 text-xs border-0 focus:outline-none focus:ring-0 px-1 py-0.5"
+                />
+                <button type="button" onClick={addEnvironment} className="inline-flex items-center gap-1 text-xs text-slate-600 border border-dashed border-slate-300 px-2 py-0.5 rounded-full hover:bg-slate-50 transition-colors">
+                  <Plus size={12} />
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      case "access_method":
+        return (
+          <div>
+            <FieldLabel>{label}</FieldLabel>
+            <input value={accessMethod} onChange={(e) => setAccessMethod(e.target.value)} placeholder="e.g. 5250 terminal session, VPN, https://console…" className={textClass} />
+          </div>
+        );
+      case "lifecycle":
+      case "criticality":
+      case "sla_target":
+        return (
+          <div>
+            <FieldLabel>{label}</FieldLabel>
+            <SelectField
+              value={key === "lifecycle" ? lifecycle : key === "criticality" ? criticality : slaTarget}
+              onChange={key === "lifecycle" ? setLifecycle : key === "criticality" ? setCriticality : setSlaTarget}
+              options={key === "lifecycle" ? PLATFORM_LIFECYCLE : key === "criticality" ? PLATFORM_CRITICALITY : PLATFORM_SLA}
+              allowEmpty
+            />
+          </div>
+        );
+      case "description":
+        return (
+          <div>
+            <FieldLabel>{label}</FieldLabel>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What runs here? Any deployment patterns?" rows={3} className={`${textClass} resize-none`} />
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   if (!mounted) return null;
 
   return createPortal(
     <>
-      <div className={cn("fixed inset-0 bg-black/25", isEdit ? "z-[115]" : "z-[100]")} onClick={onClose} />
+      <div className="fixed inset-0 z-[100] bg-black/25" onClick={onClose} />
 
-      <div
-        className={cn(
-          "fixed right-0 top-0 h-full w-full max-w-[560px] bg-white shadow-2xl flex flex-col overflow-hidden",
-          isEdit ? "z-[120]" : "z-[110]"
-        )}
-      >
+      <div className="fixed right-0 top-0 z-[110] flex h-full w-full max-w-[560px] flex-col overflow-hidden bg-white shadow-2xl">
         <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-gray-200 flex-shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">
-              {isEdit ? "Edit runtime" : "New runtime"}
-            </h2>
+            <h2 className="text-base font-semibold text-gray-900">New runtime</h2>
             <p className="text-xs text-gray-400 mt-0.5">
               Compute or hosting where components and integrations run
             </p>
@@ -295,262 +457,16 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
 
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="px-6 py-5 pb-8 space-y-7">
-            <section>
-              <FieldLabel required>Kind</FieldLabel>
-              <div className="grid grid-cols-2 gap-2">
-                {RUNTIME_KINDS.map((k) => (
-                  <button
-                    key={k.value}
-                    type="button"
-                    onClick={() => selectKind(k.value)}
-                    className={cn(
-                      "text-left rounded-lg border px-3 py-2.5 transition-colors",
-                      kind === k.value
-                        ? "border-slate-500 bg-slate-50 ring-1 ring-slate-500"
-                        : "border-gray-200 hover:border-slate-300"
-                    )}
-                  >
-                    <span className="text-sm font-medium text-gray-900 block">{k.label}</span>
-                    <span className="text-[11px] text-gray-400 mt-0.5 block">{k.hint}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <section>
-              <SectionHeader>Identity</SectionHeader>
-              <div className="space-y-3">
-                <div>
-                  <FieldLabel required>Name</FieldLabel>
-                  <input
-                    autoFocus
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder={namePlaceholder}
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>Vendor</FieldLabel>
-                  <VendorField
-                    value={vendor}
-                    onChange={setVendor}
-                    placeholder="Start typing a vendor"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <div>
-                    <FieldLabel required>Provider</FieldLabel>
-                    <div className="relative">
-                      <select
-                        value={provider}
-                        onChange={(e) => {
-                          if (e.target.value === "__add_provider__") {
-                            setShowAddProvider(true);
-                            return;
-                          }
-                          setProvider(e.target.value);
-                        }}
-                        className="w-full appearance-none rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-slate-500 pr-8"
-                      >
-                        <optgroup label="Providers">
-                          {RUNTIME_PROVIDERS.map((p) => (
-                            <option key={p.value} value={p.value}>
-                              {p.label}
-                            </option>
-                          ))}
-                        </optgroup>
-                        {customProviders.length > 0 && (
-                          <optgroup label="Custom providers">
-                            {customProviders.map((p) => (
-                              <option key={p} value={p}>
-                                {p}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {provider &&
-                          !RUNTIME_PROVIDERS.some((p) => p.value === provider) &&
-                          !customProviders.includes(provider) && (
-                            <option value={provider}>{provider}</option>
-                          )}
-                        <option value="__add_provider__">+ Add provider</option>
-                      </select>
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
-                        ▾
-                      </span>
-                    </div>
-                  </div>
-                  <div>
-                    <FieldLabel>Service / product</FieldLabel>
-                    <input
-                      value={serviceProduct}
-                      onChange={(e) => setServiceProduct(e.target.value)}
-                      placeholder={serviceProductPlaceholder}
-                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <FieldLabel>Description</FieldLabel>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="What runs here? Any deployment patterns?"
-                    rows={3}
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>Tags</FieldLabel>
-                  <input
-                    value={tags}
-                    onChange={(e) => setTags(e.target.value)}
-                    placeholder="prod, eu, multi-tenant"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  />
-                </div>
-              </div>
-            </section>
-
-            <section>
-              <SectionHeader>Deployment</SectionHeader>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <div>
-                    <FieldLabel>Hosting model</FieldLabel>
-                    <SelectField value={hostingModel} onChange={setHostingModel} options={RUNTIME_HOSTING} />
-                    <FieldHint>Who owns and shares the infrastructure</FieldHint>
-                  </div>
-                  <div>
-                    <FieldLabel>Location</FieldLabel>
-                    <input
-                      value={region}
-                      onChange={(e) => setRegion(e.target.value)}
-                      placeholder={locationPlaceholder}
-                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                    />
-                    <FieldHint>Cloud region or physical site</FieldHint>
-                  </div>
-                </div>
-
-                <div>
-                  <FieldLabel>Environments</FieldLabel>
-                  <div className="rounded-lg border border-gray-200 min-h-[44px] p-2.5 flex flex-wrap gap-1.5 items-center">
-                    {environments.map((env) => (
-                      <span
-                        key={env}
-                        className="inline-flex items-center gap-1 text-xs bg-slate-50 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full"
-                      >
-                        {env}
-                        <button
-                          type="button"
-                          onClick={() => setEnvironments((list) => list.filter((e) => e !== env))}
-                          className="opacity-60 hover:opacity-100"
-                          aria-label={`Remove ${env}`}
-                        >
-                          <X size={12} />
-                        </button>
-                      </span>
-                    ))}
-                    <div className="inline-flex items-center gap-1">
-                      <input
-                        value={envInput}
-                        onChange={(e) => setEnvInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addEnvironment();
-                          }
-                        }}
-                        placeholder="prod"
-                        className="w-16 text-xs border-0 focus:outline-none focus:ring-0 px-1 py-0.5"
-                      />
-                      <button
-                        type="button"
-                        onClick={addEnvironment}
-                        className="inline-flex items-center gap-1 text-xs text-slate-600 border border-dashed border-slate-300 px-2 py-0.5 rounded-full hover:bg-slate-50 transition-colors"
-                      >
-                        <Plus size={12} />
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <FieldLabel>Access method</FieldLabel>
-                  <input
-                    value={accessMethod}
-                    onChange={(e) => setAccessMethod(e.target.value)}
-                    placeholder="e.g. 5250 terminal session, VPN, https://console…"
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  />
-                </div>
-              </div>
-            </section>
-
-            <section>
-              <SectionHeader>Contract</SectionHeader>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  <div>
-                    <FieldLabel>Cost model</FieldLabel>
-                    <SelectField value={costModel} onChange={setCostModel} options={RUNTIME_COST_MODEL} />
-                    <FieldHint>Consumption-based costs may be approximate</FieldHint>
-                  </div>
-                  <div>
-                    <FieldLabel>Contract end</FieldLabel>
-                    <input
-                      value={commitmentEnds}
-                      onChange={(e) => setCommitmentEnds(e.target.value)}
-                      placeholder="YYYY-MM-DD"
-                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                    />
-                  </div>
-                </div>
-
-                {init.hasCostLines ? (
-                  <p className="text-[12px] text-gray-500">Annual cost is calculated from the cost lines on this item.</p>
-                ) : (
-                  <div>
-                    <FieldLabel>Annual cost (est.)</FieldLabel>
-                    <input
-                      value={annualCost}
-                      onChange={(e) => setAnnualCost(e.target.value)}
-                      placeholder="e.g. $180,000 or support fee"
-                      className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                    />
-                  </div>
+            {groupCreateFields("server").map((group) => (
+              <section key={group.section} className="space-y-3">
+                {(group.section === "cost" || group.section === "hosting" || group.section === "lifecycle") && (
+                  <SectionHeader>{SECTION_LABEL[group.section]}</SectionHeader>
                 )}
-              </div>
-            </section>
-
-            <section>
-              <SectionHeader>Governance</SectionHeader>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <div className="col-span-2">
-                  <OwnershipFields value={ownership.value} onChange={ownership.setValue} required />
-                </div>
-                <div>
-                  <FieldLabel>SLA target</FieldLabel>
-                  <SelectField value={slaTarget} onChange={setSlaTarget} options={PLATFORM_SLA} />
-                </div>
-                <div>
-                  <FieldLabel>Lifecycle</FieldLabel>
-                  <SelectField value={lifecycle} onChange={setLifecycle} options={PLATFORM_LIFECYCLE} />
-                </div>
-                <div className="col-span-2">
-                  <FieldLabel>Criticality</FieldLabel>
-                  <SelectField value={criticality} onChange={setCriticality} options={PLATFORM_CRITICALITY} />
-                </div>
-              </div>
-            </section>
+                {group.fields.map((field) => (
+                  <div key={field.key}>{renderRuntimeField(field.key, field.label)}</div>
+                ))}
+              </section>
+            ))}
 
             <div className="flex gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
               <Cpu size={13} className="text-slate-500 flex-shrink-0 mt-0.5" />
@@ -581,13 +497,7 @@ export function CreateRuntimePanel({ initialValues, initialName = "", onClose, o
             disabled={!canSubmit || saveMutation.isPending}
             className="px-4 py-2 text-sm bg-slate-600 hover:bg-slate-700 text-white rounded-md disabled:bg-slate-300 disabled:text-slate-600 disabled:cursor-not-allowed transition-colors"
           >
-            {saveMutation.isPending
-              ? isEdit
-                ? "Saving…"
-                : "Creating…"
-              : isEdit
-                ? "Save"
-                : "Create runtime"}
+            {saveMutation.isPending ? "Creating…" : "Create runtime"}
           </button>
         </div>
       </div>

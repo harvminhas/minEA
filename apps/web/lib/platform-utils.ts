@@ -126,6 +126,10 @@ export function statusToLifecycle(status: ObjectStatus | string | null | undefin
   return normalizeLifecycle(status);
 }
 
+function omitUndefined<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
+}
+
 export function buildPlatformProperties(params: {
   vendor: string;
   vendorProduct: string;
@@ -142,23 +146,25 @@ export function buildPlatformProperties(params: {
   lifecycle: string;
   criticality: string;
 }): CloudServiceProperties {
-  return {
+  return omitUndefined({
     vendor: params.vendor || undefined,
     vendor_product: params.vendorProduct.trim() || undefined,
     platform_type: params.platformType as CloudServiceProperties["platform_type"],
     platform_type_other:
       params.platformType === "other" ? params.platformTypeOther.trim() || undefined : undefined,
-    hosting_model: params.hostingModel as CloudServiceProperties["hosting_model"],
+    hosting_model: params.hostingModel
+      ? (params.hostingModel as CloudServiceProperties["hosting_model"])
+      : undefined,
     region: params.region.trim() || undefined,
     environments: params.environments.length > 0 ? params.environments : undefined,
     admin_url: params.adminUrl.trim() || undefined,
-    license_model: params.licenseModel as CloudServiceProperties["license_model"],
+    license_model: (params.licenseModel || undefined) as CloudServiceProperties["license_model"],
     contract_renewal: params.contractRenewal.trim() || undefined,
     annual_cost: params.annualCost.trim() || undefined,
-    sla_target: params.slaTarget as CloudServiceProperties["sla_target"],
-    lifecycle: params.lifecycle as CloudServiceProperties["lifecycle"],
-    criticality: params.criticality as CloudServiceProperties["criticality"],
-  };
+    sla_target: params.slaTarget ? (params.slaTarget as CloudServiceProperties["sla_target"]) : undefined,
+    lifecycle: params.lifecycle ? (params.lifecycle as CloudServiceProperties["lifecycle"]) : undefined,
+    criticality: params.criticality ? (params.criticality as CloudServiceProperties["criticality"]) : undefined,
+  });
 }
 
 export function buildPlatformDraft(params: {

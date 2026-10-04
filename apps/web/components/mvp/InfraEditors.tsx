@@ -18,6 +18,7 @@ import { infraStatus } from "@/lib/infra/status";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { CostSection } from "@/components/mvp/CostSection";
 import { AddChip } from "@/components/mvp/pills";
+import { usePermissions } from "@/lib/use-permissions";
 
 function stored(object: MinEAObject, key: string): string {
   const value = (object.properties ?? {})[key];
@@ -234,6 +235,7 @@ export function RecordFields({
   openKey?: string | null;
   onOpenKey?: (key: string | null) => void;
 }) {
+  const { canEdit } = usePermissions();
   const catalog = useModelCatalog();
   const names = new Map((catalog.data?.objects ?? []).map((item) => [item.id, item.name]));
   const record = asRecord(object, edges);
@@ -253,7 +255,7 @@ export function RecordFields({
           <h3 className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">{SECTION_LABEL[group.section].toUpperCase()}</h3>
           {group.fields.map((def) =>
             def.editor === "costLines" && row ? (
-              <CostSection key={def.key} row={row} onSaved={() => undefined} />
+              <CostSection key={def.key} row={row} onSaved={() => undefined} readOnly={!canEdit} />
             ) : (
               <InlineField
                 key={def.key}
@@ -294,6 +296,7 @@ export function InlineField({
 }) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const { canEdit } = usePermissions();
   const queryClient = useQueryClient();
   const catalog = useModelCatalog();
   const record = asRecord(object, edges);
@@ -316,11 +319,11 @@ export function InlineField({
   };
 
   useEffect(() => {
-    if (!forceOpen) return;
+    if (!forceOpen || !canEdit) return;
     openFromCurrent();
     // Opens once when the host link asks; a later catalog update must not reset the draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forceOpen]);
+  }, [forceOpen, canEdit]);
 
   const close = () => {
     setEditing(false);
@@ -388,6 +391,9 @@ export function InlineField({
         queryClient.invalidateQueries({ queryKey: ["people-teams", orgSlug, workspaceSlug] });
         queryClient.invalidateQueries({ queryKey: ["people-contacts", orgSlug, workspaceSlug] });
       }
+      queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug] });
+      queryClient.invalidateQueries({ queryKey: ["object", orgSlug, workspaceSlug, object.id] });
+      queryClient.invalidateQueries({ queryKey: ["relationships"] });
       close();
     } catch (err) {
       if (orgSlug && workspaceSlug) {
@@ -423,7 +429,7 @@ export function InlineField({
   };
 
   const start = () => {
-    if (def.editor === "none" || def.editor === "custom" || def.editor === "costLines") return;
+    if (!canEdit || def.editor === "none" || def.editor === "custom" || def.editor === "costLines") return;
     openFromCurrent();
   };
 
@@ -439,6 +445,9 @@ export function InlineField({
     }
   };
 
+  const valueClass = bare
+    ? "truncate text-left text-[18px] font-semibold text-[#1c2230]"
+    : "text-right text-[13px] text-[#1c2230]";
   const label = bare ? null : <span className="text-[13px] text-[#6b7289]">{def.label}</span>;
   let editor: ReactNode = null;
   if (editing && def.editor === "select") {
@@ -519,17 +528,21 @@ export function InlineField({
         <div className={bare ? "" : "text-right"}>
           {editor ?? (
             shown ? (
-              <button type="button" onClick={start} className={bare ? "truncate text-left text-[18px] font-semibold text-[#1c2230]" : "text-right text-[13px] text-[#1c2230]"}>
-                {shown}
-              </button>
-            ) : def.editor === "none" ? (
+              canEdit ? (
+                <button type="button" onClick={start} className={valueClass}>
+                  {shown}
+                </button>
+              ) : (
+                <span className={valueClass}>{shown}</span>
+              )
+            ) : !canEdit || def.editor === "none" ? (
               <span className="text-[13px] text-[#b0b4c0]">—</span>
             ) : (
               <AddChip label="Add" onClick={start} />
             )
           )}
           {error && <p className="mt-1 text-[12px] text-[#b42318]">{error}</p>}
-          {def.key === "vendor" && !shown && !editing && suggestion && !dismissed && (
+          {canEdit && def.key === "vendor" && !shown && !editing && suggestion && !dismissed && (
             <p className="mt-1 text-[12px] text-[#8b90a0]">
               Suggested: {suggestion}
               {" · "}

@@ -437,4 +437,114 @@ export function recordTypeOf(objectType: string): RecordType | null {
   return OBJECT_TYPE[objectType] ?? null;
 }
 
+export type CreateFormType = "application" | "server" | "platform";
+
+/** Fields the application, server, and platform create forms render, in registry order. */
+export const CREATE_FORM_KEYS: Record<CreateFormType, readonly string[]> = {
+  application: [
+    "name",
+    "category",
+    "is_custom_built",
+    "governance_status",
+    "discovery",
+    "ai_role",
+    "capabilities",
+    "tags",
+    "owner",
+    "vendor",
+    "cost",
+    "contract_renewal",
+    "hosting_model",
+    "built_on",
+    "status",
+    "criticality",
+    "sla_target",
+    "description",
+  ],
+  server: [
+    "name",
+    "compute_runtime_kind",
+    "service_product",
+    "tags",
+    "owner",
+    "vendor",
+    "runtime_provider",
+    "cost",
+    "cost_model",
+    "commitment_ends",
+    "region",
+    "hosting_model",
+    "environments",
+    "access_method",
+    "lifecycle",
+    "criticality",
+    "sla_target",
+    "description",
+  ],
+  platform: [
+    "name",
+    "platform_type",
+    "platform_type_other",
+    "vendor_product",
+    "tags",
+    "owner",
+    "vendor",
+    "license_model",
+    "cost",
+    "contract_renewal",
+    "hosting_model",
+    "region",
+    "environments",
+    "admin_url",
+    "lifecycle",
+    "criticality",
+    "sla_target",
+    "description",
+  ],
+};
+
+/**
+ * Create-form starting values. Optional criticality, SLA, vendor, hosting, kind,
+ * license model, cost model, and lifecycle stay blank.
+ * A required kind and provider keep the preselection the runtime form already used.
+ */
+export function createFormSeed(type: CreateFormType): Record<string, string> {
+  const seed: Record<string, string> = {
+    criticality: "",
+    sla_target: "",
+    vendor: "",
+    hosting_model: "",
+    kind: "",
+    provider: "",
+    license_model: "",
+    cost_model: "",
+    lifecycle: "",
+  };
+  if (type === "server") {
+    seed.kind = "kubernetes";
+    seed.provider = "aws";
+  }
+  return seed;
+}
+
+/** Registry fields for a create form, in CREATE_FORM_KEYS order. */
+export function createFormFields(type: CreateFormType): FieldDef[] {
+  const byKey = new Map(REGISTRY[type].map((field) => [field.key, field]));
+  return CREATE_FORM_KEYS[type].map((key) => {
+    const field = byKey.get(key);
+    if (!field) throw new Error(`${type} create form is missing ${key}`);
+    return field;
+  });
+}
+
+export function groupCreateFields(type: CreateFormType): { section: Section; fields: FieldDef[] }[] {
+  const groups: { section: Section; fields: FieldDef[] }[] = [];
+  for (const field of createFormFields(type)) {
+    const last = groups[groups.length - 1];
+    if (last?.section === field.section) last.fields.push(field);
+    else groups.push({ section: field.section, fields: [field] });
+  }
+  return groups;
+}
+
 export { fieldIsRequired } from "./save";

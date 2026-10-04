@@ -198,7 +198,7 @@ export function CostLinesEditor({
   );
 }
 
-export function CostSection({ row, onSaved }: { row: CatalogRow; onSaved: () => void }) {
+export function CostSection({ row, onSaved, readOnly = false }: { row: CatalogRow; onSaved: () => void; readOnly?: boolean }) {
   const { getToken, user } = useAuth();
   const actor = user?.uid || "user";
   const { orgSlug, workspaceSlug } = useTenancy();
@@ -232,7 +232,7 @@ export function CostSection({ row, onSaved }: { row: CatalogRow; onSaved: () => 
     <section>
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">COST</h3>
-        {!adding && (
+        {!readOnly && !adding && (
           <button type="button" className="text-[13px] font-medium text-[#5b4ce6]" onClick={() => setAdding(true)}>
             + Add cost line
           </button>
@@ -248,7 +248,9 @@ export function CostSection({ row, onSaved }: { row: CatalogRow; onSaved: () => 
       )}
       {lines.length === 0 && legacy != null && !adding && (
         <p className="mb-2 text-[13px] text-[#1c2230]">
-          Annual cost {formatDollars(legacy)} from the annual cost field. Add a line to replace it, or keep it as its own line.
+          {readOnly
+            ? `Annual cost ${formatDollars(legacy)}`
+            : `Annual cost ${formatDollars(legacy)} from the annual cost field. Add a line to replace it, or keep it as its own line.`}
         </p>
       )}
       {lines.length === 0 && legacy == null && !adding && (
@@ -272,19 +274,21 @@ export function CostSection({ row, onSaved }: { row: CatalogRow; onSaved: () => 
                     ? formatDollars(dollarsFromCents(line.amount_cents ?? 0))
                     : `${formatDollars(dollarsFromCents(lineAnnualCents(line)))}/yr`}
                 </div>
-                <button
-                  type="button"
-                  className="text-[12px] text-[#6b7289]"
-                  onClick={() => save.mutate(lines.filter((item) => item.id !== line.id))}
-                >
-                  Delete
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    className="text-[12px] text-[#6b7289]"
+                    onClick={() => save.mutate(lines.filter((item) => item.id !== line.id))}
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
           </div>
         ))}
       </div>
-      {adding && (
+      {!readOnly && adding && (
         <CostLineForm
           vendor={row.vendor}
           legacyDollars={lines.length === 0 ? legacy : null}

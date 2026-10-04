@@ -1,25 +1,14 @@
 "use client";
 
-import type { ApplicationProperties, MinEAObject, Relationship, SystemProductLink } from "@minea/types";
-import { CatalogDetailFields } from "@/components/catalog/CatalogDetailFields";
-import { DetailSection } from "@/components/ui/DetailPanel";
+import type { MinEAObject, Relationship, SystemProductLink } from "@minea/types";
 import { SystemDiagramPreview } from "@/components/application/SystemDiagramPreview";
 import { SystemDrawerSection } from "@/components/application/SystemDrawerSection";
+import { RecordFields, toFieldEdges } from "@/components/mvp/InfraEditors";
 import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
-import {
-  catalogOwnerLabel,
-  formatCatalogAnnualCost,
-  formatCatalogContractEnd,
-} from "@/lib/catalog-fields";
-import { systemCategoryDisplay } from "@/lib/system-category";
-import {
-  governanceStatusBadgeClass,
-  systemDiscovery,
-  systemGovernanceLabel,
-  systemGovernanceStatus,
-} from "@/lib/system-governance";
-import { buildDetailPropertyRows, formatPropertyDisplayValue } from "@/lib/object-property-display";
-import { cn } from "@/lib/utils";
+import { INTERNAL_KEYS, REGISTRY, recordTypeOf } from "@/lib/fields/registry";
+import { rowFromObject } from "@/lib/model-catalog";
+import { buildDetailPropertyRows } from "@/lib/object-property-display";
+import { useModelCatalog } from "@/lib/use-model-catalog";
 
 interface Props {
   object: MinEAObject;
@@ -46,79 +35,43 @@ export function SystemDetailsTab({
   diagramRefreshing = false,
   onExpandDiagram,
 }: Props) {
-  const props = object.properties as Record<string, unknown>;
-  const appProps = object.properties as ApplicationProperties;
-  const platformName = appProps.platform?.platform_name;
-  const categoryMeta = systemCategoryDisplay(appProps);
-  const governance = systemGovernanceStatus(appProps);
-  const discovery = systemDiscovery(appProps);
-  const hostingLabel = formatPropertyDisplayValue("hosting_model", appProps.hosting_model, object.type);
-  const detailPropertyRows = buildDetailPropertyRows(props, object.type);
-
-  const platformFromRel = relationships.some(
-    (r) =>
-      (r.type === "built_on" || r.type === "runs_on") &&
-      r.from_object_id === object.id &&
-      (r.from_type === "application" ||
-        r.from_type === "solution" ||
-        r.from_type === "technical_capability") &&
-      r.to_type === "cloud_service"
+  const catalog = useModelCatalog();
+  const live = catalog.data?.objects.find((item) => item.id === object.id) ?? object;
+  const recordType = recordTypeOf(live.type);
+  const edges = toFieldEdges(catalog.data?.relationships ?? relationships);
+  const knownPropertyKeys = new Set<string>(INTERNAL_KEYS);
+  if (recordType) {
+    for (const field of REGISTRY[recordType]) {
+      if (field.source.kind === "prop") knownPropertyKeys.add(field.source.key);
+    }
+  }
+  const extraRows = buildDetailPropertyRows((live.properties ?? {}) as Record<string, unknown>, live.type).filter(
+    (row) => !knownPropertyKeys.has(row.key)
   );
 
   return (
     <>
-      {object.description && (
-        <DetailSection title="Description">
-          <p className="text-sm text-gray-700">{object.description}</p>
-        </DetailSection>
+      {recordType && (
+        <RecordFields type={recordType} object={live} edges={edges} row={rowFromObject(live) ?? undefined} />
       )}
 
-      <DetailSection title="Record">
-        <CatalogDetailFields
-          owner={catalogOwnerLabel(object)}
-          vendor={appProps.vendor?.trim() || "—"}
-          annualCost={formatCatalogAnnualCost(appProps.annual_cost)}
-          contractEnd={formatCatalogContractEnd(appProps.contract_renewal)}
-          lifecycle={object.status}
-          criticality={appProps.criticality}
-        />
-      </DetailSection>
-
-      <DetailSection title="More details">
-        <div className="space-y-3 text-sm">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-gray-500">Governance status</span>
-            <span
-              className={cn(
-                "rounded-full px-2.5 py-0.5 text-xs font-medium border",
-                governanceStatusBadgeClass(governance)
-              )}
-            >
-              {systemGovernanceLabel(appProps)}
-            </span>
+      {extraRows.length > 0 && (
+        <SystemDrawerSection title="More details" count={extraRows.length}>
+          <div className="space-y-2 text-sm">
+            {extraRows.map((row) => (
+              <div key={row.key} className="flex items-start justify-between gap-3">
+                <span className="text-gray-500">{row.label}</span>
+                <span className="text-right font-medium text-gray-900">{row.value}</span>
+              </div>
+            ))}
           </div>
-          {discovery && <PropertyRow label="Discovery" value={discovery} />}
-          <PropertyRow label="Category" value={categoryMeta.label || "—"} />
-          {categoryMeta.needsReview && categoryMeta.label && (
-            <p className="text-[11px] font-medium text-amber-700 -mt-1">
-              Needs review — pick a functional domain when editing
-            </p>
-          )}
-          <PropertyRow label="Custom-built" value={categoryMeta.isCustomBuilt ? "Yes" : "No"} />
-          {(platformName || platformFromRel) && (
-            <PropertyRow label="Built on platform" value={platformName || "Linked platform"} />
-          )}
-          {hostingLabel && <PropertyRow label="Hosting model" value={hostingLabel} />}
-          {detailPropertyRows.map((row) => (
-            <PropertyRow key={row.key} label={row.label} value={row.value} />
-          ))}
-        </div>
-      </DetailSection>
+        </SystemDrawerSection>
+      )}
 
       <SystemDrawerSection title="Capabilities" count={linkedCapabilities.length}>
         {linkedCapabilities.length === 0 ? (
           <p className="text-sm text-gray-400">
-            No capabilities linked. Edit this system to select capabilities it supports.
+            No capabilities linked.
           </p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
@@ -177,14 +130,5 @@ export function SystemDetailsTab({
         </div>
       </SystemDrawerSection>
     </>
-  );
-}
-
-function PropertyRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-gray-500">{label}</span>
-      <span className="text-gray-900 font-medium text-right">{value}</span>
-    </div>
   );
 }
