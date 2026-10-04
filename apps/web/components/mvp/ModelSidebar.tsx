@@ -243,7 +243,7 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#e6e8ee]">
               <div className="h-full rounded-full bg-[#5b4ce6]" style={{ width: `${stats.completeness}%` }} />
             </div>
-            <Link href={`${basePath}/application/applications`} className="mt-1 inline-block text-[12px] text-[#5b4ce6]">
+            <Link href={modelPath(basePath)} className="mt-1 inline-block text-[12px] text-[#5b4ce6]">
               {stats.missing} key fields missing
             </Link>
           </>

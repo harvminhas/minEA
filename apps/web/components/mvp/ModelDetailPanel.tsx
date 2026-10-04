@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2, X } from "lucide-react";
 import type { TechDebtHostKind } from "@minea/types";
-import { objectsApi } from "@/lib/api-client";
+import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { connectionPhrase, groupImpactHits, impactOf } from "@/lib/impact/relationship-impact";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { useAuth } from "@/lib/auth-context";
@@ -17,7 +17,12 @@ import { SystemDiagramPreview } from "@/components/application/SystemDiagramPrev
 import { isSystemObjectType } from "@/lib/platform-relationship-utils";
 import { REGISTRY, recordTypeOf } from "@/lib/fields/registry";
 import type { CatalogRow } from "@/lib/model-catalog";
-import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
+import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
+import { usePermissions } from "@/lib/use-permissions";
+import { relationshipsForObject } from "@/lib/relationships-for-object";
+import { ObjectRelationshipsTab } from "@/components/objects/ObjectRelationshipsTab";
+import { RelationshipForm } from "@/components/objects/RelationshipForm";
+import { toast } from "@/hooks/use-toast";
 import { HostLink } from "@/components/mvp/HostLink";
 import { InlineField, RecordFields, toFieldEdges } from "@/components/mvp/InfraEditors";
 import { askPath } from "@/lib/mvp-paths";
@@ -32,6 +37,7 @@ export function ModelDetailPanel({
 }) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
+  const { canEdit } = usePermissions();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<ObjectDrawerTabId>("details");
   const [openField, setOpenField] = useState<string | null>(null);
@@ -155,7 +161,7 @@ export function ModelDetailPanel({
             </section>
           </div>
         )}
-        {tab === "relationships" && <Relationships row={row} />}
+        {tab === "relationships" && <Relationships row={row} canEdit={canEdit} />}
         {tab === "tech_debt" && (
           <ObjectTechDebtTab
             objectId={row.id}
@@ -204,18 +210,50 @@ function RelList({ title, items, empty }: { title: string; items: { id: string; 
   );
 }
 
-function Relationships({ row }: { row: CatalogRow }) {
+function Relationships({ row, canEdit }: { row: CatalogRow; canEdit: boolean }) {
+  const { getToken } = useAuth();
+  const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
   const catalog = useModelCatalog();
   const [expanded, setExpanded] = useState(false);
+  const [adding, setAdding] = useState(false);
   const objects = catalog.data?.objects ?? [];
   const rels = catalog.data?.relationships ?? [];
   const nameOf = (id: string) => objects.find((item) => item.id === id)?.name ?? "Untitled";
+  const relatedNameOverrides = Object.fromEntries(objects.map((item) => [item.id, item.name]));
+  const rowRelationships = relationshipsForObject(rels, row.id);
 
+  const refreshAfterWrite = () => {
+    if (!orgSlug || !workspaceSlug) return;
+    queryClient.invalidateQueries({ queryKey: ["relationships"] });
+    queryClient.invalidateQueries({ queryKey: ["object", orgSlug, workspaceSlug, row.id] });
+  };
+
+  const open = () => setAdding(true);
+
+  const remove = async (id: string) => {
+    if (!orgSlug || !workspaceSlug) return;
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      await relationshipsApi.delete(orgSlug, workspaceSlug, id, token);
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
+      refreshAfterWrite();
+    } catch (err) {
+      toast({
+        title: "Couldn't remove the connection",
+        description: err instanceof Error ? err.message : "Could not remove",
+        variant: "destructive",
+      });
+      queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
+    }
+  };
+
+  let lists = null;
   if (row.kind === "application") {
-    const nameById = Object.fromEntries(objects.map((item) => [item.id, item.name]));
-    nameById[row.id] = row.name;
+    const nameById = { ...relatedNameOverrides, [row.id]: row.name };
     const flows = objects.filter((item) => item.type === "integration_flow");
-    return (
+    lists = (
       <div>
         <h3 className="mb-2 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">RELATIONSHIP MAP</h3>
         <SystemDiagramPreview
@@ -231,53 +269,80 @@ function Relationships({ row }: { row: CatalogRow }) {
             relationships={rels}
             flows={flows}
             onClose={() => setExpanded(false)}
+            onAddConnection={canEdit ? () => { setExpanded(false); open(); } : undefined}
           />
         )}
       </div>
     );
-  }
-
-  if (row.kind === "runtime") {
+  } else if (row.kind === "runtime") {
     const linked = rels.filter(
       (rel) =>
         rel.to_object_id === row.id &&
         rel.type === "runs_on" &&
         (rel.from_type === "component" || rel.from_type === "integration_flow" || rel.from_type === "application")
     );
-    return (
+    lists = (
       <div className="space-y-4">
         <RelList title="Applications" items={linked.filter((rel) => rel.from_type === "application").map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="No applications run on this server yet." />
         <RelList title="Components" items={linked.filter((rel) => rel.from_type === "component").map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="No components run on this runtime yet." />
         <RelList title="Integrations" items={linked.filter((rel) => rel.from_type === "integration_flow").map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="No integrations reference this runtime yet." />
       </div>
     );
+  } else {
+    const systems = rels.filter(
+      (rel) =>
+        rel.to_object_id === row.id &&
+        (rel.type === "built_on" || rel.type === "runs_on") &&
+        (isSystemObjectType(rel.from_type) || rel.from_type === "application")
+    );
+    const components = rels.filter(
+      (rel) => rel.to_object_id === row.id && rel.type === "built_on" && rel.from_type === "component"
+    );
+    lists = (
+      <div className="space-y-4">
+        <h3 className="text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">
+          BUILT ON THIS PLATFORM ({systems.length + components.length})
+        </h3>
+        {systems.length === 0 && components.length === 0 ? (
+          <p className="text-[13px] text-[#8b90a0]">No systems or components linked yet.</p>
+        ) : (
+          <>
+            {systems.length > 0 && (
+              <RelList title="Systems" items={systems.map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="" />
+            )}
+            {components.length > 0 && (
+              <RelList title="Components" items={components.map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="" />
+            )}
+          </>
+        )}
+      </div>
+    );
   }
 
-  const systems = rels.filter(
-    (rel) =>
-      rel.to_object_id === row.id &&
-      (rel.type === "built_on" || rel.type === "runs_on") &&
-      (isSystemObjectType(rel.from_type) || rel.from_type === "application")
-  );
-  const components = rels.filter(
-    (rel) => rel.to_object_id === row.id && rel.type === "built_on" && rel.from_type === "component"
-  );
   return (
-    <div className="space-y-4">
-      <h3 className="text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">
-        BUILT ON THIS PLATFORM ({systems.length + components.length})
-      </h3>
-      {systems.length === 0 && components.length === 0 ? (
-        <p className="text-[13px] text-[#8b90a0]">No systems or components linked yet.</p>
-      ) : (
-        <>
-          {systems.length > 0 && (
-            <RelList title="Systems" items={systems.map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="" />
-          )}
-          {components.length > 0 && (
-            <RelList title="Components" items={components.map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="" />
-          )}
-        </>
+    <div className="space-y-6">
+      {lists}
+      <ObjectRelationshipsTab
+        objectId={row.id}
+        objectName={row.name}
+        objectType={row.object.type}
+        relationships={rowRelationships}
+        relatedNameOverrides={relatedNameOverrides}
+        onAdd={canEdit ? open : undefined}
+        onRemove={canEdit ? remove : undefined}
+      />
+      {adding && (
+        <RelationshipForm
+          fromObject={row.object}
+          onClose={() => setAdding(false)}
+          onSuccess={(rel) => {
+            if (orgSlug && workspaceSlug) {
+              applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: rel });
+            }
+            refreshAfterWrite();
+            setAdding(false);
+          }}
+        />
       )}
     </div>
   );

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { X, Search } from "lucide-react";
-import { type MinEAObject, OBJECT_TYPE_LABELS, type ObjectListResponse } from "@minea/types";
+import { type MinEAObject, OBJECT_TYPE_LABELS, type ObjectListResponse, type Relationship } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { ALLOWED_TRIPLES_FRONTEND, OUTBOUND_ONLY_TRIPLES, tripleKey } from "@/lib/allowed-triples";
 import { appendComponentSystemRef } from "@/lib/component-relationship-utils";
@@ -13,7 +13,7 @@ import { useTenancy } from "@/lib/tenancy";
 interface Props {
   fromObject: MinEAObject;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (rel: Relationship) => void;
   /** Pre-select target object type in the link picker (e.g. data_store). */
   initialTargetType?: string;
 }
@@ -303,7 +303,9 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
 
       return created;
     },
-    onSuccess,
+    onSuccess: (created) => {
+      if (created) onSuccess(created);
+    },
   });
 
   function selectTarget(obj: MinEAObject) {
