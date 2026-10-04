@@ -110,7 +110,7 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
           .filter(
             (r) =>
               (r.type === SYSTEM_PLATFORM_REL || r.type === "runs_on") &&
-              isSystemObjectType(r.from_type)
+              (isSystemObjectType(r.from_type) || r.from_type === "application")
           )
           .map((r) => r.from_object_id)
       );

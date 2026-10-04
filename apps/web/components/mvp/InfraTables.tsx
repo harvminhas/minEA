@@ -118,7 +118,7 @@ export function PlatformsTable({ rows, selectedId, anywhere = false }: { rows: C
         <table className="w-full table-fixed border-collapse text-left text-[13px]">
           <thead>
             <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
-              {["Name", "Vendor", "Kind", "Hosting", "Owner", "Built on it", "Annual cost (US$)", "Renewal"].map((heading) => (
+              {["Name", "Vendor", "Kind", "Hosting model", "Owner", "Built on it", "Annual cost (US$)", "Renewal"].map((heading) => (
                 <th key={heading} className="h-11 px-2 font-medium">{heading}</th>
               ))}
             </tr>

@@ -1,6 +1,7 @@
 import type { ObjectUpdate, RelationshipCreate } from "@minea/types";
 import type { FieldDef } from "@/lib/fields/registry";
 import { ownershipFromEntity, ownershipToPayload, type OwnershipValue } from "@/lib/owner-fields";
+import { isSystemObjectType } from "@/lib/platform-relationship-utils";
 import { lifecycleToStatus } from "@/lib/platform-utils";
 
 export type FieldEdge = {
@@ -31,6 +32,12 @@ export type FieldRecord = {
   edges?: FieldEdge[];
 };
 
+/** Owner stays optional for a shadow application. Other required flags are unchanged. */
+export function fieldIsRequired(def: FieldDef, record: { properties?: Record<string, unknown> | null }): boolean {
+  if (def.key === "owner" && record.properties?.governance_status === "shadow") return false;
+  return Boolean(def.required);
+}
+
 export type FieldPatch = {
   object?: ObjectUpdate;
   people?: Record<string, unknown>;
@@ -39,6 +46,27 @@ export type FieldPatch = {
 };
 
 const LIFECYCLE_TYPES = new Set(["model", "cloud_service", "tool"]);
+
+export function sameFieldValue(stored: unknown, next: unknown): boolean {
+  if (Array.isArray(stored) || Array.isArray(next)) {
+    const list = (value: unknown) =>
+      Array.isArray(value) ? value.map(String) : value == null || value === "" ? [] : [String(value)];
+    const left = list(stored);
+    const right = list(next);
+    return left.length === right.length && left.every((item, index) => item === right[index]);
+  }
+  if (stored && typeof stored === "object" && next && typeof next === "object") {
+    const left = stored as OwnershipValue;
+    const right = next as OwnershipValue;
+    return (
+      left.ownerTeamId === right.ownerTeamId &&
+      left.ownerTeamName === right.ownerTeamName &&
+      left.pointOfContactId === right.pointOfContactId &&
+      left.pointOfContactName === right.pointOfContactName
+    );
+  }
+  return (stored == null ? "" : String(stored)) === (next == null ? "" : String(next));
+}
 
 function blank(value: unknown): boolean {
   if (value == null) return true;
@@ -129,6 +157,16 @@ export function toPatch(def: FieldDef, value: unknown, record: FieldRecord, edge
             to_type: target as RelationshipCreate["to_type"],
           }
     );
+    if (def.key === "built_on" && isSystemObjectType(record.type)) {
+      for (const edge of edges) {
+        const legacyPlatform =
+          edge.from_object_id === record.id &&
+          edge.to_type === "cloud_service" &&
+          isSystemObjectType(edge.from_type) &&
+          (edge.type === "built_on" || edge.type === "runs_on");
+        if (legacyPlatform && !removeRelIds.includes(edge.id)) removeRelIds.push(edge.id);
+      }
+    }
     const patch: FieldPatch = { addRel, removeRelIds };
     if (def.key === "built_on" && record.type === "application") {
       patch.object = {

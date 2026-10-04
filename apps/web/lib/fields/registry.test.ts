@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { INTERNAL_KEYS, REGISTRY, recordTypeOf, type FieldDef, type RecordType } from "./registry.ts";
+import { INTERNAL_KEYS, REGISTRY, fieldIsRequired, recordTypeOf, type FieldDef, type RecordType } from "./registry.ts";
 import { emptyOwnership, type OwnershipValue } from "../owner-fields.ts";
 import { buildPlatformProperties, lifecycleToStatus } from "../platform-utils.ts";
 import { buildRuntimeProperties } from "../runtime-utils.ts";
 import { buildIntegrationInfraProperties } from "../integration-infra-utils.ts";
-import { applyPatch, readField, toPatch, type FieldEdge, type FieldRecord } from "./save.ts";
+import { applyPatch, readField, sameFieldValue, toPatch, type FieldEdge, type FieldRecord } from "./save.ts";
 
 const OBJECT_TYPE: Record<RecordType, string> = {
   application: "application",
@@ -294,6 +294,81 @@ test("labels and sources are unique within a type", () => {
     const sources = fields.map(sourceKey);
     assert.equal(new Set(sources).size, sources.length, type);
   }
+});
+
+test("built_on drops a legacy runs_on edge to a platform", () => {
+  const record = blankRecord("application");
+  const def = REGISTRY.application.find((field) => field.key === "built_on")!;
+  const edges = [
+    {
+      id: "legacy",
+      type: "runs_on",
+      from_object_id: "rec",
+      from_type: "application",
+      to_object_id: "old-platform",
+      to_type: "cloud_service",
+    },
+    {
+      id: "server",
+      type: "runs_on",
+      from_object_id: "rec",
+      from_type: "application",
+      to_object_id: "as400",
+      to_type: "model",
+    },
+  ];
+  const saved = applyPatch(record, toPatch(def, "new-1", record, edges), edges);
+  assert.deepEqual(
+    (saved.edges ?? []).map((edge) => `${edge.type}:${edge.to_type}:${edge.to_object_id}`).sort(),
+    ["built_on:cloud_service:new-1", "runs_on:model:as400"]
+  );
+});
+
+test("name is required for every type", () => {
+  for (const [type, fields] of Object.entries(REGISTRY)) {
+    const name = fields.find((field) => field.key === "name");
+    assert.ok(name, type);
+    assert.equal(fieldIsRequired(name, { properties: {} }), true, type);
+  }
+});
+
+test("an unchanged draft matches the stored value", () => {
+  assert.equal(sameFieldValue("2026-12-31", "2026-12-31"), true);
+  assert.equal(sameFieldValue("2026-12-31", "2026-01-01"), false);
+  assert.equal(sameFieldValue("x", "x"), true);
+  assert.equal(sameFieldValue("", ""), true);
+  assert.equal(sameFieldValue("", null), true);
+  assert.equal(sameFieldValue(5, "5"), true);
+  assert.equal(sameFieldValue(["a", "b"], ["a", "b"]), true);
+  assert.equal(sameFieldValue(["a"], ["b"]), false);
+  assert.equal(sameFieldValue("target-1", "target-1"), true);
+  assert.equal(
+    sameFieldValue(
+      { ownerTeamId: "ops", ownerTeamName: "Ops", pointOfContactId: "ana", pointOfContactName: "Ana" },
+      { ownerTeamId: "ops", ownerTeamName: "Ops", pointOfContactId: "ana", pointOfContactName: "Ana" }
+    ),
+    true
+  );
+  assert.equal(
+    sameFieldValue(
+      { ownerTeamId: "ops", ownerTeamName: "Ops", pointOfContactId: "ana", pointOfContactName: "Ana" },
+      { ownerTeamId: "fin", ownerTeamName: "Finance", pointOfContactId: "ana", pointOfContactName: "Ana" }
+    ),
+    false
+  );
+  assert.equal(
+    sameFieldValue(
+      { ownerTeamId: "ops", ownerTeamName: "Ops", pointOfContactId: "ana", pointOfContactName: "Ana" },
+      { ownerTeamId: "fin", ownerTeamName: "Ops", pointOfContactId: "ana", pointOfContactName: "Ana" }
+    ),
+    false
+  );
+});
+
+test("owner is optional when governance status is shadow", () => {
+  const owner = REGISTRY.application.find((field) => field.key === "owner")!;
+  assert.equal(fieldIsRequired(owner, { properties: { governance_status: "shadow" } }), false);
+  assert.equal(fieldIsRequired(owner, { properties: { governance_status: "sanctioned" } }), true);
 });
 
 test("recordTypeOf maps stored object types", () => {

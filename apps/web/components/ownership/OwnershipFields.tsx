@@ -14,6 +14,7 @@ interface Props {
   onChange: (value: OwnershipValue) => void;
   required?: boolean;
   pocRequired?: boolean;
+  keepContactOnTeamChange?: boolean;
   className?: string;
   teamLabel?: string;
   pocLabel?: string;
@@ -24,6 +25,7 @@ export function OwnershipFields({
   onChange,
   required = true,
   pocRequired = false,
+  keepContactOnTeamChange = false,
   className = "",
   teamLabel = "Owner (team)",
   pocLabel = "Point of contact (optional)",
@@ -74,7 +76,7 @@ export function OwnershipFields({
       ...value,
       ownerTeamName: name,
       ownerTeamId: option?.id ?? "",
-      ...(teamChanged ? { pointOfContactId: "", pointOfContactName: "" } : {}),
+      ...(teamChanged && !keepContactOnTeamChange ? { pointOfContactId: "", pointOfContactName: "" } : {}),
     });
   }
 

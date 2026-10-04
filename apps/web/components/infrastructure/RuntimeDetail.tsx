@@ -92,26 +92,27 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
     queryKey: ["runtime-workloads", orgSlug, workspaceSlug, runtime.id],
     queryFn: async () => {
       const token = await getToken();
-      const [rels, components, flows] = await Promise.all([
+      const [rels, components, flows, applications] = await Promise.all([
         relationshipsApi.list(orgSlug, workspaceSlug, { to_object_id: runtime.id }, token!),
         objectsApi.list(orgSlug, workspaceSlug, { type: "component" }, token!),
         objectsApi.list(orgSlug, workspaceSlug, { type: "integration_flow" }, token!),
+        objectsApi.list(orgSlug, workspaceSlug, { type: "application" }, token!),
       ]);
 
-      const componentIds = new Set(
-        rels
-          .filter((r) => r.type === "runs_on" && r.from_type === "component")
-          .map((r) => r.from_object_id)
-      );
-      const flowIds = new Set(
-        rels
-          .filter((r) => r.type === "runs_on" && r.from_type === "integration_flow")
-          .map((r) => r.from_object_id)
-      );
+      const idsFor = (fromType: string) =>
+        new Set(
+          rels
+            .filter((r) => r.type === "runs_on" && r.from_type === fromType)
+            .map((r) => r.from_object_id)
+        );
+      const componentIds = idsFor("component");
+      const flowIds = idsFor("integration_flow");
+      const applicationIds = idsFor("application");
 
       return {
         components: components.items.filter((c) => componentIds.has(c.id)),
         flows: flows.items.filter((f) => flowIds.has(f.id)),
+        applications: applications.items.filter((item) => applicationIds.has(item.id)),
       };
     },
     enabled: enabled && activeTab === "details",
@@ -130,6 +131,7 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
 
   const components = workloadsData?.components ?? [];
   const flows = workloadsData?.flows ?? [];
+  const applications = workloadsData?.applications ?? [];
 
   return (
     <>
@@ -253,6 +255,20 @@ export function RuntimeDetail({ runtime, onClose, onDelete, onUpdate }: Props) {
                 !props.sla_target && (
                   <p className="text-sm text-gray-400">No additional details yet.</p>
                 )}
+            </DetailSection>
+
+            <DetailSection title="Applications">
+              {applications.length === 0 ? (
+                <p className="text-sm text-gray-400 px-6 pb-4">No applications run on this server yet.</p>
+              ) : (
+                <ul className="px-6 pb-4 space-y-1.5">
+                  {applications.map((app) => (
+                    <li key={app.id} className="text-sm text-gray-700">
+                      {app.name}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </DetailSection>
 
             <DetailSection title="Components">

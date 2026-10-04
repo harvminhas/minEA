@@ -11,7 +11,7 @@ import { infraStatus } from "@/lib/infra/status";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 
-export function HostLink({ row }: { row: CatalogRow }) {
+export function HostLink({ row, onAddHost }: { row: CatalogRow; onAddHost?: () => void }) {
   const impact = useImpactGraph();
   const catalog = useModelCatalog();
   const { getToken } = useAuth();
@@ -62,7 +62,19 @@ export function HostLink({ row }: { row: CatalogRow }) {
     <div className="rounded-xl border border-[#f5d7a8] bg-[#fffaf0] p-3 text-[13px]">
       <div className="flex items-center justify-between gap-2">
         <strong className="text-[#92400e]">No host linked</strong>
-        <button type="button" className="font-medium text-[#c2410c]" onClick={() => setOpen((value) => !value)}>+ Add host</button>
+        <button
+          type="button"
+          className="font-medium text-[#c2410c]"
+          onClick={() => {
+            if (onAddHost) {
+              onAddHost();
+              return;
+            }
+            setOpen((value) => !value);
+          }}
+        >
+          + Add host
+        </button>
       </div>
       <p className="mt-1 text-[#7a5b32]">
         Hosting says {hosting}, but nothing links {row.name} to a server or device, so what breaks if it stops and infrastructure cost cannot include it.

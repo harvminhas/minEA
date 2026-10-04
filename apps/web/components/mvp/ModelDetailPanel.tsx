@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Trash2, X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import type { TechDebtHostKind } from "@minea/types";
 import { objectsApi } from "@/lib/api-client";
 import { connectionPhrase, groupImpactHits, impactOf } from "@/lib/impact/relationship-impact";
@@ -11,20 +11,17 @@ import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
-import { ObjectForm } from "@/components/objects/ObjectForm";
-import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
-import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
-import { PLATFORM_SLA_LABEL } from "@/lib/platform-utils";
+import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
+import { SystemDiagramModal } from "@/components/application/SystemDiagram";
+import { SystemDiagramPreview } from "@/components/application/SystemDiagramPreview";
+import { isSystemObjectType } from "@/lib/platform-relationship-utils";
+import { REGISTRY, recordTypeOf } from "@/lib/fields/registry";
 import type { CatalogRow } from "@/lib/model-catalog";
-import { applyCatalogWrite } from "@/lib/use-model-catalog";
-import { CostSection } from "@/components/mvp/CostSection";
+import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { HostLink } from "@/components/mvp/HostLink";
-import { InfraFields } from "@/components/mvp/InfraEditors";
-import { platformFields, runtimeFields } from "@/lib/infra/fields";
-import { readRuntimeInfra, hostSourceIds } from "@/lib/infra/read";
-import { infraStatus } from "@/lib/infra/status";
+import { InlineField, RecordFields, toFieldEdges } from "@/components/mvp/InfraEditors";
 import { askPath } from "@/lib/mvp-paths";
-import { AddChip, Pill } from "@/components/mvp/pills";
+import { Pill } from "@/components/mvp/pills";
 
 export function ModelDetailPanel({
   row,
@@ -36,12 +33,17 @@ export function ModelDetailPanel({
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<"details" | "debt" | "history">("details");
-  const [editing, setEditing] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
-  const debt = useObjectTechDebtSummary(row.id, tab === "debt");
+  const [tab, setTab] = useState<ObjectDrawerTabId>("details");
+  const [openField, setOpenField] = useState<string | null>(null);
+  const debt = useObjectTechDebtSummary(row.id, tab === "tech_debt");
   const impactGraph = useImpactGraph();
   const dependents = impactOf(impactGraph.nodes, impactGraph.edges, row.id);
+  const recordType = recordTypeOf(row.object.type);
+  const edges = toFieldEdges(impactGraph.relationships);
+  const nameDef = recordType ? REGISTRY[recordType].find((field) => field.key === "name") : undefined;
+  const relationshipCount = impactGraph.relationships.filter(
+    (rel) => rel.from_object_id === row.id || rel.to_object_id === row.id
+  ).length;
 
   const history = useQuery({
     queryKey: ["object-history", row.id],
@@ -50,18 +52,6 @@ export function ModelDetailPanel({
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) return { entries: [] };
       return objectsApi.history(orgSlug, workspaceSlug, row.id, token);
-    },
-  });
-
-  const acceptVendor = useMutation({
-    mutationFn: async (vendor: string) => {
-      const token = await getToken();
-      if (!token || !orgSlug || !workspaceSlug) return;
-      const properties = { ...(row.object.properties ?? {}), vendor };
-      return objectsApi.update(orgSlug, workspaceSlug, row.id, { properties }, token);
-    },
-    onSuccess: (saved) => {
-      if (saved && orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
     },
   });
 
@@ -77,35 +67,15 @@ export function ModelDetailPanel({
     },
   });
 
-  const props = (row.object.properties ?? {}) as Record<string, unknown>;
-  const slaKey = typeof props.sla_target === "string" ? props.sla_target : "";
-  const sla = PLATFORM_SLA_LABEL[slaKey] ?? "";
-
-  if (editing) {
-    const close = () => setEditing(false);
-    const done = () => setEditing(false);
-    if (row.kind === "runtime") {
-      return <CreateRuntimePanel initialValues={row.object} onClose={close} onSuccess={done} />;
-    }
-    if (row.kind === "platform") {
-      return <CreatePlatformPanel initialValues={row.object} onClose={close} onSuccess={done} />;
-    }
-    return (
-      <ObjectForm
-        objectType={row.object.type}
-        initialValues={row.object}
-        onClose={close}
-        onSuccess={done}
-      />
-    );
-  }
-
   return (
     <aside className="flex h-full w-[470px] flex-shrink-0 flex-col border-l border-[#e7e8ee] bg-white">
       <div className="flex items-start gap-3 border-b border-[#eef0f4] px-5 py-4">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[18px] font-semibold text-[#1c2230]">{row.name}</h2>
-          <p className="mt-0.5 text-[13px] text-[#6b7289]">{row.typeLabel}</p>
+          {nameDef ? (
+            <InlineField def={nameDef} object={row.object} edges={edges} bare />
+          ) : (
+            <h2 className="truncate text-[18px] font-semibold text-[#1c2230]">{row.name}</h2>
+          )}
           <div className="mt-2 flex flex-wrap gap-1.5">
             <span className="rounded-full bg-[#f3f4f8] px-2 py-0.5 text-[11px] font-medium text-[#4b5163]">{row.typeLabel}</span>
             {row.lifecycleLabel && <Pill label={row.lifecycleLabel} tone="lifecycle" />}
@@ -117,9 +87,6 @@ export function ModelDetailPanel({
             )}
           </div>
         </div>
-        <button type="button" onClick={() => setEditing(true)} className="rounded-md p-1.5 text-[#6b7289] hover:bg-[#f4f5f8]" title="Edit">
-          <Pencil size={15} />
-        </button>
         <button
           type="button"
           onClick={() => {
@@ -135,81 +102,39 @@ export function ModelDetailPanel({
         </button>
       </div>
 
-      <div className="flex gap-4 border-b border-[#eef0f4] px-5 text-[13px]">
-        {(
-          [
-            ["details", "Details"],
-            ["debt", `Tech debt${debt.data?.open_count ? ` ${debt.data.open_count}` : ""}`],
-            ["history", "History"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`border-b-2 py-2.5 ${tab === id ? "border-[#5b4ce6] font-semibold text-[#3f35b5]" : "border-transparent text-[#6b7289]"}`}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="border-b border-[#eef0f4]">
+        <ObjectDrawerTabs
+          activeTab={tab}
+          onTabChange={setTab}
+          showRelationships
+          openDebtCount={debt.data?.open_count ?? 0}
+          relationshipCount={relationshipCount}
+          className="px-5"
+        />
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {tab === "details" && (
           <div className="space-y-6">
-            {row.kind === "runtime" && <RuntimeFacts row={row} edges={impactGraph.edges} />}
-            {row.kind === "platform" && <PlatformFacts row={row} edges={impactGraph.edges} />}
-            <HostLink row={row} />
-            <Section title="Hosting">
-              <Field label="Hosted where" value={row.typeLabel} />
-              <Field label="Location" value={row.subtitle} empty="Add location" onAdd={() => setEditing(true)} />
-            </Section>
+            <HostLink row={row} onAddHost={() => setOpenField("runs_on")} />
             {row.kind === "runtime" && (
               <a href={askPath(basePath, `What breaks if ${row.name} goes down?`)} className="block rounded-lg bg-[#f4f3ff] px-3 py-2 text-[13px] font-medium text-[#3f35b5]">
                 Impact if down: ask what breaks if {row.name} goes down →
               </a>
             )}
-            <Section title="Contract">
-              <div className="flex items-start justify-between gap-3 py-1.5">
-                <span className="text-[13px] text-[#6b7289]">Vendor</span>
-                <div className="text-right text-[13px] text-[#1c2230]">
-                  {row.vendor ? (
-                    row.vendor
-                  ) : row.suggestion && !dismissed ? (
-                    <span>
-                      <AddChip label="Add vendor" onClick={() => setEditing(true)} />
-                      <span className="mt-1 block text-[12px] text-[#8b90a0]">
-                        Suggested: {row.suggestion}{" "}
-                        <button type="button" className="text-[#5b4ce6]" onClick={() => acceptVendor.mutate(row.suggestion!)}>
-                          Accept
-                        </button>
-                        {" · "}
-                        <button type="button" className="text-[#6b7289]" onClick={() => setDismissed(true)}>
-                          Dismiss
-                        </button>
-                      </span>
-                    </span>
-                  ) : (
-                    <AddChip label="Add vendor" onClick={() => setEditing(true)} />
-                  )}
-                </div>
-              </div>
-              <Field label="Renewal date" value={row.renewalLabel} empty="Add renewal date" onAdd={() => setEditing(true)} />
-              <Field label="Notice period" value="" empty="Coming soon" />
-            </Section>
-            <CostSection row={row} onSaved={() => undefined} />
-            <Section title="Governance">
-              <Field
-                label="Owner"
-                value={[row.ownerTeam, row.ownerPerson].filter(Boolean).join(" · ")}
-                empty="Add owner"
-                onAdd={() => setEditing(true)}
+            {recordType && (
+              <RecordFields
+                type={recordType}
+                object={row.object}
+                edges={edges}
+                row={row}
+                omit={["name"]}
+                openKey={openField}
+                onOpenKey={setOpenField}
               />
-              <Field label="Lifecycle" value={row.lifecycleLabel} empty="Add lifecycle" onAdd={() => setEditing(true)} />
-              <Field label="Criticality" value={row.criticalityLabel} empty="Add criticality" onAdd={() => setEditing(true)} />
-              <Field label="SLA target" value={sla} />
-            </Section>
-            <Section title="Depends on this">
+            )}
+            <section>
+              <h3 className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">DEPENDS ON THIS</h3>
               {impactGraph.isLoading && <p className="text-[13px] text-[#8b90a0]">Looking up what depends on this…</p>}
               {!impactGraph.isLoading && dependents.length === 0 && (
                 <p className="text-[13px] text-[#8b90a0]">Nothing in your model depends on {row.name}.</p>
@@ -227,10 +152,11 @@ export function ModelDetailPanel({
                   ))}
                 </div>
               ))}
-            </Section>
+            </section>
           </div>
         )}
-        {tab === "debt" && (
+        {tab === "relationships" && <Relationships row={row} />}
+        {tab === "tech_debt" && (
           <ObjectTechDebtTab
             objectId={row.id}
             objectName={row.name}
@@ -261,58 +187,97 @@ export function ModelDetailPanel({
   );
 }
 
-function RuntimeFacts({ row, edges }: { row: CatalogRow; edges: { type: string; fromId: string; toId: string }[] }) {
-  const infra = readRuntimeInfra(row.object);
-  const status = infraStatus(infra, new Date());
-  const runs = hostSourceIds(row.id, edges);
-  return (
-    <Section title="Server & device">
-      <InfraFields object={row.object} fields={runtimeFields} />
-      <Field label="Status" value={status.label} empty="Not set" />
-      <Field label="Runs on it" value={runs.length ? `${runs.length}` : ""} empty="Nothing is linked to run on it yet" />
-    </Section>
-  );
-}
-
-function PlatformFacts({ row, edges }: { row: CatalogRow; edges: { type: string; fromId: string; toId: string }[] }) {
-  const built = hostSourceIds(row.id, edges);
-  return (
-    <Section title="Platform">
-      <InfraFields object={row.object} fields={platformFields} />
-      <Field label="Built on it" value={built.length ? `${built.length}` : ""} empty="Nothing is built on it yet" />
-    </Section>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function RelList({ title, items, empty }: { title: string; items: { id: string; name: string }[]; empty: string }) {
   return (
     <section>
       <h3 className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">{title.toUpperCase()}</h3>
-      {children}
+      {items.length === 0 ? (
+        <p className="text-[13px] text-[#8b90a0]">{empty}</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.map((item) => (
+            <li key={item.id} className="text-[13px] text-[#1c2230]">{item.name}</li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
 
-function Field({
-  label,
-  value,
-  empty,
-  onAdd,
-}: {
-  label: string;
-  value?: string;
-  empty?: string;
-  onAdd?: () => void;
-}) {
+function Relationships({ row }: { row: CatalogRow }) {
+  const catalog = useModelCatalog();
+  const [expanded, setExpanded] = useState(false);
+  const objects = catalog.data?.objects ?? [];
+  const rels = catalog.data?.relationships ?? [];
+  const nameOf = (id: string) => objects.find((item) => item.id === id)?.name ?? "Untitled";
+
+  if (row.kind === "application") {
+    const nameById = Object.fromEntries(objects.map((item) => [item.id, item.name]));
+    nameById[row.id] = row.name;
+    const flows = objects.filter((item) => item.type === "integration_flow");
+    return (
+      <div>
+        <h3 className="mb-2 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">RELATIONSHIP MAP</h3>
+        <SystemDiagramPreview
+          system={row.object}
+          relationships={rels}
+          nameById={nameById}
+          flows={flows}
+          onExpand={() => setExpanded(true)}
+        />
+        {expanded && (
+          <SystemDiagramModal
+            system={row.object}
+            relationships={rels}
+            flows={flows}
+            onClose={() => setExpanded(false)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  if (row.kind === "runtime") {
+    const linked = rels.filter(
+      (rel) =>
+        rel.to_object_id === row.id &&
+        rel.type === "runs_on" &&
+        (rel.from_type === "component" || rel.from_type === "integration_flow" || rel.from_type === "application")
+    );
+    return (
+      <div className="space-y-4">
+        <RelList title="Applications" items={linked.filter((rel) => rel.from_type === "application").map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="No applications run on this server yet." />
+        <RelList title="Components" items={linked.filter((rel) => rel.from_type === "component").map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="No components run on this runtime yet." />
+        <RelList title="Integrations" items={linked.filter((rel) => rel.from_type === "integration_flow").map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="No integrations reference this runtime yet." />
+      </div>
+    );
+  }
+
+  const systems = rels.filter(
+    (rel) =>
+      rel.to_object_id === row.id &&
+      (rel.type === "built_on" || rel.type === "runs_on") &&
+      (isSystemObjectType(rel.from_type) || rel.from_type === "application")
+  );
+  const components = rels.filter(
+    (rel) => rel.to_object_id === row.id && rel.type === "built_on" && rel.from_type === "component"
+  );
   return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-[13px] text-[#6b7289]">{label}</span>
-      {value ? (
-        <span className="text-right text-[13px] text-[#1c2230]">{value}</span>
-      ) : onAdd && empty && empty !== "Coming soon" ? (
-        <AddChip label={empty.replace(/^Add /, "")} onClick={onAdd} />
+    <div className="space-y-4">
+      <h3 className="text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">
+        BUILT ON THIS PLATFORM ({systems.length + components.length})
+      </h3>
+      {systems.length === 0 && components.length === 0 ? (
+        <p className="text-[13px] text-[#8b90a0]">No systems or components linked yet.</p>
       ) : (
-        <span className="text-[13px] text-[#b0b4c0]">{empty ?? "—"}</span>
+        <>
+          {systems.length > 0 && (
+            <RelList title="Systems" items={systems.map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="" />
+          )}
+          {components.length > 0 && (
+            <RelList title="Components" items={components.map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="" />
+          )}
+        </>
       )}
     </div>
   );

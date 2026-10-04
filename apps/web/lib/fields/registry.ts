@@ -142,7 +142,7 @@ const flowSchedule = (o: { properties: Record<string, unknown> }) =>
   o.properties.mechanism === "batch_scheduled" || o.properties.mechanism === "file_based";
 const flowPlatform = (o: { properties: Record<string, unknown> }) => o.properties.mechanism === "no_code_ipaas";
 
-const nameCol = (required = false): FieldDef => ({
+const nameCol = (required = true): FieldDef => ({
   key: "name",
   label: "Name",
   section: "basics",
@@ -436,3 +436,5 @@ const OBJECT_TYPE: Record<string, RecordType> = {
 export function recordTypeOf(objectType: string): RecordType | null {
   return OBJECT_TYPE[objectType] ?? null;
 }
+
+export { fieldIsRequired } from "./save";

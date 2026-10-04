@@ -221,7 +221,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                 <table className="w-full min-w-[920px] border-collapse text-left">
                   <thead>
                     <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
-                      {["Name", "Type · hosted where", "Owner", "Vendor", "Annual cost", "Renewal", "Lifecycle", "Criticality"].map((heading) => (
+                      {["Name", "Type · Hosting model", "Owner", "Vendor", "Annual cost", "Renewal", "Lifecycle", "Criticality"].map((heading) => (
                         <th key={heading} className="h-11 px-2 font-medium">{heading}</th>
                       ))}
                     </tr>
@@ -318,7 +318,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
         )}
       </div>
 
-      {selected && <ModelDetailPanel row={selected} onClose={close} />}
+      {selected && <ModelDetailPanel key={selected.id} row={selected} onClose={close} />}
 
       {creating === "runtime" && (
         <CreateRuntimePanel
