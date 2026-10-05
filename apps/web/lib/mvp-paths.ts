@@ -20,6 +20,7 @@ export type ModelSection =
   | "platforms"
   | "servers"
   | "locations"
+  | "capabilities"
   | "infrastructure"
   | "connections"
   | "vendors"
@@ -31,6 +32,7 @@ export const MODEL_SECTIONS: ModelSection[] = [
   "platforms",
   "servers",
   "locations",
+  "capabilities",
   "infrastructure",
   "connections",
   "vendors",

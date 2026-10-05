@@ -245,6 +245,60 @@ export function catalogStats(rows: CatalogRow[]) {
   };
 }
 
+/** Vendor names the sidebar counts. These are names on records, not external_party rows. */
+export function catalogVendorNames(rows: CatalogRow[]): string[] {
+  const byKey = new Map<string, string>();
+  for (const row of rows) {
+    if (!row.vendorKey || !row.vendor) continue;
+    if (!byKey.has(row.vendorKey)) byKey.set(row.vendorKey, row.vendor);
+  }
+  return [...byKey.values()].sort((a, b) => a.localeCompare(b));
+}
+
+/** A panel row for a location or capability, which the catalog table does not list. */
+export function rowForPanel(object: MinEAObject): CatalogRow | null {
+  const listed = rowFromObject(object);
+  if (listed) return listed;
+  if (object.type !== "location" && object.type !== "capability") return null;
+  const ownerTeam = object.owner_team_name?.trim() || "";
+  const ownerPerson = object.point_of_contact_name?.trim() || (!ownerTeam ? object.owner?.trim() || "" : "");
+  const missing: CatalogMissing = {
+    owner: !ownerTeam && !ownerPerson,
+    vendor: false,
+    cost: false,
+    renewal: false,
+    lifecycle: false,
+    criticality: false,
+  };
+  return {
+    id: object.id,
+    object,
+    kind: "runtime",
+    name: object.name?.trim() || "Untitled",
+    typeLabel: object.type === "location" ? "Location" : "Capability",
+    subtitle: "",
+    ownerTeam,
+    ownerPerson,
+    vendor: "",
+    vendorKey: "",
+    annualCostLabel: "",
+    annualCostNumber: null,
+    renewalLabel: "",
+    renewalDate: null,
+    renewalSoon: false,
+    lifecycle: "",
+    lifecycleLabel: "",
+    criticality: "",
+    criticalityLabel: "",
+    costModelLabel: "",
+    hostingLabel: "",
+    slaLabel: "",
+    suggestion: null,
+    missing,
+    missingCount: missing.owner ? 1 : 0,
+  };
+}
+
 type VendorBucket = {
   vendor: string;
   annual: number;

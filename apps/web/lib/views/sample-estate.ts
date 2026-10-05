@@ -40,7 +40,7 @@ export const sampleEdges: ImpactEdge[] = [
   { type: "runs_on", fromId: "oe", toId: "as400" },
   { type: "runs_on", fromId: "inv", toId: "as400" },
   { type: "runs_on", fromId: "edi", toId: "as400" },
-  { type: "calls", fromId: "bill", toId: "oe" },
+  { type: "depends_on", fromId: "bill", toId: "oe" },
   { type: "supports", fromId: "oe", toId: "cap-om" },
   { type: "supports", fromId: "bill", toId: "cap-ba" },
   { type: "supports", fromId: "inv", toId: "cap-im" },

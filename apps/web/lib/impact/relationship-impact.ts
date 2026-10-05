@@ -1,13 +1,14 @@
 /**
  * Failure propagation for stored relationship types.
  *
- * Edges are stored once, source → target. Inverse words (called_by, includes,
- * replaced_by) are display labels only. They are not relationship types and
- * they are not written as a second edge. See RelationshipForm: an "inverse"
- * choice swaps the ends and stores the same type.
+ * Edges are stored once, source → target. Words come from RELATIONSHIP_LABELS.
+ * A swap in the dialog stores the flipped ends, not a second edge.
  *
- * Types with no entry here are not propagated. Ask before adding a rule.
+ * Direct (apps that stop) comes only from runs_on, built_on, depends_on,
+ * part_of, and located_at. calls and hosts do not propagate as a stop.
  */
+
+import { RELATIONSHIP_LABELS, type RelationshipType } from "@minea/types";
 
 export type ImpactSeverity = "direct" | "degraded" | "loses_support";
 
@@ -21,56 +22,36 @@ export type ImpactRule = {
   step: (sourceName: string, targetName: string) => string;
 };
 
+function rule(
+  type: RelationshipType,
+  severity: { whenTargetFails?: ImpactSeverity; whenSourceFails?: ImpactSeverity }
+): ImpactRule {
+  const words = RELATIONSHIP_LABELS[type];
+  return {
+    ...severity,
+    label: (source, target) => words.sentence(source, target),
+    step: (source, target) =>
+      severity.whenSourceFails && !severity.whenTargetFails
+        ? `${words.reverse} ${source}`
+        : `${words.forward} ${target}`,
+  };
+}
+
 export const relationshipImpactRules: Record<string, ImpactRule> = {
-  calls: {
-    whenTargetFails: "direct",
-    label: (source, target) => `${source} calls ${target}`,
-    step: (_source, target) => `Calls ${target}`,
-  },
-  part_of: {
-    whenTargetFails: "direct",
-    whenSourceFails: "degraded",
-    label: (source, target) => `${source} is part of ${target}`,
-    step: (_source, target) => `Part of ${target}`,
-  },
-  replaces: {
-    label: (source, target) => `${source} replaces ${target}`,
-    step: (_source, target) => `Replaces ${target}`,
-  },
-  supported_by: {
-    whenTargetFails: "loses_support",
-    label: (source, target) => `${source} is supported by ${target}`,
-    step: (_source, target) => `Supported by ${target}`,
-  },
-  supports: {
-    whenSourceFails: "loses_support",
-    label: (source, target) => `${source} supports ${target}`,
-    step: (source) => `Supported by ${source}`,
-  },
-  runs_on: {
-    whenTargetFails: "direct",
-    label: (source, target) => `${source} runs on ${target}`,
-    step: (_source, target) => `Runs on ${target}`,
-  },
-  built_on: {
-    whenTargetFails: "direct",
-    label: (source, target) => `${source} is built on ${target}`,
-    step: (_source, target) => `Built on ${target}`,
-  },
-  hosts: {
-    whenSourceFails: "direct",
-    label: (source, target) => `${source} hosts ${target}`,
-    step: (source) => `Runs on ${source}`,
-  },
-  located_at: {
-    whenTargetFails: "direct",
-    label: (source, target) => `${source} is at ${target}`,
-    step: (_source, target) => `Located at ${target}`,
-  },
-  sends_data_to: {
-    label: (source, target) => `${source} sends data to ${target}`,
-    step: (_source, target) => `Sends data to ${target}`,
-  },
+  depends_on: rule("depends_on", { whenTargetFails: "direct" }),
+  part_of: rule("part_of", { whenTargetFails: "direct", whenSourceFails: "degraded" }),
+  runs_on: rule("runs_on", { whenTargetFails: "direct" }),
+  built_on: rule("built_on", { whenTargetFails: "direct" }),
+  located_at: rule("located_at", { whenTargetFails: "direct" }),
+  sends_data_to: rule("sends_data_to", { whenSourceFails: "degraded" }),
+  reads: rule("reads", { whenTargetFails: "degraded" }),
+  writes: rule("writes", { whenTargetFails: "degraded" }),
+  owns: rule("owns", { whenTargetFails: "degraded" }),
+  creates: rule("creates", { whenTargetFails: "degraded" }),
+  updates: rule("updates", { whenTargetFails: "degraded" }),
+  supported_by: rule("supported_by", { whenTargetFails: "loses_support" }),
+  supports: rule("supports", { whenSourceFails: "loses_support" }),
+  replaces: rule("replaces", {}),
 };
 
 export const impactSectionTitle: Record<ImpactSeverity, string> = {
@@ -339,7 +320,7 @@ function impactGaps(source: ImpactRecord, affected: ImpactRecord[], edges: Impac
     if (bits.length) gaps.push(`${record.name} has ${bits.join(" and ")}.`);
   }
   const touches = (type: string) => edges.some((edge) => edge.type === type && (edge.fromId === source.id || edge.toId === source.id));
-  if (!touches("calls")) {
+  if (!touches("sends_data_to")) {
     gaps.push(`No integrations are recorded for ${source.name}, so systems that call it through an API may be missing.`);
   }
   if (source.hostingModel && !touches("runs_on") && !touches("built_on")) {

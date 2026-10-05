@@ -37,7 +37,7 @@ export function ModelDetailPanel({
 }) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
-  const { canEdit } = usePermissions();
+  const { canEdit, canDelete } = usePermissions();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<ObjectDrawerTabId>("details");
   const [openField, setOpenField] = useState<string | null>(null);
@@ -93,16 +93,18 @@ export function ModelDetailPanel({
             )}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (window.confirm(`Delete ${row.name}?`)) remove.mutate();
-          }}
-          className="rounded-md p-1.5 text-[#6b7289] hover:bg-[#f4f5f8]"
-          title="Delete"
-        >
-          <Trash2 size={15} />
-        </button>
+        {canDelete && (
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm(`Delete ${row.name}?`)) remove.mutate();
+            }}
+            className="rounded-md p-1.5 text-[#6b7289] hover:bg-[#f4f5f8]"
+            title="Delete"
+          >
+            <Trash2 size={15} />
+          </button>
+        )}
         <button type="button" onClick={onClose} className="rounded-md p-1.5 text-[#6b7289] hover:bg-[#f4f5f8]" title="Close">
           <X size={16} />
         </button>
@@ -123,7 +125,7 @@ export function ModelDetailPanel({
         {tab === "details" && (
           <div className="space-y-6">
             <HostLink row={row} onAddHost={() => setOpenField("runs_on")} />
-            {row.kind === "runtime" && (
+            {row.object.type === "model" && (
               <a href={askPath(basePath, `What breaks if ${row.name} goes down?`)} className="block rounded-lg bg-[#f4f3ff] px-3 py-2 text-[13px] font-medium text-[#3f35b5]">
                 Impact if down: ask what breaks if {row.name} goes down →
               </a>
@@ -274,7 +276,7 @@ function Relationships({ row, canEdit }: { row: CatalogRow; canEdit: boolean }) 
         )}
       </div>
     );
-  } else if (row.kind === "runtime") {
+  } else if (row.object.type === "model") {
     const linked = rels.filter(
       (rel) =>
         rel.to_object_id === row.id &&
@@ -288,7 +290,7 @@ function Relationships({ row, canEdit }: { row: CatalogRow; canEdit: boolean }) 
         <RelList title="Integrations" items={linked.filter((rel) => rel.from_type === "integration_flow").map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="No integrations reference this runtime yet." />
       </div>
     );
-  } else {
+  } else if (row.object.type === "cloud_service") {
     const systems = rels.filter(
       (rel) =>
         rel.to_object_id === row.id &&

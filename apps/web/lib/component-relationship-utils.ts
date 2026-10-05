@@ -31,7 +31,7 @@ export function architectureRelationshipsFromComponent(component: MinEAObject): 
       from_object_id: component.id,
       from_type: "component",
       to_object_id: sys.system_id,
-      to_type: "application",
+      to_type: sys.system_type ?? "application",
     });
   }
 
@@ -118,7 +118,7 @@ export async function syncComponentRelationships(
           from_object_id: componentId,
           from_type: "component",
           to_object_id: sys.system_id,
-          to_type: "application",
+          to_type: sys.system_type ?? "application",
         },
         token
       );

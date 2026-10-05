@@ -14,6 +14,7 @@ import { infraConfig } from "@/lib/infra/infraConfig";
 import { locationMigrationPlan, locationTypeLabel, locationTypes } from "@/lib/infra/locations";
 import { applyCatalogWrite } from "@/lib/use-model-catalog";
 import { AddFlow } from "@/components/add/AddFlow";
+import { modelItemPath } from "@/lib/mvp-paths";
 
 function ownerName(object: MinEAObject): string {
   return object.owner_team_name?.trim() || object.point_of_contact_name?.trim() || object.owner?.trim() || "";
@@ -23,7 +24,7 @@ function dash(value: string) {
   return value || <span className="text-[#c5c8d4]">—</span>;
 }
 
-export function LocationsTable({ anywhere = false }: { anywhere?: boolean }) {
+export function LocationsTable({ anywhere = false, selectedId }: { anywhere?: boolean; selectedId?: string }) {
   const router = useRouter();
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
@@ -156,8 +157,8 @@ export function LocationsTable({ anywhere = false }: { anywhere?: boolean }) {
               return (
                 <tr
                   key={location.id}
-                  onClick={() => router.push(`${basePath}/views?tab=impact&sel=${location.id}`)}
-                  className="cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]"
+                  onClick={() => router.push(modelItemPath(basePath, "locations", location.id))}
+                  className={`cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb] ${selectedId === location.id ? "bg-[#f6f5ff]" : ""}`}
                 >
                   <td className="px-2 py-3 font-medium text-[#1c2230]">{location.name}</td>
                   <td className="px-2 py-3">{dash(locationTypeLabel(typeKey))}</td>
@@ -183,7 +184,7 @@ export function LocationsTable({ anywhere = false }: { anywhere?: boolean }) {
                     {open && name.trim() && (
                       <div className="absolute left-0 top-9 z-10 w-[260px] rounded-lg border border-[#e6e8ee] bg-white p-1 shadow-lg">
                         {suggestions.map((location) => (
-                          <button key={location.id} type="button" className="block w-full rounded px-2 py-1.5 text-left text-[13px] hover:bg-[#f6f5ff]" onClick={() => router.push(`${basePath}/views?tab=impact&sel=${location.id}`)}>
+                          <button key={location.id} type="button" className="block w-full rounded px-2 py-1.5 text-left text-[13px] hover:bg-[#f6f5ff]" onClick={() => router.push(modelItemPath(basePath, "locations", location.id))}>
                             {location.name}
                           </button>
                         ))}

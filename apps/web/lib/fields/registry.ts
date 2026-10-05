@@ -90,6 +90,7 @@ export const INTERNAL_KEYS = [
   "runtime",
   "carrier",
   "annual_cost", // legacy, API writes it back from cost_lines
+  "catalog_tool",
 ] as const;
 
 export const SYSTEM_LIFECYCLE_OPTIONS = [
@@ -221,6 +222,13 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
       section: "hosting",
       editor: "relation",
       source: { kind: "rel", edge: "runs_on", dir: "out", target: ["model"], single: false },
+    },
+    {
+      key: "located_at",
+      label: "Location",
+      section: "hosting",
+      editor: "relation",
+      source: { kind: "rel", edge: "located_at", dir: "out", target: ["location"], single: true },
     },
     { key: "status", label: "Lifecycle", section: "lifecycle", editor: "select", source: { kind: "column", column: "status" }, options: SYSTEM_LIFECYCLE_OPTIONS },
     { key: "criticality", label: "Criticality", section: "lifecycle", editor: "select", source: { kind: "prop", key: "criticality" }, options: CRITICALITY },

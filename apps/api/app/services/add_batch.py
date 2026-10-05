@@ -6,7 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -204,13 +204,22 @@ async def apply_add_batch(
         to_id = item.to_id or (ids.get(item.to_key) if item.to_key else None)
         if from_id is None or to_id is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A link is missing one of its items")
-        checked = RelationshipCreate(
-            type=item.type,
-            from_object_id=from_id,
-            from_type=item.from_type,
-            to_object_id=to_id,
-            to_type=item.to_type,
-        )
+        try:
+            checked = RelationshipCreate(
+                type=item.type,
+                from_object_id=from_id,
+                from_type=item.from_type,
+                to_object_id=to_id,
+                to_type=item.to_type,
+            )
+        except ValidationError as exc:
+            message = exc.errors()[0]["msg"] if exc.errors() else "That relationship isn't allowed."
+            prefix = "Value error, "
+            detail = message[len(prefix):] if message.startswith(prefix) else message
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=detail,
+            ) from exc
         rel = Relationship(
             workspace_id=workspace_id,
             org_id=org_id,

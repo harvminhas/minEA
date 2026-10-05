@@ -16,7 +16,7 @@ from app.models.insights import AiInsight
 from app.models.objects import MinEAObject
 from app.models.relationships import Relationship
 from app.routers.workspaces import build_workspace_context_graph
-from app.schemas.relationships import ALLOWED_TRIPLES
+from app.schemas.relationships import triple_allowed
 from app.services.audit import log_audit
 from app.services.authorization import require_limit
 from app.services.plan_features import assert_plan_allows_ai_chat
@@ -159,8 +159,7 @@ async def ingest_commit(
         if not from_obj or not to_obj:
             continue
 
-        triple = (rel.type, from_obj.type, to_obj.type)
-        if triple not in ALLOWED_TRIPLES:
+        if not triple_allowed(rel.type, from_obj.type, to_obj.type):
             continue
 
         r = Relationship(

@@ -1,14 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X, Search } from "lucide-react";
-import { type MinEAObject, OBJECT_TYPE_LABELS, type ObjectListResponse, type Relationship } from "@minea/types";
-import { objectsApi, relationshipsApi } from "@/lib/api-client";
-import { ALLOWED_TRIPLES_FRONTEND, OUTBOUND_ONLY_TRIPLES, tripleKey } from "@/lib/allowed-triples";
+import { type MinEAObject, type ObjectListResponse, type ObjectType, type Relationship, type RelationshipType, ALLOWED_TRIPLES, RELATIONSHIP_LABELS } from "@minea/types";
+import { objectsApi, processesApi, relationshipsApi } from "@/lib/api-client";
+import { tripleKey } from "@/lib/allowed-triples";
 import { appendComponentSystemRef } from "@/lib/component-relationship-utils";
+import { applyPatch, type FieldEdge, type FieldRecord } from "@/lib/fields/save";
+import { CreateComponentPanel } from "@/components/application/CreateComponentPanel";
+import { catalogStats, catalogVendorNames } from "@/lib/model-catalog";
+import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
+import { usePermissions } from "@/lib/use-permissions";
 import { useTenancy } from "@/lib/tenancy";
+import {
+  emptyTypeHint,
+  linkGroupsFor,
+  linksForTarget,
+  linkTargetsFor,
+  NAME_ONLY_LINK_TYPES,
+  patchForPickedLink,
+  uiTypeLabel,
+} from "@/lib/relationship-targets";
 
 interface Props {
   fromObject: MinEAObject;
@@ -18,206 +32,124 @@ interface Props {
   initialTargetType?: string;
 }
 
+type PickerChoice = {
+  id: string;
+  name: string;
+  type: string;
+  object?: MinEAObject;
+  createName?: string;
+};
+
 type RelDirection = "outbound" | "inverse";
 
 type RelOption = {
   key: string;
-  type: string;
-  direction: RelDirection;
+  type: RelationshipType;
   label: string;
-  dropdownLabel: string;
+  outbound: boolean;
+  inverse: boolean;
 };
 
-const OUTBOUND_OPTION_LABELS: Partial<Record<string, string>> = {
-  calls: "Calls",
-  consumes: "Consumes",
-  exposes: "Exposes",
-  publishes: "Publishes",
-  subscribes: "Subscribes to",
-  part_of: "Part of",
-  replaces: "Replaces",
-  runs_on: "Runs on",
-  uses: "Uses",
-  reads: "Reads from",
-  writes: "Writes to",
-  creates: "Creates",
-  updates: "Updates",
-  owns: "Owns",
-  belongs_to: "Belongs to",
-  connects_to: "Connects to",
-  built_on: "Built on",
-  contains: "Contains",
-  routes: "Routes to",
-  hosts: "Hosts",
-  carries: "Carries",
-  accesses: "Accesses",
-  connects: "Connects to",
-  uses_model: "Uses model",
-  can_call: "Can call",
-  supports: "Supports",
-  escalates_to: "Escalates to",
-  affects: "Affects",
-  resolves: "Resolves",
-  depends_on: "Depends on",
-  supported_by: "Supports",
-};
+const ALLOWED_TRIPLE_KEYS = new Set(
+  ALLOWED_TRIPLES.map(([type, from, to]) => tripleKey(type, from, to))
+);
 
-const INVERSE_OPTION_LABELS: Partial<Record<string, string>> = {
-  part_of: "Includes",
-  supported_by: "Supported by",
-  affects: "Affected by",
-  calls: "Called by",
-  consumes: "Consumes from",
-  exposes: "Exposed by",
-  publishes: "Published by",
-  subscribes: "Subscribed by",
-  escalates_to: "Escalated from",
-  connects_to: "Connected from",
-  runs_on: "Hosts",
-  uses: "Used by",
-  resolves: "Resolved by",
-  depends_on: "Required by",
-  built_on: "Platform for",
-  reads: "Read by",
-  writes: "Written by",
-  creates: "Created by",
-  updates: "Updated by",
-  owns: "Owned by",
-  belongs_to: "Includes",
-  supports: "Supported by",
-  uses_model: "Uses model from",
-  can_call: "Callable from",
-  contains: "Contained in",
-  routes: "Routed from",
-  hosts: "Hosted by",
-  carries: "Carried by",
-  accesses: "Accessed by",
-  replaces: "Replaced by",
-  connects: "Connected from",
-};
-
-/** Preferred order when listing connectable object types. */
-const ENTITY_TYPE_ORDER: string[] = [
-  "data_store",
-  "data_object",
-  "data_domain",
-  "api",
-  "event",
-  "integration_flow",
-  "message_broker",
-  "application",
-  "solution",
-  "component",
-  "technical_capability",
-  "capability",
-  "cloud_service",
-  "tool",
-  "model",
-  "agent",
-  "initiative",
-  "tech_debt",
-  "roadmap_item",
-];
-
-function entityTypeSortKey(type: string): number {
-  const idx = ENTITY_TYPE_ORDER.indexOf(type);
-  return idx === -1 ? ENTITY_TYPE_ORDER.length : idx;
-}
-
-function outboundOptionLabel(type: string): string {
-  return OUTBOUND_OPTION_LABELS[type] ?? type.replace(/_/g, " ");
+function allowedTriple(type: string, from: string, to: string): boolean {
+  return ALLOWED_TRIPLE_KEYS.has(tripleKey(type, from, to));
 }
 
 function connectableTargetTypes(fromType: string): string[] {
-  const types = new Set<string>();
-  for (const [type, from, to] of ALLOWED_TRIPLES_FRONTEND) {
-    if (from === fromType) types.add(to);
-    if (to === fromType && !OUTBOUND_ONLY_TRIPLES.has(tripleKey(type, from, to))) {
-      types.add(from);
-    }
+  const types: string[] = [];
+  for (const link of linkTargetsFor(fromType)) {
+    if (!types.includes(link.target)) types.push(link.target);
   }
-  return [...types].sort((a, b) => entityTypeSortKey(a) - entityTypeSortKey(b));
+  return types;
+}
+
+function defaultDirection(option: RelOption): RelDirection {
+  return option.outbound ? "outbound" : "inverse";
 }
 
 function buildRelationshipOptionsForTarget(fromType: string, targetType: string): RelOption[] {
-  const options: RelOption[] = [];
-
-  for (const [type, from, to] of ALLOWED_TRIPLES_FRONTEND) {
-    if (from === fromType && to === targetType) {
-      const label = outboundOptionLabel(type);
-      options.push({
-        key: `outbound:${type}`,
-        type,
-        direction: "outbound",
-        label,
-        dropdownLabel: label,
-      });
-    }
-    if (
-      to === fromType &&
-      from === targetType &&
-      !OUTBOUND_ONLY_TRIPLES.has(tripleKey(type, from, to))
-    ) {
-      const label = INVERSE_OPTION_LABELS[type] ?? type.replace(/_/g, " ");
-      options.push({
-        key: `inverse:${type}`,
-        type,
-        direction: "inverse",
-        label,
-        dropdownLabel: label,
-      });
-    }
+  const byType = new Map<string, RelOption>();
+  for (const link of linksForTarget(fromType, targetType)) {
+    const outbound = link.direction !== "inverse" && allowedTriple(link.type, fromType, targetType);
+    const inverse = link.direction !== "outbound" && allowedTriple(link.type, targetType, fromType);
+    if (!outbound && !inverse) continue;
+    const words = RELATIONSHIP_LABELS[link.type as RelationshipType];
+    if (!words) continue;
+    byType.set(link.type, {
+      key: link.type,
+      type: link.type as RelationshipType,
+      label: words.forward,
+      outbound,
+      inverse,
+    });
   }
-
-  return options.sort((a, b) => {
-    if (a.direction !== b.direction) return a.direction === "outbound" ? -1 : 1;
-    return a.label.localeCompare(b.label);
-  });
-}
-
-type RelOptionGroup = {
-  key: string;
-  label: string;
-  options: RelOption[];
-};
-
-function buildRelationshipOptionGroupsForTarget(fromType: string, targetType: string): RelOptionGroup[] {
-  const options = buildRelationshipOptionsForTarget(fromType, targetType);
-  if (options.length === 1) {
-    return [{ key: "relationship", label: "Relationship", options }];
-  }
-  const outbound = options.filter((option) => option.direction === "outbound");
-  const inbound = options.filter((option) => option.direction === "inverse");
-  const groups: RelOptionGroup[] = [];
-
-  if (outbound.length > 0) {
-    groups.push({ key: "outbound", label: "Outgoing", options: outbound });
-  }
-  if (inbound.length > 0) {
-    groups.push({ key: "inverse", label: "Incoming", options: inbound });
-  }
-
-  return groups;
+  return [...byType.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
 export function RelationshipForm({ fromObject, onClose, onSuccess, initialTargetType }: Props) {
   const { getToken } = useAuth();
+  const { canEdit } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
+  const catalog = useModelCatalog();
   const [targetSearch, setTargetSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState(initialTargetType ?? "");
+  const [typeFilter, setTypeFilter] = useState(() =>
+    initialTargetType &&
+    (connectableTargetTypes(fromObject.type).includes(initialTargetType) || initialTargetType === "component")
+      ? initialTargetType
+      : ""
+  );
   const [selectedTarget, setSelectedTarget] = useState<MinEAObject | null>(null);
   const [selectedOptionKey, setSelectedOptionKey] = useState("");
+  const [direction, setDirection] = useState<RelDirection>("outbound");
+  const [flowHow, setFlowHow] = useState("");
+  const [flowFrequency, setFlowFrequency] = useState("");
+  const [createError, setCreateError] = useState("");
+  const [creatingComponent, setCreatingComponent] = useState(false);
 
-  const connectableTypes = useMemo(
-    () => connectableTargetTypes(fromObject.type),
-    [fromObject.type]
+  useEffect(() => {
+    if (!canEdit) onClose();
+    // Close once for a viewer. onClose changes identity every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEdit]);
+
+  const linkGroups = useMemo(
+    () => linkGroupsFor(fromObject.type, initialTargetType === "component" ? ["component"] : []),
+    [fromObject.type, initialTargetType]
   );
+  const connectableTypes = useMemo(
+    () => linkGroups.flatMap((group) => group.options.map((option) => option.type)),
+    [linkGroups]
+  );
+
+  const typeCounts = useMemo(() => {
+    if (!catalog.data) return null;
+    const counts = new Map<string, number>();
+    for (const object of catalog.data.objects) {
+      counts.set(object.type, (counts.get(object.type) ?? 0) + 1);
+    }
+    return counts;
+  }, [catalog.data]);
+
+  const offersProcess = connectableTypes.includes("process");
+  const processList = useQuery({
+    queryKey: ["processes", orgSlug, workspaceSlug],
+    enabled: offersProcess && Boolean(orgSlug && workspaceSlug),
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+      return processesApi.list(orgSlug, workspaceSlug, token);
+    },
+  });
 
   const searchableTypes = typeFilter ? [typeFilter] : [];
 
-  const { data: candidates } = useQuery({
+  const { data: candidates, isError, isPending, refetch } = useQuery({
     queryKey: ["objects-candidates", orgSlug, workspaceSlug, fromObject.type, typeFilter, targetSearch],
-    enabled: connectableTypes.length > 0 && typeFilter.length > 0,
+    enabled: connectableTypes.length > 0 && typeFilter.length > 0 && typeFilter !== "process",
     queryFn: async () => {
       const token = await getToken();
       const results = await Promise.all(
@@ -232,21 +164,19 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
     },
   });
 
-  const relationshipOptionGroups = useMemo(() => {
+  const relationshipOptions = useMemo(() => {
     if (!selectedTarget) return [];
-    return buildRelationshipOptionGroupsForTarget(fromObject.type, selectedTarget.type);
+    return buildRelationshipOptionsForTarget(fromObject.type, selectedTarget.type);
   }, [fromObject.type, selectedTarget]);
 
-  const relationshipOptions = useMemo(
-    () => relationshipOptionGroups.flatMap((group) => group.options),
-    [relationshipOptionGroups]
-  );
-
   const selectedOption = relationshipOptions.find((option) => option.key === selectedOptionKey);
+  const canSwap = Boolean(
+    selectedOption && (direction === "outbound" ? selectedOption.inverse : selectedOption.outbound)
+  );
 
   const resolvedTriple = useMemo(() => {
     if (!selectedOption || !selectedTarget) return null;
-    if (selectedOption.direction === "outbound") {
+    if (direction === "outbound") {
       return {
         type: selectedOption.type,
         fromType: fromObject.type,
@@ -262,22 +192,103 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
       fromId: selectedTarget.id,
       toId: fromObject.id,
     };
-  }, [fromObject, selectedOption, selectedTarget]);
+  }, [direction, fromObject, selectedOption, selectedTarget]);
+
+  const sentence = resolvedTriple && selectedTarget
+    ? RELATIONSHIP_LABELS[resolvedTriple.type].sentence(
+        resolvedTriple.fromId === fromObject.id ? fromObject.name : selectedTarget.name,
+        resolvedTriple.toId === selectedTarget.id ? selectedTarget.name : fromObject.name
+      )
+    : "";
+  const sentenceSource = direction === "inverse" && selectedTarget ? selectedTarget : fromObject;
 
   const isValidTriple = resolvedTriple
-    ? ALLOWED_TRIPLES_FRONTEND.some(
-        ([type, from, to]) =>
-          type === resolvedTriple.type &&
-          from === resolvedTriple.fromType &&
-          to === resolvedTriple.toType
-      )
+    ? allowedTriple(resolvedTriple.type, resolvedTriple.fromType, resolvedTriple.toType)
     : false;
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!resolvedTriple || !isValidTriple) return;
+      if (!resolvedTriple || !isValidTriple || !selectedOption || !selectedTarget) return;
       const token = await getToken();
       if (!token) throw new Error("Not authenticated");
+
+      const record: FieldRecord = {
+        id: fromObject.id,
+        type: fromObject.type,
+        name: fromObject.name,
+        description: fromObject.description,
+        status: fromObject.status,
+        tags: fromObject.tags,
+        owner: fromObject.owner,
+        owner_team_id: fromObject.owner_team_id,
+        owner_team_name: fromObject.owner_team_name,
+        point_of_contact_id: fromObject.point_of_contact_id,
+        point_of_contact_name: fromObject.point_of_contact_name,
+        properties: { ...(fromObject.properties ?? {}) },
+      };
+      const edges: FieldEdge[] = (catalog.data?.relationships ?? [])
+        .filter((rel) => rel.from_object_id === fromObject.id || rel.to_object_id === fromObject.id)
+        .map((rel) => ({
+          id: rel.id,
+          type: rel.type,
+          from_object_id: rel.from_object_id,
+          from_type: rel.from_type,
+          to_object_id: rel.to_object_id,
+          to_type: rel.to_type,
+        }));
+      const patch = patchForPickedLink(
+        fromObject.type,
+        { type: selectedOption.type, target: selectedTarget.type, direction },
+        selectedTarget.id,
+        record,
+        edges
+      );
+      if (patch && orgSlug && workspaceSlug) {
+        const applied = applyPatch(record, patch, edges);
+        const pending = (patch.addRel ?? []).map((rel, index) => ({
+          id: `optimistic-${index}-${rel.from_object_id}-${rel.to_object_id}`,
+          workspace_id: fromObject.workspace_id,
+          org_id: fromObject.org_id,
+          type: rel.type,
+          from_object_id: rel.from_object_id,
+          from_type: rel.from_type,
+          to_object_id: rel.to_object_id,
+          to_type: rel.to_type,
+          attributes: rel.attributes ?? {},
+          created_at: new Date().toISOString(),
+        })) satisfies Relationship[];
+        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, {
+          object: { ...fromObject, properties: applied.properties, status: (applied.status ?? fromObject.status) as MinEAObject["status"] },
+        });
+        for (const id of patch.removeRelIds ?? []) {
+          applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
+        }
+        for (const rel of pending) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: rel });
+        try {
+          const created: Relationship[] = [];
+          for (const rel of patch.addRel ?? []) {
+            created.push(await relationshipsApi.create(orgSlug, workspaceSlug, rel, token));
+          }
+          for (const rel of pending) {
+            applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: rel.id });
+          }
+          for (const rel of created) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: rel });
+          for (const id of patch.removeRelIds ?? []) {
+            await relationshipsApi.delete(orgSlug, workspaceSlug, id, token);
+          }
+          if (patch.object) {
+            const saved = await objectsApi.update(orgSlug, workspaceSlug, fromObject.id, patch.object, token);
+            applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
+          }
+          return (
+            created.find((rel) => rel.to_object_id === selectedTarget.id || rel.from_object_id === selectedTarget.id) ??
+            created[created.length - 1]
+          );
+        } catch (err) {
+          queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
+          throw err;
+        }
+      }
 
       const created = await relationshipsApi.create(
         orgSlug,
@@ -288,12 +299,20 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
           from_type: resolvedTriple.fromType,
           to_object_id: resolvedTriple.toId,
           to_type: resolvedTriple.toType,
+          ...(resolvedTriple.type === "sends_data_to"
+            ? {
+                attributes: {
+                  ...(flowHow ? { how: flowHow } : {}),
+                  ...(flowFrequency ? { frequency: flowFrequency } : {}),
+                },
+              }
+            : {}),
         },
         token
       );
 
       if (
-        selectedOption?.direction === "inverse" &&
+        direction === "inverse" &&
         resolvedTriple.type === "part_of" &&
         selectedTarget?.type === "component" &&
         fromObject.type === "application"
@@ -304,23 +323,129 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
       return created;
     },
     onSuccess: (created) => {
-      if (created) onSuccess(created);
+      if (!created) return;
+      if (orgSlug && workspaceSlug) {
+        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: created });
+        queryClient.invalidateQueries({ queryKey: ["relationships"] });
+      }
+      onSuccess(created);
     },
   });
 
+  const createTarget = useMutation({
+    mutationFn: async (explicitName: string | undefined) => {
+      const name = (explicitName ?? targetSearch).trim();
+      const type = explicitName ? "external_party" : typeFilter;
+      if (!canEdit || !name || !NAME_ONLY_LINK_TYPES.has(type)) return;
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+      return objectsApi.create(
+        orgSlug,
+        workspaceSlug,
+        { type: type as ObjectType, name },
+        token
+      );
+    },
+    onSuccess: (created) => {
+      if (!created || !orgSlug || !workspaceSlug) return;
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: created });
+      setCreateError("");
+      selectTarget(created);
+    },
+    onError: (err) => {
+      setCreateError(err instanceof Error ? err.message : "Could not create");
+    },
+  });
+
+  function chooseType(key: string, options = relationshipOptions) {
+    setSelectedOptionKey(key);
+    setFlowHow("");
+    setFlowFrequency("");
+    const option = options.find((item) => item.key === key);
+    setDirection(option ? defaultDirection(option) : "outbound");
+  }
+
   function selectTarget(obj: MinEAObject) {
     setSelectedTarget(obj);
-    setSelectedOptionKey("");
     const options = buildRelationshipOptionsForTarget(fromObject.type, obj.type);
-    if (options.length === 1) {
-      setSelectedOptionKey(options[0].key);
-    }
+    if (options.length === 1) chooseType(options[0].key, options);
+    else chooseType("");
   }
 
   function clearTarget() {
     setSelectedTarget(null);
-    setSelectedOptionKey("");
+    chooseType("");
   }
+
+  if (!canEdit) return null;
+
+  if (creatingComponent) {
+    const preset =
+      fromObject.type === "application" ||
+      fromObject.type === "solution" ||
+      fromObject.type === "technical_capability"
+        ? [{ system_id: fromObject.id, system_name: fromObject.name, system_type: fromObject.type }]
+        : [];
+    return (
+      <CreateComponentPanel
+        presetSystems={preset}
+        onClose={() => setCreatingComponent(false)}
+        onSuccess={() => {
+          setCreatingComponent(false);
+          onClose();
+        }}
+      />
+    );
+  }
+
+  const trimmedSearch = targetSearch.trim();
+  const processItems: PickerChoice[] = (processList.data?.items ?? [])
+    .filter((item) => !trimmedSearch || item.name.toLowerCase().includes(trimmedSearch.toLowerCase()))
+    .map((item) => ({ id: item.id, name: item.name, type: "process" }));
+  const objectItems: PickerChoice[] = (candidates ?? []).map((obj) => ({
+    id: obj.id,
+    name: obj.name,
+    type: obj.type,
+    object: obj,
+  }));
+  const partyItems: PickerChoice[] =
+    typeFilter === "external_party"
+      ? (catalog.data?.parties ?? [])
+          .filter((item) => item.id !== fromObject.id)
+          .filter((item) => !objectItems.some((listed) => listed.id === item.id))
+          .filter((item) => !trimmedSearch || item.name.toLowerCase().includes(trimmedSearch.toLowerCase()))
+          .map((item) => ({
+            id: item.id,
+            name: item.name,
+            type: item.type,
+            object: item,
+          }))
+      : [];
+  const listedNames = new Set(
+    [...objectItems, ...partyItems].map((item) => item.name.trim().toLowerCase())
+  );
+  const vendorItems: PickerChoice[] =
+    typeFilter === "external_party" && catalog.data
+      ? catalogVendorNames(catalog.data.rows)
+          .filter((name) => !trimmedSearch || name.toLowerCase().includes(trimmedSearch.toLowerCase()))
+          .filter((name) => !listedNames.has(name.trim().toLowerCase()))
+          .map((name) => ({
+            id: `vendor:${name}`,
+            name,
+            type: "external_party",
+            createName: name,
+          }))
+      : [];
+  const pickerItems: PickerChoice[] = typeFilter === "process" ? processItems : [...objectItems, ...partyItems, ...vendorItems];
+  const listError = typeFilter === "process" ? processList.isError : isError;
+  const listPending = typeFilter === "process" ? processList.isPending : isPending;
+  const offerCreate =
+    canEdit &&
+    NAME_ONLY_LINK_TYPES.has(typeFilter) &&
+    trimmedSearch.length > 0 &&
+    !listError &&
+    !listPending &&
+    pickerItems.length === 0;
 
   return (
     <>
@@ -337,8 +462,8 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
             <div className="flex items-center gap-2 py-2 px-3 bg-gray-50 rounded-md text-sm text-gray-700">
-              <span className="font-medium">{fromObject.name}</span>
-              <span className="text-gray-400">({OBJECT_TYPE_LABELS[fromObject.type]})</span>
+              <span className="font-medium">{sentenceSource.name}</span>
+              <span className="text-gray-400">({uiTypeLabel(sentenceSource.type, true)})</span>
             </div>
           </div>
 
@@ -351,7 +476,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
                 <div className="min-w-0 flex-1">
                   <span className="font-medium text-indigo-900">{selectedTarget.name}</span>
                   <span className="text-indigo-600/70 ml-2">
-                    ({OBJECT_TYPE_LABELS[selectedTarget.type]})
+                    ({uiTypeLabel(selectedTarget.type, true)})
                   </span>
                 </div>
                 <button
@@ -369,15 +494,37 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
                   onChange={(e) => {
                     setTypeFilter(e.target.value);
                     setTargetSearch("");
+                    setCreateError("");
                   }}
                   className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Select object type...</option>
-                  {connectableTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {OBJECT_TYPE_LABELS[type as keyof typeof OBJECT_TYPE_LABELS] ??
-                        type.replace(/_/g, " ")}
-                    </option>
+                  {linkGroups.map((group) => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.options.map((option) => {
+                        const processCount = option.type === "process" ? processList.data?.items.length : undefined;
+                        const vendorCount = catalog.data ? catalogStats(catalog.data.rows).vendorCount : undefined;
+                        const count =
+                          option.type === "external_party"
+                            ? vendorCount
+                            : option.type === "process"
+                              ? processCount
+                              : typeCounts?.get(option.type);
+                        const known =
+                          option.type === "external_party"
+                            ? catalog.data != null
+                            : option.type === "process"
+                              ? processList.data != null
+                              : typeCounts != null;
+                        const empty = known && (count ?? 0) === 0 && option.type !== "component";
+                        const name = option.label;
+                        return (
+                          <option key={option.type} value={option.type} disabled={empty}>
+                            {empty ? `${name} — ${emptyTypeHint(option.type)}` : known ? `${name} (${count ?? 0})` : name}
+                          </option>
+                        );
+                      })}
+                    </optgroup>
                   ))}
                 </select>
                 {!typeFilter ? (
@@ -390,27 +537,75 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
                       <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         value={targetSearch}
-                        onChange={(e) => setTargetSearch(e.target.value)}
+                        onChange={(e) => {
+                          setTargetSearch(e.target.value);
+                          setCreateError("");
+                        }}
                         placeholder="Search by name..."
                         className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                     </div>
                     <div className="max-h-40 overflow-y-auto border border-gray-100 rounded-md divide-y divide-gray-50">
-                      {(candidates ?? []).map((obj) => (
+                      {pickerItems.map((obj) => (
                         <button
                           key={obj.id}
                           type="button"
-                          onClick={() => selectTarget(obj)}
+                          onClick={() => {
+                            if (obj.object) {
+                              selectTarget(obj.object);
+                              return;
+                            }
+                            if (obj.createName) {
+                              createTarget.mutate(obj.createName);
+                              return;
+                            }
+                            selectTarget(obj as unknown as MinEAObject);
+                          }}
                           className="w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 transition-colors text-gray-700"
                         >
                           <span className="font-medium">{obj.name}</span>
                           <span className="text-xs text-gray-400 ml-2">
-                            ({OBJECT_TYPE_LABELS[obj.type]})
+                            ({uiTypeLabel(obj.type, true)})
                           </span>
                         </button>
                       ))}
-                      {(candidates ?? []).length === 0 && (
+                      {listError ? (
+                        <p className="text-xs text-gray-400 px-3 py-2">
+                          Couldn't load objects
+                          {" · "}
+                          <button
+                            type="button"
+                            onClick={() => void (typeFilter === "process" ? processList.refetch() : refetch())}
+                            className="font-medium text-indigo-600 hover:text-indigo-800"
+                          >
+                            Retry
+                          </button>
+                        </p>
+                      ) : listPending ? null : offerCreate ? (
+                        <div className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => createTarget.mutate(undefined)}
+                            disabled={createTarget.isPending}
+                            className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                          >
+                            {createTarget.isPending ? "Creating..." : `+ Create '${trimmedSearch}'`}
+                          </button>
+                          {createError && <p className="mt-1 text-xs text-red-600">{createError}</p>}
+                        </div>
+                      ) : pickerItems.length === 0 ? (
                         <p className="text-xs text-gray-400 px-3 py-2">No matching objects found.</p>
+                      ) : null}
+                      {typeFilter === "component" && canEdit && (
+                        <div className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => setCreatingComponent(true)}
+                            className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                          >
+                            + Create a component
+                          </button>
+                        </div>
                       )}
                     </div>
                   </>
@@ -427,23 +622,63 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
                   No relationship types are allowed between these object types.
                 </p>
               ) : (
-                <select
-                  value={selectedOptionKey}
-                  onChange={(e) => setSelectedOptionKey(e.target.value)}
-                  className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">Select relationship type...</option>
-                  {relationshipOptionGroups.map((group) => (
-                    <optgroup key={group.key} label={group.label}>
-                      {group.options.map((option) => (
-                        <option key={option.key} value={option.key}>
-                          {option.dropdownLabel}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedOptionKey}
+                    onChange={(e) => chooseType(e.target.value)}
+                    className="min-w-0 flex-1 border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Select relationship type...</option>
+                    {relationshipOptions.map((option) => (
+                      <option key={option.key} value={option.key}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span title={canSwap ? "Swap direction" : "That direction isn't allowed"}>
+                    <button
+                      type="button"
+                      disabled={!canSwap}
+                      onClick={() => setDirection((current) => (current === "outbound" ? "inverse" : "outbound"))}
+                      className="h-full rounded-md border border-gray-200 px-3 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      ⇄
+                    </button>
+                  </span>
+                </div>
               )}
+              {selectedOption?.type === "sends_data_to" && (
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <label className="block text-xs font-medium text-gray-700">
+                    How
+                    <select
+                      value={flowHow}
+                      onChange={(e) => setFlowHow(e.target.value)}
+                      className="mt-1 w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                    >
+                      <option value="">Optional</option>
+                      <option value="api">API</option>
+                      <option value="file">File</option>
+                      <option value="manual">Manual</option>
+                      <option value="integration_tool">Integration tool</option>
+                    </select>
+                  </label>
+                  <label className="block text-xs font-medium text-gray-700">
+                    Frequency
+                    <select
+                      value={flowFrequency}
+                      onChange={(e) => setFlowFrequency(e.target.value)}
+                      className="mt-1 w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                    >
+                      <option value="">Optional</option>
+                      <option value="realtime">Realtime</option>
+                      <option value="daily">Daily</option>
+                      <option value="ad_hoc">Ad hoc</option>
+                    </select>
+                  </label>
+                </div>
+              )}
+              {sentence && <p className="mt-3 text-sm text-gray-800">{sentence}</p>}
             </div>
           )}
         </div>

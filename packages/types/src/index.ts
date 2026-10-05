@@ -1,3 +1,5 @@
+import allowedTripleRules from "./relationship-rules.json";
+
 // ─── Object Types ────────────────────────────────────────────────────────────
 
 export type ObjectType =
@@ -116,6 +118,12 @@ export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
 };
 
 export const GROWTH_TYPES: ObjectType[] = ["agent", "tool", "model"];
+
+/** Backend allowed (relationship type, from type, to type) triples. Initiative is not an object type, so those links are omitted. */
+export const ALLOWED_TRIPLES: readonly [string, string, string][] =
+  allowedTripleRules as [string, string, string][];
+
+export { RELATIONSHIP_LABELS, type RelationshipLabel } from "./relationship-labels";
 
 // ─── Core Object ─────────────────────────────────────────────────────────────
 
@@ -444,6 +452,7 @@ export interface IntegrationFlowProperties {
 export interface ComponentSystemRef {
   system_id: string;
   system_name: string;
+  system_type?: ObjectType;
 }
 
 export interface ComponentRuntimeRef {

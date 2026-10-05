@@ -12,7 +12,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.ai.gemini_client import format_api_error, get_client, is_configured, model_name, not_configured_message
 from app.ai.prompts import CIS_EXTRACTION_SYSTEM
-from app.schemas.relationships import ALLOWED_TRIPLES
+from app.schemas.relationships import triple_allowed
 
 
 class ProposedObject(BaseModel):
@@ -86,7 +86,7 @@ async def extract_from_text(text: str) -> CisPayload:
     for rel in payload.relationships:
         from_type = local_id_to_type.get(rel.from_local_id, "")
         to_type = local_id_to_type.get(rel.to_local_id, "")
-        if (rel.type, from_type, to_type) in ALLOWED_TRIPLES:
+        if triple_allowed(rel.type, from_type, to_type):
             valid_rels.append(rel)
     payload.relationships = valid_rels
 

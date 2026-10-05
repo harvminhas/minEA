@@ -86,9 +86,9 @@ test("a depth-2 path renders from the affected item back to the source", () => {
     ],
     edges: [
       { type: "part_of", fromId: "a", toId: "b" },
-      { type: "calls", fromId: "x", toId: "a" },
+      { type: "depends_on", fromId: "x", toId: "a" },
     ],
   });
   const caller = presented.rows.find((row) => row.record.id === "x");
-  assert.equal(caller?.connection, "Calls A → part of B");
+  assert.equal(caller?.connection, "Depends on A → part of B");
 });

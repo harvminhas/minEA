@@ -37,6 +37,7 @@ const HIDDEN_DETAIL_KEYS = new Set([
   "is_custom_built",
   "governance_status",
   "discovery",
+  "catalog_tool",
 ]);
 
 function titleCaseEnum(value: string): string {

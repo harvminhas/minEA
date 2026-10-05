@@ -371,18 +371,19 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
         const targetId = target?.id ?? (selected.kind === "application" ? selected.id : "");
         if (!targetId) throw new Error("Link an application that stops first");
         return relationshipsApi.create(orgSlug, workspaceSlug, {
-          type: "calls",
-          from_object_id: otherId,
-          from_type: otherType,
-          to_object_id: targetId,
-          to_type: objectTypeOf(targetId),
+          type: "sends_data_to",
+          from_object_id: targetId,
+          from_type: objectTypeOf(targetId),
+          to_object_id: otherId,
+          to_type: otherType,
         }, token);
       }
       const hostId = selected.kind === "location" ? (bands.infra.find((hit) => byId.get(hit.id)?.kind === "runtime")?.id ?? "") : selected.id;
       if (!hostId) throw new Error("Add a server in this chain first");
       const hostKind = byId.get(hostId)?.kind;
+      const stopType = hostKind === "application" ? "depends_on" : hostKind === "platform" ? "built_on" : "runs_on";
       return relationshipsApi.create(orgSlug, workspaceSlug, {
-        type: hostKind === "platform" ? "built_on" : "runs_on",
+        type: stopType,
         from_object_id: otherId,
         from_type: otherType,
         to_object_id: hostId,

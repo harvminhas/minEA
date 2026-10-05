@@ -108,6 +108,26 @@ test("cards are at most six and the severity bar sums to the count", () => {
   }
 });
 
+test("depends_on counts as a stop and sends_data_to as a slowdown", () => {
+  const ranked = impactCandidates(
+    [item("srv", "Server", "runtime"), item("app", "App", "application"), item("other", "Other", "application")],
+    [
+      { id: "srv", name: "Server" },
+      { id: "app", name: "App" },
+      { id: "other", name: "Other" },
+    ],
+    [
+      { type: "depends_on", fromId: "app", toId: "srv" },
+      { type: "sends_data_to", fromId: "srv", toId: "other" },
+      { type: "calls", fromId: "other", toId: "srv" },
+    ]
+  );
+  const card = ranked.find((entry) => entry.id === "srv");
+  assert.equal(card?.direct, 1);
+  assert.equal(card?.degraded, 1);
+  assert.equal(card?.reached, 2);
+});
+
 test("headline cost uses the cost module and skips capabilities", () => {
   const hits = [
     { id: "app1", name: "Order Entry", severity: "direct" as const, indirect: false, depth: 1, path: [] },

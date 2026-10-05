@@ -46,6 +46,8 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   initialValues?: MinEAObject;
+  /** Systems to pre-select on create. Ignored once a component id is being edited. */
+  presetSystems?: ComponentSystemRef[];
   onClose: () => void;
   onSuccess: (componentId: string) => void;
 }
@@ -124,8 +126,8 @@ function SelectField({
   );
 }
 
-export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Props) {
-  const isEdit = !!initialValues;
+export function CreateComponentPanel({ initialValues, presetSystems, onClose, onSuccess }: Props) {
+  const isEdit = Boolean(initialValues?.id);
   const init = initFromComponent(initialValues);
 
   const { getToken } = useAuth();
@@ -139,7 +141,9 @@ export function CreateComponentPanel({ initialValues, onClose, onSuccess }: Prop
   const [aiRole, setAiRole] = useState<AiRole>(init.aiRole);
   const [techStack, setTechStack] = useState(init.techStack);
   const [tags, setTags] = useState(init.tags);
-  const [systems, setSystems] = useState<ComponentSystemRef[]>(init.systems);
+  const [systems, setSystems] = useState<ComponentSystemRef[]>(
+    init.systems.length > 0 ? init.systems : presetSystems ?? []
+  );
   const [runtimeKey, setRuntimeKey] = useState(init.runtimeKey);
   const [platformId, setPlatformId] = useState(init.platformId);
   const ownership = useOwnershipForm(init);

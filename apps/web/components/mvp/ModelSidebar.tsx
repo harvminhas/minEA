@@ -9,6 +9,7 @@ import { useTenancy } from "@/lib/tenancy";
 import { modelPath, type ModelSection } from "@/lib/mvp-paths";
 import { useModelNavExtras } from "@/lib/use-repository-nav-counts";
 import { catalogStats } from "@/lib/model-catalog";
+import { UI_TYPE_LABEL } from "@/lib/relationship-targets";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 
 type IconType = typeof LayoutGrid;
@@ -81,28 +82,28 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
       match: ["/model/overview"],
     },
     {
-      label: "Applications",
+      label: UI_TYPE_LABEL.application,
       href: modelPath(basePath, "applications"),
       icon: Boxes,
       count: countTypes(["application", "solution", "technical_capability"]),
       match: ["/application/applications", "/application/components", "/model/applications"],
     },
     {
-      label: "Platforms & cloud",
+      label: UI_TYPE_LABEL.cloud_service,
       href: modelPath(basePath, "platforms"),
       icon: Cloud,
       count: countTypes(["cloud_service"]),
       match: ["/model/platforms"],
     },
     {
-      label: "Servers & devices",
+      label: UI_TYPE_LABEL.model,
       href: modelPath(basePath, "servers"),
       icon: Server,
       count: countTypes(["model"]),
       match: ["/model/servers", "/model/infrastructure"],
     },
     {
-      label: "Locations",
+      label: UI_TYPE_LABEL.location,
       href: modelPath(basePath, "locations"),
       icon: MapPin,
       count: catalog.data ? catalog.data.locations?.length ?? 0 : undefined,
@@ -116,25 +117,25 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
       match: ["/integration/", "/model/connections"],
       children: [
         {
-          label: "Flows",
+          label: UI_TYPE_LABEL.integration_flow,
           href: `${basePath}/integration/flows`,
           count: countTypes(["integration_flow"]),
           match: ["/integration/flows"],
         },
         {
-          label: "APIs",
+          label: UI_TYPE_LABEL.api,
           href: `${basePath}/integration/apis`,
           count: countTypes(["api"]),
           match: ["/integration/apis"],
         },
         {
-          label: "Events",
+          label: UI_TYPE_LABEL.event,
           href: `${basePath}/integration/events`,
           count: countTypes(["event"]),
           match: ["/integration/events"],
         },
         {
-          label: "Integration infra",
+          label: UI_TYPE_LABEL.tool,
           href: `${basePath}/integration/tools`,
           count: countTypes(["tool"]),
           match: ["/integration/tools"],
@@ -142,7 +143,7 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
       ],
     },
     {
-      label: "Vendors & contracts",
+      label: UI_TYPE_LABEL.external_party,
       href: modelPath(basePath, "vendors"),
       icon: Shield,
       count: catalog.data ? stats.vendorCount : undefined,
@@ -179,10 +180,10 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
 
   const architecture: NavItem[] = [
     {
-      label: "Capabilities",
-      href: `${basePath}/business/capabilities`,
-      count: extra("business/capabilities"),
-      match: ["/business/capabilities"],
+      label: UI_TYPE_LABEL.capability,
+      href: modelPath(basePath, "capabilities"),
+      count: countTypes(["capability"]),
+      match: ["/model/capabilities", "/business/capabilities"],
     },
     {
       label: "Processes",
@@ -191,7 +192,7 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
       match: ["/views/processes"],
     },
     {
-      label: "Roadmaps",
+      label: UI_TYPE_LABEL.roadmap_item,
       href: `${basePath}/strategy/roadmaps`,
       count: countTypes(["roadmap_item"]),
       match: ["/strategy/roadmaps"],
@@ -209,19 +210,19 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
       match: ["/data/"],
       children: [
         {
-          label: "Entities",
+          label: UI_TYPE_LABEL.data_object,
           href: `${basePath}/data/data-objects`,
           count: countTypes(["data_object"]),
           match: ["/data/data-objects"],
         },
         {
-          label: "Stores",
+          label: UI_TYPE_LABEL.data_store,
           href: `${basePath}/data/data-stores`,
           count: countTypes(["data_store"]),
           match: ["/data/data-stores"],
         },
         {
-          label: "Domains",
+          label: UI_TYPE_LABEL.data_domain,
           href: `${basePath}/data/data-domains`,
           count: countTypes(["data_domain"]),
           match: ["/data/data-domains"],
@@ -309,7 +310,7 @@ function NavRows({
     !childActive &&
     (isActive(pathname, item.match) ||
       (active === "overview" && item.label === "Overview") ||
-      (active === "vendors" && item.label === "Vendors & contracts"));
+      (active === "vendors" && item.label === UI_TYPE_LABEL.external_party));
   const Icon = item.icon;
   const className = cn(
     "flex w-full items-center gap-2 rounded-lg py-1.5 text-left text-[13.5px]",

@@ -9,7 +9,7 @@ import { modelItemPath, modelPath, type ModelSection } from "@/lib/mvp-paths";
 import { AgingTile, PlatformsTable, ServersTable } from "@/components/mvp/InfraTables";
 import { LocationsTable } from "@/components/mvp/LocationsTable";
 import { describeTypes } from "@/lib/ask/deterministic";
-import { catalogStats, moneyLabel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
+import { catalogStats, moneyLabel, rowForPanel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { QuickCost } from "@/components/mvp/CostSection";
 import { AddChip, Pill } from "@/components/mvp/pills";
@@ -29,6 +29,7 @@ const SECTION_TITLE: Record<ModelSection, string> = {
   platforms: "Platforms & cloud",
   servers: "Servers & devices",
   locations: "Locations",
+  capabilities: "Capabilities",
   infrastructure: "Infrastructure",
   connections: "Connections",
   vendors: "Vendors & contracts",
@@ -48,7 +49,13 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const rows = catalog.data?.rows ?? [];
   const connections = catalog.data?.connections ?? [];
   const stats = catalogStats(rows);
-  const selected = rows.find((row) => row.id === selectedId) ?? null;
+  const selected = useMemo(() => {
+    if (!selectedId) return null;
+    const fromRows = rows.find((row) => row.id === selectedId);
+    if (fromRows) return fromRows;
+    const object = catalog.data?.objects.find((item) => item.id === selectedId);
+    return object ? rowForPanel(object) : null;
+  }, [catalog.data?.objects, rows, selectedId]);
 
   const [query, setQuery] = useState("");
   const [typeChip, setTypeChip] = useState("All");
@@ -120,7 +127,8 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
         )}
         {section === "platforms" && <PlatformsTable rows={rows} selectedId={selectedId} anywhere={anywhere} />}
         {section === "servers" && <ServersTable rows={rows} selectedId={selectedId} anywhere={anywhere} />}
-        {section === "locations" && <LocationsTable anywhere={anywhere} />}
+        {section === "locations" && <LocationsTable anywhere={anywhere} selectedId={selectedId} />}
+        {section === "capabilities" && <CapabilitiesTable selectedId={selectedId} />}
         {section === "connections" && <ConnectionsList items={connections} basePath={basePath} />}
         {section === "vendors" && <VendorsTable vendors={vendors} anywhere={anywhere} />}
         {section === "owners" && <OwnersTable rows={rows} basePath={basePath} />}
@@ -567,6 +575,47 @@ function OwnersTable({ rows, basePath }: { rows: CatalogRow[]; basePath: string 
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function CapabilitiesTable({ selectedId }: { selectedId?: string }) {
+  const router = useRouter();
+  const { basePath } = useTenancy();
+  const catalog = useModelCatalog();
+  const capabilities = (catalog.data?.objects ?? []).filter((object) => object.type === "capability");
+  return (
+    <div className="px-6 py-5">
+      <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">WHAT THE BUSINESS DOES</p>
+      <h1 className="mb-4 text-[22px] font-semibold text-[#1c2230]">
+        Capabilities <span className="text-[14px] font-normal text-[#8b90a0]">{capabilities.length}</span>
+      </h1>
+      <table className="w-full border-collapse text-left text-[13px]">
+        <thead>
+          <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
+            <th className="h-11 px-2 font-medium">Name</th>
+            <th className="h-11 px-2 font-medium">Owner</th>
+          </tr>
+        </thead>
+        <tbody>
+          {capabilities.map((capability) => (
+            <tr
+              key={capability.id}
+              onClick={() => router.push(modelItemPath(basePath, "capabilities", capability.id))}
+              className={cn(
+                "cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]",
+                selectedId === capability.id && "bg-[#f6f5ff]"
+              )}
+            >
+              <td className="px-2 py-3 font-medium text-[#1c2230]">{capability.name}</td>
+              <td className="px-2 py-3">
+                {capability.owner_team_name || capability.point_of_contact_name || capability.owner || "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {capabilities.length === 0 && <p className="py-8 text-[13px] text-[#8b90a0]">No capabilities yet.</p>}
     </div>
   );
 }
