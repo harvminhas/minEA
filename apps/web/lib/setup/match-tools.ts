@@ -1,7 +1,7 @@
 import { TOOL_CATALOG as catalog } from "@/lib/catalog/tools-catalog";
 
 export type ToolHosting = "saas" | "own" | "either";
-export type ToolKind = "app" | "server";
+export type ToolKind = "app" | "server" | "platform";
 
 export type ToolRecord = {
   name: string;
@@ -96,13 +96,29 @@ function tierFor(input: string, tool: ToolRecord): "exact" | "token" | "fuzzy" |
   return null;
 }
 
-export function matchEntries(text: string): MatchItem[] {
+/** A catalog name or alias equal to the typed text. Token and fuzzy hits do not count. */
+export function exactCatalogTool(text: string): ToolRecord | null {
+  const key = normalizeTerm(text);
+  if (!key) return null;
+  const hits = TOOL_CATALOG.filter((tool) =>
+    [tool.name, ...tool.aliases].some((name) => normalizeTerm(name) === key),
+  );
+  return hits.length === 1 ? hits[0]! : null;
+}
+
+export function matchEntries(text: string, kind?: ToolKind): MatchItem[] {
+  const tools = kind ? TOOL_CATALOG.filter((tool) => tool.kind === kind) : TOOL_CATALOG;
+  const exactOnly = kind === "server" || kind === "platform";
   return splitEntries(text).map((input) => {
     const key = normalizeTerm(input);
     const hits = { exact: [] as ToolRecord[], token: [] as ToolRecord[], fuzzy: [] as ToolRecord[] };
-    for (const tool of TOOL_CATALOG) {
+    for (const tool of tools) {
       const tier = tierFor(key, tool);
       if (tier) hits[tier].push(tool);
+    }
+    if (exactOnly) {
+      hits.token = [];
+      hits.fuzzy = [];
     }
     const tier = hits.exact.length ? "exact" : hits.token.length ? "token" : hits.fuzzy.length ? "fuzzy" : null;
     const options = tier ? hits[tier] : [];

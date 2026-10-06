@@ -96,7 +96,9 @@ function wsBase(orgSlug: string, workspaceSlug: string) {
   return `/orgs/${orgSlug}/workspaces/${workspaceSlug}`;
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit & { token?: string }): Promise<T> {
+type ApiInit = RequestInit & { token?: string; returnStatus?: boolean };
+
+async function apiFetch<T>(path: string, init?: ApiInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const maxAttempts = method === "GET" || method === "HEAD" ? 3 : 1;
   return apiRequestGate.run(async () => {
@@ -115,8 +117,8 @@ async function apiFetch<T>(path: string, init?: RequestInit & { token?: string }
   });
 }
 
-async function apiFetchOnce<T>(path: string, init?: RequestInit & { token?: string }): Promise<T> {
-  const { token, ...fetchInit } = init ?? {};
+async function apiFetchOnce<T>(path: string, init?: ApiInit): Promise<T> {
+  const { token, returnStatus, ...fetchInit } = init ?? {};
   const sharePath = getShareApiPath(path);
   const resolvedPath = sharePath ?? path;
   const res = await fetch(apiV1Url(resolvedPath), {
@@ -135,8 +137,12 @@ async function apiFetchOnce<T>(path: string, init?: RequestInit & { token?: stri
         : JSON.stringify(err.detail) ?? "API error";
     throw new Error(`${res.status} ${detail} (${resolvedPath})`);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json();
+  if (res.status === 204) {
+    return (returnStatus ? { body: undefined, status: res.status } : undefined) as T;
+  }
+  const body = await res.json();
+  if (returnStatus) return { body, status: res.status } as T;
+  return body;
 }
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -400,6 +406,18 @@ export const objectsApi = {
       token,
     }),
 
+  switchType: (
+    orgSlug: string,
+    workspaceSlug: string,
+    id: string,
+    body: { type: string; drop_relationship_ids: string[] },
+    token: string
+  ) =>
+    apiFetch<{ object: MinEAObject; relationships: Relationship[]; removed_relationship_ids: string[] }>(
+      `${wsBase(orgSlug, workspaceSlug)}/objects/${id}/switch-type`,
+      { method: "POST", body: JSON.stringify(body), token }
+    ),
+
   delete: (orgSlug: string, workspaceSlug: string, id: string, token: string) =>
     apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/objects/${id}`, { method: "DELETE", token }),
 
@@ -475,6 +493,14 @@ export const relationshipsApi = {
       method: "POST",
       body: JSON.stringify(body),
       token,
+    }),
+
+  createWithStatus: (orgSlug: string, workspaceSlug: string, body: RelationshipCreate, token: string) =>
+    apiFetch<{ body: Relationship; status: number }>(`${wsBase(orgSlug, workspaceSlug)}/relationships`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+      returnStatus: true,
     }),
 
   delete: (orgSlug: string, workspaceSlug: string, id: string, token: string) =>

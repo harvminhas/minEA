@@ -242,6 +242,7 @@ export function AddResult({
   onFillGap,
   onSave,
   onUndo,
+  onCancel,
 }: {
   rows: AddRow[];
   phase: AddPhase;
@@ -257,6 +258,7 @@ export function AddResult({
   onFillGap: (id: string, field: GapField, value: string) => void;
   onSave: () => void;
   onUndo: () => void;
+  onCancel: () => void;
 }) {
   const view = viewFromRows(rows, phase, reduced);
   const byId = useMemo(() => new Map(objects.map((object) => [object.id, object])), [objects]);
@@ -286,6 +288,9 @@ export function AddResult({
               ))}
             </div>
           )}
+          {view.mode === "records" && (
+            <button type="button" className="mt-3 text-[13px] text-[#6b7289]" onClick={onCancel}>Cancel</button>
+          )}
           {view.mode === "cards" && (
             <>
               <div className="mt-3 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
@@ -300,12 +305,15 @@ export function AddResult({
                   ))}
                 </div>
               )}
-              {view.button && (
-                <button type="button" className="mt-4 rounded-xl bg-[#5b4ce6] px-4 py-2 text-[14px] font-semibold text-white" onClick={() => { if (phase !== "saving") onSave(); }}>
-                  {phase === "saving" && <span className={view.motion ? "add-check mr-1" : "mr-1"}>✓</span>}
-                  {view.button}
-                </button>
-              )}
+              <div className="mt-4 flex items-center gap-3">
+                {view.button && (
+                  <button type="button" className="rounded-xl bg-[#5b4ce6] px-4 py-2 text-[14px] font-semibold text-white" onClick={() => { if (phase !== "saving") onSave(); }}>
+                    {phase === "saving" && <span className={view.motion ? "add-check mr-1" : "mr-1"}>✓</span>}
+                    {view.button}
+                  </button>
+                )}
+                <button type="button" className="text-[13px] text-[#6b7289]" disabled={phase === "saving"} onClick={onCancel}>Cancel</button>
+              </div>
               {phase === "error" && error && <p className="mt-2 text-[13px] text-[#b42318]">{error}</p>}
             </>
           )}
@@ -315,7 +323,15 @@ export function AddResult({
   );
 }
 
-export function AskAdd({ initialText, onSaved }: { initialText: string; onSaved?: (receipt: AddReceipt) => void }) {
+export function AskAdd({
+  initialText,
+  kind = "app",
+  onSaved,
+}: {
+  initialText: string;
+  kind?: "app" | "platform";
+  onSaved?: (receipt: AddReceipt) => void;
+}) {
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
   const { getToken } = useAuth();
   const catalog = useModelCatalog();
@@ -345,8 +361,22 @@ export function AskAdd({ initialText, onSaved }: { initialText: string; onSaved?
 
   useEffect(() => {
     if (edited.current || phase !== "idle") return;
-    setRows(prepareRows(initialText, "app", estate));
-  }, [initialText, estate, phase]);
+    setRows(prepareRows(initialText, kind, estate));
+  }, [initialText, estate, phase, kind]);
+
+  useEffect(() => {
+    if (phase === "saving" || (rows.length === 0 && phase !== "saved")) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setRows([]);
+      setSnapshot(null);
+      setError("");
+      setPhase("idle");
+      setClosed(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase, rows.length]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -454,6 +484,11 @@ export function AskAdd({ initialText, onSaved }: { initialText: string; onSaved?
       onFillGap={(id, field, value) => { void fillGap(id, field, value); }}
       onSave={() => { void save(); }}
       onUndo={() => { void undo(); }}
+      onCancel={() => {
+        setRows([]);
+        setError("");
+        setClosed(true);
+      }}
     />
   );
 }

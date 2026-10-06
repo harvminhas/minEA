@@ -13,7 +13,6 @@ import {
   PLATFORM_LIFECYCLE,
   PLATFORM_SLA,
   PLATFORM_TYPES,
-  PLATFORM_VENDORS,
 } from "@/lib/platform-utils";
 import { RUNTIME_COST_MODEL, RUNTIME_HOSTING, RUNTIME_KINDS, RUNTIME_PROVIDERS } from "@/lib/runtime-utils";
 import { systemCategorySelectOptions } from "@/lib/system-category";
@@ -91,6 +90,7 @@ export const INTERNAL_KEYS = [
   "carrier",
   "annual_cost", // legacy, API writes it back from cost_lines
   "catalog_tool",
+  "vendor", // kept beside the supplied_by link; the Vendor field writes both
 ] as const;
 
 export const SYSTEM_LIFECYCLE_OPTIONS = [
@@ -204,7 +204,13 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
     },
     tagsCol,
     ownerField(true),
-    { key: "vendor", label: "Vendor", section: "cost", editor: "text", source: { kind: "prop", key: "vendor" } },
+    {
+      key: "vendor",
+      label: "Vendor",
+      section: "cost",
+      editor: "relation",
+      source: { kind: "rel", edge: "supplied_by", dir: "out", target: ["external_party"], single: true },
+    },
     { key: "cost", label: "Annual cost", section: "cost", editor: "costLines", source: { kind: "prop", key: "cost_lines" } },
     { key: "contract_renewal", label: "Renewal", section: "cost", editor: "date", source: { kind: "prop", key: "contract_renewal" } },
     { key: "hosting_model", label: "Hosting model", section: "hosting", editor: "select", source: { kind: "prop", key: "hosting_model" }, options: APPLICATION_HOSTING_OPTIONS },
@@ -244,7 +250,13 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
     { key: "os_version", label: "OS version", section: "basics", editor: "text", source: { kind: "prop", key: "os_version" }, table: true },
     tagsCol,
     ownerField(true),
-    { key: "vendor", label: "Vendor", section: "cost", editor: "text", source: { kind: "prop", key: "vendor" } },
+    {
+      key: "vendor",
+      label: "Vendor",
+      section: "cost",
+      editor: "relation",
+      source: { kind: "rel", edge: "supplied_by", dir: "out", target: ["external_party"], single: true },
+    },
     { key: "runtime_provider", label: "Provider", section: "cost", editor: "select", source: { kind: "prop", key: "runtime_provider" }, options: byValue(RUNTIME_PROVIDERS) },
     { key: "cost", label: "Annual cost", section: "cost", editor: "costLines", source: { kind: "prop", key: "cost_lines" } },
     { key: "cost_model", label: "Cost model", section: "cost", editor: "select", source: { kind: "prop", key: "cost_model" }, options: byValue(RUNTIME_COST_MODEL) },
@@ -286,7 +298,14 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
     { key: "vendor_product", label: "Product", section: "basics", editor: "text", source: { kind: "prop", key: "vendor_product" } },
     tagsCol,
     ownerField(true),
-    { key: "vendor", label: "Vendor", section: "cost", editor: "text", source: { kind: "prop", key: "vendor" }, options: byValue(PLATFORM_VENDORS), table: true },
+    {
+      key: "vendor",
+      label: "Vendor",
+      section: "cost",
+      editor: "relation",
+      source: { kind: "rel", edge: "supplied_by", dir: "out", target: ["external_party"], single: true },
+      table: true,
+    },
     { key: "license_model", label: "License model", section: "cost", editor: "select", source: { kind: "prop", key: "license_model" }, options: byValue(PLATFORM_LICENSE) },
     { key: "cost", label: "Annual cost", section: "cost", editor: "costLines", source: { kind: "prop", key: "cost_lines" } },
     { key: "contract_renewal", label: "Renewal", section: "cost", editor: "date", source: { kind: "prop", key: "contract_renewal" }, table: true },

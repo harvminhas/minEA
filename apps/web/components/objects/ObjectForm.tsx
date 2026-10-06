@@ -13,8 +13,8 @@ import {
   OBJECT_TYPE_LABELS,
 } from "@minea/types";
 import { useTenancy } from "@/lib/tenancy";
-import { capabilityMapApi, objectsApi } from "@/lib/api-client";
-import { applyCatalogWrite } from "@/lib/use-model-catalog";
+import { capabilityMapApi, objectsApi, relationshipsApi } from "@/lib/api-client";
+import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import {
   filterEnterprisePlatforms,
@@ -197,6 +197,7 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
   const { getToken, user } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
+  const catalog = useModelCatalog();
   const enabled = useAuthQueryEnabled();
   const isEdit = !!initialValues;
   const isApplication = objectType === "application";
@@ -402,6 +403,27 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
             token!
           ),
         ]);
+      }
+      const vendorName = properties.vendor?.trim() ?? "";
+      if (!isEdit && isSystemApp && vendorName) {
+        const parties = (catalog.data?.objects ?? []).filter((object) => object.type === "external_party");
+        let party = parties.find((object) => object.name.trim().toLowerCase() === vendorName.toLowerCase());
+        if (!party) {
+          party = await objectsApi.create(orgSlug, workspaceSlug, {
+            type: "external_party",
+            name: vendorName,
+            properties: {},
+          }, token!);
+          applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: party });
+        }
+        const link = await relationshipsApi.create(orgSlug, workspaceSlug, {
+          type: "supplied_by",
+          from_object_id: saved.id,
+          from_type: saved.type,
+          to_object_id: party.id,
+          to_type: "external_party",
+        }, token!);
+        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: link });
       }
       return saved;
     },

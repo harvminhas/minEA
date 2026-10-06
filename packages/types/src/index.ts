@@ -768,6 +768,7 @@ export type RelationshipType =
   | "accesses"
   | "connects_to"
   | "located_at"
+  | "supplied_by"
   | "sends_data_to";
 
 export interface Relationship {

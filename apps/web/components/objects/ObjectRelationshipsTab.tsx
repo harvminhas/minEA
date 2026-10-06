@@ -12,6 +12,7 @@ import {
   otherRelationshipObjectId,
   relationshipFitnessLabel,
 } from "@/lib/relationship-display";
+import { alsoInDetailsLabel } from "@/lib/fields/shared-links";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -30,6 +31,7 @@ interface Props {
 export function ObjectRelationshipsTab({
   objectId,
   objectName,
+  objectType,
   relationships,
   relatedNameOverrides,
   onAdd,
@@ -123,6 +125,14 @@ export function ObjectRelationshipsTab({
                       {typeLine}
                       {fitness && (
                         <span className="text-gray-500 font-normal"> · {fitness}</span>
+                      )}
+                      {alsoInDetailsLabel(rel, objectId, objectType) && (
+                        <>
+                          {" "}
+                          <span className="ml-1.5 rounded bg-[#f3f4f8] px-1.5 py-0.5 text-[10px] font-medium text-[#4b5163]">
+                            Also in Details
+                          </span>
+                        </>
                       )}
                     </p>
                   </div>

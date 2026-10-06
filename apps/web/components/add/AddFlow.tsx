@@ -22,6 +22,7 @@ import {
   type EstateItem,
   type PlanInput,
 } from "@/lib/setup/add-plan";
+import { APP_OR_PLATFORM, nextPreset, typeGuidance } from "@/lib/setup/type-guidance";
 import { defaultHosting, type ToolRecord } from "@/lib/setup/match-tools";
 import { setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
@@ -38,6 +39,7 @@ const KIND_TITLE: Record<AddKind, string> = {
   platform: "Platform",
   server: "Server",
   location: "Location",
+  capability: "Capability",
   vendor: "Vendor",
 };
 
@@ -47,6 +49,7 @@ export function AddFlow({
   kind = "app",
   initialText,
   compact = false,
+  cards = false,
   onSaved,
 }: {
   origin: "setup" | "ask" | "model" | "views";
@@ -54,10 +57,15 @@ export function AddFlow({
   kind?: AddKind;
   initialText?: string;
   compact?: boolean;
+  /** Applications page. The Platforms page keeps its own add flow. */
+  cards?: boolean;
   onSaved?: (receipt: AddReceipt) => void;
 }) {
   if (origin === "setup") return <SetupFlow inline={inline} />;
-  if (origin === "ask" || (origin === "model" && kind === "app")) return <AskAdd initialText={initialText ?? ""} onSaved={onSaved} />;
+  const askKind = kind === "platform" ? "platform" : "app";
+  if (origin === "ask" || cards || (origin === "model" && kind === "app")) {
+    return <AskAdd initialText={initialText ?? ""} kind={askKind} onSaved={onSaved} />;
+  }
   return <AnywhereAdd origin={origin} kind={kind} initialText={initialText} compact={compact} inline={inline} />;
 }
 
@@ -94,6 +102,7 @@ function toPlan(text: string, preset: AddKind, estate: EstateItem[]): PlanInput[
     ownerName: "",
     renewal: "",
     yearly: row.status === "matched" && row.tool?.typicalAnnual ? String(row.tool.typicalAnnual) : "",
+    domainId: "",
   }));
 }
 
@@ -120,7 +129,9 @@ function AnywhereAdd({
     [catalog.data?.objects, catalog.data?.rows],
   );
   const [preset, setPreset] = useState<AddKind>(kind);
+  const [locked, setLocked] = useState(false);
   const [text, setText] = useState(initialText ?? "");
+  const guidance = useMemo(() => typeGuidance(text), [text]);
   const [rows, setRows] = useState<PlanInput[]>([]);
   const [started, setStarted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -135,6 +146,11 @@ function AnywhereAdd({
     setRows(toPlan(incoming, preset, estate));
     setStarted(true);
   }, [initialText, estate, preset]);
+
+  useEffect(() => {
+    if (locked) return;
+    setPreset((current) => nextPreset(current, text, false));
+  }, [locked, text]);
 
   const servers = useMemo(() => {
     const names = new Map<string, string>();
@@ -272,16 +288,34 @@ function AnywhereAdd({
   };
 
   const canUndo = Boolean(receipt && Date.now() < receipt.undoUntil && receipt.objectIds.length + receipt.relationshipIds.length > 0);
+  const reviewing = started && rows.length > 0 && !receipt;
+  const cancelReview = () => {
+    if (busy) return;
+    setStarted(false);
+    setRows([]);
+    setReceipt(null);
+    setError("");
+  };
+  useEffect(() => {
+    if (!reviewing && !receipt) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") cancelReview();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [reviewing, receipt, busy]);
 
   return (
     <section className="rounded-2xl border border-[#e6e8ee] bg-white p-4">
-      {(!inline || started) && preset === kind && KINDS.length > 1 && (
+      {(!inline || started) && KINDS.length > 1 && (
+      <div>
       <div className="flex flex-wrap gap-1.5">
         {KINDS.map((item) => (
           <button
             key={item}
             type="button"
             onClick={() => {
+              setLocked(true);
               setPreset(item);
               if (text.trim()) setRows(toPlan(text, item, estate));
             }}
@@ -290,6 +324,45 @@ function AnywhereAdd({
             {KIND_TITLE[item]}
           </button>
         ))}
+      </div>
+      <p className="mt-2 text-[12px] leading-5 text-[#6b7289]">{APP_OR_PLATFORM}</p>
+      {guidance.mode === "suggest" && !locked && (guidance.kind === "app" || guidance.kind === "platform") && preset === guidance.kind && (
+        <p className="mt-1 text-[12px] text-[#4b5163]">
+          {guidance.line}:{" "}
+          <button
+            type="button"
+            className="font-medium text-[#3f35b5]"
+            onClick={() => {
+              const next = preset === "platform" ? "app" : "platform";
+              setLocked(true);
+              setPreset(next);
+              if (text.trim()) setRows(toPlan(text, next, estate));
+            }}
+          >
+            change
+          </button>
+        </p>
+      )}
+      {guidance.mode === "both" && (
+        <ul className="mt-2 space-y-1">
+          {guidance.options.map((option) => (
+            <li key={option.kind}>
+              <button
+                type="button"
+                onClick={() => {
+                  setLocked(true);
+                  setPreset(option.kind);
+                  if (text.trim()) setRows(toPlan(text, option.kind, estate));
+                }}
+                className={`text-[12px] ${preset === option.kind ? "font-semibold text-[#3f35b5]" : "text-[#4b5163]"}`}
+              >
+                {option.kind === "app" ? "Application" : "Platform"}
+              </button>
+              <span className="text-[12px] text-[#6b7289]"> — {option.hint}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       </div>
       )}
 
@@ -397,9 +470,12 @@ function AnywhereAdd({
               </table>
             </div>
           )}
-          <button type="button" disabled={busy || rows.every((row) => row.existing && row.keep)} onClick={() => void run(save)} className="mt-3 rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50">
-            {busy ? "Saving…" : creating.length ? addButtonLabel(creating) : "Update"}
-          </button>
+          <div className="mt-3 flex items-center gap-3">
+            <button type="button" disabled={busy || rows.every((row) => row.existing && row.keep)} onClick={() => void run(save)} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50">
+              {busy ? "Saving…" : creating.length ? addButtonLabel(creating) : "Update"}
+            </button>
+            <button type="button" className="text-[13px] text-[#6b7289]" onClick={cancelReview}>Cancel</button>
+          </div>
         </>
       )}
 
@@ -407,7 +483,10 @@ function AnywhereAdd({
         <div className="mt-3 rounded-xl border border-[#e4e0ff] bg-[#f7f6ff] px-3 py-2 text-[13px] text-[#1c2230]">
           <p>{receipt.added}</p>
           {receipt.home && <p className="mt-1 text-[#4b5163]">{receipt.home}</p>}
-          {canUndo && <button type="button" className="mt-2 text-[13px] font-medium text-[#3f35b5]" onClick={() => void run(undo)}>Undo</button>}
+          <div className="mt-2 flex gap-3">
+            {canUndo && <button type="button" className="text-[13px] font-medium text-[#3f35b5]" onClick={() => void run(undo)}>Undo</button>}
+            <button type="button" className="text-[13px] text-[#6b7289]" onClick={cancelReview}>Cancel</button>
+          </div>
           {receipt.todos.length > 0 && <p className="mt-2">Your to-do list: {receipt.todos.length} new {receipt.todos.length === 1 ? "item" : "items"}</p>}
           {receipt.mapReady && <p className="mt-2 font-medium">Your map is ready.</p>}
         </div>

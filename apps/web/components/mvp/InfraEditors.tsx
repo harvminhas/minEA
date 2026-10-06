@@ -10,10 +10,13 @@ import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-m
 import type { InfraField } from "@/lib/infra/fields";
 import { REGISTRY, SECTION_LABEL, type FieldDef, type RecordType } from "@/lib/fields/registry";
 import { applyPatch, fieldIsRequired, readField, sameFieldValue, toPatch, type FieldEdge, type FieldRecord } from "@/lib/fields/save";
+import { isFieldManagedEdge, relationCreateLabel } from "@/lib/fields/shared-links";
 import { formatOwnershipLabel, ownershipIsValid, type OwnershipValue } from "@/lib/owner-fields";
-import { formatDate, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
+import { displayVendor, formatDate, knownVendors, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 import { dollarsFromCents, readCostLines, runCents } from "@/lib/cost/math";
+import { locationPresence } from "@/lib/infra/locations";
 import { readRuntimeInfra } from "@/lib/infra/read";
+import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { infraStatus } from "@/lib/infra/status";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { CostSection } from "@/components/mvp/CostSection";
@@ -199,6 +202,10 @@ function displayValue(def: FieldDef, record: FieldRecord, object: MinEAObject, e
   }
   if (def.editor === "relation") {
     const ids = Array.isArray(value) ? value.map(String) : value ? [String(value)] : [];
+    if (ids.length === 0 && def.key === "vendor") {
+      const stored = record.properties.vendor;
+      return displayVendor(typeof stored === "string" ? stored : "");
+    }
     return ids.map((id) => names.get(id) ?? id).join(", ");
   }
   if (def.editor === "select") {
@@ -299,9 +306,20 @@ export function InlineField({
   const { canEdit } = usePermissions();
   const queryClient = useQueryClient();
   const catalog = useModelCatalog();
+  const impact = useImpactGraph();
   const record = asRecord(object, edges);
   const lookup = names ?? new Map((catalog.data?.objects ?? []).map((item) => [item.id, item.name]));
-  const shown = displayValue(def, record, object, edges, lookup);
+  const shown = (() => {
+    if (def.key === "items_there" || def.key === "apps_affected") {
+      const apps = new Set(
+        (catalog.data?.rows ?? []).filter((row) => row.kind === "application").map((row) => row.id)
+      );
+      const presence = locationPresence(object.id, impact.relationships, impact.nodes, impact.edges, apps);
+      const count = def.key === "items_there" ? presence.items : presence.apps;
+      return count > 0 ? String(count) : "";
+    }
+    return displayValue(def, record, object, edges, lookup);
+  })();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
@@ -331,7 +349,24 @@ export function InlineField({
     onCloseEdit?.();
   };
 
-  const persist = async (value: unknown) => {
+  const [savingVendor, setSavingVendor] = useState(false);
+  const acceptVendor = async (vendorName: string) => {
+    if (savingVendor) return;
+    setSavingVendor(true);
+    try {
+      const token = await getToken();
+      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
+      const party = await ensureExternalParty(vendorName, catalog.data?.objects ?? [], orgSlug, workspaceSlug, token);
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: party });
+      await persist(party.id, party.name);
+    } catch (err) {
+      setError(`Couldn't save: ${err instanceof Error ? err.message : "Could not save"}`);
+    } finally {
+      setSavingVendor(false);
+    }
+  };
+
+  const persist = async (value: unknown, label?: string) => {
     if (sameFieldValue(readField(def, record, edges), value)) {
       close();
       return;
@@ -345,8 +380,15 @@ export function InlineField({
     let removed: Relationship[] = [];
     let pending: Relationship[] = [];
     let token: string | null = null;
+    if (def.editor === "relation") setEditing(false);
     try {
-      const patch = toPatch(def, value, record, edges);
+      const patch = toPatch(
+        def,
+        value,
+        record,
+        edges,
+        def.key === "vendor" ? label ?? lookup.get(String(Array.isArray(value) ? value[0] : value)) : undefined
+      );
       const applied = applyPatch(record, patch, edges);
       const optimistic = {
         ...object,
@@ -378,7 +420,9 @@ export function InlineField({
       }
       for (const rel of pending) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: rel.id });
       for (const rel of created) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: rel });
+      const kept = new Set(created.map((rel) => rel.id));
       for (const id of patch.removeRelIds ?? []) {
+        if (kept.has(id)) continue;
         await relationshipsApi.delete(orgSlug, workspaceSlug, id, token);
         deleted.push(id);
       }
@@ -448,7 +492,10 @@ export function InlineField({
   const valueClass = bare
     ? "truncate text-left text-[18px] font-semibold text-[#1c2230]"
     : "text-right text-[13px] text-[#1c2230]";
-  const label = bare ? null : <span className="text-[13px] text-[#6b7289]">{def.label}</span>;
+  const shared = def.source.kind === "rel" && isFieldManagedEdge(def.source.edge);
+  const label = bare ? null : (
+    <span className="text-[13px] text-[#6b7289]" title={shared ? "Shown in Relationships" : undefined}>{def.label}</span>
+  );
   let editor: ReactNode = null;
   if (editing && def.editor === "select") {
     editor = (
@@ -516,7 +563,7 @@ export function InlineField({
         def={def}
         value={readField(def, record, edges)}
         onCancel={close}
-        onSave={(value) => void persist(value)}
+        onSave={(value, label) => void persist(value, label)}
       />
     );
   }
@@ -546,7 +593,7 @@ export function InlineField({
             <p className="mt-1 text-[12px] text-[#8b90a0]">
               Suggested: {suggestion}
               {" · "}
-              <button type="button" className="text-[#5b4ce6]" onClick={() => void persist(suggestion)}>Accept</button>
+              <button type="button" className="text-[#5b4ce6] disabled:opacity-50" disabled={savingVendor} onClick={() => void acceptVendor(suggestion)}>Accept</button>
               {" · "}
               <button type="button" className="text-[#6b7289]" onClick={() => setDismissed(true)}>Dismiss</button>
             </p>
@@ -602,6 +649,22 @@ function OwnerPopover({
   );
 }
 
+function sameVendorName(left: string, right: string) {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+async function ensureExternalParty(
+  name: string,
+  objects: MinEAObject[],
+  orgSlug: string,
+  workspaceSlug: string,
+  token: string
+) {
+  const found = objects.find((item) => item.type === "external_party" && sameVendorName(item.name, name));
+  if (found) return found;
+  return objectsApi.create(orgSlug, workspaceSlug, { type: "external_party", name: name.trim(), properties: {} }, token);
+}
+
 function RelationPopover({
   def,
   value,
@@ -610,7 +673,7 @@ function RelationPopover({
 }: {
   def: FieldDef;
   value: unknown;
-  onSave: (value: unknown) => void;
+  onSave: (value: unknown, label?: string) => void;
   onCancel: () => void;
 }) {
   const source = def.source.kind === "rel" ? def.source : null;
@@ -621,27 +684,64 @@ function RelationPopover({
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string[]>(Array.isArray(value) ? value.map(String) : value ? [String(value)] : []);
   const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
   if (!source) return null;
   const needle = query.trim().toLowerCase();
-  const choices = (catalog.data?.objects ?? []).filter((item) => source.target.includes(item.type) && (!needle || item.name.toLowerCase().includes(needle)));
-  const choose = (id: string) => {
+  const objects = catalog.data?.objects ?? [];
+  const choices = objects.filter((item) => source.target.includes(item.type) && (!needle || item.name.toLowerCase().includes(needle)));
+  const partyNames = new Set(
+    objects.filter((item) => item.type === "external_party").map((item) => item.name.trim().toLowerCase())
+  );
+  const textNames = def.key === "vendor"
+    ? knownVendors(catalog.data?.rows ?? []).filter(
+        (name) => !partyNames.has(name.trim().toLowerCase()) && (!needle || name.toLowerCase().includes(needle))
+      )
+    : [];
+  const creatable = source.target.find((target) => target === "cloud_service" || target === "model" || target === "location");
+  const createLabel = relationCreateLabel(source.target, query, [...choices.map((item) => item.name), ...textNames]);
+  const noOptions = objects.every((item) => !source.target.includes(item.type));
+  const choose = (id: string, label?: string) => {
+    if (pending) return;
     if (source.single) {
-      onSave(id);
+      setQuery("");
+      onSave(id, label);
       return;
     }
     setPicked((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   };
-  const createLocation = async () => {
-    const name = query.trim();
-    if (!name || !orgSlug || !workspaceSlug) return;
+  const pickVendorName = async (vendorName: string) => {
+    if (pending || !orgSlug || !workspaceSlug) return;
+    setPending(true);
+    setQuery("");
     try {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
-      const created = await objectsApi.create(orgSlug, workspaceSlug, { type: "location", name, properties: { location_type: "other" } }, token);
+      const party = await ensureExternalParty(vendorName, objects, orgSlug, workspaceSlug, token);
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: party });
+      onSave(party.id, party.name);
+    } catch (err) {
+      setPending(false);
+      setError(err instanceof Error ? err.message : "Could not create");
+    }
+  };
+  const createNamed = async () => {
+    const name = query.trim();
+    if (!name || !creatable || !orgSlug || !workspaceSlug || pending) return;
+    setPending(true);
+    setQuery("");
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const created = await objectsApi.create(orgSlug, workspaceSlug, {
+        type: creatable,
+        name,
+        properties: creatable === "location" ? { location_type: "other" } : {},
+      }, token);
       applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: created });
       if (source.single) onSave(created.id);
       else setPicked((current) => [...current, created.id]);
     } catch (err) {
+      setPending(false);
       setError(err instanceof Error ? err.message : "Could not create");
     }
   };
@@ -659,19 +759,30 @@ function RelationPopover({
         }}
       />
       <div className="absolute right-0 z-20 w-[260px] rounded-lg border border-[#e6e8ee] bg-white p-2 text-left shadow-lg" onKeyDown={(event) => { if (event.key === "Escape") onCancel(); }}>
-        <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="mb-2 h-8 w-full rounded-md border border-[#e6e8ee] px-2 text-[13px]" />
+        <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={noOptions ? "Type a name to create" : "Search"} className="mb-2 h-8 w-full rounded-md border border-[#e6e8ee] px-2 text-[13px]" />
         <div className="max-h-48 space-y-1 overflow-y-auto">
           {choices.slice(0, 8).map((item) => (
-            <button key={item.id} type="button" onClick={() => choose(item.id)} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-[#fafafb]">
+            <button key={item.id} type="button" onClick={() => choose(item.id, def.key === "vendor" ? item.name : undefined)} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-[#fafafb]">
               {!source.single && <span className="mr-2">{picked.includes(item.id) ? "✓" : ""}</span>}
               {item.name}
             </button>
           ))}
-          {choices.length === 0 && <p className="px-2 py-2 text-[12px] text-[#8b90a0]">Nothing matches.</p>}
+          {textNames.slice(0, 8).map((name) => (
+            <button key={name} type="button" disabled={pending} onClick={() => void pickVendorName(name)} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-[#fafafb] disabled:opacity-50">
+              {name}
+            </button>
+          ))}
+          {choices.length === 0 && textNames.length === 0 && !createLabel && !noOptions && (
+            <p className="px-2 py-2 text-[12px] text-[#8b90a0]">Nothing matches.</p>
+          )}
         </div>
-        {source.target.includes("location") && query.trim() && (
-          <button type="button" className="mt-2 text-[12px] font-medium text-[#5b4ce6]" onClick={() => void createLocation()}>
-            + Create “{query.trim()}”
+        {createLabel && !pending && (
+          <button
+            type="button"
+            className="mt-2 text-[12px] font-medium text-[#5b4ce6]"
+            onClick={() => void (def.key === "vendor" ? pickVendorName(query.trim()) : createNamed())}
+          >
+            {createLabel}
           </button>
         )}
         {error && <p className="mt-1 text-[12px] text-[#b42318]">{error}</p>}

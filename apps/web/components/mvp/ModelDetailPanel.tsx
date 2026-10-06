@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2, X } from "lucide-react";
-import type { TechDebtHostKind } from "@minea/types";
+import type { MinEAObject, Relationship, TechDebtHostKind } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { connectionPhrase, groupImpactHits, impactOf } from "@/lib/impact/relationship-impact";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { useAuth } from "@/lib/auth-context";
+import { isCatalogObjectId } from "@/lib/mvp-paths";
 import { useTenancy } from "@/lib/tenancy";
 import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
@@ -16,10 +17,13 @@ import { SystemDiagramModal } from "@/components/application/SystemDiagram";
 import { SystemDiagramPreview } from "@/components/application/SystemDiagramPreview";
 import { isSystemObjectType } from "@/lib/platform-relationship-utils";
 import { REGISTRY, recordTypeOf } from "@/lib/fields/registry";
-import type { CatalogRow } from "@/lib/model-catalog";
-import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
+import { vendorRollup, type CatalogRow } from "@/lib/model-catalog";
+import { applyCatalogWrite, catalogQueryKey, useModelCatalog, type WorkspaceCatalog } from "@/lib/use-model-catalog";
 import { usePermissions } from "@/lib/use-permissions";
-import { relationshipsForObject } from "@/lib/relationships-for-object";
+import { relationshipsForIds, sameNamePartyIds } from "@/lib/relationships-for-object";
+import { formatRelationshipTriple } from "@/lib/relationship-display";
+import { suppliedByVendorClear } from "@/lib/fields/shared-links";
+import { planTypeSwitch, readableTypeConflict, type TypeSwitchPlan } from "@/lib/type-switch";
 import { ObjectRelationshipsTab } from "@/components/objects/ObjectRelationshipsTab";
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
 import { toast } from "@/hooks/use-toast";
@@ -43,13 +47,17 @@ export function ModelDetailPanel({
   const [openField, setOpenField] = useState<string | null>(null);
   const debt = useObjectTechDebtSummary(row.id, tab === "tech_debt");
   const impactGraph = useImpactGraph();
+  const catalog = useModelCatalog();
   const dependents = impactOf(impactGraph.nodes, impactGraph.edges, row.id);
   const recordType = recordTypeOf(row.object.type);
   const edges = toFieldEdges(impactGraph.relationships);
   const nameDef = recordType ? REGISTRY[recordType].find((field) => field.key === "name") : undefined;
-  const relationshipCount = impactGraph.relationships.filter(
-    (rel) => rel.from_object_id === row.id || rel.to_object_id === row.id
-  ).length;
+  const partyIds = sameNamePartyIds(catalog.data?.objects ?? [], row.id, row.object.type, row.name);
+  const relationshipCount = relationshipsForIds(catalog.data?.relationships ?? [], partyIds).length;
+  const storedObject = isCatalogObjectId(row.id);
+  useEffect(() => {
+    if (!storedObject && (tab === "history" || tab === "tech_debt")) setTab("details");
+  }, [storedObject, tab]);
 
   const history = useQuery({
     queryKey: ["object-history", row.id],
@@ -93,7 +101,7 @@ export function ModelDetailPanel({
             )}
           </div>
         </div>
-        {canDelete && (
+        {canDelete && storedObject && (
           <button
             type="button"
             onClick={() => {
@@ -115,6 +123,8 @@ export function ModelDetailPanel({
           activeTab={tab}
           onTabChange={setTab}
           showRelationships
+          showHistory={storedObject}
+          showTechDebt={storedObject}
           openDebtCount={debt.data?.open_count ?? 0}
           relationshipCount={relationshipCount}
           className="px-5"
@@ -129,6 +139,28 @@ export function ModelDetailPanel({
               <a href={askPath(basePath, `What breaks if ${row.name} goes down?`)} className="block rounded-lg bg-[#f4f3ff] px-3 py-2 text-[13px] font-medium text-[#3f35b5]">
                 Impact if down: ask what breaks if {row.name} goes down →
               </a>
+            )}
+            {row.object.type === "external_party" && (
+              <section>
+                <h3 className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">SUPPLIED ITEMS</h3>
+                {(() => {
+                  const items = vendorRollup(catalog.data?.rows ?? []).find(
+                    (vendor) => vendor.vendor.trim().toLowerCase() === row.name.trim().toLowerCase()
+                  )?.items ?? [];
+                  if (items.length === 0) return <p className="text-[13px] text-[#8b90a0]">Nothing lists this vendor yet.</p>;
+                  return items.map((item) => (
+                    <div key={item.id} className="py-1.5 text-[13px] text-[#1c2230]">{item.name}</div>
+                  ));
+                })()}
+              </section>
+            )}
+            {(row.object.type === "application" || row.object.type === "solution" || row.object.type === "technical_capability" || row.object.type === "cloud_service") && (
+              <TypeSwitch
+                canEdit={canEdit}
+                object={row.object}
+                relationships={catalog.data?.relationships ?? []}
+                objects={catalog.data?.objects ?? []}
+              />
             )}
             {recordType && (
               <RecordFields
@@ -195,6 +227,133 @@ export function ModelDetailPanel({
   );
 }
 
+const SWITCHABLE = new Set(["application", "solution", "technical_capability", "cloud_service"]);
+
+function TypeSwitch({
+  canEdit,
+  object,
+  relationships,
+  objects,
+}: {
+  canEdit: boolean;
+  object: MinEAObject;
+  relationships: Relationship[];
+  objects: MinEAObject[];
+}) {
+  const { getToken } = useAuth();
+  const { orgSlug, workspaceSlug } = useTenancy();
+  const queryClient = useQueryClient();
+  const [ask, setAsk] = useState<TypeSwitchPlan | null>(null);
+  const [forcedDrops, setForcedDrops] = useState<string[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (!canEdit || !SWITCHABLE.has(object.type)) return null;
+  const next = object.type === "cloud_service" ? "application" : "cloud_service";
+  const nameOf = (id: string) => objects.find((item) => item.id === id)?.name ?? "Untitled";
+  const freshPlan = () => planTypeSwitch({
+    objectId: object.id,
+    objectName: object.name,
+    currentType: object.type,
+    nextType: next,
+    relationships,
+    nameOf,
+  });
+  const linkLine = (rel: Relationship) => {
+    const otherId = rel.from_object_id === object.id ? rel.to_object_id : rel.from_object_id;
+    return formatRelationshipTriple(rel, object.id, object.name, nameOf(otherId)).nameLine;
+  };
+  const save = async (plan: TypeSwitchPlan) => {
+    if (!orgSlug || !workspaceSlug) return;
+    setBusy(true);
+    setError("");
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const dropIds = [...new Set([...plan.invalid, ...plan.merged].map((item) => item.id).concat(forcedDrops))];
+      const saved = await objectsApi.switchType(orgSlug, workspaceSlug, object.id, {
+        type: next,
+        drop_relationship_ids: dropIds,
+      }, token);
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved.object });
+      for (const rel of saved.relationships) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: rel });
+      for (const id of saved.removed_relationship_ids) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
+      setForcedDrops([]);
+      setAsk(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not change type";
+      const conflict = readableTypeConflict(message);
+      if (conflict && orgSlug && workspaceSlug) {
+        setError(conflict.message);
+        setForcedDrops((current) => [...new Set([...current, ...conflict.ids])]);
+        try {
+          await queryClient.refetchQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
+        } catch {
+          // Re-plan from the catalog we already have.
+        }
+        const fresh = queryClient.getQueryData<WorkspaceCatalog>(catalogQueryKey(orgSlug, workspaceSlug));
+        const rels = fresh?.relationships ?? relationships;
+        const objs = fresh?.objects ?? objects;
+        const names = (id: string) => objs.find((item) => item.id === id)?.name ?? "Untitled";
+        setAsk(planTypeSwitch({
+          objectId: object.id,
+          objectName: object.name,
+          currentType: object.type,
+          nextType: next,
+          relationships: rels,
+          nameOf: names,
+        }));
+        return;
+      }
+      setError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const start = () => {
+    setError("");
+    setAsk(freshPlan());
+  };
+  return (
+    <div>
+      <button type="button" className="text-[13px] font-medium text-[#3f35b5] disabled:opacity-50" disabled={busy} onClick={start}>
+        Change type: Application ↔ Platform
+      </button>
+      {ask && (
+        <div className="mt-2 rounded-lg border border-[#e6e8ee] p-3">
+          <SwitchLines title="Kept" lines={ask.kept.map((rel) => ({ id: rel.id, line: linkLine(rel) }))} />
+          <SwitchLines title="Remapped" lines={ask.remapped.map((rel) => ({ id: rel.id, line: linkLine(rel) }))} />
+          <SwitchLines title="Removed" lines={ask.invalid} />
+          {ask.merged.map((item) => (
+            <p key={item.id} className="mt-2 text-[13px] text-[#4b5163]">{item.line}</p>
+          ))}
+          <div className="mt-2 flex gap-2">
+            <button type="button" disabled={busy} className="rounded-lg bg-[#5b4ce6] px-2.5 py-1 text-[12px] font-semibold text-white disabled:opacity-50" onClick={() => void save(ask)}>
+              {ask.invalid.length ? "Change type and remove them" : "Change type"}
+            </button>
+            <button type="button" className="text-[12px] text-[#6b7289]" onClick={() => { setAsk(null); setForcedDrops([]); }}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {error && <p className="mt-1 text-[12px] text-[#b42318]">{error}</p>}
+    </div>
+  );
+}
+
+function SwitchLines({ title, lines }: { title: string; lines: { id: string; line: string }[] }) {
+  return (
+    <div className="mt-2 first:mt-0">
+      <p className="text-[12px] font-semibold text-[#3c4254]">{title}</p>
+      {lines.length === 0 ? (
+        <p className="text-[13px] text-[#8b90a0]">None</p>
+      ) : (
+        <ul className="mt-1 list-disc pl-4 text-[13px] text-[#4b5163]">
+          {lines.map((item) => <li key={item.id}>{item.line}</li>)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function RelList({ title, items, empty }: { title: string; items: { id: string; name: string }[]; empty: string }) {
   return (
     <section>
@@ -223,7 +382,9 @@ function Relationships({ row, canEdit }: { row: CatalogRow; canEdit: boolean }) 
   const rels = catalog.data?.relationships ?? [];
   const nameOf = (id: string) => objects.find((item) => item.id === id)?.name ?? "Untitled";
   const relatedNameOverrides = Object.fromEntries(objects.map((item) => [item.id, item.name]));
-  const rowRelationships = relationshipsForObject(rels, row.id);
+  const partyIds = sameNamePartyIds(objects, row.id, row.object.type, row.name);
+  const rowRelationships = relationshipsForIds(rels, partyIds);
+  const storedObject = isCatalogObjectId(row.id);
 
   const refreshAfterWrite = () => {
     if (!orgSlug || !workspaceSlug) return;
@@ -238,8 +399,14 @@ function Relationships({ row, canEdit }: { row: CatalogRow; canEdit: boolean }) 
     try {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
+      const rel = rels.find((item) => item.id === id);
       await relationshipsApi.delete(orgSlug, workspaceSlug, id, token);
       applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
+      if (rel && suppliedByVendorClear(rel, row.id)) {
+        const properties = { ...(row.object.properties ?? {}) };
+        delete properties.vendor;
+        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: { ...row.object, properties } });
+      }
       refreshAfterWrite();
     } catch (err) {
       toast({
@@ -330,8 +497,8 @@ function Relationships({ row, canEdit }: { row: CatalogRow; canEdit: boolean }) 
         objectType={row.object.type}
         relationships={rowRelationships}
         relatedNameOverrides={relatedNameOverrides}
-        onAdd={canEdit ? open : undefined}
-        onRemove={canEdit ? remove : undefined}
+        onAdd={canEdit && storedObject ? open : undefined}
+        onRemove={canEdit && storedObject ? remove : undefined}
       />
       {adding && (
         <RelationshipForm

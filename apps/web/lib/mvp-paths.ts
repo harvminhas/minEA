@@ -53,6 +53,20 @@ export function modelPath(basePath: string, section: ModelSection = "overview"):
   return `${basePath}/model/${section}`;
 }
 
+const OBJECT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isCatalogObjectId(id: string): boolean {
+  return OBJECT_ID.test(id);
+}
+
+export function modelItemId(id: string): string {
+  try {
+    return decodeURIComponent(id);
+  } catch {
+    return id;
+  }
+}
+
 export function modelItemPath(basePath: string, section: ModelSection, id: string): string {
-  return `${basePath}/model/${section}/${id}`;
+  return `${basePath}/model/${section}/${encodeURIComponent(id)}`;
 }

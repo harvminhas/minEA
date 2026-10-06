@@ -1,12 +1,13 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.objects import ChangeLog, MinEAObject
+from app.models.relationships import Relationship
 from app.models.tenancy import User
 from app.schemas.objects import (
     LinkSystemProductRequest,
@@ -18,12 +19,16 @@ from app.schemas.objects import (
     ObjectTechDebtSummary,
     ObjectUpdate,
     SystemProductLinksResponse,
+    TypeSwitchRequest,
+    TypeSwitchResult,
 )
 from app.services.authorization import require_limit
 from app.services.capability_validation import validate_object_write
 from app.services.cost_lines import apply_cost_lines
 from app.services.infra_fields import validate_infra_patch
 from app.services.object_history import describe_object_history
+from app.schemas.relationships import RelationshipRead
+from app.services.type_switch import SwitchLink, apply_type_switch, plan_type_switch
 from app.services.object_tech_debt import tech_debt_summary_for_object
 from app.services.owner_fields import apply_ownership_write_resolved, ownership_from_body, ownership_read_payload
 from app.services.system_products import (
@@ -137,13 +142,38 @@ async def list_objects(
     return ObjectListResponse(items=reads, total=total, page=page, page_size=page_size)
 
 
+async def _existing_external_party(
+    db: AsyncSession, workspace_id: UUID, name: str
+) -> MinEAObject | None:
+    cleaned = name.strip()
+    if not cleaned:
+        return None
+    result = await db.execute(
+        select(MinEAObject)
+        .where(
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.type == "external_party",
+            func.lower(MinEAObject.name) == cleaned.lower(),
+        )
+        .order_by(MinEAObject.created_at, MinEAObject.id)
+    )
+    return result.scalars().first()
+
+
 @router.post("", response_model=ObjectRead, status_code=status.HTTP_201_CREATED)
 async def create_object(
     body: ObjectCreate,
+    response: Response,
     ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
 ) -> MinEAObject:
     await ctx.require_permission(db, "object.create")
+    assert ctx.workspace
+    if body.type == "external_party":
+        existing = await _existing_external_party(db, ctx.workspace.id, body.name)
+        if existing is not None:
+            response.status_code = status.HTTP_200_OK
+            return await _to_read(db, existing)
     await require_limit(
         db, ctx.org_id, "max_objects_per_workspace", workspace_id=ctx.workspace.id, pending_delta=1
     )
@@ -388,6 +418,86 @@ async def update_object(
     await db.commit()
     await db.refresh(obj)
     return await _to_read(db, obj)
+
+
+@router.post("/{object_id}/switch-type", response_model=TypeSwitchResult)
+async def switch_object_type(
+    object_id: UUID,
+    body: TypeSwitchRequest,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> TypeSwitchResult:
+    await ctx.require_permission(db, "object.edit")
+    assert ctx.workspace
+    obj = (
+        await db.execute(
+            select(MinEAObject).where(
+                MinEAObject.id == object_id,
+                MinEAObject.workspace_id == ctx.workspace.id,
+                MinEAObject.org_id == ctx.org_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
+    rows = (
+        await db.execute(
+            select(Relationship).where(
+                Relationship.workspace_id == ctx.workspace.id,
+                or_(Relationship.from_object_id == obj.id, Relationship.to_object_id == obj.id),
+            )
+        )
+    ).scalars().all()
+    links = [
+        SwitchLink(
+            id=str(rel.id),
+            type=rel.type,
+            from_object_id=str(rel.from_object_id),
+            from_type=rel.from_type,
+            to_object_id=str(rel.to_object_id),
+            to_type=rel.to_type,
+        )
+        for rel in rows
+    ]
+    other_ids = [
+        rel.to_object_id if rel.from_object_id == obj.id else rel.from_object_id
+        for rel in rows
+    ]
+    names: dict[str, str] = {}
+    if other_ids:
+        for row_id, row_name in (
+            await db.execute(select(MinEAObject.id, MinEAObject.name).where(MinEAObject.id.in_(other_ids)))
+        ).all():
+            names[str(row_id)] = row_name
+    try:
+        plan = plan_type_switch(str(obj.id), obj.type, body.type, links, names)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    confirmed = {str(item) for item in body.drop_relationship_ids}
+    blocking = [*plan.invalid, *plan.merged]
+    if not {item.id for item in blocking} <= confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"invalid": [{"id": item.id, "line": item.line} for item in blocking]},
+        )
+    kept, removed = await apply_type_switch(
+        db,
+        obj,
+        list(rows),
+        plan,
+        new_type=body.type,
+        user_id=ctx.user_id,
+    )
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
+    await db.commit()
+    await db.refresh(obj)
+    for rel in kept:
+        await db.refresh(rel)
+    return TypeSwitchResult(
+        object=await _to_read(db, obj),
+        relationships=[RelationshipRead.model_validate(rel) for rel in kept],
+        removed_relationship_ids=removed,
+    )
 
 
 @router.get("/{object_id}/tech-debt", response_model=ObjectTechDebtSummary)

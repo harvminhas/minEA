@@ -106,7 +106,7 @@ function vendorSuggestion(name: string): string | null {
   return null;
 }
 
-function displayVendor(raw?: string | null): string {
+export function displayVendor(raw?: string | null): string {
   const trimmed = raw?.trim() ?? "";
   if (!trimmed || HOSTING_NOT_VENDOR.has(trimmed)) return "";
   return PLATFORM_VENDOR_LABEL[trimmed] ?? trimmed;
@@ -259,7 +259,7 @@ export function catalogVendorNames(rows: CatalogRow[]): string[] {
 export function rowForPanel(object: MinEAObject): CatalogRow | null {
   const listed = rowFromObject(object);
   if (listed) return listed;
-  if (object.type !== "location" && object.type !== "capability") return null;
+  if (object.type !== "location" && object.type !== "capability" && object.type !== "external_party") return null;
   const ownerTeam = object.owner_team_name?.trim() || "";
   const ownerPerson = object.point_of_contact_name?.trim() || (!ownerTeam ? object.owner?.trim() || "" : "");
   const missing: CatalogMissing = {
@@ -275,7 +275,7 @@ export function rowForPanel(object: MinEAObject): CatalogRow | null {
     object,
     kind: "runtime",
     name: object.name?.trim() || "Untitled",
-    typeLabel: object.type === "location" ? "Location" : "Capability",
+    typeLabel: object.type === "location" ? "Location" : object.type === "capability" ? "Capability" : "Vendor",
     subtitle: "",
     ownerTeam,
     ownerPerson,
@@ -297,6 +297,23 @@ export function rowForPanel(object: MinEAObject): CatalogRow | null {
     missing,
     missingCount: missing.owner ? 1 : 0,
   };
+}
+
+/** A panel row for a vendor name that has no vendor object yet. */
+export function vendorPanelRow(id: string, name: string): CatalogRow {
+  const row = rowForPanel({
+    id,
+    workspace_id: "",
+    org_id: "",
+    type: "external_party",
+    name,
+    tags: [],
+    properties: {},
+    created_at: "1970-01-01T00:00:00Z",
+    updated_at: "1970-01-01T00:00:00Z",
+  });
+  if (!row) throw new Error("A vendor panel row needs a name");
+  return row;
 }
 
 type VendorBucket = {

@@ -1,5 +1,7 @@
 /** Location objects live in the objects table with type `location`. No new table. */
 
+import { impactOf, type ImpactEdge, type ImpactNode } from "@/lib/impact/relationship-impact";
+
 export const locationTypes = [
   { key: "office", label: "Office" },
   { key: "data_center", label: "Data center" },
@@ -26,4 +28,17 @@ export function locationMigrationPlan(notes: LocationNote[]): { name: string; se
     groups.set(key, group);
   }
   return [...groups.values()];
+}
+
+/** Same counts the Locations list shows: items located here, and applications impact reaches. */
+export function locationPresence(
+  locationId: string,
+  relationships: readonly { type: string; to_object_id: string }[],
+  nodes: ImpactNode[],
+  edges: ImpactEdge[],
+  applicationIds: ReadonlySet<string>
+): { items: number; apps: number } {
+  const items = relationships.filter((rel) => rel.type === "located_at" && rel.to_object_id === locationId).length;
+  const apps = impactOf(nodes, edges, locationId).filter((hit) => applicationIds.has(hit.id)).length;
+  return { items, apps };
 }

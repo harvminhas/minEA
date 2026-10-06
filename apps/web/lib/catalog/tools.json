@@ -139,5 +139,14 @@
     "kind": "app",
     "typicalAnnual": 10800,
     "unit": "year"
-  }
+  },
+  { "name": "Snowflake", "aliases": ["snowflake"], "vendor": "Snowflake", "category": "Analytics", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
+  { "name": "Databricks", "aliases": ["databricks"], "vendor": "Databricks", "category": "Analytics", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
+  { "name": "Microsoft Fabric", "aliases": ["microsoft fabric", "fabric"], "vendor": "Microsoft", "category": "Analytics", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
+  { "name": "Azure Functions", "aliases": ["azure functions"], "vendor": "Microsoft", "category": "Infrastructure", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
+  { "name": "AWS Lambda", "aliases": ["aws lambda", "lambda"], "vendor": "Amazon", "category": "Infrastructure", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
+  { "name": "Azure AI Foundry", "aliases": ["azure ai foundry"], "vendor": "Microsoft", "category": "AI", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
+  { "name": "Copilot Studio", "aliases": ["copilot studio"], "vendor": "Microsoft", "category": "AI", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
+  { "name": "Bedrock", "aliases": ["bedrock", "amazon bedrock"], "vendor": "Amazon", "category": "AI", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
+  { "name": "Vertex AI", "aliases": ["vertex ai", "vertex"], "vendor": "Google", "category": "AI", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" }
 ]

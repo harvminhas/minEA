@@ -1,13 +1,13 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.objects import MinEAObject
 from app.models.relationships import Relationship
-from app.schemas.relationships import RelationshipCreate, RelationshipRead
+from app.schemas.relationships import RelationshipCreate, RelationshipRead, identical_relationship
 from app.services.relationship_rules import (
     assert_data_entity_ownership_allowed,
     assert_data_store_ownership_allowed,
@@ -21,6 +21,7 @@ from app.services.data_domain_rollup import (
     sync_entity_domain_property,
 )
 from app.services.catalog_cache import mark_catalog_dirty
+from app.services.relationship_write import relationship_http_status, save_relationship, without_vendor_text
 from app.services.data_layer import add_data_link
 from app.services.tenancy import TenancyContext, get_workspace_context
 
@@ -78,9 +79,10 @@ async def _require_object_in_workspace(
         )
 
 
-@router.post("", response_model=RelationshipRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RelationshipRead)
 async def create_relationship(
     body: RelationshipCreate,
+    response: Response,
     ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
 ) -> Relationship:
@@ -101,6 +103,27 @@ async def create_relationship(
         object_id=body.to_object_id,
         role="Target",
     )
+
+    existing_rows = (
+        await db.execute(
+            select(Relationship)
+            .where(
+                Relationship.workspace_id == ctx.workspace.id,
+                Relationship.org_id == ctx.org_id,
+                Relationship.type == body.type,
+                Relationship.from_object_id == body.from_object_id,
+                Relationship.to_object_id == body.to_object_id,
+            )
+            .order_by(Relationship.created_at, Relationship.id)
+        )
+    ).scalars().all()
+    existing = identical_relationship(
+        existing_rows, body.type, body.from_object_id, body.to_object_id
+    )
+    if existing is not None:
+        response.status_code = relationship_http_status(False)
+        return existing
+    response.status_code = relationship_http_status(True)
 
     if body.type == "owns" and body.from_type == "application" and body.to_type == "data_store":
         await assert_data_store_ownership_allowed(
@@ -241,21 +264,23 @@ async def create_relationship(
                 detail="This store already belongs to this data domain.",
             )
 
-    rel = Relationship(
-        workspace_id=ctx.workspace.id,
-        org_id=ctx.org_id,
-        type=body.type,
-        from_object_id=body.from_object_id,
-        from_type=body.from_type,
-        to_object_id=body.to_object_id,
-        to_type=body.to_type,
-        attributes=body.attributes,
-        created_by=ctx.user_id,
+    rel, created = await save_relationship(
+        db,
+        Relationship(
+            workspace_id=ctx.workspace.id,
+            org_id=ctx.org_id,
+            type=body.type,
+            from_object_id=body.from_object_id,
+            from_type=body.from_type,
+            to_object_id=body.to_object_id,
+            to_type=body.to_type,
+            attributes=body.attributes,
+            created_by=ctx.user_id,
+        ),
     )
-    db.add(rel)
-    await db.flush()
-    await db.refresh(rel)
-    await mark_catalog_dirty(db, ctx.workspace.id)
+    response.status_code = relationship_http_status(created)
+    if created:
+        await mark_catalog_dirty(db, ctx.workspace.id)
     return rel
 
 
@@ -290,6 +315,18 @@ async def delete_relationship(
         entity_obj = entity_result.scalar_one_or_none()
         if entity_obj:
             await sync_entity_domain_property(entity_obj, domain_id=None)
+
+    if rel.type == "supplied_by":
+        source_result = await db.execute(
+            select(MinEAObject).where(
+                MinEAObject.id == rel.from_object_id,
+                MinEAObject.workspace_id == ctx.workspace.id,
+                MinEAObject.org_id == ctx.org_id,
+            )
+        )
+        source = source_result.scalar_one_or_none()
+        if source is not None:
+            source.properties = without_vendor_text(source.properties)
 
     await db.delete(rel)
     await db.flush()

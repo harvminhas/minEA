@@ -84,6 +84,7 @@ function linksForPair(source: string, target: string): LinkTarget[] {
   for (const type of new Set([...outbound, ...inverse])) {
     // TODO: real AI models need their own type later. Do not rename the stored "model" type.
     if (type === "uses_model") continue;
+    if (type === "sends_data_to" && source === "application" && target === "external_party") continue;
     const out = outbound.has(type);
     const inv = inverse.has(type);
     links.push({
@@ -179,12 +180,13 @@ export function patchForPickedLink(
   link: { type: string; target: string; direction: "outbound" | "inverse" },
   targetId: string,
   record: FieldRecord,
-  edges: FieldEdge[]
+  edges: FieldEdge[],
+  targetName?: string
 ): FieldPatch | null {
   const def = fieldForDialogLink(sourceType, link);
   if (!def || def.source.kind !== "rel") return null;
   const current = readField(def, record, edges);
   const existing = Array.isArray(current) ? current.map(String) : current ? [String(current)] : [];
   const value = def.source.single ? targetId : [...new Set([...existing, targetId])];
-  return toPatch(def, value, record, edges);
+  return toPatch(def, value, record, edges, def.key === "vendor" ? targetName ?? "" : undefined);
 }

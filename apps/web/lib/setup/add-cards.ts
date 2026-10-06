@@ -70,7 +70,7 @@ export function logoTint(name: string, custom: boolean): string {
 export function cardQuestion(row: AddRow): CardQuestion {
   if (row.existing) return "none";
   if (row.status === "weak" || row.status === "pick") return "fuzzy";
-  if (row.kind === "server" || row.kind === "location" || row.kind === "vendor") return "none";
+  if (row.kind === "server" || row.kind === "location" || row.kind === "vendor" || row.kind === "capability") return "none";
   if (row.tool?.hosting === "saas" || row.choice === "saas") return "none";
   return "hosting";
 }

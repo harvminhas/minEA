@@ -5,6 +5,7 @@ import {
   fieldForDialogLink,
   linkGroupsFor,
   linkTargetsFor,
+  linksForTarget,
   offeredSections,
   patchForPickedLink,
   type LinkTarget,
@@ -36,13 +37,13 @@ const EXPECTED: Record<string, string[]> = {
     "Vendors & contracts",
     "Data stores",
   ],
-  model: ["Applications", "Platforms & cloud", "Servers & devices", "Locations"],
+  model: ["Applications", "Platforms & cloud", "Servers & devices", "Locations", "Vendors & contracts"],
   location: ["Applications", "Platforms & cloud", "Servers & devices"],
   capability: ["Applications", "Capabilities"],
   integration_flow: ["Applications", "APIs", "Events", "Integration infra"],
   api: ["Applications", "Flows", "Integration infra"],
   event: ["Applications", "Flows", "Integration infra", "Data entities"],
-  external_party: ["Applications", "Platforms & cloud", "Vendors & contracts"],
+  external_party: ["Applications", "Platforms & cloud", "Servers & devices", "Vendors & contracts"],
 };
 
 function directions(link: LinkTarget): Array<"outbound" | "inverse"> {
@@ -83,6 +84,28 @@ test("offered sections follow the sidebar for each source", () => {
       .map((link) => link.type)
       .sort(),
     ["depends_on", "part_of", "replaces", "sends_data_to"]
+  );
+  assert.deepEqual(
+    linkTargetsFor("application")
+      .filter((link) => link.target === "external_party")
+      .map((link) => link.type),
+    ["supplied_by"]
+  );
+  assert.equal(
+    linksForTarget("external_party", "application").some((link) => link.type === "supplied_by" && link.direction === "inverse"),
+    true
+  );
+  assert.equal(
+    linksForTarget("external_party", "cloud_service").some((link) => link.type === "supplied_by" && link.direction === "inverse"),
+    true
+  );
+  assert.equal(
+    linksForTarget("cloud_service", "external_party").some((link) => link.type === "supplied_by" && link.direction === "outbound"),
+    true
+  );
+  assert.equal(
+    linksForTarget("model", "external_party").some((link) => link.type === "supplied_by" && link.direction === "outbound"),
+    true
   );
   assert.equal(linkTargetsFor("agent").some((link) => link.type === "uses_model"), false);
 
@@ -149,6 +172,27 @@ test("a picked field-backed link routes through toPatch", () => {
   assert.deepEqual(located?.removeRelIds, ["old-loc"]);
   assert.equal(located?.addRel?.[0]?.to_object_id, "new-site");
   assert.equal(located?.addRel?.length, 1);
+
+  const supplied = patchForPickedLink(
+    "application",
+    { type: "supplied_by", target: "external_party", direction: "outbound" },
+    "microsoft",
+    record("application", "m365"),
+    [{
+      id: "old-vendor",
+      type: "supplied_by",
+      from_object_id: "m365",
+      from_type: "application",
+      to_object_id: "old",
+      to_type: "external_party",
+    }],
+    "Microsoft"
+  );
+  assert.deepEqual(supplied?.removeRelIds, ["old-vendor"]);
+  assert.equal(supplied?.addRel?.[0]?.type, "supplied_by");
+  assert.equal(supplied?.addRel?.[0]?.to_object_id, "microsoft");
+  assert.equal(supplied?.addRel?.length, 1);
+  assert.equal((supplied?.object?.properties as { vendor?: string } | undefined)?.vendor, "Microsoft");
 
   for (const source of Object.keys(EXPECTED)) {
     for (const link of linkTargetsFor(source)) {

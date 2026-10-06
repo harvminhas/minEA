@@ -14,6 +14,7 @@ from app.models.objects import ChangeLog, MinEAObject
 from app.models.relationships import Relationship
 from app.schemas.objects import ObjectCreate, ObjectRead
 from app.schemas.relationships import RelationshipCreate, RelationshipRead
+from app.services.relationship_write import save_relationship
 from app.services.capability_validation import validate_object_write
 from app.services.cost_lines import apply_cost_lines
 from app.services.infra_fields import validate_infra_patch
@@ -220,21 +221,22 @@ async def apply_add_batch(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=detail,
             ) from exc
-        rel = Relationship(
-            workspace_id=workspace_id,
-            org_id=org_id,
-            type=checked.type,
-            from_object_id=checked.from_object_id,
-            from_type=checked.from_type,
-            to_object_id=checked.to_object_id,
-            to_type=checked.to_type,
-            attributes={},
-            created_by=user_id,
+        rel, created = await save_relationship(
+            db,
+            Relationship(
+                workspace_id=workspace_id,
+                org_id=org_id,
+                type=checked.type,
+                from_object_id=checked.from_object_id,
+                from_type=checked.from_type,
+                to_object_id=checked.to_object_id,
+                to_type=checked.to_type,
+                attributes={},
+                created_by=user_id,
+            ),
         )
-        db.add(rel)
-        await db.flush()
-        await db.refresh(rel)
-        rel_ids.append(rel.id)
+        if created:
+            rel_ids.append(rel.id)
         rels.append(rel)
 
     reads = [await to_read(db, obj) for obj in [*created_objects, *updated]]

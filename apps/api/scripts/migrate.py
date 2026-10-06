@@ -57,6 +57,7 @@ MIGRATION_FILES = [
     "039_entity_owns_backfill.sql",
     "043_catalog_dirty.sql",
     "044_membership_setup.sql",
+    "045_relationship_ends_unique.sql",
 ]
 
 

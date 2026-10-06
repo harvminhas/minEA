@@ -93,6 +93,9 @@ ALLOWED_TRIPLES: set[tuple[str, str, str]] = {
     ("located_at", "model", "location"),
     ("located_at", "cloud_service", "location"),
     ("located_at", "application", "location"),
+    ("supplied_by", "application", "external_party"),
+    ("supplied_by", "cloud_service", "external_party"),
+    ("supplied_by", "model", "external_party"),
     ("uses", "application", "integration_flow"),
 }
 
@@ -129,8 +132,20 @@ def _copy_application_links(alias: str) -> None:
 _copy_application_links("solution")
 _copy_application_links("technical_capability")
 
+# A vendor is a supplier, not a data destination.
+for _vendor_source in ("application", "solution", "technical_capability"):
+    ALLOWED_TRIPLES.discard(("sends_data_to", _vendor_source, "external_party"))
+
 _FLOW_HOW = {"api", "file", "manual", "integration_tool"}
 _FLOW_FREQUENCY = {"realtime", "daily", "ad_hoc"}
+
+
+def identical_relationship(rows, rel_type: str, from_id, to_id):
+    """The first row with this type and these ends. A later create returns it."""
+    for row in rows:
+        if row.type == rel_type and row.from_object_id == from_id and row.to_object_id == to_id:
+            return row
+    return None
 
 
 def relationship_rejection(rel_type: str, from_type: str, to_type: str) -> str | None:

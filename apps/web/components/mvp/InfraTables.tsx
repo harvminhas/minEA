@@ -18,6 +18,7 @@ import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { QuickCost } from "@/components/mvp/CostSection";
 import { AddChip } from "@/components/mvp/pills";
 import { AddFlow } from "@/components/add/AddFlow";
+import { AppPlatformHelp } from "@/components/mvp/AppPlatformHelp";
 import { cn } from "@/lib/utils";
 
 const COMPUTE_FOR_KIND: Record<string, string> = {
@@ -84,6 +85,7 @@ export function PlatformsTable({ rows, selectedId, anywhere = false }: { rows: C
           <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">SUITES AND CLOUDS YOU BUILD ON</p>
           <h1 className="text-[22px] font-semibold text-[#1c2230]">
             Platforms & cloud <span className="text-[14px] font-normal text-[#8b90a0]">{platforms.length}</span>
+            <AppPlatformHelp />
           </h1>
         </div>
         <div className="flex items-center gap-2">

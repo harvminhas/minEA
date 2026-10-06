@@ -117,7 +117,13 @@ export function readField(def: FieldDef, record: FieldRecord, edges?: FieldEdge[
   return "";
 }
 
-export function toPatch(def: FieldDef, value: unknown, record: FieldRecord, edges: FieldEdge[]): FieldPatch {
+export function toPatch(
+  def: FieldDef,
+  value: unknown,
+  record: FieldRecord,
+  edges: FieldEdge[],
+  label?: string
+): FieldPatch {
   const empty = blank(value);
   if (def.source.kind === "owner") {
     const next: OwnershipValue = empty
@@ -168,6 +174,9 @@ export function toPatch(def: FieldDef, value: unknown, record: FieldRecord, edge
       }
     }
     const patch: FieldPatch = { addRel, removeRelIds };
+    if (def.key === "vendor" && label !== undefined) {
+      patch.object = { properties: { vendor: empty || !label ? null : label } };
+    }
     if (def.key === "built_on" && record.type === "application") {
       patch.object = {
         properties: {

@@ -28,4 +28,12 @@ class Relationship(Base):
         Index("ix_relationships_workspace_type", "workspace_id", "type"),
         Index("ix_relationships_from_object_id", "from_object_id"),
         Index("ix_relationships_to_object_id", "to_object_id"),
+        Index(
+            "uq_relationships_ends",
+            "workspace_id",
+            "type",
+            "from_object_id",
+            "to_object_id",
+            unique=True,
+        ),
     )

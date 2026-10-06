@@ -2,22 +2,27 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Info, LayoutGrid, Plus, Table2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
-import { modelItemPath, modelPath, type ModelSection } from "@/lib/mvp-paths";
+import { modelItemId, modelItemPath, modelPath, type ModelSection } from "@/lib/mvp-paths";
 import { AgingTile, PlatformsTable, ServersTable } from "@/components/mvp/InfraTables";
 import { LocationsTable } from "@/components/mvp/LocationsTable";
 import { describeTypes } from "@/lib/ask/deterministic";
-import { catalogStats, moneyLabel, rowForPanel, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
-import { useModelCatalog } from "@/lib/use-model-catalog";
+import { catalogStats, moneyLabel, rowForPanel, vendorPanelRow, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
+import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
+import { objectsApi } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
 import { QuickCost } from "@/components/mvp/CostSection";
 import { AddChip, Pill } from "@/components/mvp/pills";
+import { AppPlatformHelp } from "@/components/mvp/AppPlatformHelp";
 import { ModelDetailPanel } from "@/components/mvp/ModelDetailPanel";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { AddFlow } from "@/components/add/AddFlow";
+import { APP_OR_PLATFORM, nextPreset, typeGuidance } from "@/lib/setup/type-guidance";
 import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
 import { addAnywhereEnabled } from "@/lib/flags";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
@@ -49,13 +54,19 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const rows = catalog.data?.rows ?? [];
   const connections = catalog.data?.connections ?? [];
   const stats = catalogStats(rows);
+  const vendors = useMemo(() => vendorRollup(rows), [rows]);
+  const selectedKey = selectedId ? modelItemId(selectedId) : "";
   const selected = useMemo(() => {
-    if (!selectedId) return null;
-    const fromRows = rows.find((row) => row.id === selectedId);
+    if (!selectedKey) return null;
+    const fromRows = rows.find((row) => row.id === selectedKey);
     if (fromRows) return fromRows;
-    const object = catalog.data?.objects.find((item) => item.id === selectedId);
-    return object ? rowForPanel(object) : null;
-  }, [catalog.data?.objects, rows, selectedId]);
+    const object = catalog.data?.objects.find((item) => item.id === selectedKey);
+    const panel = object ? rowForPanel(object) : null;
+    if (panel) return panel;
+    if (section !== "vendors") return null;
+    const bucket = vendors.find((vendor) => vendor.vendor === selectedKey);
+    return bucket ? vendorPanelRow(selectedKey, bucket.vendor) : null;
+  }, [catalog.data?.objects, rows, section, selectedKey, vendors]);
 
   const [query, setQuery] = useState("");
   const [typeChip, setTypeChip] = useState("All");
@@ -66,6 +77,10 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const [creating, setCreating] = useState<"runtime" | "platform" | "application" | null>(null);
   const [appAdd, setAppAdd] = useState(false);
   const [addText, setAddText] = useState("");
+  const [addKindLocked, setAddKindLocked] = useState(false);
+  const [addKindChoice, setAddKindChoice] = useState<"app" | "platform">("app");
+  const addKind = addKindLocked ? addKindChoice : nextPreset("app", addText, false) === "platform" ? "platform" : "app";
+  const addGuidance = typeGuidance(addText);
   const anywhere = addAnywhereEnabled();
 
   const source = rows.filter((row) => {
@@ -91,8 +106,6 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
 
   const open = (row: CatalogRow) => router.push(modelItemPath(basePath, section, row.id));
   const close = () => router.push(modelPath(basePath, section));
-
-  const vendors = useMemo(() => vendorRollup(rows), [rows]);
 
   useEffect(() => {
     if (section !== "infrastructure") return;
@@ -130,7 +143,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
         {section === "locations" && <LocationsTable anywhere={anywhere} selectedId={selectedId} />}
         {section === "capabilities" && <CapabilitiesTable selectedId={selectedId} />}
         {section === "connections" && <ConnectionsList items={connections} basePath={basePath} />}
-        {section === "vendors" && <VendorsTable vendors={vendors} anywhere={anywhere} />}
+        {section === "vendors" && <VendorsTable vendors={vendors} anywhere={anywhere} selectedId={selectedId} />}
         {section === "owners" && <OwnersTable rows={rows} basePath={basePath} />}
         {(section === "applications" || section === "infrastructure") && (
           <div className="px-6 py-5">
@@ -142,6 +155,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                 <h1 className="text-[22px] font-semibold text-[#1c2230]">
                   {SECTION_TITLE[section]}{" "}
                   <span className="text-[14px] font-normal text-[#8b90a0]">{filtered.length ? describeTypes(filtered.map((row) => row.typeLabel)) : "none"}</span>
+                  {section === "applications" && <AppPlatformHelp />}
                 </h1>
               </div>
               <div className="flex items-center gap-2">
@@ -160,7 +174,19 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                 ) : (
                   <button
                     type="button"
-                    onClick={() => (anywhere ? setAppAdd((open) => !open) : setCreating("application"))}
+                    onClick={() => {
+                      if (!anywhere) {
+                        setCreating("application");
+                        return;
+                      }
+                      setAppAdd((open) => {
+                        if (open) {
+                          setAddKindLocked(false);
+                          setAddKindChoice("app");
+                        }
+                        return !open;
+                      });
+                    }}
                     className="inline-flex items-center gap-1 rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white"
                   >
                     <Plus size={14} /> Add
@@ -177,7 +203,26 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                   placeholder="Slack, Zoom, the server in the back room"
                   className="mb-3 w-full rounded-xl border border-[#e6e8ee] px-3 py-2 text-[14px] outline-none focus:border-[#5b4ce6]"
                 />
-                <AddFlow origin="model" kind="app" compact initialText={addText} />
+                <p className="mb-1 text-[12px] leading-5 text-[#6b7289]">{APP_OR_PLATFORM}</p>
+                {addGuidance.mode === "suggest" &&
+                  !addKindLocked &&
+                  (addGuidance.kind === "app" || addGuidance.kind === "platform") &&
+                  addGuidance.kind === addKind && (
+                  <p className="mb-3 text-[12px] text-[#4b5163]">
+                    {addGuidance.line}:{" "}
+                    <button
+                      type="button"
+                      className="font-medium text-[#3f35b5]"
+                      onClick={() => {
+                        setAddKindLocked(true);
+                        setAddKindChoice(addKind === "platform" ? "app" : "platform");
+                      }}
+                    >
+                      change
+                    </button>
+                  </p>
+                )}
+                <AddFlow origin="model" kind={addKind} cards compact initialText={addText} />
               </div>
             )}
 
@@ -509,12 +554,21 @@ function ConnectionsList({ items, basePath }: { items: { id: string; name: strin
 function VendorsTable({
   vendors,
   anywhere = false,
+  selectedId,
 }: {
   vendors: ReturnType<typeof vendorRollup>;
   anywhere?: boolean;
+  selectedId?: string;
 }) {
+  const router = useRouter();
+  const { basePath } = useTenancy();
+  const catalog = useModelCatalog();
   const [open, setOpen] = useState(false);
   const total = vendors.reduce((sum, vendor) => sum + vendor.annual, 0);
+  const partyId = (name: string) =>
+    (catalog.data?.objects ?? []).find(
+      (object) => object.type === "external_party" && object.name.trim().toLowerCase() === name.trim().toLowerCase()
+    )?.id;
   return (
     <div className="px-6 py-5">
       <div className="mb-1 flex items-center justify-between gap-3">
@@ -539,15 +593,23 @@ function VendorsTable({
           </tr>
         </thead>
         <tbody>
-          {vendors.map((vendor) => (
-            <tr key={vendor.vendor} className="border-b border-[#f3f4f8]">
+          {vendors.map((vendor) => {
+            const rowId = partyId(vendor.vendor) ?? vendor.vendor;
+            const selectedKey = selectedId ? modelItemId(selectedId) : "";
+            return (
+            <tr
+              key={vendor.vendor}
+              onClick={() => router.push(modelItemPath(basePath, "vendors", rowId))}
+              className={cn("cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]", selectedKey === rowId && "bg-[#f6f5ff]")}
+            >
               <td className="px-2 py-3 font-medium">{vendor.vendor}</td>
               <td className="px-2 py-3">{vendor.annual ? moneyLabel(vendor.annual) : "—"}</td>
               <td className="px-2 py-3">{vendor.renewal?.renewalLabel || "—"}</td>
               <td className="px-2 py-3">{[...vendor.owners].join(", ") || "—"}</td>
               <td className="px-2 py-3">{vendor.items.length}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
       {vendors.length === 0 && <p className="py-8 text-[13px] text-[#8b90a0]">No vendors yet. Add a vendor on an application or infrastructure item.</p>}
@@ -581,15 +643,121 @@ function OwnersTable({ rows, basePath }: { rows: CatalogRow[]; basePath: string 
 
 function CapabilitiesTable({ selectedId }: { selectedId?: string }) {
   const router = useRouter();
-  const { basePath } = useTenancy();
+  const { basePath, orgSlug, workspaceSlug } = useTenancy();
+  const { getToken } = useAuth();
+  const queryClient = useQueryClient();
   const catalog = useModelCatalog();
   const capabilities = (catalog.data?.objects ?? []).filter((object) => object.type === "capability");
+  const domains = (catalog.data?.objects ?? []).filter((object) => object.type === "business_domain");
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [domainId, setDomainId] = useState("");
+  const [newDomain, setNewDomain] = useState(false);
+  const [domainName, setDomainName] = useState("");
+  const [error, setError] = useState("");
+  const createDomain = useMutation({
+    mutationFn: async () => {
+      const trimmed = domainName.trim();
+      if (!trimmed) throw new Error("Type a domain name first");
+      const token = await getToken();
+      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
+      return objectsApi.create(orgSlug, workspaceSlug, { type: "business_domain", name: trimmed, properties: {} }, token);
+    },
+    onSuccess: (created) => {
+      setDomainName("");
+      setNewDomain(false);
+      setDomainId(created.id);
+      setError("");
+      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: created });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+  const create = useMutation({
+    mutationFn: async () => {
+      const trimmed = name.trim();
+      if (!trimmed) throw new Error("Type a name first");
+      if (!domainId) throw new Error("Choose a domain");
+      const token = await getToken();
+      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
+      return objectsApi.create(orgSlug, workspaceSlug, {
+        type: "capability",
+        name: trimmed,
+        properties: { domain_id: domainId },
+      }, token);
+    },
+    onSuccess: (created) => {
+      setName("");
+      setError("");
+      setAdding(false);
+      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: created });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
   return (
     <div className="px-6 py-5">
-      <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">WHAT THE BUSINESS DOES</p>
-      <h1 className="mb-4 text-[22px] font-semibold text-[#1c2230]">
-        Capabilities <span className="text-[14px] font-normal text-[#8b90a0]">{capabilities.length}</span>
-      </h1>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">WHAT THE BUSINESS DOES</p>
+          <h1 className="text-[22px] font-semibold text-[#1c2230]">
+            Capabilities <span className="text-[14px] font-normal text-[#8b90a0]">{capabilities.length}</span>
+          </h1>
+        </div>
+        <button type="button" onClick={() => setAdding((value) => !value)} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">
+          + Add
+        </button>
+      </div>
+      {adding && (
+        <form
+          className="mb-4 flex flex-wrap items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            create.mutate();
+          }}
+        >
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Capability name"
+            className="h-8 w-[220px] rounded-lg border border-[#e6e8ee] px-2 text-[13px]"
+          />
+          <select
+            value={domainId}
+            onChange={(event) => setDomainId(event.target.value)}
+            className="h-8 rounded-lg border border-[#e6e8ee] px-2 text-[13px]"
+            aria-label="Domain"
+          >
+            <option value="">Domain</option>
+            {domains.map((domain) => (
+              <option key={domain.id} value={domain.id}>{domain.name}</option>
+            ))}
+          </select>
+          <button type="button" className="text-[13px] font-medium text-[#5b4ce6]" onClick={() => setNewDomain((value) => !value)}>
+            + New domain
+          </button>
+          {newDomain && (
+            <>
+              <input
+                value={domainName}
+                onChange={(event) => setDomainName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  createDomain.mutate();
+                }}
+                placeholder="Domain name"
+                className="h-8 w-[180px] rounded-lg border border-[#e6e8ee] px-2 text-[13px]"
+              />
+              <button type="button" className="h-8 rounded-lg border border-[#e6e8ee] px-2 text-[13px]" onClick={() => createDomain.mutate()}>
+                {createDomain.isPending ? "Adding…" : "Add domain"}
+              </button>
+            </>
+          )}
+          <button type="submit" className="h-8 rounded-lg bg-[#5b4ce6] px-3 text-[13px] font-semibold text-white">
+            {create.isPending ? "Adding…" : "Add"}
+          </button>
+          {error && <p className="w-full text-[12px] text-[#b42318]">{error}</p>}
+        </form>
+      )}
       <table className="w-full border-collapse text-left text-[13px]">
         <thead>
           <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">

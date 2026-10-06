@@ -9,9 +9,8 @@ import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
-import { impactOf } from "@/lib/impact/relationship-impact";
 import { infraConfig } from "@/lib/infra/infraConfig";
-import { locationMigrationPlan, locationTypeLabel, locationTypes } from "@/lib/infra/locations";
+import { locationMigrationPlan, locationPresence, locationTypeLabel, locationTypes } from "@/lib/infra/locations";
 import { applyCatalogWrite } from "@/lib/use-model-catalog";
 import { AddFlow } from "@/components/add/AddFlow";
 import { modelItemPath } from "@/lib/mvp-paths";
@@ -152,8 +151,13 @@ export function LocationsTable({ anywhere = false, selectedId }: { anywhere?: bo
               const props = location.properties ?? {};
               const typeKey = typeof props.location_type === "string" ? props.location_type : "";
               const addressText = typeof props.address === "string" ? props.address : "";
-              const items = impact.relationships.filter((rel) => rel.type === "located_at" && rel.to_object_id === location.id).length;
-              const apps = impactOf(impact.nodes, impact.edges, location.id).filter((hit) => rowById.get(hit.id)?.kind === "application").length;
+              const presence = locationPresence(
+                location.id,
+                impact.relationships,
+                impact.nodes,
+                impact.edges,
+                new Set(rows.filter((row) => row.kind === "application").map((row) => row.id))
+              );
               return (
                 <tr
                   key={location.id}
@@ -163,8 +167,8 @@ export function LocationsTable({ anywhere = false, selectedId }: { anywhere?: bo
                   <td className="px-2 py-3 font-medium text-[#1c2230]">{location.name}</td>
                   <td className="px-2 py-3">{dash(locationTypeLabel(typeKey))}</td>
                   <td className="px-2 py-3">{dash(addressText)}</td>
-                  <td className="px-2 py-3">{items || dash("")}</td>
-                  <td className="px-2 py-3">{apps || dash("")}</td>
+                  <td className="px-2 py-3">{presence.items || dash("")}</td>
+                  <td className="px-2 py-3">{presence.apps || dash("")}</td>
                   <td className="px-2 py-3">{dash(ownerName(location))}</td>
                 </tr>
               );

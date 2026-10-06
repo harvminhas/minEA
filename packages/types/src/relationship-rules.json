@@ -607,11 +607,6 @@
   [
     "sends_data_to",
     "application",
-    "external_party"
-  ],
-  [
-    "sends_data_to",
-    "application",
     "solution"
   ],
   [
@@ -682,11 +677,6 @@
   [
     "sends_data_to",
     "solution",
-    "external_party"
-  ],
-  [
-    "sends_data_to",
-    "solution",
     "solution"
   ],
   [
@@ -703,11 +693,6 @@
     "sends_data_to",
     "technical_capability",
     "cloud_service"
-  ],
-  [
-    "sends_data_to",
-    "technical_capability",
-    "external_party"
   ],
   [
     "sends_data_to",
@@ -738,6 +723,31 @@
     "subscribes",
     "technical_capability",
     "event"
+  ],
+  [
+    "supplied_by",
+    "application",
+    "external_party"
+  ],
+  [
+    "supplied_by",
+    "cloud_service",
+    "external_party"
+  ],
+  [
+    "supplied_by",
+    "model",
+    "external_party"
+  ],
+  [
+    "supplied_by",
+    "solution",
+    "external_party"
+  ],
+  [
+    "supplied_by",
+    "technical_capability",
+    "external_party"
   ],
   [
     "supported_by",

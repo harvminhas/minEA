@@ -8,6 +8,7 @@ from app.schemas.relationships import (
     ALLOWED_TRIPLES,
     HOSTING_ON_APPLICATION,
     RelationshipCreate,
+    identical_relationship,
 )
 
 
@@ -64,6 +65,29 @@ class RelationshipRulesTests(unittest.TestCase):
         self.assertNotIn(("exposes", "application", "tool"), ALLOWED_TRIPLES)
         self.assertIn(("affects", "roadmap_item", "application"), ALLOWED_TRIPLES)
         self.assertIn(("uses_model", "agent", "model"), ALLOWED_TRIPLES)
+
+    def test_app_to_vendor_data_link_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            _create("sends_data_to", "application", "external_party")
+        _create("supplied_by", "application", "external_party")
+        _create("supplied_by", "cloud_service", "external_party")
+        _create("supplied_by", "model", "external_party")
+        _create("sends_data_to", "cloud_service", "external_party")
+
+    def test_identical_relationship_returns_the_existing_row(self):
+        class Row:
+            def __init__(self, rel_type, from_id, to_id, row_id):
+                self.type = rel_type
+                self.from_object_id = from_id
+                self.to_object_id = to_id
+                self.id = row_id
+
+        first = Row("located_at", "as400", "east", "e1")
+        second = Row("located_at", "as400", "east", "e2")
+        other = Row("depends_on", "as400", "east", "d")
+        found = identical_relationship([other, first, second], "located_at", "as400", "east")
+        self.assertIs(found, first)
+        self.assertIsNone(identical_relationship([other], "located_at", "as400", "east"))
 
 
 if __name__ == "__main__":

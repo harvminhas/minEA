@@ -31,6 +31,9 @@ test("every allowed relationship type has one unique pair of labels", () => {
   assert.equal(RELATIONSHIP_LABELS.contains.reverse, "Stored in");
   assert.equal(RELATIONSHIP_LABELS.sends_data_to.reverse, "Gets data from");
   assert.equal(RELATIONSHIP_LABELS.uses_model.forward, "Runs on server");
+  assert.equal(RELATIONSHIP_LABELS.supplied_by.forward, "Supplied by");
+  assert.equal(RELATIONSHIP_LABELS.supplied_by.reverse, "Supplies");
+  assert.equal(RELATIONSHIP_LABELS.supplied_by.sentence("Microsoft 365", "Microsoft"), "Microsoft 365 is supplied by Microsoft");
   assert.equal(RELATIONSHIP_LABELS.runs_on.sentence("Microsoft 365", "Dynamics 365"), "Microsoft 365 runs on Dynamics 365");
 });
 
@@ -49,4 +52,21 @@ test("the stored target shows the reverse label", () => {
   };
   assert.equal(formatRelationshipTriple(rel, "hubspot", "HubSpot", "Microsoft 365").nameLine, "Needed by Microsoft 365");
   assert.equal(formatRelationshipTriple(rel, "m365", "Microsoft 365", "HubSpot").nameLine, "Depends on HubSpot");
+});
+
+test("a vendor shows the reverse supplied-by label", () => {
+  const rel: Relationship = {
+    id: "r",
+    workspace_id: "w",
+    org_id: "o",
+    type: "supplied_by",
+    from_object_id: "m365",
+    from_type: "application",
+    to_object_id: "microsoft",
+    to_type: "external_party",
+    attributes: {},
+    created_at: "2026-01-01T00:00:00Z",
+  };
+  assert.equal(formatRelationshipTriple(rel, "microsoft", "Microsoft", "Microsoft 365").nameLine, "Supplies Microsoft 365");
+  assert.equal(formatRelationshipTriple(rel, "m365", "Microsoft 365", "Microsoft").nameLine, "Supplied by Microsoft");
 });

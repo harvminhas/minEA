@@ -7,7 +7,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cpu, Plus, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { objectsApi } from "@/lib/api-client";
-import { applyCatalogWrite } from "@/lib/use-model-catalog";
+import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
+import { linkSuppliedByVendor } from "@/lib/vendor-link";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { VendorField } from "@/components/mvp/VendorField";
 import { useOwnershipForm } from "@/hooks/use-ownership-form";
@@ -95,6 +96,7 @@ export function CreateRuntimePanel({ initialName = "", onClose, onSuccess }: Pro
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
+  const catalog = useModelCatalog();
   const enabled = useAuthQueryEnabled();
   const [mounted, setMounted] = useState(false);
 
@@ -195,7 +197,17 @@ export function CreateRuntimePanel({ initialName = "", onClose, onSuccess }: Pro
         properties: properties as Record<string, unknown>,
       };
 
-      return objectsApi.create(orgSlug, workspaceSlug, { type: "model", ...body }, token);
+      const created = await objectsApi.create(orgSlug, workspaceSlug, { type: "model", ...body }, token);
+      await linkSuppliedByVendor({
+        queryClient,
+        orgSlug,
+        workspaceSlug,
+        token,
+        source: created,
+        vendorRaw: vendor,
+        objects: catalog.data?.objects ?? [],
+      });
+      return created;
     },
     onSuccess: (runtime) => {
       applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: runtime });

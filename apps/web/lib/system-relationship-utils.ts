@@ -66,6 +66,7 @@ const RELATIONSHIP_DIAGRAM_ORDER: Partial<Record<RelationshipType, number>> = {
   subscribes: 10,
   uses: 11,
   supported_by: 12,
+  supplied_by: 12,
   supports: 13,
   contains: 14,
   connects: 15,
@@ -144,6 +145,7 @@ export const SYSTEM_DIAGRAM_OBJECT_TYPES = new Set<ObjectType>([
   "api",
   "event",
   "capability",
+  "external_party",
 ]);
 
 export function extractSystemDiagramLinks(

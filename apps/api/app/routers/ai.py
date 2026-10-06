@@ -17,6 +17,7 @@ from app.models.objects import MinEAObject
 from app.models.relationships import Relationship
 from app.routers.workspaces import build_workspace_context_graph
 from app.schemas.relationships import triple_allowed
+from app.services.relationship_write import save_relationship
 from app.services.audit import log_audit
 from app.services.authorization import require_limit
 from app.services.plan_features import assert_plan_allows_ai_chat
@@ -173,8 +174,9 @@ async def ingest_commit(
             attributes=rel.attributes,
             created_by=ctx.user_id,
         )
-        db.add(r)
-        created_rels.append(str(r.id))
+        stored, created = await save_relationship(db, r)
+        if created:
+            created_rels.append(str(stored.id))
 
     await db.commit()
     return {"created_objects": created_objects, "created_relationships": created_rels}

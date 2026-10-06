@@ -48,5 +48,6 @@ export const RELATIONSHIP_LABELS: Record<RelationshipType, RelationshipLabel> = 
   accesses: label("Accesses", "Accessed by", (from, to) => `${from} accesses ${to}`),
   connects_to: label("Connects to", "Connected through", (from, to) => `${from} connects to ${to}`),
   located_at: label("Located at", "Location of", (from, to) => `${from} is located at ${to}`),
+  supplied_by: label("Supplied by", "Supplies", (from, to) => `${from} is supplied by ${to}`),
   sends_data_to: label("Sends data to", "Gets data from", (from, to) => `${from} sends data to ${to}`),
 };

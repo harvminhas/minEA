@@ -1,8 +1,8 @@
 import type { CostLine } from "@/lib/cost/math";
 import { splitAddList } from "@/lib/setup/add-intent";
-import { defaultHosting, matchEntries, normalizeTerm, planHosting, type HostingChoice, type MatchItem, type ToolRecord } from "@/lib/setup/match-tools";
+import { defaultHosting, matchEntries, normalizeTerm, planHosting, type HostingChoice, type MatchItem, type ToolKind, type ToolRecord } from "@/lib/setup/match-tools";
 
-export type AddKind = "app" | "platform" | "server" | "location" | "vendor";
+export type AddKind = "app" | "platform" | "server" | "location" | "capability" | "vendor";
 
 const EDITION = new Set(["online", "cloud", "workplace"]);
 
@@ -44,13 +44,15 @@ export function objectTypeFor(kind: AddKind): string {
   if (kind === "platform") return "cloud_service";
   if (kind === "server") return "model";
   if (kind === "location") return "location";
+  if (kind === "capability") return "capability";
   return "external_party";
 }
 
 export function kindLabel(kind: AddKind, count: number): string {
-  const word = kind === "app" ? "app" : kind === "platform" ? "platform" : kind === "server" ? "server" : kind === "location" ? "location" : "vendor";
+  const word = kind === "app" ? "app" : kind === "platform" ? "platform" : kind === "server" ? "server" : kind === "location" ? "location" : kind === "capability" ? "capability" : "vendor";
   if (count === 1) return word;
   if (word === "app") return "apps";
+  if (word === "capability") return "capabilities";
   return `${word}s`;
 }
 
@@ -62,8 +64,7 @@ export function dedupeKey(value: string): string {
     .join(" ");
 }
 
-export function resolveKind(item: MatchItem, preset: AddKind): AddKind {
-  if (item.tool?.kind === "server") return "server";
+export function resolveKind(_item: MatchItem, preset: AddKind): AddKind {
   return preset;
 }
 
@@ -109,8 +110,24 @@ export function categoryHint(tool: ToolRecord | null, estate: EstateItem[]): str
   return `${tool.name} is the same kind of app as ${match.name}. Is one replacing the other?`;
 }
 
+const CATALOG_KIND: Partial<Record<AddKind, ToolKind>> = {
+  app: "app",
+  platform: "platform",
+  server: "server",
+};
+
+function blankMatch(input: string): MatchItem {
+  return { input, status: "custom", tool: null, options: [], customBuilt: false };
+}
+
+/** Locations and vendors keep the typed name. Apps, platforms, and servers match only that catalog kind. */
+function matchesFor(text: string, preset: AddKind): MatchItem[] {
+  const kind = CATALOG_KIND[preset];
+  return splitAddList(text).flatMap((item) => (kind ? matchEntries(item, kind) : [blankMatch(item)]));
+}
+
 export function prepareRows(text: string, preset: AddKind, estate: EstateItem[]): AddRow[] {
-  const matched = splitAddList(text).flatMap((item) => matchEntries(item));
+  const matched = matchesFor(text, preset);
   return collapseMatches(matched).map((item) => {
     const kind = resolveKind(item, preset);
     const existing = findExisting(item, kind, estate);
@@ -235,6 +252,7 @@ export type PlanInput = AddRow & {
   ownerName: string;
   renewal: string;
   yearly: string;
+  domainId: string;
 };
 
 export function planInputs(rows: AddRow[]): PlanInput[] {
@@ -247,6 +265,7 @@ export function planInputs(rows: AddRow[]): PlanInput[] {
     ownerName: "",
     renewal: "",
     yearly: row.status === "matched" && row.tool?.typicalAnnual ? String(row.tool.typicalAnnual) : "",
+    domainId: "",
   }));
 }
 
@@ -281,6 +300,7 @@ function createProperties(row: PlanInput): Record<string, unknown> {
   }
   if (row.kind === "location") return { location_type: "other" };
   if (row.kind === "vendor") return {};
+  if (row.kind === "capability") return { domain_id: row.domainId };
   const properties: Record<string, unknown> = {};
   if (tool?.vendor) properties.vendor = tool.vendor;
   Object.assign(properties, categoryFields(tool?.category));

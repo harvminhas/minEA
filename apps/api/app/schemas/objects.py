@@ -4,8 +4,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.products import ProductTechDebtItem
 from app.schemas.ownership import OwnershipFields
+from app.schemas.products import ProductTechDebtItem
+from app.schemas.relationships import RelationshipRead
 
 VALID_TYPES = {
     "business_domain", "capability", "value_stream", "roadmap_item",
@@ -146,3 +147,14 @@ class ObjectListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class TypeSwitchRequest(BaseModel):
+    type: str
+    drop_relationship_ids: list[UUID] = Field(default_factory=list)
+
+
+class TypeSwitchResult(BaseModel):
+    object: ObjectRead
+    relationships: list[RelationshipRead]
+    removed_relationship_ids: list[UUID]

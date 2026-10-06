@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X, Search } from "lucide-react";
 import { type MinEAObject, type ObjectListResponse, type ObjectType, type Relationship, type RelationshipType, ALLOWED_TRIPLES, RELATIONSHIP_LABELS } from "@minea/types";
-import { objectsApi, processesApi, relationshipsApi } from "@/lib/api-client";
+import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { tripleKey } from "@/lib/allowed-triples";
 import { appendComponentSystemRef } from "@/lib/component-relationship-utils";
 import { applyPatch, type FieldEdge, type FieldRecord } from "@/lib/fields/save";
@@ -14,6 +14,7 @@ import { catalogStats, catalogVendorNames } from "@/lib/model-catalog";
 import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
 import { usePermissions } from "@/lib/use-permissions";
 import { useTenancy } from "@/lib/tenancy";
+import { detailsAlsoSetsHint } from "@/lib/fields/shared-links";
 import {
   emptyTypeHint,
   linkGroupsFor,
@@ -81,7 +82,7 @@ function buildRelationshipOptionsForTarget(fromType: string, targetType: string)
     byType.set(link.type, {
       key: link.type,
       type: link.type as RelationshipType,
-      label: words.forward,
+      label: inverse && !outbound ? words.reverse : words.forward,
       outbound,
       inverse,
     });
@@ -133,23 +134,13 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
     }
     return counts;
   }, [catalog.data]);
-
-  const offersProcess = connectableTypes.includes("process");
-  const processList = useQuery({
-    queryKey: ["processes", orgSlug, workspaceSlug],
-    enabled: offersProcess && Boolean(orgSlug && workspaceSlug),
-    queryFn: async () => {
-      const token = await getToken();
-      if (!token) throw new Error("Not authenticated");
-      return processesApi.list(orgSlug, workspaceSlug, token);
-    },
-  });
+  const vendorCount = catalog.data ? catalogStats(catalog.data.rows).vendorCount : undefined;
 
   const searchableTypes = typeFilter ? [typeFilter] : [];
 
   const { data: candidates, isError, isPending, refetch } = useQuery({
     queryKey: ["objects-candidates", orgSlug, workspaceSlug, fromObject.type, typeFilter, targetSearch],
-    enabled: connectableTypes.length > 0 && typeFilter.length > 0 && typeFilter !== "process",
+    enabled: connectableTypes.length > 0 && typeFilter.length > 0,
     queryFn: async () => {
       const token = await getToken();
       const results = await Promise.all(
@@ -194,13 +185,17 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
     };
   }, [direction, fromObject, selectedOption, selectedTarget]);
 
+  const detailsHint = resolvedTriple ? detailsAlsoSetsHint(resolvedTriple.type, resolvedTriple.fromType) : null;
   const sentence = resolvedTriple && selectedTarget
-    ? RELATIONSHIP_LABELS[resolvedTriple.type].sentence(
-        resolvedTriple.fromId === fromObject.id ? fromObject.name : selectedTarget.name,
-        resolvedTriple.toId === selectedTarget.id ? selectedTarget.name : fromObject.name
-      )
+    ? direction === "inverse" && resolvedTriple.type === "supplied_by"
+      ? `${fromObject.name} supplies ${selectedTarget.name}`
+      : RELATIONSHIP_LABELS[resolvedTriple.type].sentence(
+          resolvedTriple.fromId === fromObject.id ? fromObject.name : selectedTarget.name,
+          resolvedTriple.toId === selectedTarget.id ? selectedTarget.name : fromObject.name
+        )
     : "";
   const sentenceSource = direction === "inverse" && selectedTarget ? selectedTarget : fromObject;
+  const linkToRecord = direction === "inverse" && selectedTarget ? fromObject : selectedTarget;
 
   const isValidTriple = resolvedTriple
     ? allowedTriple(resolvedTriple.type, resolvedTriple.fromType, resolvedTriple.toType)
@@ -209,6 +204,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
   const mutation = useMutation({
     mutationFn: async () => {
       if (!resolvedTriple || !isValidTriple || !selectedOption || !selectedTarget) return;
+      setCreateError("");
       const token = await getToken();
       if (!token) throw new Error("Not authenticated");
 
@@ -241,7 +237,8 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
         { type: selectedOption.type, target: selectedTarget.type, direction },
         selectedTarget.id,
         record,
-        edges
+        edges,
+        selectedTarget.name
       );
       if (patch && orgSlug && workspaceSlug) {
         const applied = applyPatch(record, patch, edges);
@@ -266,31 +263,37 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
         for (const rel of pending) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: rel });
         try {
           const created: Relationship[] = [];
+          let existed = false;
           for (const rel of patch.addRel ?? []) {
-            created.push(await relationshipsApi.create(orgSlug, workspaceSlug, rel, token));
+            const result = await relationshipsApi.createWithStatus(orgSlug, workspaceSlug, rel, token);
+            created.push(result.body);
+            if (result.status === 200) existed = true;
           }
           for (const rel of pending) {
             applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: rel.id });
           }
           for (const rel of created) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: rel });
+          const kept = new Set(created.map((rel) => rel.id));
           for (const id of patch.removeRelIds ?? []) {
+            if (kept.has(id)) continue;
             await relationshipsApi.delete(orgSlug, workspaceSlug, id, token);
           }
           if (patch.object) {
             const saved = await objectsApi.update(orgSlug, workspaceSlug, fromObject.id, patch.object, token);
             applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
           }
-          return (
+          const relationship =
             created.find((rel) => rel.to_object_id === selectedTarget.id || rel.from_object_id === selectedTarget.id) ??
-            created[created.length - 1]
-          );
+            created[created.length - 1];
+          if (!relationship) return;
+          return { relationship, existed };
         } catch (err) {
           queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
           throw err;
         }
       }
 
-      const created = await relationshipsApi.create(
+      const created = await relationshipsApi.createWithStatus(
         orgSlug,
         workspaceSlug,
         {
@@ -320,15 +323,19 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
         await appendComponentSystemRef(orgSlug, workspaceSlug, selectedTarget, fromObject, token);
       }
 
-      return created;
+      return { relationship: created.body, existed: created.status === 200 };
     },
-    onSuccess: (created) => {
-      if (!created) return;
+    onSuccess: (result) => {
+      if (!result) return;
       if (orgSlug && workspaceSlug) {
-        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: created });
+        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: result.relationship });
         queryClient.invalidateQueries({ queryKey: ["relationships"] });
       }
-      onSuccess(created);
+      if (result.existed) {
+        setCreateError("That relationship already exists");
+        return;
+      }
+      onSuccess(result.relationship);
     },
   });
 
@@ -399,9 +406,6 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
   }
 
   const trimmedSearch = targetSearch.trim();
-  const processItems: PickerChoice[] = (processList.data?.items ?? [])
-    .filter((item) => !trimmedSearch || item.name.toLowerCase().includes(trimmedSearch.toLowerCase()))
-    .map((item) => ({ id: item.id, name: item.name, type: "process" }));
   const objectItems: PickerChoice[] = (candidates ?? []).map((obj) => ({
     id: obj.id,
     name: obj.name,
@@ -436,9 +440,9 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
             createName: name,
           }))
       : [];
-  const pickerItems: PickerChoice[] = typeFilter === "process" ? processItems : [...objectItems, ...partyItems, ...vendorItems];
-  const listError = typeFilter === "process" ? processList.isError : isError;
-  const listPending = typeFilter === "process" ? processList.isPending : isPending;
+  const pickerItems: PickerChoice[] = [...objectItems, ...partyItems, ...vendorItems];
+  const listError = isError;
+  const listPending = isPending;
   const offerCreate =
     canEdit &&
     NAME_ONLY_LINK_TYPES.has(typeFilter) &&
@@ -474,9 +478,9 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
             ) : selectedTarget ? (
               <div className="flex items-center gap-2 py-2 px-3 bg-indigo-50 border border-indigo-100 rounded-md text-sm">
                 <div className="min-w-0 flex-1">
-                  <span className="font-medium text-indigo-900">{selectedTarget.name}</span>
+                  <span className="font-medium text-indigo-900">{linkToRecord?.name}</span>
                   <span className="text-indigo-600/70 ml-2">
-                    ({uiTypeLabel(selectedTarget.type, true)})
+                    ({uiTypeLabel(linkToRecord?.type ?? "", true)})
                   </span>
                 </div>
                 <button
@@ -502,20 +506,8 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
                   {linkGroups.map((group) => (
                     <optgroup key={group.label} label={group.label}>
                       {group.options.map((option) => {
-                        const processCount = option.type === "process" ? processList.data?.items.length : undefined;
-                        const vendorCount = catalog.data ? catalogStats(catalog.data.rows).vendorCount : undefined;
-                        const count =
-                          option.type === "external_party"
-                            ? vendorCount
-                            : option.type === "process"
-                              ? processCount
-                              : typeCounts?.get(option.type);
-                        const known =
-                          option.type === "external_party"
-                            ? catalog.data != null
-                            : option.type === "process"
-                              ? processList.data != null
-                              : typeCounts != null;
+                        const count = option.type === "external_party" ? vendorCount : typeCounts?.get(option.type);
+                        const known = option.type === "external_party" ? catalog.data != null : typeCounts != null;
                         const empty = known && (count ?? 0) === 0 && option.type !== "component";
                         const name = option.label;
                         return (
@@ -575,7 +567,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
                           {" · "}
                           <button
                             type="button"
-                            onClick={() => void (typeFilter === "process" ? processList.refetch() : refetch())}
+                            onClick={() => void refetch()}
                             className="font-medium text-indigo-600 hover:text-indigo-800"
                           >
                             Retry
@@ -647,6 +639,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
                   </span>
                 </div>
               )}
+              {detailsHint && <p className="mt-2 text-xs text-gray-500">{detailsHint}</p>}
               {selectedOption?.type === "sends_data_to" && (
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <label className="block text-xs font-medium text-gray-700">
@@ -683,6 +676,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
           )}
         </div>
 
+        {createError && <p className="px-5 pt-3 text-xs text-red-600">{createError}</p>}
         <div className="flex gap-3 p-5 border-t border-gray-100">
           <button
             onClick={onClose}
