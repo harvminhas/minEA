@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, Cable, ChevronRight, Cloud, LayoutGrid, MapPin, Server, Shield, Users } from "lucide-react";
+import { Boxes, Cable, ChevronRight, Cloud, LayoutGrid, MapPin, Server, Shield, Sparkles, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { modelPath, type ModelSection } from "@/lib/mvp-paths";
 import { useModelNavExtras } from "@/lib/use-repository-nav-counts";
 import { catalogStats } from "@/lib/model-catalog";
-import { UI_TYPE_LABEL } from "@/lib/relationship-targets";
+import { AI_GROUP_LABEL, UI_TYPE_LABEL } from "@/lib/relationship-targets";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 
 type IconType = typeof LayoutGrid;
@@ -87,6 +87,27 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
       icon: Boxes,
       count: countTypes(["application", "solution", "technical_capability"]),
       match: ["/application/applications", "/application/components", "/model/applications"],
+    },
+    {
+      label: AI_GROUP_LABEL,
+      icon: Sparkles,
+      href: modelPath(basePath, "agents"),
+      count: countTypes(["agent", "ai_model"]),
+      match: ["/model/agents", "/model/ai-models"],
+      children: [
+        {
+          label: UI_TYPE_LABEL.agent,
+          href: modelPath(basePath, "agents"),
+          count: countTypes(["agent"]),
+          match: ["/model/agents"],
+        },
+        {
+          label: UI_TYPE_LABEL.ai_model,
+          href: modelPath(basePath, "ai-models"),
+          count: countTypes(["ai_model"]),
+          match: ["/model/ai-models"],
+        },
+      ],
     },
     {
       label: UI_TYPE_LABEL.cloud_service,

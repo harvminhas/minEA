@@ -9,6 +9,7 @@ import { useTenancy } from "@/lib/tenancy";
 import { modelItemId, modelItemPath, modelPath, type ModelSection } from "@/lib/mvp-paths";
 import { AgingTile, PlatformsTable, ServersTable } from "@/components/mvp/InfraTables";
 import { LocationsTable } from "@/components/mvp/LocationsTable";
+import { AiTable } from "@/components/mvp/AiTables";
 import { describeTypes } from "@/lib/ask/deterministic";
 import { catalogStats, moneyLabel, rowForPanel, vendorPanelRow, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
@@ -31,6 +32,8 @@ import Link from "next/link";
 const SECTION_TITLE: Record<ModelSection, string> = {
   overview: "Overview",
   applications: "Applications",
+  agents: "AI agents",
+  "ai-models": "AI models",
   platforms: "Platforms & cloud",
   servers: "Servers & devices",
   locations: "Locations",
@@ -141,6 +144,8 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
         {section === "platforms" && <PlatformsTable rows={rows} selectedId={selectedId} anywhere={anywhere} />}
         {section === "servers" && <ServersTable rows={rows} selectedId={selectedId} anywhere={anywhere} />}
         {section === "locations" && <LocationsTable anywhere={anywhere} selectedId={selectedId} />}
+        {section === "agents" && <AiTable type="agent" selectedId={selectedId} />}
+        {section === "ai-models" && <AiTable type="ai_model" selectedId={selectedId} />}
         {section === "capabilities" && <CapabilitiesTable selectedId={selectedId} />}
         {section === "connections" && <ConnectionsList items={connections} basePath={basePath} />}
         {section === "vendors" && <VendorsTable vendors={vendors} anywhere={anywhere} selectedId={selectedId} />}

@@ -255,11 +255,20 @@ export function catalogVendorNames(rows: CatalogRow[]): string[] {
   return [...byKey.values()].sort((a, b) => a.localeCompare(b));
 }
 
-/** A panel row for a location or capability, which the catalog table does not list. */
+const PANEL_TYPE_LABEL: Record<string, string> = {
+  location: "Location",
+  capability: "Capability",
+  external_party: "Vendor",
+  agent: "AI agent",
+  ai_model: "AI model",
+};
+
+/** A panel row for a type the catalog tables do not list. */
 export function rowForPanel(object: MinEAObject): CatalogRow | null {
   const listed = rowFromObject(object);
   if (listed) return listed;
-  if (object.type !== "location" && object.type !== "capability" && object.type !== "external_party") return null;
+  const typeLabel = PANEL_TYPE_LABEL[object.type];
+  if (!typeLabel) return null;
   const ownerTeam = object.owner_team_name?.trim() || "";
   const ownerPerson = object.point_of_contact_name?.trim() || (!ownerTeam ? object.owner?.trim() || "" : "");
   const missing: CatalogMissing = {
@@ -270,19 +279,20 @@ export function rowForPanel(object: MinEAObject): CatalogRow | null {
     lifecycle: false,
     criticality: false,
   };
+  const priced = object.type === "agent" || object.type === "ai_model" ? annualCost(object.properties) : null;
   return {
     id: object.id,
     object,
     kind: "runtime",
     name: object.name?.trim() || "Untitled",
-    typeLabel: object.type === "location" ? "Location" : object.type === "capability" ? "Capability" : "Vendor",
+    typeLabel,
     subtitle: "",
     ownerTeam,
     ownerPerson,
     vendor: "",
     vendorKey: "",
-    annualCostLabel: "",
-    annualCostNumber: null,
+    annualCostLabel: priced?.label ?? "",
+    annualCostNumber: priced?.run ?? null,
     renewalLabel: "",
     renewalDate: null,
     renewalSoon: false,

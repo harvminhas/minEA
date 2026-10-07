@@ -6,6 +6,8 @@ export const UI_TYPE_LABEL = {
   application: "Applications",
   solution: "Applications",
   technical_capability: "Applications",
+  agent: "AI agents",
+  ai_model: "AI models",
   cloud_service: "Platforms & cloud",
   model: "Servers & devices",
   location: "Locations",
@@ -28,6 +30,8 @@ const UI_TYPE_SINGULAR: Record<keyof typeof UI_TYPE_LABEL, string> = {
   application: "Application",
   solution: "Application",
   technical_capability: "Application",
+  agent: "AI agent",
+  ai_model: "AI model",
   cloud_service: "Platform",
   model: "Server",
   location: "Location",
@@ -54,9 +58,12 @@ export type LinkTarget = {
   direction: LinkDirection;
 };
 
+export const AI_GROUP_LABEL = "AI";
+
 /** Same groups and order as ModelSidebar. Owners stays only when a link exists. */
 export const LINK_SIDEBAR: readonly { label: string; types: readonly string[] }[] = [
   { label: "Applications", types: ["application"] },
+  { label: AI_GROUP_LABEL, types: ["agent", "ai_model"] },
   { label: "Platforms & cloud", types: ["cloud_service"] },
   { label: "Servers & devices", types: ["model"] },
   { label: "Locations", types: ["location"] },
@@ -82,8 +89,6 @@ function linksForPair(source: string, target: string): LinkTarget[] {
   }
   const links: LinkTarget[] = [];
   for (const type of new Set([...outbound, ...inverse])) {
-    // TODO: real AI models need their own type later. Do not rename the stored "model" type.
-    if (type === "uses_model") continue;
     if (type === "sends_data_to" && source === "application" && target === "external_party") continue;
     const out = outbound.has(type);
     const inv = inverse.has(type);
@@ -150,13 +155,15 @@ export function emptyTypeHint(type: string): string {
   return `None yet: add in ${uiTypeLabel(type)}`;
 }
 
-/** Name-only create from the link dialog: Applications, Platforms, Servers, Locations, Vendors. */
+/** Name-only create from the link dialog: Applications, Platforms, Servers, Locations, Vendors, AI agents, AI models. */
 export const NAME_ONLY_LINK_TYPES = new Set([
   "application",
   "cloud_service",
   "model",
   "location",
   "external_party",
+  "agent",
+  "ai_model",
 ]);
 
 export function fieldForDialogLink(

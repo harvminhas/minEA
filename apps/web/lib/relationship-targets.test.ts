@@ -15,6 +15,7 @@ import type { FieldEdge, FieldRecord } from "./fields/save.ts";
 const EXPECTED: Record<string, string[]> = {
   application: [
     "Applications",
+    "AI agents",
     "Platforms & cloud",
     "Servers & devices",
     "Locations",
@@ -31,6 +32,8 @@ const EXPECTED: Record<string, string[]> = {
   ],
   cloud_service: [
     "Applications",
+    "AI agents",
+    "AI models",
     "Platforms & cloud",
     "Servers & devices",
     "Locations",
@@ -39,11 +42,13 @@ const EXPECTED: Record<string, string[]> = {
   ],
   model: ["Applications", "Platforms & cloud", "Servers & devices", "Locations", "Vendors & contracts"],
   location: ["Applications", "Platforms & cloud", "Servers & devices"],
-  capability: ["Applications", "Capabilities"],
+  capability: ["Applications", "AI agents", "Capabilities"],
   integration_flow: ["Applications", "APIs", "Events", "Integration infra"],
   api: ["Applications", "Flows", "Integration infra"],
   event: ["Applications", "Flows", "Integration infra", "Data entities"],
-  external_party: ["Applications", "Platforms & cloud", "Servers & devices", "Vendors & contracts"],
+  external_party: ["Applications", "AI models", "Platforms & cloud", "Servers & devices", "Vendors & contracts"],
+  agent: ["Applications", "AI agents", "AI models", "Platforms & cloud", "Integration infra", "Capabilities", "Data stores"],
+  ai_model: ["AI agents", "Platforms & cloud", "Vendors & contracts"],
 };
 
 function directions(link: LinkTarget): Array<"outbound" | "inverse"> {
@@ -67,6 +72,7 @@ test("offered sections follow the sidebar for each source", () => {
     linkGroupsFor("application").map((group) => [group.label, group.options.map((option) => option.label)]),
     [
       ["Applications", ["Applications"]],
+      ["AI", ["AI agents"]],
       ["Platforms & cloud", ["Platforms & cloud"]],
       ["Servers & devices", ["Servers & devices"]],
       ["Locations", ["Locations"]],
@@ -107,7 +113,14 @@ test("offered sections follow the sidebar for each source", () => {
     linksForTarget("model", "external_party").some((link) => link.type === "supplied_by" && link.direction === "outbound"),
     true
   );
-  assert.equal(linkTargetsFor("agent").some((link) => link.type === "uses_model"), false);
+  assert.deepEqual(
+    linkTargetsFor("agent").filter((link) => link.type === "uses_model"),
+    [{ target: "ai_model", type: "uses_model", direction: "outbound" }]
+  );
+  assert.deepEqual(
+    linksForTarget("ai_model", "agent").map((link) => `${link.type}:${link.direction}`),
+    ["uses_model:inverse"]
+  );
 
   const signature = (type: string) =>
     linkTargetsFor(type).map((link) => `${link.type}:${link.target}:${link.direction}`).sort();
@@ -120,6 +133,8 @@ test("offered sections follow the sidebar for each source", () => {
     ["application", linkTargetsFor("application")],
     ["cloud_service", linkTargetsFor("cloud_service")],
     ["model", linkTargetsFor("model")],
+    ["agent", linkTargetsFor("agent")],
+    ["ai_model", linkTargetsFor("ai_model")],
   ] as const) {
     for (const link of links) {
       for (const direction of directions(link)) {

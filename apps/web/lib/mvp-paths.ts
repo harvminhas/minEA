@@ -17,6 +17,8 @@ export function reportPath(basePath: string, reportId: string): string {
 export type ModelSection =
   | "overview"
   | "applications"
+  | "agents"
+  | "ai-models"
   | "platforms"
   | "servers"
   | "locations"
@@ -29,6 +31,8 @@ export type ModelSection =
 export const MODEL_SECTIONS: ModelSection[] = [
   "overview",
   "applications",
+  "agents",
+  "ai-models",
   "platforms",
   "servers",
   "locations",
