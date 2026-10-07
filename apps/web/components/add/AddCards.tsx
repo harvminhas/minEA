@@ -29,7 +29,7 @@ import {
   type AddReceipt,
   type GapField,
 } from "@/lib/setup/add-cards";
-import { buildBatch, planInputs, prepareRows, todoLines, type AddRow, type EstateItem } from "@/lib/setup/add-plan";
+import { buildBatch, catalogLists, planInputs, prepareRows, todoLines, type AddRow, type EstateItem } from "@/lib/setup/add-plan";
 import { choiceForTool } from "@/lib/setup/match-tools";
 import { setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
@@ -352,8 +352,8 @@ export function AskAdd({
   const [snapshot, setSnapshot] = useState<AddReceipt | null>(null);
   const edited = useRef(false);
   const kindRef = useRef(kind);
-  const objects = catalog.data?.objects ?? [];
-  const relationships = catalog.data?.relationships ?? [];
+  const { objects, relationships } = catalogLists(catalog.data);
+  const loaded = Boolean(catalog.data);
   const estate = useMemo(() => estateItems(objects), [objects]);
 
   const textRef = useRef<string | null>(null);
@@ -378,9 +378,10 @@ export function AskAdd({
   }, [kind, phase]);
 
   useEffect(() => {
-    if (edited.current || phase !== "idle") return;
+    // Wait for the catalog so rows match existing records instead of all looking new.
+    if (!loaded || edited.current || phase !== "idle") return;
     setRows(prepareRows(initialText, kind, estate));
-  }, [initialText, estate, phase, kind]);
+  }, [loaded, initialText, estate, phase, kind]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");

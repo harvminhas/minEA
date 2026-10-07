@@ -482,3 +482,11 @@ export function buildBatch(rows: PlanInput[], estate: EstateItem[]): { creates: 
   }
   return { creates, updates, relationships };
 }
+
+const NO_ITEMS: never[] = [];
+
+/** The catalog's lists, or the same empty arrays while it loads. A fresh `[]` per render
+ *  changes memo / effect deps every render, and AskAdd's rows effect then loops. */
+export function catalogLists<O, R>(data: { objects: O[]; relationships: R[] } | undefined): { objects: O[]; relationships: R[] } {
+  return { objects: data?.objects ?? NO_ITEMS, relationships: data?.relationships ?? NO_ITEMS };
+}

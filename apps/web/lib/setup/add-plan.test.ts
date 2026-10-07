@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   addButtonLabel,
+  catalogLists,
   addedSentence,
   buildBatch,
   dedupeKey,
@@ -291,5 +292,21 @@ describe("dedupe and steps", () => {
       })),
     );
     assert.equal(lines.length, 3);
+  });
+});
+
+describe("catalogLists", () => {
+  it("returns the same empty arrays while the catalog loads, so AskAdd's effect deps stay put", () => {
+    const first = catalogLists(undefined);
+    const second = catalogLists(undefined);
+    assert.equal(first.objects, second.objects);
+    assert.equal(first.relationships, second.relationships);
+    assert.deepEqual(first.objects, []);
+  });
+
+  it("passes the loaded lists through unchanged", () => {
+    const data = { objects: [{ id: "a" }], relationships: [{ id: "r" }] };
+    assert.equal(catalogLists(data).objects, data.objects);
+    assert.equal(catalogLists(data).relationships, data.relationships);
   });
 });
