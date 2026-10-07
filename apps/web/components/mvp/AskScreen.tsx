@@ -15,6 +15,7 @@ import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
 import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
+import { isAiDataQuestion } from "@/lib/ask/answerStrategies";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { AddSaved } from "@/components/add/AddCards";
 import { AddFlow } from "@/components/add/AddFlow";
@@ -147,7 +148,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
 
   const answer = useMemo(() => {
     if (mode !== "answer" || !question) return local;
-    const fromModel = remote.data ? answerFromModel(remote.data, rows, basePath) : null;
+    const fromModel = remote.data ? answerFromModel(remote.data, rows, basePath, question) : null;
+    // Customer / financial / personal data: the F1 rule (each app's Holds data) answers, not the model's reading of it.
+    if (local.handler === "ai" && isAiDataQuestion(question)) return local;
     if (local.handler === "gaps" || local.handler === "impact" || local.handler === "importance" || local.handler === "cost" || local.handler === "ownership" || local.handler === "clarify" || local.handler === "aging") return local;
     if (!fromModel || fromModel.handler === "unsupported") return local;
     if (local.handler === "vendors" && fromModel.citations.length === 0) return local;

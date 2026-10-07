@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.ai.ask import loop
-from app.ai.ask.ai_landscape import CATALOG, JOB_LABELS, ai_landscape, summarize
+from app.ai.ask.ai_landscape import AI_QUESTION, CATALOG, JOB_LABELS, ai_landscape, data_access, is_ai_question, summarize
 from app.ai.ask.graph import Edge, WorkspaceGraph, _record
 from app.ai.ask.loop import _validate
 from app.ai.ask.tools import ToolBag, run_tool, search_records, tool_specs
@@ -197,3 +197,122 @@ def test_the_ask_loop_calls_ai_landscape_without_a_real_model(monkeypatch):
     assert result["intent"] == "ai"
     assert result["citations"][0]["type_label"] == "AI Agent"
     assert "14" in result["answer_text"]
+
+
+# --- Step G fix: customer data and intent routing ---
+
+LIVE_OBJECTS = [
+    {
+        "id": "app-m365",
+        "type": "application",
+        "name": "Microsoft 365",
+        "status": "active",
+        "properties": {
+            "category": "Productivity",
+            "ai_features": [{"key": "m365-copilot", "name": "Microsoft 365 Copilot", "status": "on", "audience": "everyone", "sees_company_data": "yes", "vendor_trains": "no"}],
+        },
+    },
+    {"id": "agent-qa", "type": "agent", "name": "QA Agent", "status": "active", "owner": "IT", "properties": {}},
+]
+LIVE_RELATIONSHIPS = [{"id": "r1", "type": "reads", "from_object_id": "agent-qa", "to_object_id": "app-m365"}]
+
+
+def test_customer_data_uses_the_f1_rule_not_company_data():
+    """The live case: Microsoft 365 has no Holds data. Copilot sees company data and QA Agent reads it: not customer data."""
+    bag = _bag(_graph(LIVE_OBJECTS, LIVE_RELATIONSHIPS))
+    block = run_tool(bag, "ai_landscape", {})["customer_data"]
+    assert block["can_see"] == [] and block["might_see"] == []
+    assert block["can_see_company_data_only"] == [
+        {"name": "Microsoft 365 Copilot (Microsoft 365)", "record_id": "app-m365"},
+        {"name": "QA Agent", "record_id": "agent-qa"},
+    ]
+    assert block["apps_with_no_holds_data"] == [{"name": "Microsoft 365", "record_id": "app-m365", "type_label": "Application"}]
+    assert "nothing recorded holds customer or financial data" in block["if_none"]
+    assert {"app-m365", "agent-qa"} <= bag.seen_ids
+
+    held = [dict(LIVE_OBJECTS[0], properties={**LIVE_OBJECTS[0]["properties"], "holds_data": ["customer"]}), LIVE_OBJECTS[1]]
+    block = run_tool(_bag(_graph(held, LIVE_RELATIONSHIPS)), "ai_landscape", {})["customer_data"]
+    assert [row["name"] for row in block["can_see"]] == ["Microsoft 365 Copilot (Microsoft 365)", "QA Agent"]
+    assert block["can_see"][0]["why"] == "Microsoft 365 holds customer data and this feature can see it."
+    assert block["can_see_company_data_only"] == [] and block["apps_with_no_holds_data"] == []
+
+
+def test_data_access_on_the_fixture_matches_typescript():
+    # Same values as the "customer data on the fixture" test in apps/web/lib/ask/ai-answer.test.ts.
+    result = ai_landscape(FIXTURE["objects"], FIXTURE["relationships"])
+    assert data_access(FIXTURE["objects"], FIXTURE["relationships"], result) == {
+        "customer": ["app-m365:m365-copilot", "app-salesforce:salesforce-agentforce", "app-zendesk:zendesk-copilot", "agent-ap", "agent-invoice", "agent-sales"],
+        "check": [],
+        "company_only": ["app-notion:notion-ai", "app-zoom:zoom-ai-companion", "agent-quote"],
+        "no_holds_data": ["app-notion", "ds-pricebook", "app-zoom"],
+    }
+
+
+def test_the_prompts_say_customer_data_comes_from_holds_data_only():
+    assert "answer only from ai_landscape customer_data" in loop.SYSTEM
+    spec = next(item for item in tool_specs() if item["name"] == "ai_landscape")
+    assert "answer only from customer_data" in spec["description"]
+    assert "Can see company data is not customer data" in spec["description"]
+
+
+def test_ai_wording_matches_the_web_classifier():
+    source = (ROOT / "apps/web/lib/ask/answerStrategies.ts").read_text(encoding="utf-8")
+    web = re.search(r"const AI_TRIGGER = /(.+)/i;", source).group(1)
+    assert web == AI_QUESTION.pattern
+
+
+@pytest.mark.parametrize(
+    ("question", "is_ai"),
+    [
+        ("What AI do we use and what can it touch?", True),
+        ("Which agents have no owner?", True),
+        ("which AI models do we use", True),
+        ("Which language models do we use?", True),
+        ("Who uses GPT-4o?", True),
+        ("Where do we use Claude?", True),
+        ("Show me the model", False),
+        ("open the model", False),
+        # Decision (same as the web test): no AI wording, so not AI. "which AI models do we use" is.
+        ("which models do we use", False),
+        ("What breaks if Microsoft 365 goes down?", False),
+    ],
+)
+def test_only_ai_wording_is_an_ai_question(question, is_ai):
+    assert is_ai_question(question) is is_ai
+
+
+class _MisrouteModels:
+    """Scripted model that tries ai_landscape for a bare "model" question and labels the answer ai."""
+
+    def __init__(self):
+        self.calls = 0
+        self.tool_names: list[str] = []
+        self.seen_tool_result = None
+
+    async def generate_content(self, model, contents, config):
+        self.calls += 1
+        if self.calls == 1:
+            self.tool_names = [decl.name for tool in config.tools for decl in (tool.function_declarations or [])]
+            return SimpleNamespace(function_calls=[SimpleNamespace(name="ai_landscape", args={})], text="", candidates=[])
+        self.seen_tool_result = contents[-1].parts[0].function_response.response["result"]
+        body = {"answer_markdown": "I could not find that.", "intent": "ai", "citations": [], "follow_ups": ["What has no owner?"], "unsupported": True}
+        return SimpleNamespace(function_calls=[], text=json.dumps(body), candidates=[])
+
+
+@pytest.mark.parametrize("question", ["Show me the model", "open the model", "which models do we use"])
+def test_a_bare_model_question_never_reaches_ai_landscape(monkeypatch, question):
+    fake = _MisrouteModels()
+    graph = _graph()
+
+    async def fake_graph(db, workspace_id, org_id):
+        return graph
+
+    monkeypatch.setattr(loop, "is_configured", lambda: True)
+    monkeypatch.setattr(loop, "get_client", lambda: SimpleNamespace(aio=SimpleNamespace(models=fake)))
+    monkeypatch.setattr(loop, "model_name", lambda: "fake")
+    monkeypatch.setattr(loop, "load_graph", fake_graph)
+    ctx = SimpleNamespace(workspace=SimpleNamespace(id="w"), org_id="o")
+    result = asyncio.run(loop.answer_with_model(None, ctx, question))
+    assert "ai_landscape" not in fake.tool_names and "search_records" in fake.tool_names
+    assert fake.seen_tool_result["error"] == "not_an_ai_question"
+    assert result["intent"] == ""

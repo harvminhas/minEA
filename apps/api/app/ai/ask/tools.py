@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Callable
 
-from app.ai.ask.ai_landscape import JOB_LABELS, ai_landscape as build_landscape
+from app.ai.ask.ai_landscape import JOB_LABELS, ai_landscape as build_landscape, data_access
 from app.ai.ask.graph import Rec, WorkspaceGraph, fold
 from app.ai.ask.impact import ImpactEdge, impact_of as traverse_impact
 
@@ -376,6 +376,31 @@ def ai_landscape(bag: ToolBag, args: dict) -> dict:
         for flag in result["flags"]
         if not flag_filter or flag["id"] == flag_filter
     ]
+    access = data_access(objects, relationships, result)
+    f1_why = {item_id: flag["why"] for flag in result["flags"] if flag["id"] == "F1" for item_id in flag["itemIds"]}
+
+    def access_row(item_id: str, why: bool = False) -> dict:
+        row = {"name": feature_names.get(item_id) or names.get(item_id, item_id), "record_id": records_for([item_id])[0]}
+        if why:
+            row["why"] = f1_why.get(item_id, "")
+        return row
+
+    customer_data = {
+        "rule": (
+            "For any question about customer, financial or personal data, answer only from this block. It is flag F1: "
+            "what each app's Holds data field says (or its category default). Can see company data, or an agent "
+            "reading an app, does not mean customer data."
+        ),
+        "can_see": [access_row(item_id, why=True) for item_id in access["customer"]],
+        "might_see": [access_row(item_id, why=True) for item_id in access["check"]],
+        "can_see_company_data_only": [access_row(item_id) for item_id in access["company_only"]],
+        "apps_with_no_holds_data": [{"name": names.get(record_id, record_id), "record_id": record_id, "type_label": label(record_id)} for record_id in access["no_holds_data"]],
+        "if_none": (
+            "If can_see and might_see are both empty, say plainly that nothing recorded holds customer or financial data. "
+            "Then, as a separate point, name the AI that can see company data and the apps with no Holds data recorded."
+        ),
+    }
+
     by_flag: dict[str, int] = {}
     for flag in result["flags"]:
         by_flag[flag["id"]] = by_flag.get(flag["id"], 0) + 1
@@ -416,6 +441,10 @@ def ai_landscape(bag: ToolBag, args: dict) -> dict:
     for flag in flag_rows:
         for name in flag["items"]:
             bag.note_name(name)
+    for rows in customer_data.values():
+        for row in rows if isinstance(rows, list) else []:
+            note(row["record_id"])
+            bag.note_name(row["name"])
     for flag_id in by_flag:
         bag.numbers.add(flag_id[1:])  # "F1" in an answer must not read as an ungrounded 1
     return {
@@ -423,6 +452,7 @@ def ai_landscape(bag: ToolBag, args: dict) -> dict:
         "spend": spend,
         "flags_by_kind": by_flag,
         "flags": flag_rows,
+        "customer_data": customer_data,
         **shown,
         "unreviewed_count": len(result["unreviewed"]),
         "unreviewed_apps": sorted({row["hostName"] for row in result["unreviewed"]}),
@@ -499,7 +529,10 @@ TOOLS: list[AskTool] = [
             "An AI feature is a setting on an app, not a separate item: its id is the app's id, so cite the app. "
             "group is features, agents or platforms; flag is F1 (can see customer or financial data), F2 (vendor may train), "
             "F3 (agent has no owner), F4 (agent can change data), F5 (agent uses a person's account) or F6 (same job). "
-            "counts and spend are always for the whole workspace."
+            "counts and spend are always for the whole workspace. "
+            "Customer, financial or personal data questions: answer only from customer_data (the F1 rule, from each app's Holds data). "
+            "Can see company data is not customer data. "
+            "Use it only when the question has AI wording; a bare \"model\" means the architecture model, not AI."
         ),
         parameters={
             "type": "object",
@@ -513,8 +546,13 @@ TOOLS: list[AskTool] = [
 ]
 
 
-def tool_specs() -> list[dict]:
-    return [{"name": tool.name, "description": tool.description, "input_schema": tool.parameters} for tool in TOOLS]
+def tool_specs(include_ai: bool = True) -> list[dict]:
+    """include_ai is False when the question has no AI wording, so the model can't route it to ai_landscape."""
+    return [
+        {"name": tool.name, "description": tool.description, "input_schema": tool.parameters}
+        for tool in TOOLS
+        if include_ai or tool.name != "ai_landscape"
+    ]
 
 
 def run_tool(bag: ToolBag, name: str, args: dict) -> dict:

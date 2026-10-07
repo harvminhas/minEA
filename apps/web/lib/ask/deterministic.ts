@@ -3,6 +3,8 @@ import type { AskModelPayload } from "@/lib/api-client";
 import {
   choiceLabel,
   classifyIntent,
+  isAiDataQuestion,
+  isAiQuestion,
   importanceVerdict,
   inferCriticality,
   resolveSubject,
@@ -12,7 +14,7 @@ import { presentImpact, type ImpactRecord } from "@/lib/impact/impact-answer";
 import { impactOf, type ImpactEdge, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
 import { moneyLabel, vendorRollup, type CatalogMissing, type CatalogRow } from "@/lib/model-catalog";
 import { modelItemPath, reportPath, sectionForKind } from "@/lib/mvp-paths";
-import { aiLandscape, type AiLandscape, type LandscapeEdge, type LandscapeFlag, type LandscapeObject } from "@/lib/ai/landscape";
+import { aiLandscape, dataAccess, type AiLandscape, type LandscapeEdge, type LandscapeFlag, type LandscapeObject } from "@/lib/ai/landscape";
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { agingSummary } from "@/lib/infra/status";
 
@@ -153,8 +155,11 @@ function withoutDuplicateRoster(text: string, citations: AskCitation[]): string 
   return head.endsWith(".") ? head : `${head}.`;
 }
 
-export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], basePath: string): AskAnswer | null {
+export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], basePath: string, question?: string): AskAnswer | null {
   if (payload.source !== "llm" || !payload.answer_text) return null;
+  const aiAnswer = payload.intent === "ai" || (payload.tools_used ?? []).includes("ai_landscape");
+  // An AI answer to a question with no AI wording ("show me the model") is a misroute: keep the local answer.
+  if (aiAnswer && question !== undefined && !isAiQuestion(question)) return null;
   const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const citations: AskCitation[] = payload.citations.map((item) => ({
     n: item.n,
@@ -168,7 +173,6 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
     : intent && intent in HANDLER_INTENTS
       ? HANDLER_INTENTS[intent]
       : "impact";
-  const aiAnswer = intent === "ai" || (payload.tools_used ?? []).includes("ai_landscape");
   return {
     handler: handler === "impact" && aiAnswer ? "ai" : handler,
     ...(aiAnswer && !payload.unsupported ? { link: aiReportLink(basePath) } : {}),
@@ -261,7 +265,9 @@ export function answerFromRecords(input: {
     return empty("unsupported", "Ask a question about your applications, capabilities, or infrastructure.", today);
   }
   if (input.landscape && classifyIntent(question) === "ai") {
-    return aiAnswer(aiLandscape(input.landscape), input.landscape.objects, input.rows, input.basePath, today);
+    const result = aiLandscape(input.landscape);
+    if (isAiDataQuestion(question)) return aiDataAnswer(result, input.landscape, input.rows, input.basePath, today);
+    return aiAnswer(result, input.landscape.objects, input.rows, input.basePath, today);
   }
   if (/uptime|invoice|ticket|forecast|google workspace|opinion/.test(q) || /customer data|sensitive|personal data/.test(q)) {
     return {
@@ -345,26 +351,8 @@ function aiAnswer(result: AiLandscape, objects: readonly LandscapeObject[], rows
       link,
     };
   }
-  const byId = new Map(objects.map((object) => [object.id, object]));
   const rowById = new Map(rows.map((row) => [row.id, row]));
-  const itemRecord = (itemId: string) => {
-    const feature = result.features.find((item) => item.id === itemId);
-    if (feature) return { recordId: feature.hostId, label: `${feature.feature.name} (${feature.hostName})` };
-    return { recordId: itemId, label: byId.get(itemId)?.name ?? itemId };
-  };
-  const citations: AskCitation[] = [];
-  const citeRecord = (recordId: string, relationship: string): number => {
-    const existing = citations.find((item) => item.recordId === recordId);
-    if (existing) {
-      if (relationship && !existing.relationship.includes(relationship)) existing.relationship = `${existing.relationship} · ${relationship}`;
-      return existing.n;
-    }
-    const object = byId.get(recordId);
-    const agent = result.agents.find((item) => item.id === recordId);
-    const row = rowById.get(recordId) ?? aiRow(recordId, object, agent?.owner ?? "");
-    citations.push({ n: citations.length + 1, recordId, relationship, row });
-    return citations.length;
-  };
+  const { itemRecord, citeRecord, citations } = aiCiter(result, objects, rows);
   const top: LandscapeFlag[] = result.flags.slice(0, 3);
   const evidence: AskEvidence[] = top.map((flag) => {
     const records = flag.itemIds.map(itemRecord);
@@ -408,6 +396,98 @@ function aiAnswer(result: AiLandscape, objects: readonly LandscapeObject[], rows
       "Which agents have no owner?",
       "What do we spend on AI?",
     ].slice(0, 3),
+    caption: { generatedAt: today, recordCount: citations.length, gapCount: gaps.length },
+    link,
+  };
+}
+
+/** Cites AI items: a feature is cited as the app it is on; agents and AI models get their own rows. */
+function aiCiter(result: AiLandscape, objects: readonly LandscapeObject[], rows: CatalogRow[]) {
+  const byId = new Map(objects.map((object) => [object.id, object]));
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const itemRecord = (itemId: string) => {
+    const feature = result.features.find((item) => item.id === itemId);
+    if (feature) return { recordId: feature.hostId, label: `${feature.feature.name} (${feature.hostName})` };
+    return { recordId: itemId, label: byId.get(itemId)?.name ?? itemId };
+  };
+  const citations: AskCitation[] = [];
+  const citeRecord = (recordId: string, relationship: string): number => {
+    const existing = citations.find((item) => item.recordId === recordId);
+    if (existing) {
+      if (relationship && !existing.relationship.includes(relationship)) existing.relationship = `${existing.relationship} · ${relationship}`;
+      return existing.n;
+    }
+    const object = byId.get(recordId);
+    const agent = result.agents.find((item) => item.id === recordId);
+    const row = rowById.get(recordId) ?? aiRow(recordId, object, agent?.owner ?? "");
+    citations.push({ n: citations.length + 1, recordId, relationship, row });
+    return citations.length;
+  };
+  return { itemRecord, citeRecord, citations };
+}
+
+/**
+ * Customer, financial or personal data questions: the F1 rule only (each app's Holds data), so "can see
+ * company data" or an agent reading an app is never called customer data. Those are a separate point.
+ */
+function aiDataAnswer(
+  result: AiLandscape,
+  landscape: { objects: readonly LandscapeObject[]; relationships: readonly LandscapeEdge[] },
+  rows: CatalogRow[],
+  basePath: string,
+  today: string
+): AskAnswer {
+  const link = aiReportLink(basePath);
+  const access = dataAccess(result, landscape.objects, landscape.relationships);
+  const { itemRecord, citeRecord, citations } = aiCiter(result, landscape.objects, rows);
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const byId = new Map(landscape.objects.map((object) => [object.id, object]));
+  const f1Why = new Map(result.flags.filter((flag) => flag.id === "F1").flatMap((flag) => flag.itemIds.map((id) => [id, flag.why] as const)));
+  const flaggedEvidence = (ids: string[], relationship: string): AskEvidence[] =>
+    ids.map((id) => {
+      const record = itemRecord(id);
+      citeRecord(record.recordId, relationship);
+      return { text: `${record.label}: ${f1Why.get(id) ?? ""}`.trim(), citationIds: [record.recordId] };
+    });
+  const evidence: AskEvidence[] = [
+    ...flaggedEvidence(access.customer, "F1 Can see customer or financial data"),
+    ...flaggedEvidence(access.check, "F1 May see customer or financial data"),
+  ];
+  let head: string;
+  if (access.customer.length) {
+    head = `**AI can see customer or financial data in ${plural(access.customer.length, "place", "places")}**, going by what each app's Holds data says.`;
+  } else if (access.check.length) {
+    head = `**No AI is confirmed to see customer or financial data.** In ${plural(access.check.length, "place", "places")}, AI is on an app that holds it and nobody has said if it can see it.`;
+  } else {
+    head = "**Nothing recorded holds customer or financial data**, so no AI is flagged as seeing it.";
+  }
+  if (access.companyOnly.length) {
+    const records = access.companyOnly.map(itemRecord);
+    for (const record of records) citeRecord(record.recordId, "Can see company data");
+    evidence.push({
+      text: `Separately, ${joinNames(records.map((record) => record.label))} can see company data. That is not the same as customer data.`,
+      citationIds: [...new Set(records.map((record) => record.recordId))],
+    });
+  }
+  const unknownNames = access.noHoldsData.map((id) => byId.get(id)?.name ?? id);
+  if (unknownNames.length) {
+    for (const id of access.noHoldsData) citeRecord(id, "No Holds data recorded");
+    evidence.push({
+      text: `${joinNames(unknownNames)} ${unknownNames.length === 1 ? "has" : "have"} no Holds data recorded, so we can't tell if ${unknownNames.length === 1 ? "it holds" : "they hold"} customer data.`,
+      citationIds: [...access.noHoldsData],
+    });
+  }
+  const gaps = access.noHoldsData.slice(0, 5).map((id) => {
+    const row = rowById.get(id);
+    return { text: `Add what ${byId.get(id)?.name ?? id} holds (Holds data).`, fillHref: modelItemPath(basePath, row ? sectionForKind(row.kind) : "applications", id) };
+  });
+  return {
+    handler: "ai",
+    answerText: head,
+    citations,
+    evidence,
+    gaps,
+    followUps: ["What AI do we use and what can it touch?", "Which agents have no owner?", "What do we spend on AI?"],
     caption: { generatedAt: today, recordCount: citations.length, gapCount: gaps.length },
     link,
   };

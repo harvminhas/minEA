@@ -470,6 +470,55 @@ export function aiLandscape({
   };
 }
 
+export type DataAccess = {
+  /** Item ids flagged F1 high: the app holds customer or financial data and the AI can see it. */
+  customer: string[];
+  /** Item ids flagged F1 check: the app holds it, but nobody knows if the feature can see it. */
+  check: string[];
+  /** Item ids that can see company data with no F1 flag. Company data is not customer data. */
+  companyOnly: string[];
+  /** Apps AI can reach whose Holds data is empty and has no default: nobody knows what they hold. */
+  noHoldsData: string[];
+};
+
+/**
+ * Which AI can see customer or financial data, by the F1 rule only (each app's Holds data or its default),
+ * never "can see company data" or an agent merely reading an app. Same as data_access in ai_landscape.py.
+ */
+export function dataAccess(result: AiLandscape, objects: readonly LandscapeObject[], relationships: readonly LandscapeEdge[]): DataAccess {
+  const byId = new Map(objects.map((object) => [object.id, object]));
+  const f1 = result.flags.filter((flag) => flag.id === "F1");
+  const flagged = new Set(f1.flatMap((flag) => flag.itemIds));
+  const companyOnly: string[] = [];
+  const reached: string[] = [];
+  const reach = (id: string) => {
+    if (!reached.includes(id)) reached.push(id);
+  };
+  for (const item of result.features) {
+    const sees = item.feature.sees_company_data;
+    if (sees === "yes" || sees === "unknown") reach(item.hostId);
+    if (sees === "yes" && !flagged.has(item.id)) companyOnly.push(item.id);
+  }
+  for (const agent of result.agents) {
+    if (!agent.active) continue;
+    const targets = [...agent.reads, ...agent.writes];
+    targets.forEach((target) => reach(target.id));
+    if (targets.length && !flagged.has(agent.id)) companyOnly.push(agent.id);
+  }
+  const noHoldsData = reached
+    .map((id) => byId.get(id))
+    .filter((object): object is LandscapeObject => Boolean(object))
+    .filter((object) => !Array.isArray(object.properties?.holds_data) && sensitiveKinds(object, objects, relationships).kinds.size === 0)
+    .sort(byName)
+    .map((object) => object.id);
+  return {
+    customer: f1.filter((flag) => flag.severity === "high").flatMap((flag) => flag.itemIds),
+    check: f1.filter((flag) => flag.severity === "check").flatMap((flag) => flag.itemIds),
+    companyOnly,
+    noHoldsData,
+  };
+}
+
 /** §8 chip: any agent / AI model / active feature, or at least one catalog suggestion. */
 export function hasAiToAskAbout(objects: readonly LandscapeObject[], catalog: readonly AiCatalogEntry[] = AI_FEATURE_CATALOG): boolean {
   if (objects.some((object) => (object.type === "agent" || object.type === "ai_model") && object.status !== "retired")) return true;

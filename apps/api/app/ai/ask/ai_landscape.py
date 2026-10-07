@@ -471,6 +471,61 @@ def ai_landscape(objects: list[dict], relationships: list[dict], catalog: list[d
     }
 
 
+def data_access(objects: list[dict], relationships: list[dict], result: dict) -> dict:
+    """Which AI can see customer or financial data, by the F1 rule only (same as dataAccess in landscape.ts).
+
+    customer / check: item ids flagged F1 high / check, so the answer comes from the app's Holds data
+    (or its category default), never from "can see company data" or an agent merely reading an app.
+    company_only: AI that can see company data with no F1 flag. no_holds_data: apps AI can reach whose
+    Holds data is empty and has no default, so nobody knows what they hold.
+    """
+    by_id = {obj["id"]: obj for obj in objects}
+    f1 = [flag for flag in result["flags"] if flag["id"] == "F1"]
+    flagged = {item_id for flag in f1 for item_id in flag["itemIds"]}
+    company: list[str] = []
+    reached: list[str] = []
+    for item in result["features"]:
+        sees = item["feature"].get("sees_company_data")
+        if sees in {"yes", "unknown"} and item["hostId"] not in reached:
+            reached.append(item["hostId"])
+        if sees == "yes" and item["id"] not in flagged:
+            company.append(item["id"])
+    for agent in result["agents"]:
+        if not agent["active"]:
+            continue
+        targets = [*agent["reads"], *agent["writes"]]
+        for target in targets:
+            if target["id"] not in reached:
+                reached.append(target["id"])
+        if targets and agent["id"] not in flagged:
+            company.append(agent["id"])
+    unknown = [
+        by_id[record_id]
+        for record_id in reached
+        if record_id in by_id
+        and not isinstance(_props(by_id[record_id]).get("holds_data"), list)
+        and not sensitive_kinds(by_id[record_id], by_id, relationships)[0]
+    ]
+    return {
+        "customer": [item_id for flag in f1 if flag["severity"] == "high" for item_id in flag["itemIds"]],
+        "check": [item_id for flag in f1 if flag["severity"] == "check" for item_id in flag["itemIds"]],
+        "company_only": company,
+        "no_holds_data": [obj["id"] for obj in sorted(unknown, key=lambda obj: _name_key(obj["name"]))],
+    }
+
+
+# AI wording (same list as AI_TRIGGER in apps/web/lib/ask/answerStrategies.ts; a test keeps them equal).
+# A bare "model" is the architecture model, BuboMap's main section, so it never counts on its own.
+AI_QUESTION = re.compile(
+    r"\b(ai|copilots?|agents?|agentic|llms?|gpt\w*|chatgpt|openai|claude|anthropic|gemini|mistral|llama|language models?)\b",
+    re.I,
+)
+
+
+def is_ai_question(question: str) -> bool:
+    return bool(AI_QUESTION.search(question or ""))
+
+
 def summarize(objects: list[dict], relationships: list[dict]) -> dict:
     """The projection the shared fixture's `expected` block pins (same as landscape.test-helpers.ts)."""
     result = ai_landscape(objects, relationships)

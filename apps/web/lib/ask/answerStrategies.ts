@@ -114,8 +114,22 @@ export function answerStrategyArtifact(): { thresholds: typeof criticalityThresh
   return { thresholds: criticalityThresholds, strategyPrompt };
 }
 
-/** §8: AI words. Bare "model" is a tab name (servers), so it never counts. */
-const AI_TRIGGER = /\b(ai|copilot|agents?|gpt|llm|chatgpt|claude|gemini)\b/i;
+/**
+ * §8: AI words. A bare "model" is the architecture model (BuboMap's main section), so it never counts on its own:
+ * "show me the model" and "which models do we use" are not AI questions; "which AI models do we use" is.
+ * Same list as AI_QUESTION in apps/api/app/ai/ask/ai_landscape.py (a pytest keeps them equal).
+ */
+const AI_TRIGGER = /\b(ai|copilots?|agents?|agentic|llms?|gpt\w*|chatgpt|openai|claude|anthropic|gemini|mistral|llama|language models?)\b/i;
+/** Customer, financial or personal data: answered by the F1 rule (each app's Holds data), not "can see company data". */
+const AI_DATA_TRIGGER = /\b(customer|customers|client|financial|finance|personal|sensitive)\b[\w\s,'-]{0,30}?\bdata\b|\bpii\b/i;
+
+export function isAiQuestion(question: string): boolean {
+  return AI_TRIGGER.test(question);
+}
+
+export function isAiDataQuestion(question: string): boolean {
+  return AI_TRIGGER.test(question) && AI_DATA_TRIGGER.test(question);
+}
 const IMPORTANCE_TRIGGER = /how important|why .{0,80} important|how critical|why .{0,80} critical|can we live without|business critical/;
 const IMPACT_TRIGGER = /break|fail|goes down|is down|outage|depend|impact/;
 
