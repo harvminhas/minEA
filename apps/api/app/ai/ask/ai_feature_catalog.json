@@ -1,0 +1,395 @@
+[
+  {
+    "key": "m365-copilot-chat",
+    "name": "Microsoft 365 Copilot Chat",
+    "vendor": "Microsoft",
+    "tool": "Microsoft 365",
+    "aliases": [
+      "microsoft 365",
+      "m365",
+      "office 365",
+      "o365"
+    ],
+    "job": "writing_assist",
+    "pricing": {
+      "model": "included",
+      "note": "Free with Microsoft 365 business plans"
+    },
+    "default_on": true,
+    "defaults": {
+      "sees_company_data": "no",
+      "vendor_trains": "no",
+      "audience": "everyone"
+    },
+    "data_note": "Web answers plus files a user uploads; not the company's mail or files.",
+    "source_url": "https://www.microsoft.com/en-us/microsoft-365-copilot/pricing",
+    "checked": "2026-10"
+  },
+  {
+    "key": "m365-copilot",
+    "name": "Microsoft 365 Copilot",
+    "vendor": "Microsoft",
+    "tool": "Microsoft 365",
+    "aliases": [
+      "microsoft 365",
+      "m365",
+      "office 365",
+      "o365"
+    ],
+    "job": "writing_assist",
+    "pricing": {
+      "model": "per_seat",
+      "seat_month_usd": 21,
+      "note": "Copilot Business add-on, annual; $30 on Enterprise plans"
+    },
+    "default_on": false,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "no",
+      "audience": "some_groups"
+    },
+    "data_note": "Mail, files, chats and meetings each user can already open (Microsoft Graph).",
+    "source_url": "https://www.microsoft.com/en-us/microsoft-365-copilot/pricing",
+    "checked": "2026-10"
+  },
+  {
+    "key": "teams-premium-recap",
+    "name": "Teams Premium intelligent recap",
+    "vendor": "Microsoft",
+    "tool": "Microsoft 365",
+    "aliases": [
+      "microsoft 365",
+      "m365",
+      "office 365",
+      "o365",
+      "microsoft teams",
+      "teams"
+    ],
+    "job": "meeting_notes",
+    "pricing": {
+      "model": "per_seat",
+      "seat_month_usd": 10,
+      "note": "Teams Premium add-on [assumed price]"
+    },
+    "default_on": false,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "no",
+      "audience": "some_groups"
+    },
+    "data_note": "Meeting recordings, transcripts and chat.",
+    "source_url": "https://www.microsoft.com/en-us/microsoft-teams/premium",
+    "checked": "2026-10"
+  },
+  {
+    "key": "dynamics-365-copilot",
+    "name": "Copilot in Dynamics 365",
+    "vendor": "Microsoft",
+    "tool": null,
+    "aliases": [
+      "dynamics 365",
+      "d365",
+      "microsoft dynamics"
+    ],
+    "job": "sales_assist",
+    "pricing": {
+      "model": "included",
+      "note": "Included in most Dynamics 365 apps [assumed]"
+    },
+    "default_on": true,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "no",
+      "audience": "everyone"
+    },
+    "data_note": "Customer, sales and service records in Dynamics 365.",
+    "source_url": "https://www.microsoft.com/en-us/dynamics-365/pricing",
+    "checked": "2026-10"
+  },
+  {
+    "key": "salesforce-agentforce",
+    "name": "Agentforce (Sales/Service add-on)",
+    "vendor": "Salesforce",
+    "tool": "Salesforce",
+    "aliases": [
+      "salesforce",
+      "sales cloud",
+      "service cloud"
+    ],
+    "job": "sales_assist",
+    "pricing": {
+      "model": "per_seat",
+      "seat_month_usd": 125,
+      "note": "Add-on per user/month, or $2 per conversation / Flex Credits"
+    },
+    "default_on": false,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "no",
+      "audience": "some_groups"
+    },
+    "data_note": "Salesforce records the user can see (Data Cloud grounding).",
+    "source_url": "https://www.salesforce.com/agentforce/pricing/",
+    "checked": "2026-10"
+  },
+  {
+    "key": "slack-ai",
+    "name": "Slack AI (summaries, recaps, search answers)",
+    "vendor": "Salesforce",
+    "tool": "Slack",
+    "aliases": [
+      "slack"
+    ],
+    "job": "search_answers",
+    "pricing": {
+      "model": "included",
+      "note": "Pro: summaries; Business+: full Slack AI"
+    },
+    "default_on": true,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "no",
+      "audience": "everyone"
+    },
+    "data_note": "Channels, threads and files the user can open.",
+    "source_url": "https://slack.com/pricing",
+    "checked": "2026-10"
+  },
+  {
+    "key": "zoom-ai-companion",
+    "name": "Zoom AI Companion",
+    "vendor": "Zoom",
+    "tool": "Zoom Workplace",
+    "aliases": [
+      "zoom",
+      "zoom workplace"
+    ],
+    "job": "meeting_notes",
+    "pricing": {
+      "model": "included",
+      "note": "Included with paid Zoom Workplace plans"
+    },
+    "default_on": true,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "no",
+      "audience": "everyone"
+    },
+    "data_note": "Meetings, recordings, transcripts and Team Chat.",
+    "source_url": "https://www.zoom.com/en/products/ai-assistant/",
+    "checked": "2026-10"
+  },
+  {
+    "key": "hubspot-breeze-assistant",
+    "name": "Breeze Assistant",
+    "vendor": "HubSpot",
+    "tool": "HubSpot",
+    "aliases": [
+      "hubspot"
+    ],
+    "job": "sales_assist",
+    "pricing": {
+      "model": "included",
+      "note": "Included in HubSpot plans"
+    },
+    "default_on": true,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "unknown",
+      "audience": "everyone"
+    },
+    "data_note": "CRM records, emails and notes in HubSpot.",
+    "source_url": "https://www.hubspot.com/products/artificial-intelligence",
+    "checked": "2026-10"
+  },
+  {
+    "key": "hubspot-breeze-agents",
+    "name": "Breeze agents (Customer, Prospecting)",
+    "vendor": "HubSpot",
+    "tool": "HubSpot",
+    "aliases": [
+      "hubspot"
+    ],
+    "job": "support_replies",
+    "pricing": {
+      "model": "usage",
+      "note": "HubSpot Credits; about $0.50 per resolved conversation"
+    },
+    "default_on": false,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "unknown",
+      "audience": "admins"
+    },
+    "data_note": "Knowledge base, tickets and CRM records.",
+    "source_url": "https://www.hubspot.com/pricing",
+    "checked": "2026-10"
+  },
+  {
+    "key": "zendesk-copilot",
+    "name": "Zendesk Copilot",
+    "vendor": "Zendesk",
+    "tool": null,
+    "aliases": [
+      "zendesk"
+    ],
+    "job": "support_replies",
+    "pricing": {
+      "model": "per_seat",
+      "seat_month_usd": 50,
+      "note": "Copilot add-on, Suite Professional and up"
+    },
+    "default_on": false,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "unknown",
+      "audience": "some_groups"
+    },
+    "data_note": "Tickets, macros and help-centre articles.",
+    "source_url": "https://www.zendesk.com/pricing/",
+    "checked": "2026-10"
+  },
+  {
+    "key": "zendesk-ai-agents",
+    "name": "Zendesk AI agents",
+    "vendor": "Zendesk",
+    "tool": null,
+    "aliases": [
+      "zendesk"
+    ],
+    "job": "support_replies",
+    "pricing": {
+      "model": "usage",
+      "note": "$1.50–$2.00 per automated resolution"
+    },
+    "default_on": false,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "unknown",
+      "audience": "admins"
+    },
+    "data_note": "Help-centre articles and ticket history.",
+    "source_url": "https://www.zendesk.com/pricing/",
+    "checked": "2026-10"
+  },
+  {
+    "key": "notion-ai",
+    "name": "Notion AI (Agent, Meeting Notes, Enterprise Search)",
+    "vendor": "Notion",
+    "tool": null,
+    "aliases": [
+      "notion"
+    ],
+    "job": "writing_assist",
+    "pricing": {
+      "model": "included",
+      "note": "Included in Business ($20/member/month)"
+    },
+    "default_on": true,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "no",
+      "audience": "everyone"
+    },
+    "data_note": "Pages and databases the user can open, plus connected apps.",
+    "source_url": "https://www.notion.com/pricing",
+    "checked": "2026-10"
+  },
+  {
+    "key": "google-gemini-workspace",
+    "name": "Gemini in Google Workspace",
+    "vendor": "Google",
+    "tool": null,
+    "aliases": [
+      "google workspace",
+      "g suite",
+      "gsuite",
+      "gmail"
+    ],
+    "job": "writing_assist",
+    "pricing": {
+      "model": "included",
+      "note": "Included in Business editions"
+    },
+    "default_on": true,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "no",
+      "audience": "everyone"
+    },
+    "data_note": "Gmail, Drive, Docs and Meet content the user can open.",
+    "source_url": "https://workspace.google.com/pricing",
+    "checked": "2026-10"
+  },
+  {
+    "key": "quickbooks-intuit-assist",
+    "name": "Intuit Assist",
+    "vendor": "Intuit",
+    "tool": "QuickBooks Online",
+    "aliases": [
+      "quickbooks",
+      "quickbooks online"
+    ],
+    "job": "data_analysis",
+    "pricing": {
+      "model": "included",
+      "note": "Included in QuickBooks Online [assumed]"
+    },
+    "default_on": true,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "unknown",
+      "audience": "everyone"
+    },
+    "data_note": "Books, invoices, bills and customers in QuickBooks.",
+    "source_url": "https://quickbooks.intuit.com/intuit-assist/",
+    "checked": "2026-10"
+  },
+  {
+    "key": "shopify-sidekick",
+    "name": "Shopify Sidekick",
+    "vendor": "Shopify",
+    "tool": "Shopify",
+    "aliases": [
+      "shopify"
+    ],
+    "job": "writing_assist",
+    "pricing": {
+      "model": "included",
+      "note": "Included in Shopify plans [assumed]"
+    },
+    "default_on": true,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "unknown",
+      "audience": "everyone"
+    },
+    "data_note": "Store orders, products, customers and analytics.",
+    "source_url": "https://www.shopify.com/magic",
+    "checked": "2026-10"
+  },
+  {
+    "key": "github-copilot",
+    "name": "GitHub Copilot Business",
+    "vendor": "GitHub",
+    "tool": null,
+    "aliases": [
+      "github"
+    ],
+    "job": "coding",
+    "pricing": {
+      "model": "per_seat",
+      "seat_month_usd": 19,
+      "note": "Copilot Business per user/month [assumed]"
+    },
+    "default_on": false,
+    "defaults": {
+      "sees_company_data": "yes",
+      "vendor_trains": "no",
+      "audience": "some_groups"
+    },
+    "data_note": "Code in the repositories and editors where it is used.",
+    "source_url": "https://github.com/features/copilot/plans",
+    "checked": "2026-10"
+  }
+]

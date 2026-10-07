@@ -126,8 +126,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         basePath,
         loading: impactQuery && impact.isLoading,
         focusId,
+        landscape: catalog.data ? { objects: catalog.data.objects, relationships: catalog.data.relationships } : undefined,
       }),
-    [question, rows, impact.nodes, impact.edges, impact.isLoading, impactQuery, basePath, focusId]
+    [question, rows, impact.nodes, impact.edges, impact.isLoading, impactQuery, basePath, focusId, catalog.data]
   );
 
   const thinking = mode === "answer" && question.length > 0 && remote.isPending && !showingAdd && !ambiguous;
@@ -166,7 +167,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   }, [showSetup, setup.dismissed, setupOpen]);
   const keepSetup = showSetup || setupLatched;
   const emptyPreview = process.env.NODE_ENV !== "production" && params.get("demo") === "empty";
-  const chips = askChips(rows, impact.edges);
+  const chips = askChips(rows, impact.edges, new Date(), catalog.data?.objects ?? []);
   const cards = popularCards(rows, impact.edges, new Date(), emptyPreview);
   const support = supportCounts(rows);
   const platformCount = rows.filter((row) => row.kind === "platform").length;
@@ -369,6 +370,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               </ul>
             )}
             {answer.context && <p className="mt-2 text-[13px] text-[#6b7289]">{answer.context}</p>}
+            {answer.link && (
+              <Link href={answer.link.href} className="mt-2 inline-block text-[13px] font-medium text-[#5b4ce6]">{answer.link.label} →</Link>
+            )}
             {(answer.fixActions?.length ?? 0) > 0 && (
               <FixActions
                 actions={answer.fixActions ?? []}
@@ -832,7 +836,9 @@ function criticalityCell(item: AskCitation, focus: AskAnswer["focusBlank"]) {
   return <span className="text-[#b0b4c0]">—</span>;
 }
 
-function recordHref(basePath: string, row: { id: string; kind: string }): string {
+function recordHref(basePath: string, row: { id: string; kind: string; object?: { type?: string } }): string {
+  if (row.object?.type === "agent") return modelItemPath(basePath, "agents", row.id);
+  if (row.object?.type === "ai_model") return modelItemPath(basePath, "ai-models", row.id);
   return modelItemPath(basePath, row.kind === "application" ? "applications" : row.kind === "platform" ? "platforms" : "servers", row.id);
 }
 

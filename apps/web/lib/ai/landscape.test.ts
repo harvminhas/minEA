@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fixture from "../../../../packages/types/src/fixtures/ai-landscape.fixture.json";
-import { agentChain, aiLandscape, sensitiveKinds, type LandscapeEdge, type LandscapeObject } from "./landscape";
+import { agentChain, aiLandscape, f6Title, flagGroupTitle, hasAiToAskAbout, sensitiveKinds, type LandscapeEdge, type LandscapeObject } from "./landscape";
 import { summarize } from "./landscape.test-helpers";
 
 type Obj = LandscapeObject;
@@ -160,4 +160,31 @@ test("agent chain uses impact-rule lanes and the data_store hop", () => {
     "Acts as:svc-sales:null",
     "Can call:Quote Builder:slow",
   ]);
+});
+
+test("F6 titles carry the group's size; a mixed F6 group header drops the count", () => {
+  const six = aiLandscape(sample).flags.filter((flag) => flag.id === "F6");
+  assert.deepEqual(
+    six.map((flag) => [flag.itemIds.length, flag.title]),
+    six.map((flag) => [flag.itemIds.length, flag.itemIds.length === 2 ? "Two doing the same job" : flag.itemIds.length === 3 ? "Three doing the same job" : `${flag.itemIds.length} doing the same job`]),
+  );
+  const m365 = obj("m365", "application", "Microsoft 365", {
+    ai_features: [feature("m365-copilot", "Copilot"), feature("m365-copilot-chat", "Copilot Chat")],
+  });
+  const shop = obj("shop", "application", "Shopify", { ai_features: [feature("shopify-sidekick", "Sidekick")] });
+  const [three] = flagsOf([m365, shop], [], "F6");
+  assert.equal(three.title, "Three doing the same job");
+  assert.equal(f6Title(2), "Two doing the same job");
+  assert.equal(f6Title(9), "9 doing the same job");
+  assert.equal(flagGroupTitle([three]), "Three doing the same job");
+  assert.equal(flagGroupTitle([three, { ...three, title: f6Title(2) }]), "Doing the same job");
+});
+
+test("hasAiToAskAbout: agents, models, active features or catalog suggestions", () => {
+  assert.equal(hasAiToAskAbout([]), false);
+  assert.equal(hasAiToAskAbout([obj("crm", "application", "Order Entry")]), false);
+  assert.equal(hasAiToAskAbout([obj("m365", "application", "Microsoft 365")]), true);
+  assert.equal(hasAiToAskAbout([agent("bot")]), true);
+  assert.equal(hasAiToAskAbout([obj("bot", "agent", "Old bot", {}, { status: "retired" })]), false);
+  assert.equal(hasAiToAskAbout([model]), true);
 });

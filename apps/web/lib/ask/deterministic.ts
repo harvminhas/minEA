@@ -7,11 +7,12 @@ import {
   inferCriticality,
   resolveSubject,
 } from "@/lib/ask/answerStrategies";
-import { dollarsFromCents, lineAnnualCents, lineTitle, readCostLines } from "@/lib/cost/math";
+import { dollarsFromCents, formatDollars, lineAnnualCents, lineTitle, readCostLines } from "@/lib/cost/math";
 import { presentImpact, type ImpactRecord } from "@/lib/impact/impact-answer";
 import { impactOf, type ImpactEdge, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
 import { moneyLabel, vendorRollup, type CatalogMissing, type CatalogRow } from "@/lib/model-catalog";
-import { modelItemPath, sectionForKind } from "@/lib/mvp-paths";
+import { modelItemPath, reportPath, sectionForKind } from "@/lib/mvp-paths";
+import { aiLandscape, type AiLandscape, type LandscapeEdge, type LandscapeFlag, type LandscapeObject } from "@/lib/ai/landscape";
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { agingSummary } from "@/lib/infra/status";
 
@@ -62,6 +63,7 @@ export type AskAnswer = {
     | "criticality"
     | "gaps"
     | "aging"
+    | "ai"
     | "clarify"
     | "unsupported";
   answerText: string;
@@ -78,6 +80,8 @@ export type AskAnswer = {
   /** Blank cells for this field use the amber Add. Other blanks stay a grey dash. */
   focusBlank?: keyof CatalogMissing;
   caption: { generatedAt: string; recordCount: number; gapCount: number; extra?: string };
+  /** A report that holds the full answer, shown under it. */
+  link?: { href: string; label: string };
   loading?: boolean;
 };
 
@@ -123,6 +127,7 @@ const HANDLER_INTENTS: Record<string, AskAnswer["handler"]> = {
   lifecycle: "lifecycle",
   criticality: "criticality",
   aging: "aging",
+  ai: "ai",
 };
 
 const SUGGESTED = [
@@ -163,8 +168,10 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
     : intent && intent in HANDLER_INTENTS
       ? HANDLER_INTENTS[intent]
       : "impact";
+  const aiAnswer = intent === "ai" || (payload.tools_used ?? []).includes("ai_landscape");
   return {
-    handler,
+    handler: handler === "impact" && aiAnswer ? "ai" : handler,
+    ...(aiAnswer && !payload.unsupported ? { link: aiReportLink(basePath) } : {}),
     answerText: withoutDuplicateRoster(payload.answer_text, citations),
     citations,
     verdict: payload.verdict
@@ -197,6 +204,7 @@ function rowForCitation(item: AskModelPayload["citations"][number], rows: Catalo
   const found = rows.find((row) => row.id === item.record_id);
   if (found) return found;
   const application = item.type_label === "Application";
+  const aiType = item.type_label === "AI Agent" ? "agent" : item.type_label === "AI Model" ? "ai_model" : null;
   const missing: CatalogMissing = {
     owner: !item.owner,
     vendor: true,
@@ -207,7 +215,7 @@ function rowForCitation(item: AskModelPayload["citations"][number], rows: Catalo
   };
   return {
     id: item.record_id,
-    object: { id: item.record_id, name: item.name, type: application ? "application" : "cloud_service" } as MinEAObject,
+    object: { id: item.record_id, name: item.name, type: aiType ?? (application ? "application" : "cloud_service") } as MinEAObject,
     kind: application ? "application" : "platform",
     name: item.name,
     typeLabel: item.type_label || item.kind || "Item",
@@ -242,6 +250,8 @@ export function answerFromRecords(input: {
   loading?: boolean;
   /** Set when the person picked one of several items that share a name. */
   focusId?: string;
+  /** Catalog objects and relationships for the AI answer (agents and AI models aren't rows). */
+  landscape?: { objects: readonly LandscapeObject[]; relationships: readonly LandscapeEdge[] };
 }): AskAnswer {
   const question = input.question.trim();
   const q = question.toLowerCase();
@@ -249,6 +259,9 @@ export function answerFromRecords(input: {
 
   if (!question) {
     return empty("unsupported", "Ask a question about your applications, capabilities, or infrastructure.", today);
+  }
+  if (input.landscape && classifyIntent(question) === "ai") {
+    return aiAnswer(aiLandscape(input.landscape), input.landscape.objects, input.rows, input.basePath, today);
   }
   if (/uptime|invoice|ticket|forecast|google workspace|opinion/.test(q) || /customer data|sensitive|personal data/.test(q)) {
     return {
@@ -309,6 +322,103 @@ export function answerFromRecords(input: {
     ),
     followUps: SUGGESTED.slice(0, 3),
   };
+}
+
+function aiReportLink(basePath: string): { href: string; label: string } {
+  return { href: reportPath(basePath, "ai-landscape"), label: "Open Reports › AI landscape" };
+}
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/** §8 deterministic AI answer from aiLandscape(): counts per group, the top 3 flags with citations, spend, unreviewed. */
+function aiAnswer(result: AiLandscape, objects: readonly LandscapeObject[], rows: CatalogRow[], basePath: string, today: string): AskAnswer {
+  const link = aiReportLink(basePath);
+  const activeAgents = result.agents.filter((agent) => agent.active);
+  const platforms = result.platforms.filter((item) => item.counted);
+  if (result.places === 0 && result.unreviewed.length === 0) {
+    return {
+      ...empty("ai", "I don't see any AI in your map yet.", today),
+      gaps: [{ text: "Add an AI agent, or check the apps you own for AI features.", fillHref: link.href }],
+      followUps: ["What has no owner?", "Where is our money going?", "What renews in the next 90 days?"],
+      link,
+    };
+  }
+  const byId = new Map(objects.map((object) => [object.id, object]));
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const itemRecord = (itemId: string) => {
+    const feature = result.features.find((item) => item.id === itemId);
+    if (feature) return { recordId: feature.hostId, label: `${feature.feature.name} (${feature.hostName})` };
+    return { recordId: itemId, label: byId.get(itemId)?.name ?? itemId };
+  };
+  const citations: AskCitation[] = [];
+  const citeRecord = (recordId: string, relationship: string): number => {
+    const existing = citations.find((item) => item.recordId === recordId);
+    if (existing) {
+      if (relationship && !existing.relationship.includes(relationship)) existing.relationship = `${existing.relationship} · ${relationship}`;
+      return existing.n;
+    }
+    const object = byId.get(recordId);
+    const agent = result.agents.find((item) => item.id === recordId);
+    const row = rowById.get(recordId) ?? aiRow(recordId, object, agent?.owner ?? "");
+    citations.push({ n: citations.length + 1, recordId, relationship, row });
+    return citations.length;
+  };
+  const top: LandscapeFlag[] = result.flags.slice(0, 3);
+  const evidence: AskEvidence[] = top.map((flag) => {
+    const records = flag.itemIds.map(itemRecord);
+    for (const record of records) citeRecord(record.recordId, `${flag.id} ${flag.title}`);
+    const names = records.map((record) => record.label).join(", ");
+    return { text: `${names}: ${flag.why}`, citationIds: [...new Set(records.map((record) => record.recordId))] };
+  });
+  for (const flag of result.flags.slice(3)) {
+    if (citations.length >= 10) break;
+    for (const id of flag.itemIds) citeRecord(itemRecord(id).recordId, `${flag.id} ${flag.title}`);
+  }
+  const groups = [
+    result.features.length ? plural(result.features.length, "feature in your tools", "features in your tools") : "",
+    activeAgents.length ? plural(activeAgents.length, "agent", "agents") : "",
+    platforms.length ? plural(platforms.length, "AI platform or model", "AI platforms and models") : "",
+  ].filter(Boolean);
+  const head = result.places
+    ? `You use AI in **${plural(result.places, "place", "places")}**: ${joinNames(groups)}.`
+    : "No AI is confirmed on your map yet.";
+  const flagLine = result.flags.length
+    ? `**${plural(result.flags.length, "flag", "flags")}** (${result.highFlags} high)`
+    : "No flags";
+  const spend = result.spend.total > 0 ? `${formatDollars(result.spend.total)} / yr on AI` : "no AI spend recorded";
+  const gaps: { text: string; fillHref: string }[] = [];
+  if (result.unreviewed.length) {
+    const apps = new Set(result.unreviewed.map((row) => row.hostId)).size;
+    gaps.push({ text: `${plural(result.unreviewed.length, "AI feature", "AI features")} on ${plural(apps, "app", "apps")} nobody has confirmed yet.`, fillHref: link.href });
+  }
+  for (const agent of activeAgents.filter((item) => item.identityGap).slice(0, 3)) {
+    gaps.push({ text: `Whose account does ${agent.name} use?`, fillHref: modelItemPath(basePath, "agents", agent.id) });
+  }
+  const outage = result.platforms.find((item) => item.counted && rowById.has(item.id) && item.usedBy.length > 0);
+  return {
+    handler: "ai",
+    answerText: `${head} ${flagLine}, ${result.unreviewed.length} unreviewed, ${spend}.`,
+    citations,
+    evidence,
+    gaps,
+    followUps: [
+      ...(outage ? [`What breaks if ${outage.name} goes down?`] : []),
+      "Which agents have no owner?",
+      "What do we spend on AI?",
+    ].slice(0, 3),
+    caption: { generatedAt: today, recordCount: citations.length, gapCount: gaps.length },
+    link,
+  };
+}
+
+/** Agents and AI models aren't catalog rows; give them a row that links to their own page. */
+function aiRow(recordId: string, object: LandscapeObject | undefined, owner: string): CatalogRow {
+  const type = object?.type ?? "application";
+  const label = type === "agent" ? "AI Agent" : type === "ai_model" ? "AI Model" : "Item";
+  const row = placeholderRow(recordId, object?.name ?? recordId, label);
+  return { ...row, object: { ...row.object, type } as MinEAObject, ownerTeam: owner, missing: { ...row.missing, owner: !owner } };
 }
 
 export function graphFrom(nodes: ImpactNode[], relationships: Relationship[]): AskGraph {

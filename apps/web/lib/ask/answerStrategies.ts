@@ -22,6 +22,7 @@ export type AskIntent =
   | "spend"
   | "vendors"
   | "aging"
+  | "ai"
   | "unknown";
 
 export type InferenceInput = {
@@ -76,6 +77,7 @@ Intents:
 - ownership (who owns this item): the owner column. If it is blank, owners of related items, labelled inferred.
 - gaps, lists, and spend: find_gaps or aggregate. A missing-field question is not a vendor list.
 - aging (out of support, unsupported OS, old servers, what needs replacing): list of infrastructure past support. End-of-life questions stay on the lifecycle list. The counts come from the infrastructure status module when that split is on.
+- ai (what AI do we use, AI agents, AI models, Copilot and other AI features, what AI can see or change, AI risks, AI spend): ai_landscape. Use its numbers as given. An AI feature is a setting on an app, not a separate item: cite the app.
 
 Answer rules:
 - Lead with a one-line verdict.
@@ -112,8 +114,14 @@ export function answerStrategyArtifact(): { thresholds: typeof criticalityThresh
   return { thresholds: criticalityThresholds, strategyPrompt };
 }
 
+/** §8: AI words. Bare "model" is a tab name (servers), so it never counts. */
+const AI_TRIGGER = /\b(ai|copilot|agents?|gpt|llm|chatgpt|claude|gemini)\b/i;
+const IMPORTANCE_TRIGGER = /how important|why .{0,80} important|how critical|why .{0,80} critical|can we live without|business critical/;
+const IMPACT_TRIGGER = /break|fail|goes down|is down|outage|depend|impact/;
+
 export function classifyIntent(question: string): AskIntent {
   const q = question.toLowerCase();
+  if (AI_TRIGGER.test(q) && !IMPORTANCE_TRIGGER.test(q) && !IMPACT_TRIGGER.test(q)) return "ai";
   if (GAP_TRIGGER.test(q)) {
     if (/vendor/.test(q)) return "gaps";
     if (/owner/.test(q)) return "gaps";
@@ -122,8 +130,8 @@ export function classifyIntent(question: string): AskIntent {
     if (/critical/.test(q)) return "gaps";
     if (/lifecycle|end of life|\beol\b/.test(q)) return "gaps";
   }
-  if (/how important|why .{0,80} important|how critical|why .{0,80} critical|can we live without|business critical/.test(q)) return "importance";
-  if (/break|fail|goes down|is down|outage|depend|impact/.test(q)) return "impact";
+  if (IMPORTANCE_TRIGGER.test(q)) return "importance";
+  if (IMPACT_TRIGGER.test(q)) return "impact";
   if (/who owns/.test(q)) return "ownership";
   if (/no owner|unowned|without an owner/.test(q)) return "ownership";
   if (/renew|contract|expire|90 day/.test(q)) return "renewals";

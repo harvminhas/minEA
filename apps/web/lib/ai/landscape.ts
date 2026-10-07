@@ -106,6 +106,20 @@ const TITLES: Record<FlagId, { title: string; fix: string }> = {
   F6: { title: "Two doing the same job", fix: "Compare them" },
 };
 
+const COUNT_WORDS: Record<number, string> = { 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six" };
+
+/** F6 title with the group's size: "Two doing the same job", "Three doing the same job". */
+export function f6Title(count: number): string {
+  return `${COUNT_WORDS[count] ?? String(count)} doing the same job`;
+}
+
+/** Header for a group of flags of one kind: the shared title, or a count-free one when F6 groups differ in size. */
+export function flagGroupTitle(group: readonly LandscapeFlag[]): string {
+  const titles = new Set(group.map((flag) => flag.title));
+  if (titles.size === 1) return group[0].title;
+  return group[0].id === "F6" ? "Doing the same job" : group[0].title;
+}
+
 const KIND_ORDER: SensitiveKind[] = ["customer", "financial", "employee"];
 
 function kindsText(kinds: Set<SensitiveKind>): string {
@@ -316,7 +330,8 @@ export function riskFlags(
 ): LandscapeFlag[] {
   const graph = graphOf(objects, relationships);
   const flags: LandscapeFlag[] = [];
-  const push = (id: FlagId, severity: Severity, itemIds: string[], why: string) => flags.push({ id, severity, itemIds, why, ...TITLES[id] });
+  const push = (id: FlagId, severity: Severity, itemIds: string[], why: string, title?: string) =>
+    flags.push({ id, severity, itemIds, why, ...TITLES[id], ...(title ? { title } : {}) });
 
   for (const item of features) {
     const host = graph.byId.get(item.hostId);
@@ -367,7 +382,7 @@ export function riskFlags(
     if (!job || job === "other" || members.length < 2) continue;
     if (new Set(members.map((member) => member.record)).size < 2) continue;
     const label = AI_JOBS.find((item) => item.value === job)?.label.toLowerCase() ?? job;
-    push("F6", "check", members.map((member) => member.id), `${members.map((member) => member.name).join(", ")} ${members.length === 2 ? "both" : "all"} do ${label}.`);
+    push("F6", "check", members.map((member) => member.id), `${members.map((member) => member.name).join(", ")} ${members.length === 2 ? "both" : "all"} do ${label}.`, f6Title(members.length));
   }
 
   const rank = (flag: LandscapeFlag) => (flag.severity === "high" ? 0 : 1);
@@ -453,4 +468,11 @@ export function aiLandscape({
     highFlags: flags.filter((flag) => flag.severity === "high").length,
     chainAgentId: chainAgent?.id ?? null,
   };
+}
+
+/** §8 chip: any agent / AI model / active feature, or at least one catalog suggestion. */
+export function hasAiToAskAbout(objects: readonly LandscapeObject[], catalog: readonly AiCatalogEntry[] = AI_FEATURE_CATALOG): boolean {
+  if (objects.some((object) => (object.type === "agent" || object.type === "ai_model") && object.status !== "retired")) return true;
+  const { features, unreviewed: review } = collectFeatures(objects, catalog);
+  return features.length > 0 || review.length > 0;
 }

@@ -5,6 +5,9 @@ import { hostSourceIds, readPlatformInfra, readRuntimeInfra } from "@/lib/infra/
 import { countLabel } from "@/lib/labels";
 import { agingSummary, infraStatus } from "@/lib/infra/status";
 import { impactOf, type ImpactEdge, type ImpactNode } from "@/lib/impact/relationship-impact";
+import { hasAiToAskAbout, type LandscapeObject } from "@/lib/ai/landscape";
+
+export const AI_CHIP = "What AI do we use and what can it touch?";
 
 export type HomeEdge = { type: string; fromId: string; toId: string };
 
@@ -129,7 +132,8 @@ export function supportCounts(rows: CatalogRow[], today = new Date()) {
   return { out: aging.outOfSupportOrOs, soon: aging.endsSoon };
 }
 
-export function askChips(rows: CatalogRow[], edges: HomeEdge[], today = new Date()): string[] {
+/** `objects` are the catalog objects (agents and AI models aren't rows); they only drive the AI chip. */
+export function askChips(rows: CatalogRow[], edges: HomeEdge[], today = new Date(), objects: readonly LandscapeObject[] = []): string[] {
   const stats = catalogStats(rows);
   const servers = rows.filter((row) => row.kind === "runtime");
   const aging = agingSummary(servers.map((row) => readRuntimeInfra(row.object)), today);
@@ -142,6 +146,7 @@ export function askChips(rows: CatalogRow[], edges: HomeEdge[], today = new Date
   chips.push(stats.renewals.length > 0 ? "What renews in the next 90 days?" : "When is our next renewal?");
   if (stats.noOwner.length > 0) chips.push("What has no owner?");
   if (stats.spend > 0) chips.push("What are we spending by vendor?");
+  if (hasAiToAskAbout(objects)) chips.push(AI_CHIP);
   const graphNodes = nodesOf(rows);
   const graphEdges = edges as ImpactEdge[];
   const busiestApp = [...rows.filter((row) => row.kind === "application")].sort(

@@ -125,6 +125,9 @@ class Edge:
 class WorkspaceGraph:
     records: dict[str, Rec]
     edges: list[Edge]
+    # Raw objects (id, type, name, status, owners, properties) for lookups that need properties,
+    # such as ai_landscape. Same shape as the web catalog objects.
+    objects: list[dict] = field(default_factory=list)
 
     def get(self, record_id: str) -> Rec | None:
         return self.records.get(record_id)
@@ -138,6 +141,8 @@ def _kind(obj: MinEAObject, props: dict) -> str:
     name = obj.name or ""
     hosting = str(props.get("hosting_model") or "")
     runtime = str(props.get("compute_runtime_kind") or "")
+    if obj.type in {"agent", "ai_model"}:
+        return TYPE_LABELS[obj.type]
     if obj.type in APP_TYPES:
         if props.get("is_custom_built"):
             return "Built in-house"
@@ -185,7 +190,7 @@ def _record(obj: MinEAObject, team_names: dict[str, str]) -> Rec | None:
         record_type = "flow"
     elif obj.type == "component":
         record_type = "component"
-    elif obj.type in {"api", "event", "capability", "data_object", "data_store", "data_domain", "roadmap_item", "tech_debt"}:
+    elif obj.type in {"api", "event", "capability", "data_object", "data_store", "data_domain", "roadmap_item", "tech_debt", "agent", "ai_model"}:
         record_type = obj.type
     else:
         record_type = "other"
@@ -264,10 +269,28 @@ async def load_graph(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUI
     team_names = {str(team.id): team.name for team in teams}
     records: dict[str, Rec] = {}
     edges: list[Edge] = []
+    raw: list[dict] = []
     for obj in objects:
         rec = _record(obj, team_names)
         if rec:
             records[rec.id] = rec
+        raw.append(_raw(obj, team_names))
     for rel in relationships:
         edges.append(Edge(str(rel.from_object_id), str(rel.to_object_id), rel.type, ""))
-    return WorkspaceGraph(records=records, edges=edges)
+    return WorkspaceGraph(records=records, edges=edges, objects=raw)
+
+
+def _raw(obj: MinEAObject, team_names: dict[str, str]) -> dict:
+    team_id = str(obj.owner_team_id) if obj.owner_team_id else None
+    return {
+        "id": str(obj.id),
+        "type": obj.type,
+        "name": obj.name,
+        "status": obj.status,
+        "owner": obj.owner,
+        "owner_team_id": team_id,
+        "owner_team_name": team_names.get(team_id) if team_id else None,
+        "point_of_contact_id": str(obj.point_of_contact_id) if obj.point_of_contact_id else None,
+        "point_of_contact_name": obj.point_of_contact_name,
+        "properties": obj.properties or {},
+    }

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Callable
 
+from app.ai.ask.ai_landscape import JOB_LABELS, ai_landscape as build_landscape
 from app.ai.ask.graph import Rec, WorkspaceGraph, fold
 from app.ai.ask.impact import ImpactEdge, impact_of as traverse_impact
 
@@ -34,12 +35,18 @@ class ToolBag:
 
     def note_record(self, rec: Rec) -> None:
         self.seen_ids.add(rec.id)
+        self.note_name(rec.name)
         if rec.annual is not None:
             self.numbers.add(str(int(rec.annual)))
             self.numbers.add(f"{int(rec.annual):,}")
         if rec.renewal:
             for token in re.findall(r"\d+", rec.renewal):
                 self.numbers.add(token)
+
+    def note_name(self, name: str) -> None:
+        """Digits inside a returned name ("Microsoft 365", "GPT-4o") are not made-up numbers."""
+        for token in re.findall(r"\d+", name or ""):
+            self.numbers.add(token)
 
     def note_number(self, value: int | float) -> None:
         whole = int(value) if float(value).is_integer() else value
@@ -259,6 +266,172 @@ def find_gaps(bag: ToolBag, args: dict) -> dict:
     return {"gaps": gaps[:50], "count": len(gaps), "by_type": by_type}
 
 
+AI_GROUPS = {"features", "agents", "platforms"}
+AI_FLAGS = {"F1", "F2", "F3", "F4", "F5", "F6"}
+
+
+def _seats(feature_item: dict, host: dict) -> int | None:
+    line_id = feature_item["feature"].get("cost_line_id")
+    lines = (host.get("properties") or {}).get("cost_lines")
+    for line in lines if isinstance(lines, list) else []:
+        if isinstance(line, dict) and line.get("id") == line_id:
+            calc = line.get("calculation") or {}
+            if calc.get("kind") == "per_user":
+                return int(calc.get("seats") or 0) or None
+    return None
+
+
+def ai_landscape(bag: ToolBag, args: dict) -> dict:
+    """§8: the AI landscape report as data. Item ids are record ids (a feature's id is its app)."""
+    objects = bag.graph.objects
+    relationships = [{"type": edge.relation, "from_object_id": edge.from_id, "to_object_id": edge.to_id} for edge in bag.graph.edges]
+    result = build_landscape(objects, relationships)
+    by_id = {obj["id"]: obj for obj in objects}
+    group = str(args.get("group") or "").strip().lower()
+    flag_filter = str(args.get("flag") or "").strip().upper()
+
+    def label(record_id: str) -> str:
+        rec = bag.graph.get(record_id)
+        return rec.type_label() if rec else "Item"
+
+    def note(record_id: str) -> None:
+        rec = bag.graph.get(record_id)
+        if rec:
+            bag.note_record(rec)
+
+    feature_rows = []
+    for item in result["features"]:
+        feature = item["feature"]
+        seats = _seats(item, by_id.get(item["hostId"]) or {})
+        feature_rows.append(
+            {
+                "id": item["hostId"],
+                "name": feature["name"],
+                "app": item["hostName"],
+                "type_label": label(item["hostId"]),
+                "status": feature.get("status"),
+                "audience": feature.get("audience"),
+                "sees_company_data": feature.get("sees_company_data"),
+                "vendor_trains": feature.get("vendor_trains"),
+                "job": JOB_LABELS.get(item["job"], item["job"]),
+                "seats": seats,
+                "add_on_per_year": item["addOn"],
+            }
+        )
+    agent_rows = []
+    for agent in result["agents"]:
+        if not agent["active"]:
+            continue
+        agent_rows.append(
+            {
+                "id": agent["id"],
+                "name": agent["name"],
+                "type_label": label(agent["id"]),
+                "status": agent["status"],
+                "job": JOB_LABELS.get(agent["job"], agent["job"]),
+                "built_with": [item["name"] for item in agent["builtWith"]],
+                "models": [item["name"] for item in agent["models"]],
+                "reads": [item["name"] for item in agent["reads"]],
+                "writes": [item["name"] for item in agent["writes"]],
+                "acts_as": agent["actsAs"],
+                "autonomy": agent["autonomy"] or None,
+                "owner": agent["owner"] or None,
+                "cost_per_year": agent["cost"],
+            }
+        )
+    platform_rows = [
+        {
+            "id": item["id"],
+            "name": item["name"],
+            "type_label": label(item["id"]),
+            "kind": item["kindLabel"],
+            "counted_in_spend": item["counted"],
+            "vendor": item["vendor"] or None,
+            "used_by": [use["name"] for use in item["usedBy"]],
+            "vendor_trains": item["vendorTrains"] or None,
+            "cost_per_year": item["cost"],
+        }
+        for item in result["platforms"]
+    ]
+
+    def records_for(item_ids: list[str]) -> list[str]:
+        found: list[str] = []
+        for item_id in item_ids:
+            record_id = item_id.split(":", 1)[0] if ":" in item_id else item_id
+            if record_id not in found:
+                found.append(record_id)
+        return found
+
+    names = {obj["id"]: obj["name"] for obj in objects}
+    feature_names = {item["id"]: f"{item['feature']['name']} ({item['hostName']})" for item in result["features"]}
+    flag_rows = [
+        {
+            "flag": flag["id"],
+            "severity": flag["severity"],
+            "title": flag["title"],
+            "why": flag["why"],
+            "items": [feature_names.get(item_id) or names.get(item_id, item_id) for item_id in flag["itemIds"]],
+            "record_ids": records_for(flag["itemIds"]),
+        }
+        for flag in result["flags"]
+        if not flag_filter or flag["id"] == flag_filter
+    ]
+    by_flag: dict[str, int] = {}
+    for flag in result["flags"]:
+        by_flag[flag["id"]] = by_flag.get(flag["id"], 0) + 1
+
+    counts = {
+        "places": result["places"],
+        "features": len(feature_rows),
+        "agents": len(agent_rows),
+        "platforms_and_models": sum(1 for item in result["platforms"] if item["counted"]),
+        "flags": len(result["flags"]),
+        "high_flags": result["highFlags"],
+        "unreviewed": len(result["unreviewed"]),
+    }
+    spend = {
+        "total_per_year": result["spend"]["total"],
+        "per_seat_add_ons": result["spend"]["addOns"],
+        "platforms_and_models": result["spend"]["platforms"],
+        "agents": result["spend"]["agents"],
+    }
+    shown = {
+        "features": feature_rows if group in {"", "features"} else [],
+        "agents": agent_rows if group in {"", "agents"} else [],
+        "platforms": platform_rows if group in {"", "platforms"} else [],
+    }
+    for rows in shown.values():
+        for row in rows:
+            note(row["id"])
+            for key in ("seats", "add_on_per_year", "cost_per_year"):
+                if isinstance(row.get(key), (int, float)):
+                    bag.note_number(row[key])
+    for flag in flag_rows:
+        for record_id in flag["record_ids"]:
+            note(record_id)
+    for value in [*counts.values(), *spend.values(), *by_flag.values()]:
+        bag.note_number(value)
+    for row in feature_rows:
+        bag.note_name(row["name"])
+    for flag in flag_rows:
+        for name in flag["items"]:
+            bag.note_name(name)
+    for flag_id in by_flag:
+        bag.numbers.add(flag_id[1:])  # "F1" in an answer must not read as an ungrounded 1
+    return {
+        "counts": counts,
+        "spend": spend,
+        "flags_by_kind": by_flag,
+        "flags": flag_rows,
+        **shown,
+        "unreviewed_count": len(result["unreviewed"]),
+        "unreviewed_apps": sorted({row["hostName"] for row in result["unreviewed"]}),
+        "group": group if group in AI_GROUPS else None,
+        "flag": flag_filter if flag_filter in AI_FLAGS else None,
+        "report": "Reports › AI landscape",
+    }
+
+
 TOOLS: list[AskTool] = [
     AskTool(
         name="search_records",
@@ -317,6 +490,25 @@ TOOLS: list[AskTool] = [
             },
         },
         run=find_gaps,
+    ),
+    AskTool(
+        name="ai_landscape",
+        description=(
+            "Everywhere AI is used: AI features in tools, AI agents, AI platforms and models, with risk flags F1–F6, "
+            "total AI spend and unreviewed count. Use the numbers as given. "
+            "An AI feature is a setting on an app, not a separate item: its id is the app's id, so cite the app. "
+            "group is features, agents or platforms; flag is F1 (can see customer or financial data), F2 (vendor may train), "
+            "F3 (agent has no owner), F4 (agent can change data), F5 (agent uses a person's account) or F6 (same job). "
+            "counts and spend are always for the whole workspace."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "group": {"type": "string", "enum": ["features", "agents", "platforms"]},
+                "flag": {"type": "string", "enum": ["F1", "F2", "F3", "F4", "F5", "F6"]},
+            },
+        },
+        run=ai_landscape,
     ),
 ]
 

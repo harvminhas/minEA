@@ -10,7 +10,7 @@ import { useModelCatalog } from "@/lib/use-model-catalog";
 import { moneyLabel } from "@/lib/model-catalog";
 import { countLabel } from "@/lib/labels";
 import { AGENT_AUTONOMY_OPTIONS, AGENT_STATUS_OPTIONS } from "@/lib/fields/registry";
-import { agentChain, aiLandscape, type Lane, type LandscapeFlag, type UnreviewedRow } from "@/lib/ai/landscape";
+import { agentChain, aiLandscape, flagGroupTitle, type Lane, type LandscapeFlag, type UnreviewedRow } from "@/lib/ai/landscape";
 import { confirmFeature, featureCostLabel } from "@/lib/ai/features";
 import { useFeatureSave } from "@/lib/ai/use-feature-save";
 
@@ -310,7 +310,7 @@ function FlagsCard({
           <div className="flex items-center gap-2">
             <SeverityPill severity={group[0].severity} />
             <span className="text-[14px] font-medium text-[#1c2230]">
-              {group[0].severity === "check" && group[0].id !== "F6" ? `Check: ${group[0].title.toLowerCase()}` : group[0].title}
+              {group[0].severity === "check" && group[0].id !== "F6" ? `Check: ${group[0].title.toLowerCase()}` : flagGroupTitle(group)}
             </span>
             <span className="text-[12px] text-[#8b90a0]">{group.length}</span>
             <span className="ml-auto text-[12px] text-[#5b4ce6]">{group[0].fix}</span>
