@@ -265,6 +265,7 @@ function AnywhereAdd({
         renewal: row.renewal,
         choice: row.choice,
         hint: row.hint,
+        tool: row.status === "matched" ? row.tool : null,
       }))),
       undoUntil: Date.now() + UNDO_MS,
       objectIds: saved.created_object_ids,

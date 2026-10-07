@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  aiStepPatch,
+  aiStepRows,
+  replaceTypicalLine,
+  setupCreate,
+  setupScreenFromStored,
+  storedSetupStep,
+  SETUP_SCREENS,
   addButtonLabel,
   catalogLists,
   addedSentence,
@@ -14,7 +21,10 @@ import {
   type EstateItem,
   type PlanInput,
 } from "./add-plan.ts";
-import { TOOL_CATALOG } from "./match-tools.ts";
+import { SAMPLE_COMPANY, TOOL_CATALOG, setupMatch } from "./match-tools.ts";
+import { lineAnnualCents } from "../cost/math.ts";
+import { catalogEntry } from "../ai/catalog.ts";
+import { unreviewed } from "../ai/landscape.ts";
 
 const hubspot: EstateItem = {
   id: "hub",
@@ -308,5 +318,137 @@ describe("catalogLists", () => {
     const data = { objects: [{ id: "a" }], relationships: [{ id: "r" }] };
     assert.equal(catalogLists(data).objects, data.objects);
     assert.equal(catalogLists(data).relationships, data.relationships);
+  });
+});
+
+describe("first-run AI step", () => {
+  const NOW = "2026-10-07T12:00:00.000Z";
+  const hostsFor = (text: string) =>
+    setupMatch(text).flatMap((item, index) => {
+      const spec = setupCreate(item);
+      return spec ? [{ key: String(index), objectId: `id-${index}`, type: spec.type, name: spec.name, properties: spec.properties }] : [];
+    });
+
+  it("the sample company gives four apps, default-on features ticked and paid add-ons not", () => {
+    const { rows, others } = aiStepRows(hostsFor(SAMPLE_COMPANY));
+    assert.deepEqual(rows.map((row) => row.name), ["Salesforce", "QuickBooks Online", "Microsoft 365", "Shopify"]);
+    const m365 = rows.find((row) => row.name === "Microsoft 365")!;
+    assert.deepEqual(
+      m365.features.map((feature) => [feature.entry.key, feature.ticked, feature.paidLabel]),
+      [
+        ["m365-copilot-chat", true, ""],
+        ["m365-copilot", false, "paid add-on · $21 /user/mo"],
+        ["teams-premium-recap", false, "paid add-on · $10 /user/mo"],
+      ],
+    );
+    assert.equal(m365.audience, "everyone");
+    assert.deepEqual(rows.find((row) => row.name === "Salesforce")!.features.map((feature) => feature.ticked), [false]);
+    assert.deepEqual(others, ["Order Entry", "EDI", "label printing"]);
+  });
+
+  it("Copilot Chat ticked + M365 Copilot ticked with 25 seats → 2 features on, 1 off, 1 cost line of $6,300 / yr", () => {
+    const host = { id: "m365", type: "application", name: "Microsoft 365", properties: { catalog_tool: "microsoft 365", cost_lines: [] } };
+    const [patch] = aiStepPatch(
+      [{
+        host,
+        audience: "some_groups",
+        features: [
+          { entry: catalogEntry("m365-copilot-chat")!, ticked: true },
+          { entry: catalogEntry("m365-copilot")!, ticked: true, seats: 25 },
+          { entry: catalogEntry("teams-premium-recap")!, ticked: false, seats: 10 },
+        ],
+      }],
+      "Ana",
+      NOW,
+    );
+    assert.equal(patch.objectId, "m365");
+    assert.deepEqual(
+      patch.properties.ai_features.map((feature) => [feature.key, feature.status, feature.source, feature.audience, feature.confirmed_by, feature.cost_line_id ?? null]),
+      [
+        ["m365-copilot-chat", "on", "onboarding", "some_groups", "Ana", null],
+        ["m365-copilot", "on", "onboarding", "some_groups", "Ana", "ai-m365-copilot"],
+        ["teams-premium-recap", "off", "onboarding", "some_groups", "Ana", null],
+      ],
+    );
+    const lines = patch.properties.cost_lines!;
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0].ai_feature, "m365-copilot");
+    assert.equal(lines[0].source, "estimate");
+    assert.equal(lineAnnualCents(lines[0]), 630000);
+  });
+
+  it("keeps the app's typical cost line and sends no cost_lines when nothing has seats", () => {
+    const typical = { id: "typical-microsoft", type: "subscription", amount_cents: 100, frequency: "annual", calculation: { kind: "flat" }, vendor: null, source: "estimate", created_at: NOW, created_by: "setup", updated_at: NOW, updated_by: "setup" };
+    const host = { id: "m365", type: "application", name: "Microsoft 365", properties: { cost_lines: [typical] } };
+    const [plain] = aiStepPatch([{ host, audience: "everyone", features: [{ entry: catalogEntry("m365-copilot-chat")!, ticked: true }] }], "Ana", NOW);
+    assert.equal("cost_lines" in plain.properties, false);
+    const [seated] = aiStepPatch([{ host, audience: "everyone", features: [{ entry: catalogEntry("m365-copilot")!, ticked: true, seats: 2 }] }], "Ana", NOW);
+    assert.deepEqual(seated.properties.cost_lines!.map((line) => line.id), ["typical-microsoft", "ai-m365-copilot"]);
+  });
+
+  it("Next with the default ticks leaves nothing unreviewed on those apps; Skip leaves them all unreviewed", () => {
+    const hosts = hostsFor(SAMPLE_COMPANY);
+    const { rows } = aiStepRows(hosts);
+    const objects = hosts.map((host) => ({ id: host.objectId, type: host.type, name: host.name, properties: { ...host.properties } }));
+    const patches = aiStepPatch(
+      rows.map((row) => ({
+        host: objects.find((object) => object.id === row.objectId)!,
+        audience: row.audience,
+        features: row.features.map((feature) => ({ entry: feature.entry, ticked: feature.ticked })),
+      })),
+      "Ana",
+      NOW,
+    );
+    assert.equal(unreviewed(objects).length, 6);
+    const saved = objects.map((object) => {
+      const patch = patches.find((item) => item.objectId === object.id);
+      return patch ? { ...object, properties: { ...object.properties, ...patch.properties } } : object;
+    });
+    assert.deepEqual(unreviewed(saved), []);
+    const on = saved.flatMap((object) => ((object.properties as { ai_features?: { key: string; status: string }[] }).ai_features ?? []).filter((feature) => feature.status === "on").map((feature) => feature.key));
+    assert.deepEqual(on, ["quickbooks-intuit-assist", "m365-copilot-chat", "shopify-sidekick"]);
+  });
+
+  it("a yearly cost typed on the owners step replaces the typical line but keeps the AI seat line", () => {
+    const host = { id: "m365", type: "application", name: "Microsoft 365", properties: { cost_lines: [] } };
+    const [patch] = aiStepPatch([{ host, audience: "everyone", features: [{ entry: catalogEntry("m365-copilot")!, ticked: true, seats: 25 }] }], "Ana", NOW);
+    const typical = { id: "typical-microsoft", type: "subscription", amount_cents: 1500000, frequency: "annual", calculation: { kind: "flat" }, vendor: "Microsoft", source: "estimate", notes: "typical", created_at: NOW, created_by: "setup", updated_at: NOW, updated_by: "setup" } as const;
+    const typed = { ...typical, id: "typed", amount_cents: 2000000 };
+    const lines = replaceTypicalLine({ cost_lines: [typical, ...patch.properties.cost_lines!] }, typed);
+    assert.deepEqual(lines.map((line) => line.id), ["ai-m365-copilot", "typed"]);
+  });
+
+  it("skip writes nothing, and a list with no known AI skips the step", () => {
+    assert.deepEqual(aiStepPatch([], "Ana", NOW), []);
+    const { rows, others } = aiStepRows(hostsFor("AS400, Order Entry, EDI, label printing"));
+    assert.deepEqual(rows, []);
+    assert.deepEqual(others, ["Order Entry", "EDI", "label printing"]);
+  });
+
+  it("features already stored on a kept app aren't asked again", () => {
+    const kept = { key: "m", type: "application", name: "Microsoft 365", properties: { ai_features: [{ key: "m365-copilot-chat", name: "Copilot Chat", status: "on", sees_company_data: "no", vendor_trains: "no", source: "catalog" }] } };
+    assert.deepEqual(aiStepRows([kept]).rows[0].features.map((feature) => feature.entry.key), ["m365-copilot", "teams-premium-recap"]);
+  });
+
+  it("stored setupStep values keep their old meaning; the AI step gets a new number", () => {
+    assert.deepEqual(SETUP_SCREENS, ["paste", "matched", "ai", "where", "owners"]);
+    // Values written before this step existed: 1 matched, 2 where, 3 owners.
+    assert.equal(setupScreenFromStored(1), "matched");
+    assert.equal(setupScreenFromStored(2), "where");
+    assert.equal(setupScreenFromStored(3), "owners");
+    assert.equal(setupScreenFromStored(4), "ai");
+    assert.equal(setupScreenFromStored(null), "paste");
+    assert.equal(setupScreenFromStored(9), "paste");
+    for (const screen of SETUP_SCREENS) assert.equal(setupScreenFromStored(storedSetupStep(screen)), screen);
+    assert.equal(storedSetupStep("where"), 2);
+    assert.equal(storedSetupStep("owners"), 3);
+  });
+
+  it("a new app with known AI features gets a 'Confirm AI features' to-do", () => {
+    const m365 = TOOL_CATALOG.find((tool) => tool.name === "Microsoft 365")!;
+    const row = { name: "Microsoft 365", kind: "app" as const, kept: false, updating: false, owner: "Ana", renewal: "2027-01-01", choice: "saas" as const, hint: null };
+    assert.deepEqual(todoLines([{ ...row, tool: m365 }]), ["Confirm AI features on Microsoft 365"]);
+    assert.deepEqual(todoLines([{ ...row, tool: null }]), []);
+    assert.deepEqual(todoLines([{ ...row, tool: m365, kept: true }]), []);
   });
 });

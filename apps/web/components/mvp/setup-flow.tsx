@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MinEAObject } from "@minea/types";
@@ -19,7 +20,9 @@ import {
   type MatchItem,
   type ToolRecord,
 } from "@/lib/setup/match-tools";
-import { setupCreate } from "@/lib/setup/add-plan";
+import { SETUP_SCREENS, aiStepPatch, aiStepRows, replaceTypicalLine, setupCreate, storedSetupStep, type AiStepRow } from "@/lib/setup/add-plan";
+import type { AiFeatureAudience } from "@minea/types";
+import { modelPath } from "@/lib/mvp-paths";
 import { SETUP_MIN, setupMeter, setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
@@ -118,6 +121,9 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
   const [whereByServer, setWhereByServer] = useState<Record<string, string>>({});
   const [serverIds, setServerIds] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [hosts, setHosts] = useState<Record<string, MinEAObject>>({});
+  const [aiRows, setAiRows] = useState<AiStepRow[]>([]);
+  const [aiPicks, setAiPicks] = useState<Record<string, AiPick>>({});
   const [error, setError] = useState("");
 
   const apps = drafts.filter(isApp);
@@ -156,9 +162,11 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
     router.push(`${basePath}/views?tab=impact&ready=1`);
   };
 
+  // Screens: 0 paste, 1 matched, 2 AI turned on?, 3 where, 4 owners. The stored setupStep keeps its old
+  // numbers (see storedSetupStep), so workspaces that stopped mid-setup before this step existed read the same.
   const skip = async () => {
-    await setup.save({ setupDismissedAt: new Date().toISOString(), setupStep: step });
-    if (step === 3) {
+    await setup.save({ setupDismissedAt: new Date().toISOString(), setupStep: storedSetupStep(SETUP_SCREENS[step] ?? "paste") });
+    if (step === 4) {
       openReadyMap();
       return;
     }
@@ -179,8 +187,11 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
     const token = await auth();
     const nextIds = { ...serverIds };
     const created: Draft[] = [];
+    const stored: Record<string, MinEAObject> = { ...hosts };
     for (const draft of drafts) {
       if (draft.objectId) {
+        const known = catalog.data?.objects.find((object) => object.id === draft.objectId);
+        if (known) stored[draft.key] = known;
         created.push(draft);
         continue;
       }
@@ -195,12 +206,49 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
         properties: spec.properties,
       }, token);
       remember(saved);
+      stored[draft.key] = saved;
       if (spec.type === "model") nextIds[draft.key] = saved.id;
       created.push({ ...draft, objectId: saved.id, input: saved.name });
     }
     setServerIds(nextIds);
     setDrafts(created);
-    setStep(2);
+    setHosts(stored);
+    const { rows } = aiStepRows(
+      created
+        .filter((draft) => stored[draft.key])
+        .map((draft) => ({ key: draft.key, objectId: stored[draft.key].id, type: stored[draft.key].type, name: stored[draft.key].name, properties: stored[draft.key].properties })),
+    );
+    setAiRows(rows);
+    setAiPicks(Object.fromEntries(rows.map((row) => [row.key, startPick(row)])));
+    setStep(rows.length > 0 ? 2 : 3);
+  };
+
+  const saveAi = async () => {
+    const token = await auth();
+    const person = user?.displayName || user?.email || "Someone";
+    const choices = aiRows.flatMap((row) => {
+      const host = (row.objectId && catalog.data?.objects.find((object) => object.id === row.objectId)) || hosts[row.key];
+      const pick = aiPicks[row.key];
+      if (!host || !pick) return [];
+      return [{
+        host,
+        audience: pick.audience,
+        features: row.features.map((feature) => ({
+          entry: feature.entry,
+          ticked: Boolean(pick.ticked[feature.entry.key]),
+          seats: pick.seats[feature.entry.key] ? Number(pick.seats[feature.entry.key]) : null,
+        })),
+      }];
+    });
+    for (const change of aiStepPatch(choices, person)) {
+      const saved = await objectsApi.update(orgSlug!, workspaceSlug!, change.objectId, { properties: change.properties }, token);
+      remember(saved);
+      setHosts((current) => {
+        const key = Object.keys(current).find((name) => current[name].id === saved.id);
+        return key ? { ...current, [key]: saved } : current;
+      });
+    }
+    setStep(3);
   };
 
   const linkServers = async () => {
@@ -257,7 +305,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
       remember(saved);
     }
     setServerIds(ids);
-    setStep(3);
+    setStep(4);
   };
 
   const finish = async () => {
@@ -268,7 +316,8 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
       const properties: Record<string, unknown> = {};
       if (app.renewal) properties.contract_renewal = app.renewal;
       if (!app.typical && Number.isFinite(yearly) && yearly > 0) {
-        properties.cost_lines = [typicalLine(yearly, app.tool?.vendor ?? "")];
+        const current = catalog.data?.objects.find((object) => object.id === app.objectId) ?? hosts[app.key];
+        properties.cost_lines = replaceTypicalLine(current?.properties, typicalLine(yearly, app.tool?.vendor ?? ""));
       }
       const saved = await objectsApi.update(orgSlug!, workspaceSlug!, app.objectId, {
         owner: app.ownerTeam || undefined,
@@ -464,7 +513,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
             <div className="flex gap-2">
               <button type="button" onClick={() => void run(skip)} className="rounded-lg px-3 py-1.5 text-[13px] text-[#6b7289]">Skip for now</button>
               <button type="button" disabled={busy} onClick={() => void run(createApps)} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50">
-                {busy ? "Saving…" : "Next: where each one lives →"}
+                {busy ? "Saving…" : "Next →"}
               </button>
             </div>
           </div>
@@ -474,6 +523,84 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
       {step === 2 && (
         <>
           <Stepper step={2} />
+          <h2 className="text-[18px] font-semibold text-[#1c2230]">Which of these have AI turned on?</h2>
+          <p className="mt-1 text-[13px] text-[#6b7289]">Tick what&apos;s on today. We pre-ticked what&apos;s on by default in each plan.</p>
+          <ul className="mt-3 space-y-3">
+            {aiRows.map((row) => {
+              const pick = aiPicks[row.key] ?? startPick(row);
+              const setPick = (change: Partial<AiPick>) => setAiPicks((current) => ({ ...current, [row.key]: { ...pick, ...change } }));
+              return (
+                <li key={row.key} className="rounded-xl border border-[#e6e8ee] px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-medium text-[#1c2230]">{row.name}</span>
+                    <label className="flex items-center gap-1 text-[12px] text-[#6b7289]">
+                      Who can use it
+                      <select
+                        aria-label={`Who can use AI in ${row.name}`}
+                        value={pick.audience}
+                        onChange={(event) => setPick({ audience: event.target.value as AiFeatureAudience })}
+                        className="h-7 rounded-md border border-[#e6e8ee] bg-white px-1 text-[12px] text-[#1c2230]"
+                      >
+                        <option value="everyone">Everyone</option>
+                        <option value="some_groups">Some groups</option>
+                        <option value="admins">Admins only</option>
+                      </select>
+                    </label>
+                  </div>
+                  <ul className="mt-2 space-y-1.5">
+                    {row.features.map((feature) => {
+                      const key = feature.entry.key;
+                      const ticked = Boolean(pick.ticked[key]);
+                      return (
+                        <li key={key} className="flex flex-wrap items-center gap-2 text-[13px]">
+                          <label className="flex items-center gap-2">
+                            <input type="checkbox" checked={ticked} onChange={(event) => setPick({ ticked: { ...pick.ticked, [key]: event.target.checked } })} />
+                            <span className="text-[#1c2230]">{feature.entry.name}</span>
+                          </label>
+                          {feature.entry.default_on && <span className="rounded-full bg-[#ecfdf3] px-2 py-0.5 text-[11px] text-[#047857]">On by default in your plan</span>}
+                          {feature.paidLabel && <span className="text-[12px] text-[#8b90a0]">{feature.paidLabel}</span>}
+                          {ticked && feature.paidLabel && (
+                            <label className="flex items-center gap-1 text-[12px] text-[#6b7289]">
+                              Seats
+                              <input
+                                aria-label={`Seats for ${feature.entry.name}`}
+                                inputMode="numeric"
+                                value={pick.seats[key] ?? ""}
+                                onChange={(event) => setPick({ seats: { ...pick.seats, [key]: event.target.value.replace(/[^0-9]/g, "") } })}
+                                placeholder="optional"
+                                className="h-7 w-20 rounded-md border border-[#e6e8ee] px-1 text-right"
+                              />
+                            </label>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              );
+            })}
+          </ul>
+          {aiOthers(drafts, aiRows).length > 0 && (
+            <p className="mt-3 text-[13px] text-[#6b7289]">
+              {aiOthers(drafts, aiRows).length} other{aiOthers(drafts, aiRows).length === 1 ? "" : "s"}: no known AI features ({aiOthers(drafts, aiRows).join(", ")})
+            </p>
+          )}
+          <p className="mt-1 text-[13px] text-[#6b7289]">
+            Built your own AI agents or bots? Add them in <Link href={modelPath(basePath, "agents")} className="font-medium text-[#5b4ce6]">Model › AI agents</Link>.
+          </p>
+          <p className="mt-3 text-[12px] text-[#8b90a0]">Ticked = On · Unticked = Off · Skip = all stay Unreviewed (you&apos;ll see them in Reports › AI landscape)</p>
+          <div className="mt-3 flex gap-2">
+            <button type="button" disabled={busy} onClick={() => void run(saveAi)} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50">
+              {busy ? "Saving…" : "Next: where each one lives →"}
+            </button>
+            <button type="button" disabled={busy} onClick={() => setStep(3)} className="rounded-lg px-3 py-1.5 text-[13px] text-[#6b7289]">Skip for now</button>
+          </div>
+        </>
+      )}
+
+      {step === 3 && (
+        <>
+          <Stepper step={3} />
           <h2 className="text-[18px] font-semibold text-[#1c2230]">Where does each one live?</h2>
           <p className="mt-1 text-[13px] text-[#6b7289]">{meter}. Aim for {SETUP_MIN.apps} apps and {SETUP_MIN.hostingLinks} link to a server.</p>
           <ul className="mt-3 space-y-3">
@@ -526,9 +653,9 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
         </>
       )}
 
-      {step === 3 && (
+      {step === 4 && (
         <>
-          <Stepper step={3} />
+          <Stepper step={4} />
           <h2 className="text-[18px] font-semibold text-[#1c2230]">Owners and renewals</h2>
           <p className="mt-1 text-[13px] text-[#6b7289]">All optional. Empty cells are the ones still open.</p>
           <div className="mt-3 overflow-x-auto">
@@ -566,6 +693,22 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
   );
 }
 
+type AiPick = { audience: AiFeatureAudience; ticked: Record<string, boolean>; seats: Record<string, string> };
+
+function startPick(row: AiStepRow): AiPick {
+  return {
+    audience: row.audience,
+    ticked: Object.fromEntries(row.features.map((feature) => [feature.entry.key, feature.ticked])),
+    seats: {},
+  };
+}
+
+/** Names on the list with no known AI features (servers included), for the one-line "others" note. */
+function aiOthers(drafts: Draft[], rows: AiStepRow[]): string[] {
+  const shown = new Set(rows.map((row) => row.key));
+  return drafts.filter((draft) => !shown.has(draft.key)).map((draft) => displayName(draft));
+}
+
 function thinkName(item: Draft): string {
   if (item.tool?.kind === "server") return item.tool.name === "AS400" ? "IBM i server (AS400)" : item.tool.name;
   if (item.status === "weak" && item.tool) return `${item.tool.name}?`;
@@ -583,7 +726,7 @@ function reviewBadge(item: Draft): { label: string; className: string } {
 }
 
 function Stepper({ step }: { step: number }) {
-  const labels = ["What you use", "Where each one lives", "Owners & renewals (optional)"];
+  const labels = ["What you use", "AI turned on? (optional)", "Where each one lives", "Owners & renewals (optional)"];
   return (
     <ol className="mb-4 flex flex-wrap items-center gap-x-2 text-[13px]">
       {labels.map((label, index) => {

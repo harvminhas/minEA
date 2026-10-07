@@ -1,4 +1,8 @@
+import type { AiCatalogEntry, AiFeature, AiFeatureAudience } from "@minea/types";
 import type { CostLine } from "@/lib/cost/math";
+import { readCostLines } from "@/lib/cost/math";
+import { catalogEntriesFor } from "@/lib/ai/catalog";
+import { confirmFeature, readFeatures, setFeatureSeats } from "@/lib/ai/features";
 import { splitAddList } from "@/lib/setup/add-intent";
 import { defaultHosting, isSetupApp, matchEntries, normalizeTerm, planHosting, type HostingChoice, type MatchItem, type ToolKind, type ToolRecord } from "@/lib/setup/match-tools";
 
@@ -265,7 +269,15 @@ export type TodoRow = {
   renewal: string;
   choice: HostingChoice;
   hint: string | null;
+  /** The matched catalog tool, so a new app with known AI features gets a "Confirm AI features" line. */
+  tool?: ToolRecord | null;
 };
+
+function hasCatalogAi(row: TodoRow): boolean {
+  if (!row.tool || (row.kind !== "app" && row.kind !== "platform")) return false;
+  const type = row.kind === "platform" ? "cloud_service" : "application";
+  return catalogEntriesFor({ type, name: row.name, properties: { catalog_tool: normalizeTerm(row.tool.name) } }).length > 0;
+}
 
 /** One line per new item that still has a gap, plus one line per same-category hint. */
 export function todoLines(rows: TodoRow[]): string[] {
@@ -277,6 +289,7 @@ export function todoLines(rows: TodoRow[]): string[] {
     if (row.kind !== "location" && row.kind !== "vendor" && !row.renewal) gaps.push("no renewal date");
     if ((row.kind === "app" || row.kind === "platform") && row.choice === "unknown") gaps.push("no home");
     if (gaps.length) lines.push(`${row.name} still has ${gaps.join(", ")}`);
+    if (hasCatalogAi(row)) lines.push(`Confirm AI features on ${row.name}`);
     if (row.hint) lines.push(row.hint);
   }
   return lines;
@@ -489,4 +502,122 @@ const NO_ITEMS: never[] = [];
  *  changes memo / effect deps every render, and AskAdd's rows effect then loops. */
 export function catalogLists<O, R>(data: { objects: O[]; relationships: R[] } | undefined): { objects: O[]; relationships: R[] } {
   return { objects: data?.objects ?? NO_ITEMS, relationships: data?.relationships ?? NO_ITEMS };
+}
+
+// ─── First-run step "Which of these have AI turned on?" (spec §7) ───────────
+
+/** An app or platform the first-run flow created or kept, as stored (or about to be). */
+export type AiStepHost = { key: string; objectId?: string; type: string; name: string; properties?: Record<string, unknown> | null };
+
+export type AiStepFeature = {
+  entry: AiCatalogEntry;
+  /** Pre-ticked when the catalog says it's on by default in the plan. */
+  ticked: boolean;
+  /** "paid add-on · $30 /user/mo" for per-seat add-ons, else "". */
+  paidLabel: string;
+};
+
+export type AiStepRow = { key: string; objectId?: string; name: string; audience: AiFeatureAudience; features: AiStepFeature[] };
+
+export type AiStepRows = { rows: AiStepRow[]; others: string[] };
+
+const SETUP_HOST_TYPES = new Set(["application", "cloud_service"]);
+
+/** Groups for the AI step: catalog features not stored on the host yet. Empty rows → the step is skipped. */
+export function aiStepRows(hosts: AiStepHost[]): AiStepRows {
+  const rows: AiStepRow[] = [];
+  const others: string[] = [];
+  for (const host of hosts) {
+    if (!SETUP_HOST_TYPES.has(host.type)) continue;
+    const stored = new Set(readFeatures(host.properties).map((feature) => feature.key));
+    const entries = catalogEntriesFor({ type: host.type, name: host.name, properties: host.properties }).filter((entry) => !stored.has(entry.key));
+    if (entries.length === 0) {
+      others.push(host.name);
+      continue;
+    }
+    const paid = entries.find((entry) => entry.pricing.model === "per_seat");
+    rows.push({
+      key: host.key,
+      objectId: host.objectId,
+      name: host.name,
+      audience: (entries.find((entry) => entry.default_on) ?? paid ?? entries[0]).defaults.audience,
+      features: entries.map((entry) => ({
+        entry,
+        ticked: entry.default_on,
+        paidLabel:
+          entry.pricing.model === "per_seat"
+            ? `paid add-on${entry.pricing.seat_month_usd != null ? ` · $${entry.pricing.seat_month_usd} /user/mo` : ""}`
+            : "",
+      })),
+    });
+  }
+  return { rows, others };
+}
+
+export type AiStepChoice = {
+  /** The host as stored now (its existing features and cost lines are kept). */
+  host: { id: string; type: string; name: string; status?: string | null; properties?: Record<string, unknown> | null };
+  audience: AiFeatureAudience;
+  features: { entry: AiCatalogEntry; ticked: boolean; seats?: number | null }[];
+};
+
+/** The owners step replaces the setup's typical cost with the number typed; AI seat lines from the AI step stay. */
+export function replaceTypicalLine(properties: Record<string, unknown> | null | undefined, line: CostLine): CostLine[] {
+  return [...(readCostLines(properties) ?? []).filter((item) => item.ai_feature), line];
+}
+
+/** Next on the AI step: ticked → on, unticked → off, source "onboarding"; seats on a ticked paid add-on → a tagged cost line. */
+export function aiStepPatch(
+  choices: AiStepChoice[],
+  user: string,
+  now: string = new Date().toISOString()
+): { objectId: string; properties: { ai_features: AiFeature[]; cost_lines?: CostLine[] } }[] {
+  const patches: { objectId: string; properties: { ai_features: AiFeature[]; cost_lines?: CostLine[] } }[] = [];
+  for (const choice of choices) {
+    if (choice.features.length === 0) continue;
+    let host = { ...choice.host, properties: { ...(choice.host.properties ?? {}) } };
+    let linesTouched = false;
+    for (const pick of choice.features) {
+      const confirmed = confirmFeature(host, pick.entry, pick.ticked ? "on" : "off", user, now);
+      const features = confirmed.properties.ai_features.map((feature) =>
+        feature.key === pick.entry.key ? { ...feature, source: "onboarding" as const, audience: choice.audience } : feature
+      );
+      host = { ...host, properties: { ...host.properties, ai_features: features } };
+      const seats = Math.floor(Number(pick.seats ?? 0));
+      const price = pick.entry.pricing.seat_month_usd;
+      if (pick.ticked && pick.entry.pricing.model === "per_seat" && seats > 0 && price != null) {
+        const seated = setFeatureSeats(host, pick.entry.key, seats, Math.round(price * 100), user, now);
+        host = { ...host, properties: { ...host.properties, ...seated.properties } };
+        linesTouched = true;
+      }
+    }
+    const ai_features = readFeatures(host.properties);
+    patches.push({
+      objectId: choice.host.id,
+      properties: linesTouched ? { ai_features, cost_lines: readCostLines(host.properties) ?? [] } : { ai_features },
+    });
+  }
+  return patches;
+}
+
+// ─── Stored setup step ─────────────────────────────────────────────────────
+
+/**
+ * The first-run screens, in order. `setupStep` in the workspace's stored setup JSON keeps the numbers it had
+ * before the AI step existed (1 matched, 2 where, 3 owners), and the AI step gets a new number (4), so values
+ * already stored for workspaces mid-setup keep their meaning and no data has to change.
+ */
+export const SETUP_SCREENS = ["paste", "matched", "ai", "where", "owners"] as const;
+export type SetupScreen = (typeof SETUP_SCREENS)[number];
+
+const STORED: Record<SetupScreen, number> = { paste: 0, matched: 1, where: 2, owners: 3, ai: 4 };
+
+export function storedSetupStep(screen: SetupScreen): number {
+  return STORED[screen];
+}
+
+/** A stored setupStep (old or new) back to its screen; unknown values start over. */
+export function setupScreenFromStored(value: number | null | undefined): SetupScreen {
+  const found = (Object.keys(STORED) as SetupScreen[]).find((screen) => STORED[screen] === value);
+  return found ?? "paste";
 }

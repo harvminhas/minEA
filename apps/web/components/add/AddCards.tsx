@@ -430,7 +430,7 @@ export function AskAdd({
         added: savedAdded(names),
         names,
         kept: savedKept(kept),
-        todos: todoLines(planned.map((row) => ({ name: row.name, kind: row.kind, kept: Boolean(row.existing), updating: false, owner: "", renewal: "", choice: row.choice, hint: row.hint }))),
+        todos: todoLines(planned.map((row) => ({ name: row.name, kind: row.kind, kept: Boolean(row.existing), updating: false, owner: "", renewal: "", choice: row.choice, hint: row.hint, tool: row.status === "matched" ? row.tool : null }))),
         canUndo: saved.created_object_ids.length + saved.created_relationship_ids.length > 0,
         objectIds: saved.created_object_ids,
         relationshipIds: saved.created_relationship_ids,
