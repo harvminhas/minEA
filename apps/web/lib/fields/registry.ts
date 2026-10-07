@@ -19,7 +19,7 @@ import { RUNTIME_COST_MODEL, RUNTIME_HOSTING, RUNTIME_KINDS, RUNTIME_PROVIDERS }
 import { systemCategorySelectOptions } from "@/lib/system-category";
 import { systemGovernanceSelectOptions } from "@/lib/system-governance";
 
-export type Section = "basics" | "ownership" | "cost" | "hosting" | "lifecycle" | "notes";
+export type Section = "basics" | "ownership" | "cost" | "hosting" | "lifecycle" | "ai" | "notes";
 
 export const SECTION_LABEL = {
   basics: "Basics",
@@ -27,6 +27,7 @@ export const SECTION_LABEL = {
   cost: "Cost & contract",
   hosting: "Hosting & location",
   lifecycle: "Lifecycle & risk",
+  ai: "AI",
   notes: "Notes",
 } as const;
 
@@ -37,6 +38,7 @@ export type Editor =
   | "date"
   | "select"
   | "tags"
+  | "choices"
   | "owner"
   | "relation"
   | "costLines"
@@ -95,9 +97,32 @@ export const INTERNAL_KEYS = [
   "catalog_tool",
   "vendor", // kept beside the supplied_by link; the Vendor field writes both
   "eu_ai_act_risk_class",
-  "ai_features", // AI section arrives in Step D2
-  "holds_data",
 ] as const;
+
+/** Fixed-options multi-select for properties.holds_data (order = stored order). */
+export const HOLDS_DATA_OPTIONS = [
+  { value: "customer", label: "Customer" },
+  { value: "financial", label: "Financial" },
+  { value: "employee", label: "Employee" },
+  { value: "none", label: "None" },
+] as const;
+
+const holdsDataField: FieldDef = {
+  key: "holds_data",
+  label: "Holds data",
+  section: "lifecycle",
+  editor: "choices",
+  source: { kind: "prop", key: "holds_data" },
+  options: HOLDS_DATA_OPTIONS,
+};
+
+const aiFeaturesField: FieldDef = {
+  key: "ai_features",
+  label: "AI features",
+  section: "ai",
+  editor: "custom",
+  source: { kind: "prop", key: "ai_features" },
+};
 
 export const SYSTEM_LIFECYCLE_OPTIONS = [
   { value: "planned", label: "Planned" },
@@ -272,6 +297,8 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
     { key: "status", label: "Lifecycle", section: "lifecycle", editor: "select", source: { kind: "column", column: "status" }, options: SYSTEM_LIFECYCLE_OPTIONS },
     { key: "criticality", label: "Criticality", section: "lifecycle", editor: "select", source: { kind: "prop", key: "criticality" }, options: CRITICALITY },
     { key: "sla_target", label: "SLA target", section: "lifecycle", editor: "select", source: { kind: "prop", key: "sla_target" }, options: byValue(PLATFORM_SLA) },
+    holdsDataField,
+    aiFeaturesField,
     descriptionCol,
   ],
   server: [
@@ -358,6 +385,8 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
     { key: "lifecycle", label: "Lifecycle", section: "lifecycle", editor: "select", source: { kind: "prop", key: "lifecycle" }, options: byValue(PLATFORM_LIFECYCLE) },
     { key: "criticality", label: "Criticality", section: "lifecycle", editor: "select", source: { kind: "prop", key: "criticality" }, options: CRITICALITY },
     { key: "sla_target", label: "SLA target", section: "lifecycle", editor: "select", source: { kind: "prop", key: "sla_target" }, options: byValue(PLATFORM_SLA) },
+    holdsDataField,
+    aiFeaturesField,
     descriptionCol,
   ],
   location: [

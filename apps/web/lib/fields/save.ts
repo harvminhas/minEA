@@ -1,5 +1,6 @@
 import type { ObjectUpdate, RelationshipCreate } from "@minea/types";
 import { isActsAsShape, readActsAs, sameActsAs } from "@/lib/ai/acts-as";
+import { readHoldsData } from "@/lib/ai/sensitive";
 import type { FieldDef } from "@/lib/fields/registry";
 import { ownershipFromEntity, ownershipToPayload, type OwnershipValue } from "@/lib/owner-fields";
 import { isSystemObjectType } from "@/lib/platform-relationship-utils";
@@ -104,7 +105,7 @@ export function readField(def: FieldDef, record: FieldRecord, edges?: FieldEdge[
   }
   if (def.source.kind === "prop") {
     const value = record.properties[def.source.key];
-    if (value == null) return def.editor === "tags" || def.editor === "costLines" ? [] : "";
+    if (value == null) return def.editor === "tags" || def.editor === "costLines" || def.editor === "choices" ? [] : "";
     return value;
   }
   if (def.source.kind === "owner") return ownershipFromEntity(record);
@@ -205,7 +206,9 @@ export function toPatch(
     ? (empty ? null : value === "yes")
     : def.key === "acts_as"
       ? readActsAs(value)
-      : (empty ? null : value);
+      : def.key === "holds_data"
+        ? (readHoldsData(value).length ? readHoldsData(value) : null)
+        : (empty ? null : value);
   const properties: Record<string, unknown> = { [def.source.key]: stored };
   if (def.key === "access_method") properties.console_url = stored;
   const object: ObjectUpdate = { properties };

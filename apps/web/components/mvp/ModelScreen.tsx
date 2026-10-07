@@ -28,6 +28,7 @@ import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
 import { addAnywhereEnabled } from "@/lib/flags";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import Link from "next/link";
+import { aiColumnLabel } from "@/lib/ai/features";
 
 const SECTION_TITLE: Record<ModelSection, string> = {
   overview: "Overview",
@@ -94,6 +95,8 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
 
   const types = ["All", ...Array.from(new Set(source.map((row) => row.typeLabel)))];
 
+  const aiLabels = new Map(source.map((row) => [row.id, aiColumnLabel(row.object)]));
+  const aiColumn = [...aiLabels.values()].some(Boolean);
   const filtered = source.filter((row) => {
     const hay = `${row.name} ${row.vendor} ${row.ownerTeam} ${row.ownerPerson}`.toLowerCase();
     if (query && !hay.includes(query.toLowerCase())) return false;
@@ -298,7 +301,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                 <table className="w-full min-w-[920px] border-collapse text-left">
                   <thead>
                     <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
-                      {["Name", "Type · Hosting model", "Owner", "Vendor", "Annual cost", "Renewal", "Lifecycle", "Criticality"].map((heading) => (
+                      {["Name", "Type · Hosting model", "Owner", "Vendor", "Annual cost", "Renewal", "Lifecycle", "Criticality", ...(aiColumn ? ["AI"] : [])].map((heading) => (
                         <th key={heading} className="h-11 px-2 font-medium">{heading}</th>
                       ))}
                     </tr>
@@ -356,6 +359,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                         <td className="px-2 py-3">
                           {row.criticalityLabel ? <Pill label={row.criticalityLabel} tone="criticality" /> : <AddChip label="Add" onClick={() => open(row)} />}
                         </td>
+                        {aiColumn && <td className="px-2 py-3 text-[12px] text-[#4b5163]">{aiLabels.get(row.id) || <span className="text-[#b0b4c0]">—</span>}</td>}
                       </tr>
                     ))}
                   </tbody>

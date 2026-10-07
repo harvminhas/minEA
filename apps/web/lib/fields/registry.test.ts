@@ -82,6 +82,7 @@ function sample(def: FieldDef): unknown {
   if (def.editor === "select") return def.options?.[0]?.value ?? "x";
   if (def.editor === "date") return "2026-12-31";
   if (def.editor === "tags") return ["x"];
+  if (def.editor === "choices") return [def.options?.[0]?.value ?? "x"];
   if (def.editor === "owner") {
     return {
       ownerTeamId: "team-1",
@@ -99,7 +100,7 @@ function sample(def: FieldDef): unknown {
 }
 
 function emptyValue(def: FieldDef): unknown {
-  if (def.editor === "tags" || def.editor === "costLines") return [];
+  if (def.editor === "tags" || def.editor === "costLines" || def.editor === "choices") return [];
   if (def.editor === "relation" && def.source.kind === "rel" && !def.source.single) return [];
   if (def.editor === "owner") return emptyOwnership();
   return "";
@@ -559,4 +560,36 @@ test("acts as saves each shape, clears, and notices a different pick", () => {
   assert.equal(sameFieldValue(ana, { ...ana }), true);
   assert.equal(sameFieldValue(ana, ""), false);
   assert.equal(sameFieldValue("", null), true);
+});
+
+test("apps and platforms get Holds data (lifecycle) and an AI section before notes", () => {
+  for (const type of ["application", "platform"] as const) {
+    const order: string[] = [];
+    for (const def of REGISTRY[type]) {
+      if (order[order.length - 1] !== def.section) order.push(def.section);
+    }
+    assert.deepEqual(order.slice(-3), ["lifecycle", "ai", "notes"], type);
+    const holds = REGISTRY[type].find((field) => field.key === "holds_data")!;
+    assert.equal(holds.section, "lifecycle");
+    assert.equal(holds.editor, "choices");
+    assert.deepEqual(holds.options?.map((option) => option.label), ["Customer", "Financial", "Employee", "None"]);
+    assert.equal(REGISTRY[type].find((field) => field.key === "ai_features")?.editor, "custom");
+  }
+  const keys = new Set<string>(INTERNAL_KEYS);
+  assert.equal(keys.has("holds_data") || keys.has("ai_features"), false);
+});
+
+test("holds data saves in a fixed order, drops None beside a real kind, and clears", () => {
+  const app = blankRecord("application");
+  const holds = REGISTRY.application.find((field) => field.key === "holds_data")!;
+  assert.deepEqual(readField(holds, app, []), []);
+  const saved = applyPatch(app, toPatch(holds, ["financial", "none", "customer"], app, []), []);
+  assert.deepEqual(saved.properties.holds_data, ["customer", "financial"]);
+  assert.deepEqual(readField(holds, saved, []), ["customer", "financial"]);
+  const none = applyPatch(saved, toPatch(holds, ["none"], saved, []), []);
+  assert.deepEqual(none.properties.holds_data, ["none"]);
+  const cleared = applyPatch(none, toPatch(holds, [], none, []), []);
+  assert.equal("holds_data" in cleared.properties, false);
+  assert.equal(sameFieldValue(["customer"], ["customer"]), true);
+  assert.equal(sameFieldValue(["customer"], ["customer", "financial"]), false);
 });

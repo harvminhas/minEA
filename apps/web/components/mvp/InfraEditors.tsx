@@ -19,11 +19,13 @@ import { locationPresence } from "@/lib/infra/locations";
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { actsAsFlag, actsAsLabel, readActsAs } from "@/lib/ai/acts-as";
+import { holdsDataLabel, readHoldsData, suggestedHoldsData, toggleHoldsData } from "@/lib/ai/sensitive";
 import { emptyTypeHint } from "@/lib/relationship-targets";
 import { infraStatus } from "@/lib/infra/status";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { CostSection } from "@/components/mvp/CostSection";
 import { ActsAsPicker } from "@/components/mvp/ActsAsPicker";
+import { AiFeaturesSection } from "@/components/mvp/AiFeaturesSection";
 import { AddChip } from "@/components/mvp/pills";
 import { usePermissions } from "@/lib/use-permissions";
 
@@ -205,6 +207,10 @@ function displayValue(def: FieldDef, record: FieldRecord, object: MinEAObject, e
     return formatOwnershipLabel(owner.ownerTeamName, owner.pointOfContactName);
   }
   if (def.editor === "tags") return Array.isArray(value) ? value.join(", ") : "";
+  if (def.editor === "choices") {
+    const values = Array.isArray(value) ? value.map(String) : [];
+    return values.map((item) => def.options?.find((option) => option.value === item)?.label ?? item).join(", ");
+  }
   if (def.editor === "costLines") {
     const lines = readCostLines({ cost_lines: value });
     if (!lines?.length) return "";
@@ -273,6 +279,8 @@ export function RecordFields({
           {group.fields.map((def) =>
             def.editor === "costLines" && row ? (
               <CostSection key={def.key} row={row} onSaved={() => undefined} readOnly={!canEdit} />
+            ) : def.key === "ai_features" ? (
+              <AiFeaturesSection key={def.key} object={object} edges={edges} names={names} readOnly={!canEdit} />
             ) : (
               <InlineField
                 key={def.key}
@@ -579,6 +587,15 @@ export function InlineField({
         onSave={(value) => void persist(value)}
       />
     );
+  } else if (editing && def.editor === "choices") {
+    editor = (
+      <ChoicesPopover
+        def={def}
+        value={readField(def, record, edges)}
+        onCancel={close}
+        onSave={(value) => void persist(value)}
+      />
+    );
   } else if (editing && def.key === "acts_as") {
     editor = (
       <ActsAsPicker
@@ -600,6 +617,7 @@ export function InlineField({
   }
 
   const actsFlag = !editing && def.key === "acts_as" ? actsAsFlag(readField(def, record, edges)) : null;
+  const holdsSuggestion = def.key === "holds_data" && !shown && !editing ? suggestedHoldsData(record) : [];
 
   return (
     <div className={bare ? "" : "py-1.5"} title={def.readOnlyReason}>
@@ -622,6 +640,17 @@ export function InlineField({
             )
           )}
           {actsFlag && <p className="mt-1 text-[12px] text-[#b45309]">{actsFlag}</p>}
+          {holdsSuggestion.length > 0 && (
+            <p className="mt-1 text-[12px] text-[#8b90a0]">
+              Suggested from {record.type === "cloud_service" ? "platform type" : "category"}: {holdsDataLabel(holdsSuggestion)}
+              {canEdit && (
+                <>
+                  {" · "}
+                  <button type="button" className="text-[#5b4ce6]" onClick={() => void persist(holdsSuggestion)}>Accept</button>
+                </>
+              )}
+            </p>
+          )}
           {error && <p className="mt-1 text-[12px] text-[#b42318]">{error}</p>}
           {canEdit && def.key === "vendor" && !shown && !editing && suggestion && !dismissed && (
             <p className="mt-1 text-[12px] text-[#8b90a0]">
@@ -651,6 +680,52 @@ function optimisticRelationship(rel: RelationshipCreate, index: number, object: 
     attributes: rel.attributes ?? {},
     created_at: new Date().toISOString(),
   };
+}
+
+function ChoicesPopover({
+  def,
+  value,
+  onSave,
+  onCancel,
+}: {
+  def: FieldDef;
+  value: unknown;
+  onSave: (value: string[]) => void;
+  onCancel: () => void;
+}) {
+  const holds = def.key === "holds_data";
+  const initial = Array.isArray(value) ? value.map(String) : [];
+  const [picked, setPicked] = useState<string[]>(holds ? readHoldsData(initial) : initial);
+  const toggle = (item: string) =>
+    setPicked((current) =>
+      holds
+        ? toggleHoldsData(readHoldsData(current), item as Parameters<typeof toggleHoldsData>[1])
+        : current.includes(item)
+          ? current.filter((entry) => entry !== item)
+          : (def.options ?? []).map((option) => option.value).filter((entry) => entry === item || current.includes(entry))
+    );
+  return (
+    <div className="relative">
+      <button type="button" aria-label="Close" className="fixed inset-0 z-10 cursor-default" onClick={onCancel} />
+      <div
+        className="absolute right-0 z-20 w-[220px] rounded-lg border border-[#e6e8ee] bg-white p-3 text-left shadow-lg"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onCancel();
+        }}
+      >
+        {(def.options ?? []).map((option, index) => (
+          <label key={option.value} className="flex items-center gap-2 py-1 text-[13px] text-[#1c2230]">
+            <input type="checkbox" autoFocus={index === 0} checked={picked.includes(option.value)} onChange={() => toggle(option.value)} />
+            {option.label}
+          </label>
+        ))}
+        <div className="mt-2 flex items-center justify-end gap-2">
+          <button type="button" className="text-[12px] text-[#6b7289]" onClick={onCancel}>Cancel</button>
+          <button type="button" className="rounded-md bg-[#5b4ce6] px-2 py-1 text-[12px] font-semibold text-white" onClick={() => onSave(picked)}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function OwnerPopover({

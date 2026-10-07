@@ -3,7 +3,20 @@ import { test } from "node:test";
 import { AI_FEATURE_CATALOG } from "@minea/types";
 import { lineAnnualCents } from "../cost/math.ts";
 import { catalogEntriesFor } from "./catalog.ts";
-import { confirmFeature, readFeatures, removeFeature, setFeatureSeats, suggestedFeatures } from "./features.ts";
+import { applyPatch } from "../fields/save.ts";
+import {
+  addCustomFeature,
+  agentsTouching,
+  aiColumnLabel,
+  confirmFeature,
+  featureCostLabel,
+  featureFlags,
+  readFeatures,
+  removeFeature,
+  setFeatureSeats,
+  suggestedFeatures,
+  updateFeature,
+} from "./features.ts";
 
 const NOW = "2026-10-07T12:00:00.000Z";
 const entry = (key: string) => AI_FEATURE_CATALOG.find((item) => item.key === key)!;
@@ -111,4 +124,80 @@ test("readFeatures drops junk", () => {
   assert.deepEqual(readFeatures({ ai_features: [null, "x", { key: "a" }, { key: "a", name: "A" }] }), [{ key: "a", name: "A" }]);
   assert.deepEqual(readFeatures({ ai_features: "nope" }), []);
   assert.deepEqual(readFeatures(undefined), []);
+});
+
+test("updateFeature: a status change records who confirmed it; other edits keep it", () => {
+  const object = host("Microsoft 365", confirmFeature(host("Microsoft 365"), entry("m365-copilot"), "unreviewed", "Ana", NOW).properties);
+  assert.equal(readFeatures(object.properties)[0].confirmed_at, null);
+  const on = updateFeature(object, "m365-copilot", { status: "on" }, "Ben", NOW).properties.ai_features[0];
+  assert.equal(on.status, "on");
+  assert.equal(on.confirmed_by, "Ben");
+  const edited = updateFeature(host("Microsoft 365", { ai_features: [on] }), "m365-copilot", { audience: "admins", vendor_trains: "unknown" }, "Cy", "2026-10-08T00:00:00.000Z").properties.ai_features[0];
+  assert.equal(edited.audience, "admins");
+  assert.equal(edited.vendor_trains, "unknown");
+  assert.equal(edited.confirmed_by, "Ben");
+  assert.equal(edited.confirmed_at, NOW);
+  assert.throws(() => updateFeature(object, "slack-ai", { status: "on" }, "Ana"));
+});
+
+test("addCustomFeature makes a custom-<slug> key, unique on the record, with unknown answers", () => {
+  const first = addCustomFeature(host("Intranet"), "  Glean Assistant ", "Ana", NOW).properties.ai_features;
+  assert.deepEqual(first, [
+    { key: "custom-glean-assistant", name: "Glean Assistant", status: "on", audience: null, sees_company_data: "unknown", vendor_trains: "unknown", source: "user", confirmed_at: NOW, confirmed_by: "Ana" },
+  ]);
+  const second = addCustomFeature(host("Intranet", { ai_features: first }), "Glean assistant", "Ana", NOW).properties.ai_features;
+  assert.equal(second[1].key, "custom-glean-assistant-2");
+  assert.throws(() => addCustomFeature(host("Intranet"), "  ", "Ana"));
+});
+
+test("featureFlags: F1 needs a customer/financial host, F2 follows vendor_trains, off features have none", () => {
+  const copilot = { ...confirmFeature(host("Microsoft 365"), entry("m365-copilot"), "on", "Ana", NOW).properties.ai_features[0] };
+  const sensitive = host("Microsoft 365", { holds_data: ["customer"] });
+  assert.deepEqual(featureFlags(copilot, sensitive).map((flag) => `${flag.id}:${flag.severity}`), ["F1:high"]);
+  assert.deepEqual(featureFlags(copilot, host("Microsoft 365", { holds_data: ["none"] })), []);
+  assert.deepEqual(featureFlags(copilot, host("Microsoft 365", { category: "ERP" })).map((flag) => flag.id), ["F1"]);
+  assert.deepEqual(featureFlags({ ...copilot, sees_company_data: "unknown" }, sensitive).map((flag) => `${flag.id}:${flag.severity}`), ["F1:check"]);
+  assert.deepEqual(featureFlags({ ...copilot, vendor_trains: "yes" }, host("Notes")).map((flag) => `${flag.id}:${flag.severity}`), ["F2:high"]);
+  assert.deepEqual(featureFlags({ ...copilot, vendor_trains: "unknown" }, host("Notes")).map((flag) => `${flag.id}:${flag.severity}`), ["F2:check"]);
+  assert.deepEqual(featureFlags({ ...copilot, status: "off", vendor_trains: "yes" }, sensitive), []);
+});
+
+test("Microsoft 365 sample: 2 confirmed + 1 suggestion, seats label, and the table cell", () => {
+  let object = host("Microsoft 365", { cost_lines: [] });
+  const save = (patch: { properties: Record<string, unknown> }) => {
+    const next = applyPatch({ id: "m365", type: "application", properties: object.properties as Record<string, unknown> }, { object: { properties: patch.properties } }, []);
+    object = host("Microsoft 365", next.properties);
+  };
+  save(confirmFeature(object, entry("m365-copilot"), "on", "Ana", NOW));
+  save(confirmFeature(object, entry("m365-copilot-chat"), "on", "Ana", NOW));
+  assert.deepEqual(keys(suggestedFeatures(object)), ["teams-premium-recap"]);
+  assert.equal(aiColumnLabel(object), "2 on · 1 to review");
+
+  save(setFeatureSeats(object, "m365-copilot", 25, 2100, "uid-1", NOW));
+  const [copilot, chat] = readFeatures(object.properties);
+  assert.equal(featureCostLabel(copilot, object.properties), "25 seats × $21 /user/mo = $6,300 / yr");
+  assert.equal(featureCostLabel(chat, object.properties), "Included in your plan");
+  const agents = addCustomFeature(object, "Breeze", "Ana", NOW).properties.ai_features.at(-1)!;
+  assert.equal(featureCostLabel(agents, object.properties), "");
+  assert.equal(featureCostLabel({ ...agents, key: "zendesk-ai-agents" }, object.properties), "$1.50–$2.00 per automated resolution");
+
+  save(removeFeature(object, "m365-copilot"));
+  assert.deepEqual(object.properties.cost_lines, []);
+  assert.equal(aiColumnLabel(object), "1 on · 2 to review");
+  assert.equal(aiColumnLabel(host("Microsoft 365", {}, "model")), "");
+  assert.equal(aiColumnLabel(host("Payroll")), "");
+});
+
+test("agentsTouching lists agents that read or write this record", () => {
+  const edges = [
+    { type: "reads", from_object_id: "ag1", from_type: "agent", to_object_id: "m365" },
+    { type: "writes", from_object_id: "ag2", from_type: "agent", to_object_id: "m365" },
+    { type: "reads", from_object_id: "app2", from_type: "application", to_object_id: "m365" },
+    { type: "reads", from_object_id: "ag3", from_type: "agent", to_object_id: "other" },
+  ];
+  const names = new Map([["ag1", "Invoice Reader"], ["ag2", "AP Inbox Agent"]]);
+  assert.deepEqual(agentsTouching("m365", edges, names), [
+    { id: "ag1", name: "Invoice Reader", verb: "reads from it" },
+    { id: "ag2", name: "AP Inbox Agent", verb: "writes to it" },
+  ]);
 });

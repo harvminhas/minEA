@@ -20,6 +20,7 @@ import { AddChip } from "@/components/mvp/pills";
 import { AddFlow } from "@/components/add/AddFlow";
 import { AppPlatformHelp } from "@/components/mvp/AppPlatformHelp";
 import { cn } from "@/lib/utils";
+import { aiColumnLabel } from "@/lib/ai/features";
 
 const COMPUTE_FOR_KIND: Record<string, string> = {
   physical_server: "on_prem",
@@ -77,6 +78,8 @@ export function PlatformsTable({ rows, selectedId, anywhere = false }: { rows: C
   });
   const missing = platforms.filter((row) => row.missing.owner || row.missing.cost).length;
   const total = filtered.reduce((sum, item) => sum + (item.row.annualCostNumber ?? 0), 0);
+  const aiLabels = new Map(platforms.map((row) => [row.id, aiColumnLabel(row.object)]));
+  const aiColumn = [...aiLabels.values()].some(Boolean);
 
   return (
     <div className="px-6 py-5">
@@ -120,7 +123,7 @@ export function PlatformsTable({ rows, selectedId, anywhere = false }: { rows: C
         <table className="w-full table-fixed border-collapse text-left text-[13px]">
           <thead>
             <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
-              {["Name", "Vendor", "Kind", "Hosting model", "Owner", "Built on it", "Annual cost (US$)", "Renewal"].map((heading) => (
+              {["Name", "Vendor", "Kind", "Hosting model", "Owner", "Built on it", "Annual cost (US$)", "Renewal", ...(aiColumn ? ["AI"] : [])].map((heading) => (
                 <th key={heading} className="h-11 px-2 font-medium">{heading}</th>
               ))}
             </tr>
@@ -142,6 +145,7 @@ export function PlatformsTable({ rows, selectedId, anywhere = false }: { rows: C
                     {row.missing.cost ? <QuickCost row={row} onSaved={() => undefined} /> : row.annualCostLabel}
                   </td>
                   <td className="px-2 py-3">{row.renewalLabel && !row.missing.renewal ? row.renewalLabel : dash("")}</td>
+                  {aiColumn && <td className="px-2 py-3 text-[12px] text-[#4b5163]">{aiLabels.get(row.id) || dash("")}</td>}
                 </tr>
               );
             })}
