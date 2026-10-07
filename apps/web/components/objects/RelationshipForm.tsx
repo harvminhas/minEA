@@ -22,6 +22,7 @@ import {
   linkTargetsFor,
   NAME_ONLY_LINK_TYPES,
   patchForPickedLink,
+  pickedLinkExisted,
   uiTypeLabel,
 } from "@/lib/relationship-targets";
 
@@ -263,12 +264,13 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
         for (const rel of pending) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: rel });
         try {
           const created: Relationship[] = [];
-          let existed = false;
+          const results: { status: number; body: Relationship }[] = [];
           for (const rel of patch.addRel ?? []) {
             const result = await relationshipsApi.createWithStatus(orgSlug, workspaceSlug, rel, token);
+            results.push(result);
             created.push(result.body);
-            if (result.status === 200) existed = true;
           }
+          const existed = pickedLinkExisted(results, selectedTarget.id);
           for (const rel of pending) {
             applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: rel.id });
           }

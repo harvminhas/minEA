@@ -195,5 +195,15 @@ export function patchForPickedLink(
   const current = readField(def, record, edges);
   const existing = Array.isArray(current) ? current.map(String) : current ? [String(current)] : [];
   const value = def.source.single ? targetId : [...new Set([...existing, targetId])];
-  return toPatch(def, value, record, edges, def.key === "vendor" ? targetName ?? "" : undefined);
+  return toPatch(def, value, record, edges, def.key === "vendor" ? targetName ?? "" : undefined, (id) => (id === targetId ? link.target : undefined));
+}
+
+/** A 200 for a link this pick kept is not "that relationship already exists". */
+export function pickedLinkExisted(
+  results: readonly { status: number; body: { from_object_id: string; to_object_id: string } }[],
+  targetId: string
+): boolean {
+  return results.some(
+    (result) => result.status === 200 && (result.body.from_object_id === targetId || result.body.to_object_id === targetId)
+  );
 }

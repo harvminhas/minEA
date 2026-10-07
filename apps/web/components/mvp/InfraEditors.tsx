@@ -6,7 +6,7 @@ import type { MinEAObject, Relationship, RelationshipCreate } from "@minea/types
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
-import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
+import { applyCatalogWrite, catalogQueryKey, useModelCatalog, type WorkspaceCatalog } from "@/lib/use-model-catalog";
 import type { InfraField } from "@/lib/infra/fields";
 import { REGISTRY, SECTION_LABEL, type FieldDef, type RecordType } from "@/lib/fields/registry";
 import { applyPatch, fieldIsRequired, readField, sameFieldValue, toPatch, type FieldEdge, type FieldRecord } from "@/lib/fields/save";
@@ -184,6 +184,11 @@ function displayValue(def: FieldDef, record: FieldRecord, object: MinEAObject, e
     if (def.key === "built_on_it") {
       const count = edges.filter((edge) => edge.to_object_id === record.id && (edge.type === "built_on" || edge.type === "runs_on")).length;
       return count ? String(count) : "";
+    }
+    if (def.key === "used_by") {
+      const count = edges.filter((edge) => edge.to_object_id === record.id && edge.type === "uses_model").length;
+      if (count === 0) return "";
+      return count === 1 ? "1 agent" : `${count} agents`;
     }
     if (def.key === "status_calc") return infraStatus(readRuntimeInfra(object), new Date()).label;
     return "";
@@ -382,12 +387,21 @@ export function InlineField({
     let token: string | null = null;
     if (def.editor === "relation") setEditing(false);
     try {
+      const typeOf = (id: string) => {
+        const fresh =
+          orgSlug && workspaceSlug
+            ? queryClient.getQueryData<WorkspaceCatalog>(catalogQueryKey(orgSlug, workspaceSlug))
+            : undefined;
+        const objects = fresh?.objects ?? catalog.data?.objects ?? [];
+        return objects.find((item) => item.id === id)?.type;
+      };
       const patch = toPatch(
         def,
         value,
         record,
         edges,
-        def.key === "vendor" ? label ?? lookup.get(String(Array.isArray(value) ? value[0] : value)) : undefined
+        def.key === "vendor" ? label ?? lookup.get(String(Array.isArray(value) ? value[0] : value)) : undefined,
+        typeOf
       );
       const applied = applyPatch(record, patch, edges);
       const optimistic = {

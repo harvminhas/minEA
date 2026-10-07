@@ -1,3 +1,4 @@
+import { AI_JOBS } from "@minea/types";
 import { AI_ROLES } from "@/lib/ai-role-utils";
 import { API_AUDIENCES, API_AUTH, API_CRITICALITY, API_STATUSES, API_STYLES } from "@/lib/api-utils";
 import { COMPONENT_STATUSES, COMPONENT_TYPES } from "@/lib/component-utils";
@@ -76,7 +77,9 @@ export type RecordType =
   | "team"
   | "role"
   | "contact"
-  | "capability";
+  | "capability"
+  | "agent"
+  | "ai_model";
 
 /** Keys written beside a field, or only by a create form. Not a second editor. */
 export const INTERNAL_KEYS = [
@@ -91,6 +94,7 @@ export const INTERNAL_KEYS = [
   "annual_cost", // legacy, API writes it back from cost_lines
   "catalog_tool",
   "vendor", // kept beside the supplied_by link; the Vendor field writes both
+  "eu_ai_act_risk_class",
 ] as const;
 
 export const SYSTEM_LIFECYCLE_OPTIONS = [
@@ -117,6 +121,33 @@ const YES_NO = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
 ] as const;
+
+const YES_NO_UNKNOWN = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+  { value: "unknown", label: "Unknown" },
+] as const;
+
+export const AGENT_STATUS_OPTIONS = [
+  { value: "planned", label: "Idea" },
+  { value: "under_evaluation", label: "Piloting" },
+  { value: "active", label: "Live" },
+  { value: "retired", label: "Retired" },
+] as const;
+
+export const AGENT_TRIGGER_OPTIONS = [
+  { value: "manual", label: "Manual" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "event", label: "When something happens" },
+] as const;
+
+export const AGENT_AUTONOMY_OPTIONS = [
+  { value: "suggest", label: "Suggests only" },
+  { value: "act_with_approval", label: "Acts with approval" },
+  { value: "act_autonomously", label: "Acts on its own" },
+] as const;
+
+const AGENT_DATA_TARGETS = ["application", "solution", "technical_capability", "cloud_service", "data_store"];
 
 const CRITICALITY = PLATFORM_CRITICALITY.map((item) => ({
   value: item.value,
@@ -440,6 +471,84 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
     peopleName("Capability name"),
     ownerField(),
   ],
+  agent: [
+    nameCol(true),
+    { key: "job", label: "Job", section: "basics", editor: "select", source: { kind: "prop", key: "job" }, options: byValue(AI_JOBS) },
+    { key: "scope", label: "What it does", section: "basics", editor: "longtext", source: { kind: "prop", key: "scope" } },
+    { key: "status", label: "Status", section: "basics", editor: "select", source: { kind: "column", column: "status" }, options: AGENT_STATUS_OPTIONS },
+    { key: "trigger", label: "Trigger", section: "basics", editor: "select", source: { kind: "prop", key: "trigger" }, options: AGENT_TRIGGER_OPTIONS },
+    { key: "autonomy_level", label: "Autonomy", section: "basics", editor: "select", source: { kind: "prop", key: "autonomy_level" }, options: AGENT_AUTONOMY_OPTIONS },
+    tagsCol,
+    ownerField(true),
+    {
+      key: "built_on",
+      label: "Built with",
+      section: "hosting",
+      editor: "relation",
+      source: { kind: "rel", edge: "built_on", dir: "out", target: ["cloud_service", "tool"], single: true },
+    },
+    {
+      key: "uses_model",
+      label: "Model",
+      section: "hosting",
+      editor: "relation",
+      source: { kind: "rel", edge: "uses_model", dir: "out", target: ["ai_model"], single: false },
+    },
+    {
+      key: "reads",
+      label: "Reads from",
+      section: "hosting",
+      editor: "relation",
+      source: { kind: "rel", edge: "reads", dir: "out", target: AGENT_DATA_TARGETS, single: false },
+    },
+    {
+      key: "writes",
+      label: "Writes to",
+      section: "hosting",
+      editor: "relation",
+      source: { kind: "rel", edge: "writes", dir: "out", target: AGENT_DATA_TARGETS, single: false },
+    },
+    {
+      key: "can_call",
+      label: "Can call",
+      section: "hosting",
+      editor: "relation",
+      source: { kind: "rel", edge: "can_call", dir: "out", target: ["agent", "tool"], single: false },
+    },
+    { key: "cost", label: "Annual cost", section: "cost", editor: "costLines", source: { kind: "prop", key: "cost_lines" } },
+    { key: "human_escalation_point", label: "Escalates to (person)", section: "lifecycle", editor: "text", source: { kind: "prop", key: "human_escalation_point" } },
+    descriptionCol,
+  ],
+  ai_model: [
+    nameCol(true),
+    { key: "model_family", label: "Model family", section: "basics", editor: "text", source: { kind: "prop", key: "model_family" } },
+    ownerField(),
+    {
+      key: "runs_on",
+      label: "Accessed through",
+      section: "hosting",
+      editor: "relation",
+      source: { kind: "rel", edge: "runs_on", dir: "out", target: ["cloud_service"], single: true },
+    },
+    {
+      key: "used_by",
+      label: "Used by",
+      section: "hosting",
+      editor: "none",
+      source: { kind: "derived" },
+      readOnlyReason: "Agents linked to this model",
+    },
+    {
+      key: "vendor",
+      label: "Vendor",
+      section: "cost",
+      editor: "relation",
+      source: { kind: "rel", edge: "supplied_by", dir: "out", target: ["external_party"], single: true },
+    },
+    { key: "cost", label: "Annual cost", section: "cost", editor: "costLines", source: { kind: "prop", key: "cost_lines" } },
+    { key: "vendor_trains", label: "Vendor trains on our data", section: "lifecycle", editor: "select", source: { kind: "prop", key: "vendor_trains" }, options: YES_NO_UNKNOWN },
+    descriptionCol,
+  ],
 };
 
 const OBJECT_TYPE: Record<string, RecordType> = {
@@ -458,6 +567,8 @@ const OBJECT_TYPE: Record<string, RecordType> = {
   role: "role",
   contact: "contact",
   capability: "capability",
+  agent: "agent",
+  ai_model: "ai_model",
 };
 
 export function recordTypeOf(objectType: string): RecordType | null {

@@ -122,7 +122,8 @@ export function toPatch(
   value: unknown,
   record: FieldRecord,
   edges: FieldEdge[],
-  label?: string
+  label?: string,
+  typeOf?: (id: string) => string | undefined
 ): FieldPatch {
   const empty = blank(value);
   if (def.source.kind === "owner") {
@@ -144,14 +145,24 @@ export function toPatch(
     const source = def.source;
     const removeRelIds = edges.filter((edge) => relMatches(def, edge, record.id)).map((edge) => edge.id);
     const ids = empty ? [] : Array.isArray(value) ? value.map(String) : [String(value)];
-    const target = source.target[0] ?? "application";
     const incoming = source.dir === "in";
+    const endType = (id: string): string => {
+      const matched = edges.find(
+        (edge) => relMatches(def, edge, record.id) && (incoming ? edge.from_object_id === id : edge.to_object_id === id)
+      );
+      const fromEdge = incoming ? matched?.from_type : matched?.to_type;
+      for (const candidate of [typeOf?.(id), fromEdge]) {
+        if (candidate && source.target.includes(candidate)) return candidate;
+      }
+      if (source.target.length === 1) return source.target[0]!;
+      throw new Error(`Pick ${def.label.toLowerCase()} from the list`);
+    };
     const addRel: RelationshipCreate[] = ids.map((id) =>
       incoming
         ? {
             type: source.edge as RelationshipCreate["type"],
             from_object_id: id,
-            from_type: target as RelationshipCreate["from_type"],
+            from_type: endType(id) as RelationshipCreate["from_type"],
             to_object_id: record.id,
             to_type: record.type as RelationshipCreate["to_type"],
           }
@@ -160,7 +171,7 @@ export function toPatch(
             from_object_id: record.id,
             from_type: record.type as RelationshipCreate["from_type"],
             to_object_id: id,
-            to_type: target as RelationshipCreate["to_type"],
+            to_type: endType(id) as RelationshipCreate["to_type"],
           }
     );
     if (def.key === "built_on" && isSystemObjectType(record.type)) {

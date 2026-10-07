@@ -302,11 +302,60 @@ export interface ApplicationProperties {
   node_layout?: Record<string, { x: number; y: number }>;
 }
 
+export type YesNoUnknown = "yes" | "no" | "unknown";
+
+export type AiJob =
+  | "writing_assist"
+  | "meeting_notes"
+  | "search_answers"
+  | "sales_assist"
+  | "support_replies"
+  | "invoice_processing"
+  | "data_analysis"
+  | "coding"
+  | "workflow_automation"
+  | "other";
+
+export const AI_JOBS: readonly { value: AiJob; label: string }[] = [
+  { value: "writing_assist", label: "Writing help" },
+  { value: "meeting_notes", label: "Meeting notes" },
+  { value: "search_answers", label: "Search and answers" },
+  { value: "sales_assist", label: "Sales assist" },
+  { value: "support_replies", label: "Support replies" },
+  { value: "invoice_processing", label: "Invoice processing" },
+  { value: "data_analysis", label: "Data analysis" },
+  { value: "coding", label: "Coding" },
+  { value: "workflow_automation", label: "Workflow automation" },
+  { value: "other", label: "Other" },
+];
+
+export type AgentTrigger = "manual" | "scheduled" | "event";
+
+export type ActsAs =
+  | { type: "contact"; id: string; name: string }
+  | { type: "team"; id: string; name: string }
+  | { type: "service_account"; name: string };
+
+export const ACTS_AS_LABEL: Record<ActsAs["type"], string> = {
+  contact: "Person",
+  team: "Team",
+  service_account: "Service account",
+};
+
 export interface AgentProperties {
   autonomy_level?: "suggest" | "act_with_approval" | "act_autonomously";
   scope?: string;
   human_escalation_point?: string;
   eu_ai_act_risk_class?: "minimal" | "limited" | "high" | "unacceptable";
+  job?: AiJob;
+  trigger?: AgentTrigger;
+  acts_as?: ActsAs | null;
+}
+
+export interface AiModelProperties {
+  model_family?: string;
+  vendor_trains?: YesNoUnknown;
+  context?: string;
 }
 
 export interface DataObjectProperties {

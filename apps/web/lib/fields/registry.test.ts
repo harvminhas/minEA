@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { AI_JOBS, ALLOWED_TRIPLES } from "@minea/types";
 import { CREATE_FORM_KEYS, INTERNAL_KEYS, REGISTRY, createFormFields, createFormSeed, fieldIsRequired, recordTypeOf, type FieldDef, type RecordType } from "./registry.ts";
 import { emptyOwnership, type OwnershipValue } from "../owner-fields.ts";
 import { buildPlatformProperties, lifecycleToStatus } from "../platform-utils.ts";
 import { buildRuntimeProperties } from "../runtime-utils.ts";
 import { buildIntegrationInfraProperties } from "../integration-infra-utils.ts";
 import { applyPatch, readField, sameFieldValue, toPatch, type FieldEdge, type FieldRecord } from "./save.ts";
+import { patchForPickedLink, pickedLinkExisted } from "../relationship-targets.ts";
 
 const OBJECT_TYPE: Record<RecordType, string> = {
   application: "application",
@@ -21,6 +23,8 @@ const OBJECT_TYPE: Record<RecordType, string> = {
   role: "role",
   contact: "contact",
   capability: "capability",
+  agent: "agent",
+  ai_model: "ai_model",
 };
 
 const BODY_KEYS: Partial<Record<RecordType, readonly string[]>> = {
@@ -117,7 +121,9 @@ test("every editable field round-trips and clears", () => {
     for (const def of REGISTRY[type]) {
       if (def.editor === "none" || def.editor === "custom") continue;
       const value = sample(def);
-      const saved = applyPatch(record, toPatch(def, value, record, []), []);
+      const source = def.source;
+      const typeOf = source.kind === "rel" ? () => source.target[source.target.length - 1] : undefined;
+      const saved = applyPatch(record, toPatch(def, value, record, [], undefined, typeOf), []);
       assert.deepEqual(readField(def, saved), value, `${type}.${def.key}`);
       for (const cleared of [null, ""]) {
         const next = applyPatch(saved, toPatch(def, cleared, saved, saved.edges ?? []), saved.edges ?? []);
@@ -379,6 +385,8 @@ test("recordTypeOf maps stored object types", () => {
   assert.equal(recordTypeOf("cloud_service"), "platform");
   assert.equal(recordTypeOf("tool"), "integration_infra");
   assert.equal(recordTypeOf("integration_flow"), "flow");
+  assert.equal(recordTypeOf("agent"), "agent");
+  assert.equal(recordTypeOf("ai_model"), "ai_model");
   assert.equal(recordTypeOf("domain"), null);
 });
 
@@ -431,4 +439,96 @@ test("a blank platform create omits vendor, license model, and lifecycle", () =>
   assert.equal("license_model" in props, false);
   assert.equal("lifecycle" in props, false);
   assert.equal(props.platform_type, "low_code");
+});
+
+test("a link field with several target types saves each item's real type", () => {
+  const agent = blankRecord("agent");
+  const reads = REGISTRY.agent.find((field) => field.key === "reads")!;
+  const types: Record<string, string> = { sf: "application", lake: "data_store", fabric: "cloud_service" };
+  const saved = toPatch(reads, ["sf", "lake", "fabric"], agent, [], undefined, (id) => types[id]);
+  assert.deepEqual(
+    saved.addRel?.map((rel) => rel.to_type),
+    ["application", "data_store", "cloud_service"]
+  );
+
+  const builtOn = REGISTRY.agent.find((field) => field.key === "built_on")!;
+  const tool = toPatch(builtOn, "studio", agent, [], undefined, () => "tool");
+  assert.equal(tool.addRel?.[0]?.to_type, "tool");
+
+  assert.throws(() => toPatch(reads, ["mystery"], agent, [], undefined, () => undefined), /Pick reads from from the list/);
+
+  const existing: FieldEdge = {
+    id: "old",
+    type: "reads",
+    from_object_id: agent.id,
+    from_type: "agent",
+    to_object_id: "sf",
+    to_type: "application",
+  };
+  const patch = patchForPickedLink(
+    "agent",
+    { type: "reads", target: "data_store", direction: "outbound" },
+    "lake",
+    agent,
+    [existing]
+  );
+  assert.deepEqual(
+    patch?.addRel?.map((rel) => `${rel.to_object_id}:${rel.to_type}`),
+    ["sf:application", "lake:data_store"]
+  );
+
+  assert.equal(
+    pickedLinkExisted(
+      [
+        { status: 200, body: { from_object_id: agent.id, to_object_id: "sf" } },
+        { status: 201, body: { from_object_id: agent.id, to_object_id: "lake" } },
+      ],
+      "lake"
+    ),
+    false
+  );
+  assert.equal(
+    pickedLinkExisted([{ status: 200, body: { from_object_id: agent.id, to_object_id: "lake" } }], "lake"),
+    true
+  );
+});
+
+test("agent and AI model fields follow the spec and only use allowed links", () => {
+  assert.equal(recordTypeOf("agent"), "agent");
+  assert.equal(recordTypeOf("ai_model"), "ai_model");
+  const sections = (type: RecordType) => {
+    const order: string[] = [];
+    for (const def of REGISTRY[type]) {
+      if (order[order.length - 1] !== def.section) order.push(def.section);
+    }
+    return order;
+  };
+  assert.deepEqual(sections("agent"), ["basics", "ownership", "hosting", "cost", "lifecycle", "notes"]);
+  assert.deepEqual(sections("ai_model"), ["basics", "ownership", "hosting", "cost", "lifecycle", "notes"]);
+  assert.deepEqual(
+    REGISTRY.agent.filter((field) => field.section === "hosting").map((field) => field.label),
+    ["Built with", "Model", "Reads from", "Writes to", "Can call"]
+  );
+  assert.deepEqual(
+    REGISTRY.agent.find((field) => field.key === "job")?.options?.map((option) => option.value),
+    AI_JOBS.map((job) => job.value)
+  );
+  assert.deepEqual(
+    REGISTRY.agent.find((field) => field.key === "status")?.options?.map((option) => option.label),
+    ["Idea", "Piloting", "Live", "Retired"]
+  );
+  assert.equal(REGISTRY.ai_model.find((field) => field.key === "runs_on")?.label, "Accessed through");
+  assert.equal(REGISTRY.ai_model.find((field) => field.key === "vendor_trains")?.label, "Vendor trains on our data");
+
+  const allowed = new Set(ALLOWED_TRIPLES.map(([type, from, to]) => `${type}:${from}:${to}`));
+  for (const type of ["agent", "ai_model"] as const) {
+    for (const def of REGISTRY[type]) {
+      if (def.source.kind !== "rel") continue;
+      for (const target of def.source.target) {
+        const key =
+          def.source.dir === "out" ? `${def.source.edge}:${type}:${target}` : `${def.source.edge}:${target}:${type}`;
+        assert.equal(allowed.has(key), true, key);
+      }
+    }
+  }
 });
