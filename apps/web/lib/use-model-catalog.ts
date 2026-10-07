@@ -8,6 +8,8 @@ import { shouldRefreshOnEnter } from "@/lib/catalog-refresh";
 import { rowFromObject, type CatalogRow } from "@/lib/model-catalog";
 import { useTenancy } from "@/lib/tenancy";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
+import { savesWaiting } from "@/lib/fields/save-queue";
+import { compareUpdatedAt } from "@/lib/updated-at";
 
 export { shouldRefreshOnEnter };
 
@@ -53,11 +55,31 @@ export function shapeCatalog(body: CatalogBody): WorkspaceCatalog {
   };
 }
 
-/** Keep records written in this tab when a catalog fetch started before those writes. */
-export function mergeFreshCatalog(current: WorkspaceCatalog | undefined, fetched: WorkspaceCatalog): WorkspaceCatalog {
+function newerHere(local: MinEAObject, fetched: MinEAObject): boolean {
+  return compareUpdatedAt(local.updated_at, fetched.updated_at) === 1;
+}
+
+/**
+ * Keep records written in this tab when a catalog fetch started before those writes: records the fetch
+ * doesn't have, records with a save still waiting, and records this tab holds a newer copy of.
+ */
+export function mergeFreshCatalog(
+  current: WorkspaceCatalog | undefined,
+  fetched: WorkspaceCatalog,
+  waiting: (id: string) => boolean = (id) => savesWaiting(id) > 0
+): WorkspaceCatalog {
   if (!current) return fetched;
+  const local = new Map(current.objects.map((object) => [object.id, object]));
+  let kept = false;
+  const objects = fetched.objects.map((object) => {
+    const mine = local.get(object.id);
+    if (mine && mine !== object && (waiting(object.id) || newerHere(mine, object))) {
+      kept = true;
+      return mine;
+    }
+    return object;
+  });
   const seen = new Set(fetched.objects.map((object) => object.id));
-  const objects = [...fetched.objects];
   for (const object of current.objects) {
     if (!seen.has(object.id)) objects.push(object);
   }
@@ -66,7 +88,7 @@ export function mergeFreshCatalog(current: WorkspaceCatalog | undefined, fetched
   for (const rel of current.relationships) {
     if (!seenRel.has(rel.id)) relationships.push(rel);
   }
-  if (objects.length === fetched.objects.length && relationships.length === fetched.relationships.length) return fetched;
+  if (!kept && objects.length === fetched.objects.length && relationships.length === fetched.relationships.length) return fetched;
   return shapeCatalog({ ...fetched, objects, relationships });
 }
 
