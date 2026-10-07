@@ -77,7 +77,7 @@ export function AiTable({ type, selectedId }: { type: AiTableType; selectedId?: 
             placeholder="Name"
             className="h-8 w-[220px] rounded-lg border border-[#e6e8ee] px-2 text-[13px]"
           />
-          <button type="submit" disabled={create.isPending} className="h-8 rounded-lg bg-[#5b4ce6] px-3 text-[13px] font-semibold text-white">
+          <button type="submit" disabled={create.isPending} className="h-8 rounded-lg bg-[#5b4ce6] px-3 text-[13px] font-semibold text-white disabled:opacity-50">
             {create.isPending ? "Adding…" : "Add"}
           </button>
           {error && <p className="w-full text-[12px] text-[#b42318]">{error}</p>}

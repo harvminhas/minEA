@@ -584,7 +584,7 @@ export interface ToolProperties {
   /** API gateway registration (from API panel) */
   gateway_platform?: "apigee" | "kong" | "aws_api_gateway";
   /** Integration infrastructure (Technology → Integration Infra) */
-  integration_infra_kind?: "ipaas" | "etl_elt" | "broker" | "gateway" | "transport" | "custom";
+  integration_infra_kind?: "ipaas" | "etl_elt" | "broker" | "gateway" | "transport" | "mcp_server" | "custom";
   integration_infra_kind_other?: string;
   /** What integration object types this carrier can link to (APIs, events, flows, data). */
   integration_infra_handles?: Array<"apis" | "events" | "flows" | "data">;
@@ -610,7 +610,7 @@ export interface CloudServiceProperties {
   /** Enterprise platform (Technology → Platforms) */
   vendor?: string;
   vendor_product?: string;
-  platform_type?: "low_code" | "itsm" | "crm" | "erp" | "bpm" | "custom_dev" | "other";
+  platform_type?: "low_code" | "itsm" | "crm" | "erp" | "bpm" | "custom_dev" | "ai_platform" | "data_platform" | "other";
   platform_type_other?: string;
   hosting_model?: "saas" | "paas" | "self_hosted" | "hybrid";
   region?: string;

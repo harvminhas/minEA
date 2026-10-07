@@ -44,14 +44,14 @@ export function detailsAlsoSetsHint(edge: string, objectType: string | null): st
   return `This also sets ${name} in Details`;
 }
 
-/** Offer to create a platform, server, location, or vendor when the typed name is not already listed. */
+/** Offer to create a platform, server, location, or vendor when the typed name is not already listed and the field has one target type. */
 export function relationCreateLabel(
   targets: readonly string[],
   query: string,
   choiceNames: readonly string[]
 ): string | null {
   const name = query.trim();
-  if (!name || !targets.some((target) => CREATABLE.has(target))) return null;
+  if (!name || targets.length !== 1 || !CREATABLE.has(targets[0]!)) return null;
   const key = name.toLowerCase();
   if (choiceNames.some((item) => item.trim().toLowerCase() === key)) return null;
   return `+ Create '${name}'`;

@@ -10,6 +10,7 @@ import { applyCatalogWrite, catalogQueryKey, useModelCatalog, type WorkspaceCata
 import type { InfraField } from "@/lib/infra/fields";
 import { REGISTRY, SECTION_LABEL, type FieldDef, type RecordType } from "@/lib/fields/registry";
 import { applyPatch, fieldIsRequired, readField, sameFieldValue, toPatch, type FieldEdge, type FieldRecord } from "@/lib/fields/save";
+import { savesWaiting, trackSave } from "@/lib/fields/save-queue";
 import { isFieldManagedEdge, relationCreateLabel } from "@/lib/fields/shared-links";
 import { formatOwnershipLabel, ownershipIsValid, type OwnershipValue } from "@/lib/owner-fields";
 import { displayVendor, formatDate, knownVendors, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
@@ -17,6 +18,7 @@ import { dollarsFromCents, readCostLines, runCents } from "@/lib/cost/math";
 import { locationPresence } from "@/lib/infra/locations";
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
+import { emptyTypeHint } from "@/lib/relationship-targets";
 import { infraStatus } from "@/lib/infra/status";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { CostSection } from "@/components/mvp/CostSection";
@@ -441,8 +443,10 @@ export function InlineField({
         deleted.push(id);
       }
       if (patch.object) {
-        const saved = await objectsApi.update(orgSlug, workspaceSlug, object.id, patch.object, token);
-        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
+        const body = patch.object;
+        const auth = token;
+        const saved = await trackSave(object.id, () => objectsApi.update(orgSlug, workspaceSlug, object.id, body, auth));
+        if (savesWaiting(object.id) === 0) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
       }
       if (def.editor === "owner") {
         queryClient.invalidateQueries({ queryKey: ["teams", orgSlug, workspaceSlug] });
@@ -576,6 +580,7 @@ export function InlineField({
       <RelationPopover
         def={def}
         value={readField(def, record, edges)}
+        selfId={object.id}
         onCancel={close}
         onSave={(value, label) => void persist(value, label)}
       />
@@ -682,11 +687,13 @@ async function ensureExternalParty(
 function RelationPopover({
   def,
   value,
+  selfId,
   onSave,
   onCancel,
 }: {
   def: FieldDef;
   value: unknown;
+  selfId: string;
   onSave: (value: unknown, label?: string) => void;
   onCancel: () => void;
 }) {
@@ -702,7 +709,9 @@ function RelationPopover({
   if (!source) return null;
   const needle = query.trim().toLowerCase();
   const objects = catalog.data?.objects ?? [];
-  const choices = objects.filter((item) => source.target.includes(item.type) && (!needle || item.name.toLowerCase().includes(needle)));
+  const choices = objects.filter(
+    (item) => item.id !== selfId && source.target.includes(item.type) && (!needle || item.name.toLowerCase().includes(needle))
+  );
   const partyNames = new Set(
     objects.filter((item) => item.type === "external_party").map((item) => item.name.trim().toLowerCase())
   );
@@ -711,9 +720,13 @@ function RelationPopover({
         (name) => !partyNames.has(name.trim().toLowerCase()) && (!needle || name.toLowerCase().includes(needle))
       )
     : [];
-  const creatable = source.target.find((target) => target === "cloud_service" || target === "model" || target === "location");
+  const creatable =
+    source.target.length === 1
+      ? source.target.find((target) => target === "cloud_service" || target === "model" || target === "location")
+      : undefined;
+  const canCreate = def.key === "vendor" || Boolean(creatable);
   const createLabel = relationCreateLabel(source.target, query, [...choices.map((item) => item.name), ...textNames]);
-  const noOptions = objects.every((item) => !source.target.includes(item.type));
+  const noOptions = objects.every((item) => item.id === selfId || !source.target.includes(item.type));
   const choose = (id: string, label?: string) => {
     if (pending) return;
     if (source.single) {
@@ -760,20 +773,30 @@ function RelationPopover({
     }
   };
 
+  // Esc and click-outside both keep the ticked items, like closing a menu.
+  const finish = () => {
+    const next = source.single ? (picked[0] ?? "") : picked;
+    if (sameFieldValue(value, next)) onCancel();
+    else onSave(next);
+  };
+
   return (
     <div className="relative">
       <button
         type="button"
         aria-label="Close"
         className="fixed inset-0 z-10 cursor-default"
-        onClick={() => {
-          const next = source.single ? (picked[0] ?? "") : picked;
-          if (sameFieldValue(value, next)) onCancel();
-          else onSave(next);
-        }}
+        onClick={finish}
       />
-      <div className="absolute right-0 z-20 w-[260px] rounded-lg border border-[#e6e8ee] bg-white p-2 text-left shadow-lg" onKeyDown={(event) => { if (event.key === "Escape") onCancel(); }}>
-        <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={noOptions ? "Type a name to create" : "Search"} className="mb-2 h-8 w-full rounded-md border border-[#e6e8ee] px-2 text-[13px]" />
+      <div
+        className="absolute right-0 z-20 w-[260px] rounded-lg border border-[#e6e8ee] bg-white p-2 text-left shadow-lg"
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.stopPropagation();
+          finish();
+        }}
+      >
+        <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={noOptions && canCreate ? "Type a name to create" : "Search"} className="mb-2 h-8 w-full rounded-md border border-[#e6e8ee] px-2 text-[13px]" />
         <div className="max-h-48 space-y-1 overflow-y-auto">
           {choices.slice(0, 8).map((item) => (
             <button key={item.id} type="button" onClick={() => choose(item.id, def.key === "vendor" ? item.name : undefined)} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-[#fafafb]">
@@ -790,6 +813,9 @@ function RelationPopover({
             <p className="px-2 py-2 text-[12px] text-[#8b90a0]">Nothing matches.</p>
           )}
         </div>
+        {noOptions && !canCreate && (
+          <p className="px-2 py-2 text-[12px] text-[#8b90a0]">{emptyTypeHint(source.target[0] ?? "")}</p>
+        )}
         {createLabel && !pending && (
           <button
             type="button"

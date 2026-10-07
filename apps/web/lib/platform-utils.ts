@@ -20,6 +20,8 @@ export const PLATFORM_TYPES = [
   { value: "erp", label: "ERP foundation" },
   { value: "bpm", label: "BPM / workflow" },
   { value: "custom_dev", label: "Custom development" },
+  { value: "ai_platform", label: "AI / agent platform" },
+  { value: "data_platform", label: "Data platform" },
   { value: "other", label: "Other…" },
 ];
 

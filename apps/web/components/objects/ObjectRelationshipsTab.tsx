@@ -140,7 +140,7 @@ export function ObjectRelationshipsTab({
                 {!hideRemove && onRemove && (
                   <button
                     type="button"
-                    onClick={() => onRemove(rel.id)}
+                    onClick={() => { if (window.confirm("Remove this relationship?")) onRemove(rel.id); }}
                     disabled={isRemoving}
                     className={cn(
                       "text-gray-300 hover:text-red-400 transition-colors flex-shrink-0",

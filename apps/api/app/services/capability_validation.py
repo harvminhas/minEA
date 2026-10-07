@@ -54,7 +54,14 @@ def _validate_system(
     if isinstance(body, ObjectCreate):
         body.properties = normalized
     elif body.properties is not None:
-        body.properties = normalized
+        # None means the field was cleared. normalize drops those, so put them
+        # back and let the router's merge delete the stored key.
+        cleared = {
+            key: None
+            for key, value in incoming.items()
+            if value is None and key not in normalized
+        }
+        body.properties = {**normalized, **cleared}
 
 
 async def _validate_domain(

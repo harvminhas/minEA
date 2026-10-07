@@ -317,12 +317,14 @@ async def update_object(
     await ctx.require_permission(db, "object.edit")
     assert ctx.workspace
 
+    # Lock the row so a second save waits and merges into the committed
+    # properties, instead of both writes starting from the same old JSON.
     result = await db.execute(
         select(MinEAObject).where(
             MinEAObject.id == object_id,
             MinEAObject.workspace_id == ctx.workspace.id,
             MinEAObject.org_id == ctx.org_id,
-        )
+        ).with_for_update()
     )
     obj = result.scalar_one_or_none()
     if not obj:

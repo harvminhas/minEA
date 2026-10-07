@@ -33,6 +33,7 @@ export const INFRA_KINDS = [
   { value: "broker", label: "Broker" },
   { value: "etl_elt", label: "ETL / ELT" },
   { value: "transport", label: "Transport" },
+  { value: "mcp_server", label: "MCP server" },
   { value: "custom", label: "Custom" },
 ] as const;
 
@@ -50,6 +51,7 @@ export const DEFAULT_HANDLES_BY_KIND: Record<string, IntegrationInfraHandle[]> =
   broker: ["events"],
   etl_elt: ["data", "flows"],
   transport: ["flows", "data"],
+  mcp_server: ["apis", "data"],
   custom: [],
 };
 

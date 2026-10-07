@@ -60,4 +60,9 @@ test("an empty hosting picker offers to create the typed name", () => {
   assert.equal(relationCreateLabel(["model"], "AS400", []), "+ Create 'AS400'");
   assert.equal(relationCreateLabel(["cloud_service"], "Azure", ["Azure"]), null);
   assert.equal(relationCreateLabel(["cloud_service"], "", []), null);
+  assert.equal(relationCreateLabel(["cloud_service", "tool"], "n8n", []), null);
+  assert.equal(
+    relationCreateLabel(["application", "solution", "technical_capability", "cloud_service", "data_store"], "Fabric", []),
+    null
+  );
 });
