@@ -6,6 +6,7 @@ import { catalogEntriesFor } from "./catalog.ts";
 import { applyPatch } from "../fields/save.ts";
 import {
   addCustomFeature,
+  customFeatureAdd,
   agentsTouching,
   aiColumnLabel,
   confirmFeature,
@@ -209,4 +210,20 @@ test("aiColumnLabel shows piloting on its own, not as on", () => {
     properties: { ai_features: [{ key: "salesforce-agentforce", name: "Agentforce", status: "piloting", sees_company_data: "yes", vendor_trains: "no", source: "catalog" }] },
   };
   assert.equal(aiColumnLabel(salesforce), "1 piloting");
+});
+
+test("replaying a custom add with its key never adds it twice", () => {
+  const first = addCustomFeature(host("Microsoft 365"), "QA Custom AI", "Ana", NOW).properties.ai_features;
+  const withIt = host("Microsoft 365", { ai_features: first });
+  const replay = addCustomFeature(withIt, "QA Custom AI", "Ana", NOW, "custom-qa-custom-ai").properties.ai_features;
+  assert.deepEqual(replay, first);
+
+  const click = customFeatureAdd("QA Custom AI", "Ana", NOW);
+  const preview = click(host("Microsoft 365")).properties.ai_features;
+  assert.deepEqual(preview.map((item) => item.key), ["custom-qa-custom-ai"]);
+  // The real send / a rebuild lands on an answer that already has it: no second card.
+  assert.deepEqual(click(host("Microsoft 365", { ai_features: preview })).properties.ai_features, preview);
+  // A second click is a second feature, as before.
+  const again = customFeatureAdd("QA Custom AI", "Ana", NOW)(host("Microsoft 365", { ai_features: preview })).properties.ai_features;
+  assert.deepEqual(again.map((item) => item.key), ["custom-qa-custom-ai", "custom-qa-custom-ai-2"]);
 });

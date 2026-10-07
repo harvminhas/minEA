@@ -136,22 +136,26 @@ export function updateFeature(
   };
 }
 
-/** A feature the catalog doesn't know: key "custom-<slug>", answers unknown, turned on. */
+/**
+ * A feature the catalog doesn't know: key "custom-<slug>", answers unknown, turned on.
+ * Pass `key` to replay an add: if that key is already on the record the patch changes nothing.
+ */
 export function addCustomFeature(
   object: FeatureHost,
   name: string,
   user: string,
-  now: string = new Date().toISOString()
+  now: string = new Date().toISOString(),
+  key?: string
 ): FeaturePatch {
   const label = name.trim();
   if (!label) throw new Error("Type the AI feature's name");
   const features = readFeatures(object.properties);
-  const base = `custom-${normalizeTerm(label).replace(/ /g, "-") || "feature"}`;
+  if (key && features.some((item) => item.key === key)) return { properties: { ai_features: features } };
   const taken = new Set(features.map((item) => item.key));
-  let key = base;
-  for (let n = 2; taken.has(key); n += 1) key = `${base}-${n}`;
+  let next = key ?? `custom-${normalizeTerm(label).replace(/ /g, "-") || "feature"}`;
+  if (!key) for (let n = 2, base = next; taken.has(next); n += 1) next = `${base}-${n}`;
   const added: AiFeature = {
-    key,
+    key: next,
     name: label,
     status: "on",
     audience: null,
@@ -162,6 +166,20 @@ export function addCustomFeature(
     confirmed_by: user,
   };
   return { properties: { ai_features: [...features, added] } };
+}
+
+/**
+ * One click on "Add … as your own". The key is fixed the first time the build runs (the queue's preview),
+ * so every later replay (the real send, a rebuild on a newer server answer) adds the same feature once.
+ */
+export function customFeatureAdd(name: string, user: string, now: string = new Date().toISOString()) {
+  let key: string | undefined;
+  return (object: FeatureHost): FeaturePatch => {
+    const before = new Set(readFeatures(object.properties).map((item) => item.key));
+    const patch = addCustomFeature(object, name, user, now, key);
+    key ??= patch.properties.ai_features.find((item) => !before.has(item.key))?.key;
+    return patch;
+  };
 }
 
 export type FeatureFlag = { id: "F1" | "F2"; severity: "high" | "check"; title: string };

@@ -8,7 +8,7 @@ import { useFeatureSave } from "@/lib/ai/use-feature-save";
 import type { FieldEdge } from "@/lib/fields/save";
 import { catalogEntriesFor, catalogEntry } from "@/lib/ai/catalog";
 import {
-  addCustomFeature,
+  customFeatureAdd,
   agentsTouching,
   aiColumnLabel,
   confirmFeature,
@@ -109,7 +109,7 @@ export function AiFeaturesSection({
                 }}
                 onCustom={(name) => {
                   setAdding(false);
-                  void save((current) => addCustomFeature(current, name, person));
+                  void save(customFeatureAdd(name, person));
                 }}
               />
             )}

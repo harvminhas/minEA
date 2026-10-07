@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { MinEAObject } from "@minea/types";
 import { mergeFreshCatalog, shapeCatalog } from "@/lib/use-model-catalog";
-import { addCustomFeature, readFeatures, setFeatureSeats, updateFeature } from "./features";
+import { addCustomFeature, confirmFeature, customFeatureAdd, readFeatures, setFeatureSeats, updateFeature } from "./features";
+import { catalogEntry } from "./catalog";
 import { enqueueFeatureSave, resetFeatureLanes, type FeatureDeps } from "./feature-queue";
 
 const NOW = "2026-10-07T12:00:00.000Z";
@@ -119,4 +120,23 @@ test("a failed save is dropped and later clicks still build from the server's co
   assert.deepEqual(readFeatures(server.row().properties).map((feature) => feature.name), ["One", "Three"]);
   assert.deepEqual(readFeatures(cache.get()?.properties).map((feature) => feature.name), ["One", "Three"]);
   assert.deepEqual(cache.errors, ["Couldn't save: Server said no"]);
+});
+
+test("an add rebuilt on an answer that already contains it stays one feature (add + Copilot Chat on)", async () => {
+  resetFeatureLanes();
+  const start = { ...record("m365"), name: "Microsoft 365" } as MinEAObject;
+  const server = fakeServer(start, [40, 5]);
+  const cache = fakeCache(start);
+  const deps = cache.deps(server.send);
+  const add = customFeatureAdd("QA Custom AI", "QA", NOW);
+  const chat = catalogEntry("m365-copilot-chat")!;
+  await Promise.all([
+    enqueueFeatureSave("o/w/m365", add, deps),
+    enqueueFeatureSave("o/w/m365", (current) => confirmFeature(current, chat, "on", "QA", NOW), deps),
+    // The same click replayed on top of the answer that already has it.
+    enqueueFeatureSave("o/w/m365", add, deps),
+  ]);
+  const keys = readFeatures(server.row().properties).map((feature) => `${feature.key}:${feature.status}`);
+  assert.deepEqual(keys, ["custom-qa-custom-ai:on", "m365-copilot-chat:on"]);
+  assert.deepEqual(cache.get()?.properties, server.row().properties);
 });
