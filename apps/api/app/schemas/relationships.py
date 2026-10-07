@@ -107,6 +107,7 @@ ALLOWED_TRIPLES: set[tuple[str, str, str]] = {
     ("supplied_by", "cloud_service", "external_party"),
     ("supplied_by", "model", "external_party"),
     ("supplied_by", "ai_model", "external_party"),
+    ("sends_data_to", "cloud_service", "data_store"),
     ("uses", "application", "integration_flow"),
 }
 

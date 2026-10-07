@@ -672,6 +672,11 @@
   [
     "sends_data_to",
     "cloud_service",
+    "data_store"
+  ],
+  [
+    "sends_data_to",
+    "cloud_service",
     "external_party"
   ],
   [

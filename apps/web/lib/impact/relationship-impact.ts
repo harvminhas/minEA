@@ -8,7 +8,7 @@
  * part_of, and located_at. calls and hosts do not propagate as a stop.
  */
 
-import { RELATIONSHIP_LABELS, type RelationshipType } from "@minea/types";
+import { IMPACT_LANES, RELATIONSHIP_LABELS, type RelationshipType } from "@minea/types";
 
 export type ImpactSeverity = "direct" | "degraded" | "loses_support";
 
@@ -37,22 +37,9 @@ function rule(
   };
 }
 
-export const relationshipImpactRules: Record<string, ImpactRule> = {
-  depends_on: rule("depends_on", { whenTargetFails: "direct" }),
-  part_of: rule("part_of", { whenTargetFails: "direct", whenSourceFails: "degraded" }),
-  runs_on: rule("runs_on", { whenTargetFails: "direct" }),
-  built_on: rule("built_on", { whenTargetFails: "direct" }),
-  located_at: rule("located_at", { whenTargetFails: "direct" }),
-  sends_data_to: rule("sends_data_to", { whenSourceFails: "degraded" }),
-  reads: rule("reads", { whenTargetFails: "degraded" }),
-  writes: rule("writes", { whenTargetFails: "degraded" }),
-  owns: rule("owns", { whenTargetFails: "degraded" }),
-  creates: rule("creates", { whenTargetFails: "degraded" }),
-  updates: rule("updates", { whenTargetFails: "degraded" }),
-  supported_by: rule("supported_by", { whenTargetFails: "loses_support" }),
-  supports: rule("supports", { whenSourceFails: "loses_support" }),
-  replaces: rule("replaces", {}),
-};
+export const relationshipImpactRules: Record<string, ImpactRule> = Object.fromEntries(
+  Object.entries(IMPACT_LANES).map(([type, lane]) => [type, rule(type as RelationshipType, lane)]),
+);
 
 export const impactSectionTitle: Record<ImpactSeverity, string> = {
   direct: "Stops working",

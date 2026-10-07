@@ -1,0 +1,19 @@
+{
+  "_risk": ["writes"],
+  "depends_on": { "whenTargetFails": "direct" },
+  "part_of": { "whenTargetFails": "direct", "whenSourceFails": "degraded" },
+  "runs_on": { "whenTargetFails": "direct" },
+  "built_on": { "whenTargetFails": "direct" },
+  "located_at": { "whenTargetFails": "direct" },
+  "uses_model": { "whenTargetFails": "direct" },
+  "sends_data_to": { "whenSourceFails": "degraded" },
+  "reads": { "whenTargetFails": "degraded" },
+  "writes": { "whenTargetFails": "degraded" },
+  "owns": { "whenTargetFails": "degraded" },
+  "creates": { "whenTargetFails": "degraded" },
+  "updates": { "whenTargetFails": "degraded" },
+  "can_call": { "whenTargetFails": "degraded" },
+  "supported_by": { "whenTargetFails": "loses_support" },
+  "supports": { "whenSourceFails": "loses_support" },
+  "replaces": {}
+}

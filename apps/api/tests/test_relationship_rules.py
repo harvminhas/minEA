@@ -142,6 +142,12 @@ class RelationshipRulesTests(unittest.TestCase):
         self.assertGreater(len(found), 30)
         self.assertEqual(found, _LABELS)
 
+    def test_platform_sends_data_to_a_data_store(self):
+        self.assertEqual(_create("sends_data_to", "cloud_service", "data_store").type, "sends_data_to")
+        for source in ("application", "data_store", "external_party"):
+            with self.assertRaises(ValidationError):
+                _create("sends_data_to", source, "data_store")
+
     def test_workspace_copy_keeps_ai_models(self):
         from app.services.workspace_copy_layers import object_types_for_layers
 

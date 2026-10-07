@@ -1,4 +1,5 @@
 import allowedTripleRules from "./relationship-rules.json";
+import impactRules from "./impact-rules.json";
 
 // ─── Object Types ────────────────────────────────────────────────────────────
 
@@ -126,6 +127,14 @@ export const ALLOWED_TRIPLES: readonly [string, string, string][] =
   allowedTripleRules as [string, string, string][];
 
 export { RELATIONSHIP_LABELS, type RelationshipLabel } from "./relationship-labels";
+
+export type ImpactLane = { whenTargetFails?: "direct" | "degraded" | "loses_support"; whenSourceFails?: "direct" | "degraded" | "loses_support" };
+
+export const IMPACT_LANES: Readonly<Record<string, ImpactLane>> = Object.fromEntries(
+  Object.entries(impactRules).filter(([key]) => !key.startsWith("_")),
+) as unknown as Readonly<Record<string, ImpactLane>>;
+
+export const RISK_EDGE_TYPES: readonly string[] = impactRules._risk;
 
 // ─── Core Object ─────────────────────────────────────────────────────────────
 
