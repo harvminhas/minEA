@@ -1,13 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { AI_FEATURE_CATALOG, AI_JOBS, type AiCatalogEntry, type AiFeature, type AiFeatureStatus, type MinEAObject, type YesNoUnknown } from "@minea/types";
-import { objectsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import { useTenancy } from "@/lib/tenancy";
-import { applyCatalogWrite, catalogQueryKey, useModelCatalog, type WorkspaceCatalog } from "@/lib/use-model-catalog";
-import { savesWaiting, trackSave } from "@/lib/fields/save-queue";
+import { useModelCatalog } from "@/lib/use-model-catalog";
+import { useFeatureSave } from "@/lib/ai/use-feature-save";
 import type { FieldEdge } from "@/lib/fields/save";
 import { catalogEntriesFor, catalogEntry } from "@/lib/ai/catalog";
 import {
@@ -23,7 +20,6 @@ import {
   suggestedFeatures,
   updateFeature,
   type FeatureChanges,
-  type FeaturePatch,
 } from "@/lib/ai/features";
 import { readCostLines } from "@/lib/cost/math";
 
@@ -79,54 +75,13 @@ export function AiFeaturesSection({
   names: ReadonlyMap<string, string>;
   readOnly: boolean;
 }) {
-  const queryClient = useQueryClient();
   const catalog = useModelCatalog();
-  const { getToken, user } = useAuth();
-  const { orgSlug, workspaceSlug } = useTenancy();
-  const [error, setError] = useState("");
+  const { user } = useAuth();
   const [adding, setAdding] = useState(false);
   const live = catalog.data?.objects.find((item) => item.id === object.id) ?? object;
   const person = user?.displayName || user?.email || "Someone";
   const actor = user?.uid || "user";
-
-  /** Builds every patch from the freshest cached record so two quick clicks don't undo each other. */
-  const fresh = (): MinEAObject => {
-    const cached = orgSlug && workspaceSlug ? queryClient.getQueryData<WorkspaceCatalog>(catalogQueryKey(orgSlug, workspaceSlug)) : undefined;
-    return cached?.objects.find((item) => item.id === object.id) ?? live;
-  };
-
-  const save = async (build: (current: MinEAObject) => FeaturePatch) => {
-    setError("");
-    const current = fresh();
-    let patch: FeaturePatch;
-    try {
-      patch = build(current);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save");
-      return;
-    }
-    if (orgSlug && workspaceSlug) {
-      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, {
-        object: { ...current, properties: { ...(current.properties ?? {}), ...patch.properties } },
-      });
-    }
-    try {
-      const token = await getToken();
-      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
-      const saved = await trackSave(object.id, () =>
-        objectsApi.update(orgSlug, workspaceSlug, object.id, { properties: patch.properties }, token)
-      );
-      if (savesWaiting(object.id) === 0) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
-      queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug] });
-      queryClient.invalidateQueries({ queryKey: ["object", orgSlug, workspaceSlug, object.id] });
-    } catch (err) {
-      if (orgSlug && workspaceSlug) {
-        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: current });
-        queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
-      }
-      setError(`Couldn't save: ${err instanceof Error ? err.message : "Could not save"}`);
-    }
-  };
+  const { save, error } = useFeatureSave(object.id, live);
 
   const features = readFeatures(live.properties);
   const suggestions = suggestedFeatures(live);

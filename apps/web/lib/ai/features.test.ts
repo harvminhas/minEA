@@ -201,3 +201,12 @@ test("agentsTouching lists agents that read or write this record", () => {
     { id: "ag2", name: "AP Inbox Agent", verb: "writes to it" },
   ]);
 });
+
+test("aiColumnLabel shows piloting on its own, not as on", () => {
+  const salesforce = {
+    type: "application",
+    name: "Salesforce",
+    properties: { ai_features: [{ key: "salesforce-agentforce", name: "Agentforce", status: "piloting", sees_company_data: "yes", vendor_trains: "no", source: "catalog" }] },
+  };
+  assert.equal(aiColumnLabel(salesforce), "1 piloting");
+});

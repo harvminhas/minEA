@@ -1,0 +1,842 @@
+{
+  "_note": "Sample company for the AI landscape report (spec \u00a76). expected is checked by apps/web/lib/ai/landscape.test.ts.",
+  "objects": [
+    {
+      "id": "app-m365",
+      "type": "application",
+      "name": "Microsoft 365",
+      "status": "active",
+      "properties": {
+        "category": "Productivity",
+        "holds_data": [
+          "customer",
+          "financial"
+        ],
+        "cost_lines": [
+          {
+            "id": "m365-base",
+            "type": "subscription",
+            "label": "Business Standard",
+            "frequency": "monthly",
+            "calculation": {
+              "kind": "per_user",
+              "seats": 60,
+              "unit_price_monthly_cents": 1250
+            },
+            "vendor": "Microsoft",
+            "source": "estimate",
+            "created_at": "2026-10-01T00:00:00Z",
+            "created_by": "fixture",
+            "updated_at": "2026-10-01T00:00:00Z",
+            "updated_by": "fixture"
+          },
+          {
+            "id": "ai-m365-copilot",
+            "type": "subscription",
+            "label": "Microsoft 365 Copilot",
+            "frequency": "monthly",
+            "calculation": {
+              "kind": "per_user",
+              "seats": 25,
+              "unit_price_monthly_cents": 2100
+            },
+            "vendor": "Microsoft",
+            "source": "estimate",
+            "created_at": "2026-10-01T00:00:00Z",
+            "created_by": "fixture",
+            "updated_at": "2026-10-01T00:00:00Z",
+            "updated_by": "fixture",
+            "ai_feature": "m365-copilot"
+          }
+        ],
+        "ai_features": [
+          {
+            "key": "m365-copilot",
+            "name": "Microsoft 365 Copilot",
+            "status": "on",
+            "audience": "some_groups",
+            "sees_company_data": "yes",
+            "vendor_trains": "no",
+            "source": "catalog",
+            "confirmed_at": "2026-10-01T00:00:00Z",
+            "confirmed_by": "Harvinder",
+            "cost_line_id": "ai-m365-copilot"
+          },
+          {
+            "key": "m365-copilot-chat",
+            "name": "Microsoft 365 Copilot Chat",
+            "status": "on",
+            "audience": "everyone",
+            "sees_company_data": "no",
+            "vendor_trains": "no",
+            "source": "catalog",
+            "confirmed_at": "2026-10-01T00:00:00Z",
+            "confirmed_by": "Harvinder"
+          }
+        ]
+      }
+    },
+    {
+      "id": "app-salesforce",
+      "type": "application",
+      "name": "Salesforce",
+      "status": "active",
+      "properties": {
+        "category": "CRM",
+        "cost_lines": [
+          {
+            "id": "ai-salesforce-agentforce",
+            "type": "subscription",
+            "label": "Agentforce",
+            "frequency": "monthly",
+            "calculation": {
+              "kind": "per_user",
+              "seats": 2,
+              "unit_price_monthly_cents": 12500
+            },
+            "vendor": "Salesforce",
+            "source": "estimate",
+            "created_at": "2026-10-01T00:00:00Z",
+            "created_by": "fixture",
+            "updated_at": "2026-10-01T00:00:00Z",
+            "updated_by": "fixture",
+            "ai_feature": "salesforce-agentforce"
+          }
+        ],
+        "ai_features": [
+          {
+            "key": "salesforce-agentforce",
+            "name": "Agentforce",
+            "status": "piloting",
+            "audience": "some_groups",
+            "sees_company_data": "yes",
+            "vendor_trains": "no",
+            "source": "catalog",
+            "confirmed_at": "2026-10-01T00:00:00Z",
+            "confirmed_by": "Harvinder",
+            "cost_line_id": "ai-salesforce-agentforce"
+          }
+        ]
+      }
+    },
+    {
+      "id": "app-zendesk",
+      "type": "application",
+      "name": "Zendesk",
+      "status": "active",
+      "properties": {
+        "category": "CX",
+        "cost_lines": [
+          {
+            "id": "ai-zendesk-copilot",
+            "type": "subscription",
+            "label": "Zendesk Copilot",
+            "frequency": "monthly",
+            "calculation": {
+              "kind": "per_user",
+              "seats": 6,
+              "unit_price_monthly_cents": 5000
+            },
+            "vendor": "Zendesk",
+            "source": "estimate",
+            "created_at": "2026-10-01T00:00:00Z",
+            "created_by": "fixture",
+            "updated_at": "2026-10-01T00:00:00Z",
+            "updated_by": "fixture",
+            "ai_feature": "zendesk-copilot"
+          }
+        ],
+        "ai_features": [
+          {
+            "key": "zendesk-copilot",
+            "name": "Zendesk Copilot",
+            "status": "on",
+            "audience": "some_groups",
+            "sees_company_data": "yes",
+            "vendor_trains": "unknown",
+            "source": "catalog",
+            "confirmed_at": "2026-10-01T00:00:00Z",
+            "confirmed_by": "Harvinder",
+            "cost_line_id": "ai-zendesk-copilot"
+          }
+        ]
+      }
+    },
+    {
+      "id": "app-zoom",
+      "type": "application",
+      "name": "Zoom",
+      "status": "active",
+      "properties": {
+        "category": "Collaboration",
+        "ai_features": [
+          {
+            "key": "zoom-ai-companion",
+            "name": "Zoom AI Companion",
+            "status": "on",
+            "audience": "everyone",
+            "sees_company_data": "yes",
+            "vendor_trains": "no",
+            "source": "catalog",
+            "confirmed_at": "2026-10-01T00:00:00Z",
+            "confirmed_by": "Harvinder"
+          }
+        ]
+      }
+    },
+    {
+      "id": "app-notion",
+      "type": "application",
+      "name": "Notion",
+      "status": "active",
+      "properties": {
+        "category": "Collaboration",
+        "ai_features": [
+          {
+            "key": "notion-ai",
+            "name": "Notion AI",
+            "status": "on",
+            "audience": "everyone",
+            "sees_company_data": "yes",
+            "vendor_trains": "no",
+            "source": "catalog",
+            "confirmed_at": "2026-10-01T00:00:00Z",
+            "confirmed_by": "Harvinder"
+          }
+        ]
+      }
+    },
+    {
+      "id": "app-hubspot",
+      "type": "application",
+      "name": "HubSpot",
+      "status": "active",
+      "properties": {
+        "category": "Marketing",
+        "ai_features": [
+          {
+            "key": "hubspot-breeze-agents",
+            "name": "Breeze agents",
+            "status": "off",
+            "audience": "admins",
+            "sees_company_data": "yes",
+            "vendor_trains": "unknown",
+            "source": "catalog",
+            "confirmed_at": "2026-10-01T00:00:00Z",
+            "confirmed_by": "Harvinder"
+          }
+        ]
+      }
+    },
+    {
+      "id": "app-slack",
+      "type": "application",
+      "name": "Slack",
+      "status": "active",
+      "properties": {
+        "category": "Collaboration",
+        "ai_features": [
+          {
+            "key": "slack-ai",
+            "name": "Slack AI",
+            "status": "off",
+            "audience": "everyone",
+            "sees_company_data": "yes",
+            "vendor_trains": "no",
+            "source": "catalog",
+            "confirmed_at": "2026-10-01T00:00:00Z",
+            "confirmed_by": "Harvinder"
+          }
+        ]
+      }
+    },
+    {
+      "id": "app-quickbooks",
+      "type": "application",
+      "name": "QuickBooks Online",
+      "status": "active",
+      "properties": {
+        "category": "Finance"
+      }
+    },
+    {
+      "id": "plat-d365",
+      "type": "cloud_service",
+      "name": "Dynamics 365",
+      "status": "active",
+      "properties": {
+        "platform_type": "erp",
+        "ai_features": [
+          {
+            "key": "dynamics-365-copilot",
+            "name": "Copilot in Dynamics 365",
+            "status": "off",
+            "audience": "everyone",
+            "sees_company_data": "yes",
+            "vendor_trains": "no",
+            "source": "catalog",
+            "confirmed_at": "2026-10-01T00:00:00Z",
+            "confirmed_by": "Harvinder"
+          }
+        ]
+      }
+    },
+    {
+      "id": "plat-fabric",
+      "type": "cloud_service",
+      "name": "Microsoft Fabric",
+      "status": "active",
+      "properties": {
+        "platform_type": "data_platform",
+        "annual_cost": 9000
+      }
+    },
+    {
+      "id": "ds-lakehouse",
+      "type": "data_store",
+      "name": "Sales lakehouse",
+      "status": "active",
+      "properties": {}
+    },
+    {
+      "id": "ds-pricebook",
+      "type": "data_store",
+      "name": "Price book",
+      "status": "active",
+      "properties": {}
+    },
+    {
+      "id": "plat-copilot-studio",
+      "type": "cloud_service",
+      "name": "Copilot Studio",
+      "status": "active",
+      "properties": {
+        "platform_type": "ai_platform",
+        "vendor": "Microsoft",
+        "annual_cost": 2400
+      }
+    },
+    {
+      "id": "plat-foundry",
+      "type": "cloud_service",
+      "name": "Azure AI Foundry",
+      "status": "active",
+      "properties": {
+        "platform_type": "ai_platform",
+        "vendor": "Microsoft",
+        "annual_cost": 1200
+      }
+    },
+    {
+      "id": "plat-power-automate",
+      "type": "cloud_service",
+      "name": "Power Automate",
+      "status": "active",
+      "properties": {
+        "platform_type": "low_code",
+        "vendor": "Microsoft",
+        "annual_cost": 1800
+      }
+    },
+    {
+      "id": "tool-n8n",
+      "type": "tool",
+      "name": "n8n",
+      "status": "active",
+      "properties": {
+        "annual_cost": 600
+      }
+    },
+    {
+      "id": "model-gpt4o",
+      "type": "ai_model",
+      "name": "GPT-4o",
+      "status": "active",
+      "properties": {
+        "vendor": "OpenAI",
+        "vendor_trains": "no"
+      }
+    },
+    {
+      "id": "model-claude",
+      "type": "ai_model",
+      "name": "Claude Sonnet",
+      "status": "active",
+      "properties": {
+        "vendor": "Anthropic",
+        "vendor_trains": "no",
+        "annual_cost": 480
+      }
+    },
+    {
+      "id": "team-finance",
+      "type": "team",
+      "name": "Finance",
+      "status": "active",
+      "properties": {}
+    },
+    {
+      "id": "contact-priya",
+      "type": "contact",
+      "name": "Priya Shah",
+      "status": "active",
+      "properties": {}
+    },
+    {
+      "id": "contact-dana",
+      "type": "contact",
+      "name": "Dana Lee",
+      "status": "active",
+      "properties": {}
+    },
+    {
+      "id": "agent-sales",
+      "type": "agent",
+      "name": "Sales Assistant",
+      "status": "active",
+      "point_of_contact_id": "contact-priya",
+      "properties": {
+        "job": "sales_assist",
+        "autonomy_level": "act_with_approval",
+        "acts_as": {
+          "type": "service_account",
+          "name": "svc-sales"
+        }
+      }
+    },
+    {
+      "id": "agent-invoice",
+      "type": "agent",
+      "name": "Invoice Reader",
+      "status": "active",
+      "properties": {
+        "job": "invoice_processing",
+        "autonomy_level": "act_autonomously",
+        "acts_as": {
+          "type": "contact",
+          "id": "contact-dana",
+          "name": "Dana Lee"
+        }
+      }
+    },
+    {
+      "id": "agent-ap",
+      "type": "agent",
+      "name": "AP Inbox Agent",
+      "status": "under_evaluation",
+      "owner_team_id": "team-finance",
+      "properties": {
+        "job": "invoice_processing",
+        "autonomy_level": "suggest",
+        "acts_as": {
+          "type": "team",
+          "id": "team-finance",
+          "name": "Finance"
+        }
+      }
+    },
+    {
+      "id": "agent-quote",
+      "type": "agent",
+      "name": "Quote Builder",
+      "status": "active",
+      "point_of_contact_id": "contact-priya",
+      "properties": {
+        "job": "sales_assist",
+        "autonomy_level": "suggest",
+        "acts_as": {
+          "type": "service_account",
+          "name": "svc-sales"
+        }
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel-1",
+      "type": "built_on",
+      "from_object_id": "agent-sales",
+      "from_type": "agent",
+      "to_object_id": "plat-copilot-studio",
+      "to_type": "cloud_service"
+    },
+    {
+      "id": "rel-2",
+      "type": "uses_model",
+      "from_object_id": "agent-sales",
+      "from_type": "agent",
+      "to_object_id": "model-gpt4o",
+      "to_type": "ai_model"
+    },
+    {
+      "id": "rel-3",
+      "type": "reads",
+      "from_object_id": "agent-sales",
+      "from_type": "agent",
+      "to_object_id": "ds-lakehouse",
+      "to_type": "data_store"
+    },
+    {
+      "id": "rel-4",
+      "type": "writes",
+      "from_object_id": "agent-sales",
+      "from_type": "agent",
+      "to_object_id": "app-salesforce",
+      "to_type": "application"
+    },
+    {
+      "id": "rel-5",
+      "type": "can_call",
+      "from_object_id": "agent-sales",
+      "from_type": "agent",
+      "to_object_id": "agent-quote",
+      "to_type": "agent"
+    },
+    {
+      "id": "rel-6",
+      "type": "built_on",
+      "from_object_id": "agent-invoice",
+      "from_type": "agent",
+      "to_object_id": "tool-n8n",
+      "to_type": "tool"
+    },
+    {
+      "id": "rel-7",
+      "type": "uses_model",
+      "from_object_id": "agent-invoice",
+      "from_type": "agent",
+      "to_object_id": "model-claude",
+      "to_type": "ai_model"
+    },
+    {
+      "id": "rel-8",
+      "type": "reads",
+      "from_object_id": "agent-invoice",
+      "from_type": "agent",
+      "to_object_id": "app-m365",
+      "to_type": "application"
+    },
+    {
+      "id": "rel-9",
+      "type": "writes",
+      "from_object_id": "agent-invoice",
+      "from_type": "agent",
+      "to_object_id": "app-quickbooks",
+      "to_type": "application"
+    },
+    {
+      "id": "rel-10",
+      "type": "built_on",
+      "from_object_id": "agent-ap",
+      "from_type": "agent",
+      "to_object_id": "plat-power-automate",
+      "to_type": "cloud_service"
+    },
+    {
+      "id": "rel-11",
+      "type": "uses_model",
+      "from_object_id": "agent-ap",
+      "from_type": "agent",
+      "to_object_id": "model-gpt4o",
+      "to_type": "ai_model"
+    },
+    {
+      "id": "rel-12",
+      "type": "reads",
+      "from_object_id": "agent-ap",
+      "from_type": "agent",
+      "to_object_id": "app-m365",
+      "to_type": "application"
+    },
+    {
+      "id": "rel-13",
+      "type": "built_on",
+      "from_object_id": "agent-quote",
+      "from_type": "agent",
+      "to_object_id": "plat-copilot-studio",
+      "to_type": "cloud_service"
+    },
+    {
+      "id": "rel-14",
+      "type": "uses_model",
+      "from_object_id": "agent-quote",
+      "from_type": "agent",
+      "to_object_id": "model-gpt4o",
+      "to_type": "ai_model"
+    },
+    {
+      "id": "rel-15",
+      "type": "reads",
+      "from_object_id": "agent-quote",
+      "from_type": "agent",
+      "to_object_id": "ds-pricebook",
+      "to_type": "data_store"
+    },
+    {
+      "id": "rel-16",
+      "type": "runs_on",
+      "from_object_id": "model-gpt4o",
+      "from_type": "ai_model",
+      "to_object_id": "plat-foundry",
+      "to_type": "cloud_service"
+    },
+    {
+      "id": "rel-17",
+      "type": "sends_data_to",
+      "from_object_id": "plat-d365",
+      "from_type": "cloud_service",
+      "to_object_id": "ds-lakehouse",
+      "to_type": "data_store"
+    },
+    {
+      "id": "rel-18",
+      "type": "runs_on",
+      "from_object_id": "ds-lakehouse",
+      "from_type": "data_store",
+      "to_object_id": "plat-fabric",
+      "to_type": "cloud_service"
+    }
+  ],
+  "expected": {
+    "places": 14,
+    "flags": 14,
+    "highFlags": 9,
+    "spend": {
+      "total": 16980,
+      "addOns": 12900,
+      "platforms": 4080,
+      "agents": 0
+    },
+    "features": [
+      "app-m365:m365-copilot",
+      "app-m365:m365-copilot-chat",
+      "app-notion:notion-ai",
+      "app-salesforce:salesforce-agentforce",
+      "app-zendesk:zendesk-copilot",
+      "app-zoom:zoom-ai-companion"
+    ],
+    "offFeatures": [
+      "plat-d365:dynamics-365-copilot",
+      "app-hubspot:hubspot-breeze-agents",
+      "app-slack:slack-ai"
+    ],
+    "agents": [
+      {
+        "id": "agent-ap",
+        "active": true,
+        "owner": "Finance",
+        "identityGap": false
+      },
+      {
+        "id": "agent-invoice",
+        "active": true,
+        "owner": "",
+        "identityGap": false
+      },
+      {
+        "id": "agent-quote",
+        "active": true,
+        "owner": "Priya Shah",
+        "identityGap": false
+      },
+      {
+        "id": "agent-sales",
+        "active": true,
+        "owner": "Priya Shah",
+        "identityGap": false
+      }
+    ],
+    "platforms": [
+      {
+        "id": "plat-foundry",
+        "kind": "AI platform",
+        "counted": true,
+        "cost": 1200,
+        "usedBy": [
+          "model-gpt4o"
+        ]
+      },
+      {
+        "id": "model-claude",
+        "kind": "Model",
+        "counted": true,
+        "cost": 480,
+        "usedBy": [
+          "agent-invoice"
+        ]
+      },
+      {
+        "id": "plat-copilot-studio",
+        "kind": "AI platform",
+        "counted": true,
+        "cost": 2400,
+        "usedBy": [
+          "agent-quote",
+          "agent-sales"
+        ]
+      },
+      {
+        "id": "model-gpt4o",
+        "kind": "Model",
+        "counted": true,
+        "cost": 0,
+        "usedBy": [
+          "agent-ap",
+          "agent-quote",
+          "agent-sales"
+        ]
+      },
+      {
+        "id": "tool-n8n",
+        "kind": "Runs agents",
+        "counted": false,
+        "cost": 600,
+        "usedBy": [
+          "agent-invoice"
+        ]
+      },
+      {
+        "id": "plat-power-automate",
+        "kind": "Runs agents",
+        "counted": false,
+        "cost": 1800,
+        "usedBy": [
+          "agent-ap"
+        ]
+      }
+    ],
+    "unreviewed": [
+      "app-hubspot:hubspot-breeze-assistant",
+      "app-m365:teams-premium-recap",
+      "app-quickbooks:quickbooks-intuit-assist",
+      "app-zendesk:zendesk-ai-agents"
+    ],
+    "flagList": [
+      {
+        "id": "F1",
+        "severity": "high",
+        "itemIds": [
+          "app-m365:m365-copilot"
+        ],
+        "why": "Microsoft 365 holds customer and financial data and this feature can see it."
+      },
+      {
+        "id": "F1",
+        "severity": "high",
+        "itemIds": [
+          "app-salesforce:salesforce-agentforce"
+        ],
+        "why": "Salesforce holds customer data and this feature can see it."
+      },
+      {
+        "id": "F1",
+        "severity": "high",
+        "itemIds": [
+          "app-zendesk:zendesk-copilot"
+        ],
+        "why": "Zendesk holds customer data and this feature can see it."
+      },
+      {
+        "id": "F1",
+        "severity": "high",
+        "itemIds": [
+          "agent-ap"
+        ],
+        "why": "It reads Microsoft 365, which holds customer and financial data."
+      },
+      {
+        "id": "F1",
+        "severity": "high",
+        "itemIds": [
+          "agent-invoice"
+        ],
+        "why": "It reads Microsoft 365, which holds customer and financial data."
+      },
+      {
+        "id": "F1",
+        "severity": "high",
+        "itemIds": [
+          "agent-sales"
+        ],
+        "why": "It reads Sales lakehouse (it gets data from Dynamics 365), which holds customer and financial data."
+      },
+      {
+        "id": "F3",
+        "severity": "high",
+        "itemIds": [
+          "agent-invoice"
+        ],
+        "why": "Nobody is named as its owner."
+      },
+      {
+        "id": "F4",
+        "severity": "high",
+        "itemIds": [
+          "agent-invoice"
+        ],
+        "why": "It writes to QuickBooks Online on its own, with nobody approving."
+      },
+      {
+        "id": "F5",
+        "severity": "high",
+        "itemIds": [
+          "agent-invoice"
+        ],
+        "why": "It signs in as Dana Lee. If they leave, it stops; and its changes look like theirs."
+      },
+      {
+        "id": "F2",
+        "severity": "check",
+        "itemIds": [
+          "app-zendesk:zendesk-copilot"
+        ],
+        "why": "We don't know if Zendesk trains on your data."
+      },
+      {
+        "id": "F4",
+        "severity": "check",
+        "itemIds": [
+          "agent-sales"
+        ],
+        "why": "It writes to Salesforce once someone approves."
+      },
+      {
+        "id": "F6",
+        "severity": "check",
+        "itemIds": [
+          "app-m365:m365-copilot",
+          "app-m365:m365-copilot-chat",
+          "app-notion:notion-ai"
+        ],
+        "why": "Microsoft 365 Copilot, Microsoft 365 Copilot Chat, Notion AI all do writing help."
+      },
+      {
+        "id": "F6",
+        "severity": "check",
+        "itemIds": [
+          "app-salesforce:salesforce-agentforce",
+          "agent-quote",
+          "agent-sales"
+        ],
+        "why": "Agentforce, Quote Builder, Sales Assistant all do sales assist."
+      },
+      {
+        "id": "F6",
+        "severity": "check",
+        "itemIds": [
+          "agent-ap",
+          "agent-invoice"
+        ],
+        "why": "AP Inbox Agent, Invoice Reader both do invoice processing."
+      }
+    ],
+    "chainAgentId": "agent-invoice",
+    "chain": [
+      "Built with n8n (stop)",
+      "Uses model Claude Sonnet (stop)",
+      "Reads Microsoft 365 (slow)",
+      "Writes QuickBooks Online (risk)",
+      "Acts as Dana Lee (identity)"
+    ]
+  }
+}

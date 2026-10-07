@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Info } from "lucide-react";
@@ -11,6 +11,7 @@ import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
+import { aiLandscape } from "@/lib/ai/landscape";
 import { EXAMPLE_REPORT_STATS, hostingMap, infraCost, popularCards, REPORT_REGISTRY, singlePoints, topHostLine } from "@/lib/reports/home";
 import { countLabel } from "@/lib/labels";
 
@@ -42,6 +43,9 @@ export function ReportsScreen() {
   const cost = infraCost(rows);
   const hosts = hostingMap(rows, impact.edges);
   const spof = singlePoints(rows, impact.edges);
+  const objects = catalog.data?.objects;
+  const relationships = catalog.data?.relationships;
+  const ai = useMemo(() => aiLandscape({ objects: objects ?? [], relationships: relationships ?? [] }), [objects, relationships]);
   const shown = REPORT_REGISTRY.filter((item) => !group || item.category === group);
 
   const statFor = (id: string): { value: string; detail: string; alert?: boolean } => {
@@ -57,6 +61,13 @@ export function ReportsScreen() {
       return { value: retiring ? `${retiring} items` : "Nothing is retiring", detail: "" };
     }
     if (id === "single-points") return spof.length ? { value: String(spof.length), detail: spof.map((item) => item.name).join(", "), alert: true } : { value: "None found", detail: "" };
+    if (id === "ai-landscape") {
+      return {
+        value: countLabel(ai.places, "place", "places"),
+        detail: `${countLabel(ai.flags.length, "flag", "flags")} · ${moneyLabel(ai.spend.total)} / yr`,
+        alert: ai.highFlags > 0,
+      };
+    }
     if (id === "ownership-gaps") return cards.ownership;
     if (id === "sensitive-vendors") return { value: "Not tracked yet", detail: "" };
     return { value: "Open the tech debt view", detail: "" };

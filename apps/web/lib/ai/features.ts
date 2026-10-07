@@ -197,12 +197,13 @@ export function featureCostLabel(feature: AiFeature, properties: Record<string, 
   return "";
 }
 
-/** Applications / Platforms table cell, e.g. "2 on · 1 to review"; "" when there is nothing to say. */
+/** Applications / Platforms table cell, e.g. "2 on · 1 piloting · 1 to review"; "" when there is nothing to say. */
 export function aiColumnLabel(object: FeatureHost): string {
   const features = readFeatures(object.properties);
-  const on = features.filter((item) => item.status === "on" || item.status === "piloting").length;
+  const on = features.filter((item) => item.status === "on").length;
+  const piloting = features.filter((item) => item.status === "piloting").length;
   const review = features.filter((item) => item.status === "unreviewed").length + suggestedFeatures(object).length;
-  return [on ? `${on} on` : "", review ? `${review} to review` : ""].filter(Boolean).join(" · ");
+  return [on ? `${on} on` : "", piloting ? `${piloting} piloting` : "", review ? `${review} to review` : ""].filter(Boolean).join(" · ");
 }
 
 type TouchEdge = { type: string; from_object_id: string; from_type: string; to_object_id: string };
