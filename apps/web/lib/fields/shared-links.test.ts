@@ -40,6 +40,7 @@ test("Also in Details is only on the side that has the field", () => {
   const built = { type: "built_on", from_object_id: "app" };
   assert.equal(alsoInDetailsLabel(built, "app", "application"), "Built on platform");
   assert.equal(alsoInDetailsLabel(built, "plat", "cloud_service"), null);
+  assert.equal(alsoInDetailsLabel({ type: "built_on", from_object_id: "other" }, "app", "application"), null);
   const vendor = { type: "supplied_by", from_object_id: "app" };
   assert.equal(alsoInDetailsLabel(vendor, "app", "application"), "Vendor");
   assert.equal(alsoInDetailsLabel(vendor, "party", "external_party"), null);

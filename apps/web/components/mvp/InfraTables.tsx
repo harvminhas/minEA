@@ -103,7 +103,7 @@ export function PlatformsTable({ rows, selectedId, anywhere = false }: { rows: C
           )}
         </div>
       </div>
-      {adding && <div className="mb-4"><AddFlow origin="model" kind="platform" compact /></div>}
+      {adding && <div className="mb-4"><AddFlow origin="model" kind="platform" compact onClose={() => setAdding(false)} /></div>}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, vendor, or owner" className="h-9 w-[260px] max-w-full rounded-lg border border-[#e6e8ee] px-3 text-[13px] outline-none focus:border-[#5b4ce6]" />
         <select value={kind} onChange={(event) => setKind(event.target.value)} className="h-9 rounded-lg border border-[#e6e8ee] px-2 text-[13px]">
@@ -249,7 +249,7 @@ export function ServersTable({ rows, selectedId, anywhere = false }: { rows: Cat
           </button>
         )}
       </div>
-      {adding && <div className="mb-4"><AddFlow origin="model" kind="server" compact /></div>}
+      {adding && <div className="mb-4"><AddFlow origin="model" kind="server" compact onClose={() => setAdding(false)} /></div>}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, OS, or owner" className="h-9 w-[260px] max-w-full rounded-lg border border-[#e6e8ee] px-3 text-[13px] outline-none focus:border-[#5b4ce6]" />
         <select value={kind} onChange={(event) => setKind(event.target.value)} className="h-9 rounded-lg border border-[#e6e8ee] px-2 text-[13px]">

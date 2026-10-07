@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { TOOL_CATALOG } from "./match-tools.ts";
-import { classifyAddIntent } from "./add-intent.ts";
+import { addListText, classifyAddIntent, prefixAdd } from "./add-intent.ts";
 import { normalizeTerm } from "./match-tools.ts";
 
 function known(term: string): boolean {
@@ -14,6 +14,11 @@ describe("classifyAddIntent", () => {
     assert.equal(classifyAddIntent("add Zoom, HubSpot and NetSuite", known), "add");
     assert.equal(classifyAddIntent("+ Gusto", known), "add");
     assert.equal(classifyAddIntent("new server SQL02", known), "add");
+    assert.equal(classifyAddIntent("add AWS, Azure", known), "add");
+    assert.equal(addListText("add AWS, Azure"), "AWS, Azure");
+    assert.equal(prefixAdd("AWS, Azure"), "add AWS, Azure");
+    assert.equal(prefixAdd(""), "add ");
+    assert.equal(prefixAdd("add Zoom"), "add Zoom");
   });
 
   it("treats a mostly known list as an add", () => {

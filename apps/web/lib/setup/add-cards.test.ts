@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { MOTION_CSS, cardQuestion, costShareLine, describeAddResult, firstGap, noticeDeadline, savedAdded, savedKept, viewFromRows } from "./add-cards.ts";
+import { MOTION_CSS, cardQuestion, catalogHostingLine, costShareLine, describeAddResult, firstGap, hostingChoices, noticeDeadline, savedAdded, savedKept, undoneSentence, viewFromRows } from "./add-cards.ts";
+import { applicationAddHint } from "./type-guidance.ts";
 import { prepareRows, todoLines, type AddRow, type EstateItem } from "./add-plan.ts";
 import type { ToolRecord } from "./match-tools.ts";
 
@@ -99,6 +100,38 @@ describe("ask add cards", () => {
     const next = viewFromRows([...removed, ...view.alreadyLines], "idle");
     assert.equal(next.button, "Add 1 app");
     assert.equal(firstGap({ owner: hubspot.owner, renewal: hubspot.renewal, criticality: "" })?.label, "No renewal date");
+  });
+
+  it("a platform guess and change use a platform card, then an app card", () => {
+    for (const name of ["Snowflake", "AWS Lambda"]) {
+      assert.equal(applicationAddHint(name, "platform", false), "We think this is a Platform");
+      const platform = describeAddResult({ text: name, estate: [], phase: "idle", kind: "platform" });
+      assert.equal(platform.button, "Add 1 platform", name);
+      assert.equal(platform.title, "Add 1 platform to your map", name);
+      assert.equal(platform.addCards[0]?.kind, "platform", name);
+      assert.equal(catalogHostingLine(platform.addCards[0]!), "Platform hosting, nothing to ask");
+      assert.equal(applicationAddHint(name, "app", true), "Adding as an Application");
+      assert.equal(applicationAddHint(name, "platform", true), "Adding as a Platform");
+      const app = describeAddResult({ text: name, estate: [], phase: "idle", kind: "app" });
+      assert.equal(app.button, "Add 1 app", name);
+      assert.equal(app.addCards[0]?.kind, "app", name);
+      assert.equal(catalogHostingLine(app.addCards[0]!), null);
+    }
+  });
+
+  it("an unmatched platform asks for hosting and a PaaS match does not", () => {
+    assert.deepEqual(hostingChoices("platform").map((choice) => choice.label), ["SaaS", "PaaS", "Self-hosted", "Don't know"]);
+    for (const name of ["AWS", "Azure"]) {
+      const view = describeAddResult({ text: name, estate: [], phase: "idle", kind: "platform" });
+      assert.equal(view.questions[0], "hosting", name);
+      assert.equal(view.addCards[0]?.choice, "unknown", name);
+    }
+    const functions = describeAddResult({ text: "Azure Functions", estate: [], phase: "idle", kind: "platform" });
+    assert.equal(functions.addCards[0]?.choice, "paas");
+    assert.equal(functions.questions[0], "none");
+    assert.equal(catalogHostingLine(functions.addCards[0]!), "Platform hosting, nothing to ask");
+    assert.equal(undoneSentence(["Esc test office"]), "Undone: Esc test office removed");
+    assert.equal(undoneSentence(["A", "B"]), "Undone: A, B removed");
   });
 
   it("asks at most one question", () => {

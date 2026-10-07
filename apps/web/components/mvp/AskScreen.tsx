@@ -20,8 +20,9 @@ import { AddSaved } from "@/components/add/AddCards";
 import { AddFlow } from "@/components/add/AddFlow";
 import { FirstRunAsk, SetupCard } from "@/components/mvp/FirstRunAsk";
 import { addAnywhereEnabled } from "@/lib/flags";
-import { addListText, classifyAddIntent } from "@/lib/setup/add-intent";
-import { clearAddReceipt, readAddReceipt, writeAddReceipt, type AddReceipt } from "@/lib/setup/add-cards";
+import { addListText, classifyAddIntent, prefixAdd } from "@/lib/setup/add-intent";
+import { undoneSentence, readAddReceipt, writeAddReceipt, type AddReceipt } from "@/lib/setup/add-cards";
+import { askListKind } from "@/lib/setup/type-guidance";
 import { normalizeTerm, TOOL_CATALOG } from "@/lib/setup/match-tools";
 import { Pill } from "@/components/mvp/pills";
 import { countLabel } from "@/lib/labels";
@@ -59,6 +60,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const knownNames = useMemo(() => {
     const names = new Set<string>();
     for (const tool of TOOL_CATALOG) {
+      if (tool.kind === "platform") continue;
       names.add(normalizeTerm(tool.name));
       for (const alias of tool.aliases) names.add(normalizeTerm(alias));
     }
@@ -87,13 +89,21 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const undoAdd = async () => {
     if (!addReceipt || !orgSlug || !workspaceSlug) return;
     const token = await getToken();
-    if (token && Date.now() <= addReceipt.undoUntil) {
-      await addApi.undo(orgSlug, workspaceSlug, { object_ids: addReceipt.objectIds, relationship_ids: addReceipt.relationshipIds }, token);
-      for (const id of addReceipt.objectIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeId: id });
-      for (const id of addReceipt.relationshipIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
-    }
-    clearAddReceipt(orgSlug, workspaceSlug);
-    setAddReceipt(null);
+    if (!token || Date.now() > addReceipt.undoUntil) return;
+    await addApi.undo(orgSlug, workspaceSlug, { object_ids: addReceipt.objectIds, relationship_ids: addReceipt.relationshipIds }, token);
+    for (const id of addReceipt.objectIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeId: id });
+    for (const id of addReceipt.relationshipIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
+    const undone: AddReceipt = {
+      ...addReceipt,
+      added: undoneSentence(addReceipt.names ?? []),
+      kept: "",
+      todos: [],
+      canUndo: false,
+      objectIds: [],
+      relationshipIds: [],
+    };
+    writeAddReceipt(orgSlug, workspaceSlug, undone);
+    setAddReceipt(undone);
   };
 
   const remote = useQuery({
@@ -167,6 +177,13 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     router.push(askPath(basePath, q, nextFocusId));
   };
 
+  const beginAdd = () => {
+    const next = prefixAdd(draft);
+    setDraft(next);
+    if (addListText(next)) submit(next);
+    else document.getElementById(ASK_BAR_ID)?.focus();
+  };
+
   if (mode === "home" && (showSetup || setupLatched)) {
     return (
       <div className="mx-auto max-w-3xl px-6 pb-16 pt-12">
@@ -209,7 +226,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             className="h-11 flex-1 bg-transparent text-[15px] outline-none"
           />
           {anywhere && (
-            <button type="button" className="rounded-lg px-2 py-1 text-[13px] font-semibold text-[#5b4ce6]" onClick={() => { setDraft("add "); document.getElementById(ASK_BAR_ID)?.focus(); }}>
+            <button type="button" className="rounded-lg px-2 py-1 text-[13px] font-semibold text-[#5b4ce6]" onClick={beginAdd}>
               + Add
             </button>
           )}
@@ -266,7 +283,14 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-6">
+    <div
+      className="mx-auto max-w-4xl px-6 py-6"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || visibleReceipt || !showingAdd) return;
+        event.preventDefault();
+        setReadAs("ask");
+      }}
+    >
       <form
         className="mb-6 flex items-center gap-2 rounded-2xl border border-[#e6e8ee] px-3 py-2"
         onSubmit={(event) => {
@@ -277,7 +301,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         <Sparkles size={16} className="text-[#5b4ce6]" />
         <input id={ASK_BAR_ID} value={draft} onChange={(event) => setDraft(event.target.value)} className="h-10 flex-1 bg-transparent text-[15px] outline-none" />
         {anywhere && (
-          <button type="button" className="rounded-lg px-2 py-1 text-[13px] font-semibold text-[#5b4ce6]" onClick={() => { setDraft("add "); document.getElementById(ASK_BAR_ID)?.focus(); }}>
+          <button type="button" className="rounded-lg px-2 py-1 text-[13px] font-semibold text-[#5b4ce6]" onClick={beginAdd}>
             + Add
           </button>
         )}
@@ -286,7 +310,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
       {visibleReceipt ? (
         <AddSaved added={visibleReceipt.added} kept={visibleReceipt.kept} todos={visibleReceipt.todos} canUndo={visibleReceipt.canUndo && Date.now() < visibleReceipt.undoUntil} motion={false} onUndo={() => void undoAdd()} />
       ) : showingAdd ? (
-        <AddFlow origin="ask" kind="app" initialText={addListText(question)} onSaved={rememberAdd} />
+        <AddFlow origin="ask" kind={askListKind(addListText(question))} initialText={addListText(question)} onSaved={rememberAdd} onClose={() => setReadAs("ask")} />
       ) : ambiguous ? (
         <div className="rounded-2xl border border-[#e6e8ee] bg-white px-5 py-4">
           <p className="text-[15px] text-[#1c2230]">Is this a list of things to add, or a question?</p>

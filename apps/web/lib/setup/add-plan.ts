@@ -1,6 +1,6 @@
 import type { CostLine } from "@/lib/cost/math";
 import { splitAddList } from "@/lib/setup/add-intent";
-import { defaultHosting, matchEntries, normalizeTerm, planHosting, type HostingChoice, type MatchItem, type ToolKind, type ToolRecord } from "@/lib/setup/match-tools";
+import { defaultHosting, isSetupApp, matchEntries, normalizeTerm, planHosting, type HostingChoice, type MatchItem, type ToolKind, type ToolRecord } from "@/lib/setup/match-tools";
 
 export type AddKind = "app" | "platform" | "server" | "location" | "capability" | "vendor";
 
@@ -10,6 +10,72 @@ const EDITION = new Set(["online", "cloud", "workplace"]);
 export function categoryFields(value: string | null | undefined): { category?: string } {
   const trimmed = value?.trim() ?? "";
   return trimmed ? { category: trimmed } : {};
+}
+
+const PLATFORM_TYPE_BY_CATEGORY: Record<string, string> = {
+  crm: "crm",
+  "crm foundation": "crm",
+  erp: "erp",
+  itsm: "itsm",
+  "low-code": "low_code",
+  "low code": "low_code",
+  "no-code": "low_code",
+  bpm: "bpm",
+  workflow: "bpm",
+  "custom development": "custom_dev",
+};
+
+/** Catalog categories that match a platform type. Analytics, Infrastructure, and AI do not. */
+export function platformTypeFromCategory(category: string | null | undefined): string | null {
+  const key = (category ?? "").trim().toLowerCase();
+  return PLATFORM_TYPE_BY_CATEGORY[key] ?? null;
+}
+
+/** An exact catalog platform becomes a cloud service. Typed text and app tools stay applications. */
+export function setupCreate(item: {
+  input: string;
+  status: MatchItem["status"];
+  tool: ToolRecord | null;
+  customBuilt?: boolean;
+  yearly?: string;
+}): { type: "application" | "model" | "cloud_service"; name: string; properties: Record<string, unknown> } | null {
+  if (item.tool?.kind === "server") {
+    const named = item.status === "matched" ? item.tool : null;
+    return {
+      type: "model",
+      name: named?.name || item.input,
+      properties: { runtime_kind: "physical_server", compute_runtime_kind: "on_prem" },
+    };
+  }
+  const matched = item.status === "matched" ? item.tool : null;
+  if (matched?.kind === "platform") {
+    const hosting = matched.hosting === "saas" || matched.hosting === "paas" ? matched.hosting : matched.hosting === "own" ? "self_hosted" : undefined;
+    const platformType = platformTypeFromCategory(matched.category);
+    return {
+      type: "cloud_service",
+      name: matched.name,
+      properties: {
+        ...(matched.vendor ? { vendor: matched.vendor } : {}),
+        ...categoryFields(matched.category),
+        catalog_tool: normalizeTerm(matched.name),
+        ...(hosting ? { hosting_model: hosting } : {}),
+        ...(platformType ? { platform_type: platformType } : {}),
+      },
+    };
+  }
+  if (!isSetupApp(item)) return null;
+  const yearly = Number(item.yearly);
+  return {
+    type: "application",
+    name: matched?.name || item.input,
+    properties: {
+      ...(matched?.vendor ? { vendor: matched.vendor } : {}),
+      ...(matched ? { catalog_tool: normalizeTerm(matched.name) } : {}),
+      ...categoryFields(matched?.category),
+      ...(item.customBuilt ? { is_custom_built: true } : {}),
+      ...(matched && Number.isFinite(yearly) && yearly > 0 ? { cost_lines: [typicalLine(yearly, matched.vendor)] } : {}),
+    },
+  };
 }
 
 export type EstateItem = {
@@ -306,8 +372,15 @@ function createProperties(row: PlanInput): Record<string, unknown> {
   Object.assign(properties, categoryFields(tool?.category));
   if (catalogTool) properties.catalog_tool = catalogTool;
   if (row.customBuilt) properties.is_custom_built = true;
-  if ((row.kind === "app" || row.kind === "platform") && row.choice === "saas") properties.hosting_model = "saas";
-  if (row.kind === "app" && row.choice === "own") properties.hosting_model = "on_premise";
+  if (row.kind === "platform") {
+    if (row.choice === "saas" || row.choice === "paas" || row.choice === "self_hosted") properties.hosting_model = row.choice;
+    const platformType = platformTypeFromCategory(tool?.category);
+    if (platformType) properties.platform_type = platformType;
+  } else if (row.choice === "saas") {
+    properties.hosting_model = "saas";
+  } else if (row.kind === "app" && row.choice === "own") {
+    properties.hosting_model = "on_premise";
+  }
   if (tool && Number.isFinite(yearly) && yearly > 0) properties.cost_lines = [typicalLine(yearly, tool.vendor)];
   if (row.renewal) properties.contract_renewal = row.renewal;
   return properties;

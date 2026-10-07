@@ -486,7 +486,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
             )}
           </div>
         )}
-        {serverAdd && <div className="mb-4"><AddFlow origin="views" kind="server" compact /></div>}
+        {serverAdd && <div className="mb-4"><AddFlow origin="views" kind="server" compact onClose={() => setServerAdd(false)} /></div>}
         {caption && <p className="mb-3 rounded-lg bg-[#fff7ed] px-3 py-2 text-[13px] text-[#9a3412]">{caption}</p>}
         <p className="mb-3 flex flex-wrap gap-x-2 text-[13px]">
           <Count n={bands.stop.length} text="apps stop" color="text-[#e11d48]" />

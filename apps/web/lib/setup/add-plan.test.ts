@@ -6,12 +6,14 @@ import {
   buildBatch,
   dedupeKey,
   homeSentence,
+  platformTypeFromCategory,
   prepareRows,
   saasSkipCount,
   todoLines,
   type EstateItem,
   type PlanInput,
 } from "./add-plan.ts";
+import { TOOL_CATALOG } from "./match-tools.ts";
 
 const hubspot: EstateItem = {
   id: "hub",
@@ -126,6 +128,29 @@ describe("dedupe and steps", () => {
     assert.match(rows[0]?.hint ?? "", /QuickBooks Online/);
   });
 
+  it("the app flow never matches a platform tool", () => {
+    for (const tool of TOOL_CATALOG.filter((item) => item.kind === "platform")) {
+      const row = prepareRows(tool.name, "app", [])[0];
+      assert.equal(row?.tool, null, tool.name);
+      assert.equal(row?.kind, "app", tool.name);
+      assert.equal(row?.name, tool.name, tool.name);
+    }
+  });
+
+  it("Microsoft 365 in the platform flow keeps its name", () => {
+    const row = prepareRows("Microsoft 365", "platform", [])[0];
+    assert.equal(row?.name, "Microsoft 365");
+    assert.equal(row?.kind, "platform");
+    assert.equal(row?.tool, null);
+  });
+
+  it("Dynamics 365 does not match Microsoft 365", () => {
+    const row = prepareRows("Dynamics 365", "app", [])[0];
+    assert.equal(row?.name, "Dynamics 365");
+    assert.equal(row?.tool?.name, undefined);
+    assert.notEqual(row?.tool?.name, "Microsoft 365");
+  });
+
   it("keeps one item compact and a server name stays a server only when that type is chosen", () => {
     assert.equal(prepareRows("Plant scheduling", "app", []).length, 1);
     const as400 = prepareRows("AS400", "server", []);
@@ -171,6 +196,38 @@ describe("dedupe and steps", () => {
     const batch = buildBatch(plan("label printing", []), []);
     assert.equal(batch.creates[0]?.name, "label printing");
     assert.equal(batch.creates[0]?.properties.catalog_tool, undefined);
+  });
+
+  it("saves platform hosting and fills platform type only when the category is known", () => {
+    const fields = {
+      keep: false,
+      serverName: "",
+      where: "",
+      ownerTeam: "",
+      ownerName: "",
+      renewal: "",
+      yearly: "",
+      domainId: "",
+    };
+    const aws = prepareRows("AWS", "platform", []).map((row) => ({ ...row, ...fields, choice: "paas" as const }));
+    const paas = buildBatch(aws, []).creates[0];
+    assert.equal(paas?.type, "cloud_service");
+    assert.equal(paas?.properties.hosting_model, "paas");
+    assert.equal(paas?.properties.platform_type, undefined);
+    const hosted = prepareRows("Azure", "platform", []).map((row) => ({ ...row, ...fields, choice: "self_hosted" as const }));
+    assert.equal(buildBatch(hosted, []).creates[0]?.properties.hosting_model, "self_hosted");
+    const open = prepareRows("AWS", "platform", []).map((row) => ({ ...row, ...fields, choice: "unknown" as const }));
+    assert.equal(buildBatch(open, []).creates[0]?.properties.hosting_model, undefined);
+    const functions = prepareRows("Azure Functions", "platform", []).map((row) => ({ ...row, ...fields }));
+    const saved = buildBatch(functions, []).creates[0];
+    assert.equal(saved?.properties.hosting_model, "paas");
+    assert.equal(saved?.properties.vendor, "Microsoft");
+    assert.equal(saved?.properties.category, "Infrastructure");
+    assert.equal(saved?.properties.platform_type, undefined);
+    const typed = functions.map((row) => ({ ...row, tool: row.tool ? { ...row.tool, category: "CRM" } : null }));
+    assert.equal(buildBatch(typed, []).creates[0]?.properties.platform_type, "crm");
+    assert.equal(platformTypeFromCategory("Low-code"), "low_code");
+    assert.equal(platformTypeFromCategory("Analytics"), null);
   });
 
   it("stores a new category name as itself", () => {

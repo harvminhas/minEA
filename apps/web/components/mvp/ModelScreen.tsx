@@ -22,7 +22,7 @@ import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformP
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { AddFlow } from "@/components/add/AddFlow";
-import { APP_OR_PLATFORM, nextPreset, typeGuidance } from "@/lib/setup/type-guidance";
+import { APP_OR_PLATFORM, applicationAddHint, nextPreset } from "@/lib/setup/type-guidance";
 import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
 import { addAnywhereEnabled } from "@/lib/flags";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
@@ -79,8 +79,8 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const [addText, setAddText] = useState("");
   const [addKindLocked, setAddKindLocked] = useState(false);
   const [addKindChoice, setAddKindChoice] = useState<"app" | "platform">("app");
+  const [addSaved, setAddSaved] = useState(false);
   const addKind = addKindLocked ? addKindChoice : nextPreset("app", addText, false) === "platform" ? "platform" : "app";
-  const addGuidance = typeGuidance(addText);
   const anywhere = addAnywhereEnabled();
 
   const source = rows.filter((row) => {
@@ -180,10 +180,9 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                         return;
                       }
                       setAppAdd((open) => {
-                        if (open) {
-                          setAddKindLocked(false);
-                          setAddKindChoice("app");
-                        }
+                        setAddKindLocked(false);
+                        setAddKindChoice("app");
+                        setAddSaved(false);
                         return !open;
                       });
                     }}
@@ -195,7 +194,17 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
               </div>
             </div>
             {anywhere && appAdd && section === "applications" && (
-              <div className="mb-4">
+              <div
+                className="mb-4"
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape" || addSaved) return;
+                  event.preventDefault();
+                  setAppAdd(false);
+                  setAddSaved(false);
+                  setAddKindLocked(false);
+                  setAddKindChoice("app");
+                }}
+              >
                 <textarea
                   value={addText}
                   onChange={(event) => setAddText(event.target.value)}
@@ -204,12 +213,9 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                   className="mb-3 w-full rounded-xl border border-[#e6e8ee] px-3 py-2 text-[14px] outline-none focus:border-[#5b4ce6]"
                 />
                 <p className="mb-1 text-[12px] leading-5 text-[#6b7289]">{APP_OR_PLATFORM}</p>
-                {addGuidance.mode === "suggest" &&
-                  !addKindLocked &&
-                  (addGuidance.kind === "app" || addGuidance.kind === "platform") &&
-                  addGuidance.kind === addKind && (
+                {applicationAddHint(addText, addKind, addKindLocked) && (
                   <p className="mb-3 text-[12px] text-[#4b5163]">
-                    {addGuidance.line}:{" "}
+                    {applicationAddHint(addText, addKind, addKindLocked)}:{" "}
                     <button
                       type="button"
                       className="font-medium text-[#3f35b5]"
@@ -222,7 +228,20 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                     </button>
                   </p>
                 )}
-                <AddFlow origin="model" kind={addKind} cards compact initialText={addText} />
+                <AddFlow
+                  origin="model"
+                  kind={addKind}
+                  cards
+                  compact
+                  initialText={addText}
+                  onSaved={() => setAddSaved(true)}
+                  onClose={() => {
+                    setAppAdd(false);
+                    setAddSaved(false);
+                    setAddKindLocked(false);
+                    setAddKindChoice("app");
+                  }}
+                />
               </div>
             )}
 
@@ -579,7 +598,7 @@ function VendorsTable({
           </button>
         )}
       </div>
-      {open && <div className="mb-4"><AddFlow origin="model" kind="vendor" compact /></div>}
+      {open && <div className="mb-4"><AddFlow origin="model" kind="vendor" compact onClose={() => setOpen(false)} /></div>}
       <p className="mb-4 mt-1 text-[13px] text-[#6b7289]">
         Derived from the vendor field on applications and infrastructure. {vendors.length} vendors
         {total > 0 ? ` · ${moneyLabel(total)} tracked` : ""}.

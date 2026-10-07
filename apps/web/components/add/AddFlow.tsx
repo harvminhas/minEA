@@ -14,8 +14,8 @@ import {
   findExisting,
   homeSentence,
   prepareRows,
-  resolveKind,
   saasSkipCount,
+  resolveKind,
   todoLines,
   type AddKind,
   type AddRow,
@@ -29,7 +29,7 @@ import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { AskAdd } from "@/components/add/AddCards";
-import type { AddReceipt } from "@/lib/setup/add-cards";
+import { cardQuestion, hostingChoices, undoneSentence, type AddReceipt } from "@/lib/setup/add-cards";
 import { SetupFlow } from "@/components/mvp/setup-flow";
 
 const UNDO_MS = 10 * 60 * 1000;
@@ -51,6 +51,7 @@ export function AddFlow({
   compact = false,
   cards = false,
   onSaved,
+  onClose,
 }: {
   origin: "setup" | "ask" | "model" | "views";
   inline?: boolean;
@@ -60,13 +61,14 @@ export function AddFlow({
   /** Applications page. The Platforms page keeps its own add flow. */
   cards?: boolean;
   onSaved?: (receipt: AddReceipt) => void;
+  onClose?: () => void;
 }) {
   if (origin === "setup") return <SetupFlow inline={inline} />;
   const askKind = kind === "platform" ? "platform" : "app";
   if (origin === "ask" || cards || (origin === "model" && kind === "app")) {
-    return <AskAdd initialText={initialText ?? ""} kind={askKind} onSaved={onSaved} />;
+    return <AskAdd initialText={initialText ?? ""} kind={askKind} onSaved={onSaved} onClose={onClose} />;
   }
-  return <AnywhereAdd origin={origin} kind={kind} initialText={initialText} compact={compact} inline={inline} />;
+  return <AnywhereAdd origin={origin} kind={kind} initialText={initialText} compact={compact} inline={inline} onClose={onClose} />;
 }
 
 function estateItems(objects: { id: string; type: string; name: string; owner?: string | null; properties?: Record<string, unknown> | null }[], rows: { id: string; ownerTeam: string; ownerPerson: string; annualCostNumber: number | null; lifecycleLabel: string; vendor: string; renewalLabel: string; category?: string }[]): EstateItem[] {
@@ -112,12 +114,14 @@ function AnywhereAdd({
   initialText,
   compact,
   inline = false,
+  onClose,
 }: {
   origin: "ask" | "model" | "views";
   kind: AddKind;
   initialText?: string;
   compact?: boolean;
   inline?: boolean;
+  onClose?: () => void;
 }) {
   const { orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
@@ -136,7 +140,7 @@ function AnywhereAdd({
   const [started, setStarted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [receipt, setReceipt] = useState<{ added: string; home: string; todos: string[]; undoUntil: number; objectIds: string[]; relationshipIds: string[]; mapReady: boolean } | null>(null);
+  const [receipt, setReceipt] = useState<{ added: string; home: string; todos: string[]; undoUntil: number; objectIds: string[]; relationshipIds: string[]; mapReady: boolean; names: string[] } | null>(null);
   const dirty = useRef(false);
 
   useEffect(() => {
@@ -166,6 +170,11 @@ function AnywhereAdd({
   const creating = rows.filter((row) => !row.existing);
   const one = compact || creating.length + rows.filter((row) => row.existing).length <= 1;
   const skip = saasSkipCount(rows);
+  const hostingRows = rows.filter((row) => {
+    if (row.existing || (row.kind !== "app" && row.kind !== "platform")) return false;
+    if (row.kind === "platform") return cardQuestion(row) === "hosting";
+    return one || skip === null;
+  });
   const listId = `add-servers-${origin}`;
 
   const patch = (key: string, change: Partial<PlanInput> & { tool?: ToolRecord | null; status?: AddRow["status"] }) => {
@@ -245,6 +254,7 @@ function AnywhereAdd({
     if (metNow) void setup.save({ mapReadyShownAt: new Date().toISOString() });
     setReceipt({
       added: addedSentence(created, kept),
+      names: created.map((row) => row.name),
       home: homeSentence(apps.map((row) => ({ choice: row.choice, linked: row.choice !== "own" || Boolean(row.serverName.trim()) }))),
       todos: todoLines(planned.map((row) => ({
         name: row.name,
@@ -272,7 +282,7 @@ function AnywhereAdd({
     await addApi.undo(orgSlug, workspaceSlug, { object_ids: receipt.objectIds, relationship_ids: receipt.relationshipIds }, token);
     for (const id of receipt.objectIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeId: id });
     for (const id of receipt.relationshipIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
-    setReceipt(null);
+    setReceipt({ ...receipt, added: undoneSentence(receipt.names), home: "", todos: [], objectIds: [], relationshipIds: [] });
   };
 
   const run = async (task: () => Promise<void>) => {
@@ -289,6 +299,7 @@ function AnywhereAdd({
 
   const canUndo = Boolean(receipt && Date.now() < receipt.undoUntil && receipt.objectIds.length + receipt.relationshipIds.length > 0);
   const reviewing = started && rows.length > 0 && !receipt;
+  const panelRef = useRef<HTMLElement>(null);
   const cancelReview = () => {
     if (busy) return;
     setStarted(false);
@@ -296,17 +307,27 @@ function AnywhereAdd({
     setReceipt(null);
     setError("");
   };
+  const dismiss = () => {
+    if (busy) return;
+    if (onClose) onClose();
+    else cancelReview();
+  };
   useEffect(() => {
-    if (!reviewing && !receipt) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") cancelReview();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [reviewing, receipt, busy]);
+    if (reviewing) panelRef.current?.focus();
+  }, [reviewing]);
 
   return (
-    <section className="rounded-2xl border border-[#e6e8ee] bg-white p-4">
+    <section
+      ref={panelRef}
+      tabIndex={-1}
+      className="rounded-2xl border border-[#e6e8ee] bg-white p-4 focus:outline-none"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || busy || receipt) return;
+        event.preventDefault();
+        event.stopPropagation();
+        dismiss();
+      }}
+    >
       {(!inline || started) && KINDS.length > 1 && (
       <div>
       <div className="flex flex-wrap gap-1.5">
@@ -428,7 +449,7 @@ function AnywhereAdd({
                   </label>
                 )}
                 {row.hint && <p className="mt-2 text-[12px] text-[#9a3412]">{row.hint}</p>}
-                {one && !row.existing && (row.kind === "app" || row.kind === "platform") && (
+                {one && hostingRows.some((item) => item.key === row.key) && (
                   <HostingChoices row={row} servers={servers} listId={listId} showName={false} onChange={(change) => patch(row.key, change)} />
                 )}
                 {one && !row.existing && (
@@ -437,10 +458,10 @@ function AnywhereAdd({
               </li>
             ))}
           </ul>
-          {!one && skip === null && (
+          {!one && hostingRows.length > 0 && (
             <div className="mt-3 space-y-3">
               <h3 className="text-[14px] font-semibold text-[#1c2230]">Where does each one live?</h3>
-              {rows.filter((row) => !row.existing && (row.kind === "app" || row.kind === "platform")).map((row) => (
+              {hostingRows.map((row) => (
                 <HostingChoices key={row.key} row={row} servers={servers} listId={listId} onChange={(change) => patch(row.key, change)} />
               ))}
             </div>
@@ -474,7 +495,7 @@ function AnywhereAdd({
             <button type="button" disabled={busy || rows.every((row) => row.existing && row.keep)} onClick={() => void run(save)} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50">
               {busy ? "Saving…" : creating.length ? addButtonLabel(creating) : "Update"}
             </button>
-            <button type="button" className="text-[13px] text-[#6b7289]" onClick={cancelReview}>Cancel</button>
+            <button type="button" className="text-[13px] text-[#6b7289]" onClick={dismiss}>Cancel</button>
           </div>
         </>
       )}
@@ -514,9 +535,9 @@ function HostingChoices({
     <div className="mt-2">
       {showName && <div className="text-[13px] font-medium text-[#1c2230]">{row.name}</div>}
       <div className="mt-1 flex flex-wrap gap-1.5">
-        {(["saas", "own", "unknown"] as const).map((choice) => (
+        {hostingChoices(row.kind).map(({ choice, label }) => (
           <button key={choice} type="button" onClick={() => onChange({ choice, serverName: choice === "own" ? row.serverName || servers[0] || "" : "" })} className={`rounded-full border px-2 py-0.5 text-[12px] ${row.choice === choice ? "border-[#5b4ce6] bg-[#ece9ff]" : "border-[#e6e8ee]"}`}>
-            {choice === "saas" ? "SaaS (cloud)" : choice === "own" ? "Our server" : "Don't know"}
+            {row.kind === "platform" ? label : choice === "saas" ? "SaaS (cloud)" : label}
           </button>
         ))}
       </div>

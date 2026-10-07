@@ -1,3 +1,4 @@
+import { splitAddList } from "@/lib/setup/add-intent";
 import { exactCatalogTool, normalizeTerm } from "@/lib/setup/match-tools";
 import type { AddKind } from "@/lib/setup/add-plan";
 
@@ -57,6 +58,34 @@ export function typeGuidance(text: string): TypeGuidance {
   if (tool.kind === "server") return { mode: "suggest", kind: "server", line: suggestLine("server") };
   if (tool.kind === "platform") return { mode: "suggest", kind: "platform", line: suggestLine("platform") };
   return { mode: "suggest", kind: "app", line: suggestLine("app") };
+}
+
+/** The Applications hint. Change keeps the sentence on the kind the card will use. */
+export function applicationAddHint(text: string, kind: "app" | "platform", locked: boolean): string | null {
+  if (!text.trim()) return null;
+  const guidance = typeGuidance(text);
+  const suggested = guidance.mode === "suggest" && (guidance.kind === "app" || guidance.kind === "platform") ? guidance.kind : null;
+  if (!suggested && !locked) return null;
+  if (!locked && suggested !== kind) return null;
+  if (locked) {
+    if (kind === "platform") return "Adding as a Platform";
+    if (kind === "app") return "Adding as an Application";
+    return null;
+  }
+  if (suggested === "platform") return "We think this is a Platform";
+  if (suggested === "app") return "We think this is an Application";
+  return null;
+}
+
+/** A list is a platform add when every name is a platform guess. */
+export function askListKind(text: string): "app" | "platform" {
+  const parts = splitAddList(text);
+  if (parts.length === 0) return "app";
+  const platforms = parts.every((part) => {
+    const guidance = typeGuidance(part);
+    return guidance.mode === "suggest" && guidance.kind === "platform";
+  });
+  return platforms ? "platform" : "app";
 }
 
 /** Guess only while the add flow is an app or a platform, and only between those two. */

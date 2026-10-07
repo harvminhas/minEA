@@ -128,7 +128,7 @@ export function LocationsTable({ anywhere = false, selectedId }: { anywhere?: bo
           </button>
         )}
       </div>
-      {adding && <div className="mb-4"><AddFlow origin="model" kind="location" compact /></div>}
+      {adding && <div className="mb-4"><AddFlow origin="model" kind="location" compact onClose={() => setAdding(false)} /></div>}
       {plan.length > 0 && (
         <div className="mb-4 rounded-xl border border-[#f3e2b3] bg-[#fffaf0] px-4 py-3 text-[13px] text-[#6b5420]">
           <p>{plan.length} place {plan.length === 1 ? "name is" : "names are"} still only a note on a server. Creating them does not remove the note.</p>

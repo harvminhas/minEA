@@ -10,6 +10,14 @@ export function addListText(text: string): string {
   return text.replace(LEADING, "").trim();
 }
 
+/** Keep the typed names and mark the text as an add. An empty field stays ready to type. */
+export function prefixAdd(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "add ";
+  if (/^(add\b|new\b|\+)/i.test(trimmed)) return trimmed;
+  return `add ${trimmed}`;
+}
+
 /** Commas, new lines, semicolons, "and", and "&". */
 export function splitAddList(text: string): string[] {
   const normalized = text.replace(/\s+and\s+/gi, ",").replace(/\s*&\s*/g, ",");

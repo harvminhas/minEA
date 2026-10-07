@@ -1,6 +1,6 @@
 import { TOOL_CATALOG as catalog } from "@/lib/catalog/tools-catalog";
 
-export type ToolHosting = "saas" | "own" | "either";
+export type ToolHosting = "saas" | "paas" | "own" | "either";
 export type ToolKind = "app" | "server" | "platform";
 
 export type ToolRecord = {
@@ -82,13 +82,28 @@ function namesOf(tool: ToolRecord): string[] {
   return [tool.name, ...tool.aliases].map(normalizeTerm).filter(Boolean);
 }
 
+/** A bare number such as 365 is not a name. It counts only beside another word from that name. */
+function tokenHit(input: string, name: string): boolean {
+  const inputTokens = input.split(" ").filter(Boolean);
+  const nameTokens = name.split(" ").filter(Boolean);
+  const nameSet = new Set(nameTokens);
+  const words = inputTokens.filter((token) => token.length >= 3 && !/^\d+$/.test(token));
+  if (words.length > 0) return words.every((token) => nameSet.has(token));
+  const numbers = inputTokens.filter((token) => /^\d+$/.test(token) && token.length >= 3);
+  if (!numbers.some((token) => nameSet.has(token) || name.replace(/ /g, "").includes(token))) return false;
+  const letters = inputTokens.filter((token) => !/^\d+$/.test(token)).join("");
+  if (letters.length < 2) return false;
+  const compact = name.replace(/ /g, "");
+  return editDistance(`${letters}${numbers[0]}`, compact) <= 1 || nameTokens.some((word) => word.startsWith(letters));
+}
+
 function tierFor(input: string, tool: ToolRecord): "exact" | "token" | "fuzzy" | null {
   const names = namesOf(tool);
   if (names.includes(input)) return "exact";
-  const tokens = input.split(" ").filter((token) => token.length >= 3);
+  const tokens = input.split(" ").filter((token) => token.length >= 3 && !/^\d+$/.test(token));
   for (const name of names) {
     if (input.length >= 3 && (name.startsWith(input) || input.startsWith(name))) return "token";
-    if (tokens.some((token) => name.split(" ").includes(token))) return "token";
+    if (tokenHit(input, name)) return "token";
   }
   const hintHit = (tool.hints ?? []).some((hint) => tokens.includes(normalizeTerm(hint)));
   const close = names.some((name) => similarity(input, name) >= 0.6 || editDistance(input, name) <= 2);
@@ -106,9 +121,13 @@ export function exactCatalogTool(text: string): ToolRecord | null {
   return hits.length === 1 ? hits[0]! : null;
 }
 
-export function matchEntries(text: string, kind?: ToolKind): MatchItem[] {
-  const tools = kind ? TOOL_CATALOG.filter((tool) => tool.kind === kind) : TOOL_CATALOG;
-  const exactOnly = kind === "server" || kind === "platform";
+/** Setup lists apps and servers. Platform catalog names stay out of that match. */
+export const SETUP_MATCH_KINDS: readonly ToolKind[] = ["app", "server"];
+
+export function matchEntries(text: string, kind?: ToolKind | readonly ToolKind[]): MatchItem[] {
+  const kinds = kind == null ? null : new Set<ToolKind>(typeof kind === "string" ? [kind] : kind);
+  const tools = kinds ? TOOL_CATALOG.filter((tool) => kinds.has(tool.kind)) : TOOL_CATALOG;
+  const exactOnly = kinds != null && [...kinds].every((item) => item === "server" || item === "platform");
   return splitEntries(text).map((input) => {
     const key = normalizeTerm(input);
     const hits = { exact: [] as ToolRecord[], token: [] as ToolRecord[], fuzzy: [] as ToolRecord[] };
@@ -135,14 +154,34 @@ export function matchEntries(text: string, kind?: ToolKind): MatchItem[] {
   });
 }
 
-export type HostingChoice = "saas" | "own" | "unknown";
+export function setupMatch(text: string): MatchItem[] {
+  return matchEntries(text, SETUP_MATCH_KINDS).map((item) => {
+    if (item.tool) return item;
+    const platform = exactCatalogTool(item.input);
+    if (platform?.kind !== "platform") return item;
+    return { ...item, status: "matched" as const, tool: platform, options: [platform] };
+  });
+}
 
-export function defaultHosting(item: MatchItem): HostingChoice {
-  const tool = item.tool;
-  if (!tool || item.status === "custom") return "unknown";
+/** Setup creates an application for an app tool or typed text. A catalog platform is neither. */
+export function isSetupApp(item: { input: string; tool: { kind: ToolKind } | null }): boolean {
+  if (item.tool?.kind === "server" || item.tool?.kind === "platform") return false;
+  return exactCatalogTool(item.input)?.kind !== "platform";
+}
+
+export type HostingChoice = "saas" | "paas" | "self_hosted" | "own" | "unknown";
+
+export function choiceForTool(tool: { hosting: ToolHosting } | null | undefined): HostingChoice {
+  if (!tool) return "unknown";
   if (tool.hosting === "saas") return "saas";
+  if (tool.hosting === "paas") return "paas";
   if (tool.hosting === "own") return "own";
   return "unknown";
+}
+
+export function defaultHosting(item: MatchItem): HostingChoice {
+  if (!item.tool || item.status === "custom") return "unknown";
+  return choiceForTool(item.tool);
 }
 
 export type HostingRow = {

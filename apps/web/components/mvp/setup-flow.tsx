@@ -11,14 +11,15 @@ import type { CostLine } from "@/lib/cost/math";
 import {
   SAMPLE_COMPANY,
   defaultHosting,
-  matchEntries,
+  isSetupApp,
   normalizeTerm,
+  setupMatch,
   planHosting,
   type HostingChoice,
   type MatchItem,
   type ToolRecord,
 } from "@/lib/setup/match-tools";
-import { categoryFields } from "@/lib/setup/add-plan";
+import { setupCreate } from "@/lib/setup/add-plan";
 import { SETUP_MIN, setupMeter, setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
@@ -37,7 +38,7 @@ type Draft = MatchItem & {
 };
 
 function isApp(item: Draft): boolean {
-  return item.tool?.kind !== "server";
+  return isSetupApp(item);
 }
 
 function typicalLine(annual: number, vendor: string): CostLine {
@@ -146,7 +147,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
   useEffect(() => {
     if (step !== 1) return;
     const timer = window.setTimeout(() => {
-      setDrafts((current) => mergeDrafts(current, toDrafts(matchEntries(text))));
+      setDrafts((current) => mergeDrafts(current, toDrafts(setupMatch(text))));
     }, 300);
     return () => window.clearTimeout(timer);
   }, [text, step]);
@@ -183,25 +184,18 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
         created.push(draft);
         continue;
       }
-      const tool = draft.status === "matched" ? draft.tool : null;
-      const server = tool?.kind === "server";
-      const yearly = Number(draft.yearly);
-      const properties: Record<string, unknown> = server
-        ? { runtime_kind: "physical_server", compute_runtime_kind: "on_prem" }
-        : {
-            ...(tool?.vendor ? { vendor: tool.vendor } : {}),
-            ...(tool ? { catalog_tool: normalizeTerm(tool.name) } : {}),
-            ...categoryFields(tool?.category),
-            ...(draft.customBuilt ? { is_custom_built: true } : {}),
-            ...(tool && Number.isFinite(yearly) && yearly > 0 ? { cost_lines: [typicalLine(yearly, tool.vendor)] } : {}),
-          };
+      const spec = setupCreate(draft);
+      if (!spec) {
+        created.push(draft);
+        continue;
+      }
       const saved = await objectsApi.create(orgSlug!, workspaceSlug!, {
-        type: server ? "model" : "application",
-        name: tool?.name || draft.input,
-        properties,
+        type: spec.type,
+        name: spec.name,
+        properties: spec.properties,
       }, token);
       remember(saved);
-      if (server) nextIds[draft.key] = saved.id;
+      if (spec.type === "model") nextIds[draft.key] = saved.id;
       created.push({ ...draft, objectId: saved.id, input: saved.name });
     }
     setServerIds(nextIds);
@@ -299,6 +293,17 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
     }
   };
 
+  const appCount = drafts.filter(isApp).length;
+  const platformCount = drafts.filter((item) => item.tool?.kind === "platform").length;
+  const serverCount = drafts.filter((item) => item.tool?.kind === "server").length;
+  const checkCount = drafts.filter((item) => item.status === "pick" || item.status === "weak").length;
+  const foundLine = [
+    `${appCount} apps`,
+    platformCount > 0 ? `${platformCount} platform${platformCount === 1 ? "" : "s"}` : "",
+    `${serverCount} server${serverCount === 1 ? "" : "s"}`,
+    `${checkCount} to check`,
+  ].filter(Boolean).join(" · ");
+
   return (
     <section className={inline ? "rounded-2xl border border-[#e6e8ee] bg-white p-4" : "mt-8 w-full"}>
       {step === 0 && !inline && (
@@ -323,7 +328,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
               type="button"
               disabled={!text.trim()}
               onClick={() => {
-                setDrafts(toDrafts(matchEntries(text)));
+                setDrafts(toDrafts(setupMatch(text)));
                 setStep(1);
               }}
               className="shrink-0 rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50"
@@ -367,7 +372,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
               type="button"
               disabled={!text.trim()}
               onClick={() => {
-                setDrafts(toDrafts(matchEntries(text)));
+                setDrafts(toDrafts(setupMatch(text)));
                 setStep(1);
               }}
               className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50"
@@ -396,7 +401,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
           <div className="mt-4">
             <h2 className="text-[18px] font-semibold text-[#1c2230]">We found {drafts.length} items</h2>
             <p className="mt-1 text-[13px] text-[#6b7289]">
-              {drafts.filter(isApp).length} apps · {drafts.filter((item) => item.tool?.kind === "server").length} server{drafts.filter((item) => item.tool?.kind === "server").length === 1 ? "" : "s"} · {drafts.filter((item) => item.status === "pick" || item.status === "weak").length} to check
+              {foundLine}
             </p>
           </div>
           <div className="mt-3 overflow-hidden">
@@ -570,6 +575,7 @@ function thinkName(item: Draft): string {
 
 function reviewBadge(item: Draft): { label: string; className: string } {
   if (item.tool?.kind === "server") return { label: "Server", className: "bg-[#dbeafe] text-[#1d4ed8]" };
+  if (item.tool?.kind === "platform") return { label: "Platform", className: "bg-[#ede9fe] text-[#6d28d9]" };
   if (item.status === "matched") return { label: "Matched", className: "bg-[#dcfce7] text-[#166534]" };
   if (item.status === "custom") return { label: "Custom", className: "bg-[#f3f4f6] text-[#4b5563]" };
   if (item.status === "pick") return { label: "Pick one", className: "bg-[#fef3c7] text-[#b45309]" };

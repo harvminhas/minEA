@@ -12,21 +12,25 @@ import { askPath, modelItemPath, type ModelSection } from "@/lib/mvp-paths";
 import {
   MOTION_CSS,
   cardQuestion,
+  catalogHostingLine,
   costShareLine,
   firstGap,
   formatRenewal,
+  hostingChoices,
   logoInitials,
   logoTint,
   noticeDeadline,
   recordSubtitle,
   savedAdded,
   savedKept,
+  undoneSentence,
   viewFromRows,
   type AddPhase,
   type AddReceipt,
   type GapField,
 } from "@/lib/setup/add-cards";
 import { buildBatch, planInputs, prepareRows, todoLines, type AddRow, type EstateItem } from "@/lib/setup/add-plan";
+import { choiceForTool } from "@/lib/setup/match-tools";
 import { setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
@@ -154,6 +158,7 @@ export function RecordCard({
 
 export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: AddRow; index: number; dim: boolean; motion: boolean; onRemove: () => void; onChange: (patch: Partial<AddRow>) => void }) {
   const question = cardQuestion(row);
+  const hosting = catalogHostingLine(row);
   const known = row.status === "matched" && row.tool;
   const subtitle = known ? [row.tool?.category, row.tool?.vendor].filter(Boolean).join(" · ") : "New";
   const typical = known && row.tool?.typicalAnnual ? `typical $${row.tool.typicalAnnual.toLocaleString("en-US")}` : "";
@@ -169,18 +174,18 @@ export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: 
         <button type="button" aria-label={`Remove ${row.name}`} className="text-[16px] text-[#6b7289]" onClick={onRemove}>×</button>
       </div>
       <div className="mt-3 text-[13px] text-[#4b5163]">
-        {question === "none" && (row.choice === "saas" || row.tool?.hosting === "saas") && <p>Cloud app (SaaS), nothing to ask</p>}
+        {hosting && <p>{hosting}</p>}
         {question === "fuzzy" && row.status === "weak" && (
           <p>Is it {row.tool?.name}? <button type="button" className="ml-2 font-medium text-[#3f35b5]" onClick={() => onChange({ status: "matched", name: row.tool?.name || row.name })}>Yes</button> <button type="button" className="ml-2 text-[#6b7289]" onClick={() => onChange({ status: "custom", tool: null, choice: "unknown", name: row.input })}>No</button></p>
         )}
         {question === "fuzzy" && row.status === "pick" && (
-          <div className="flex flex-wrap gap-1.5">{row.options.map((option) => <button key={option.name} type="button" className="rounded-full border border-[#e6e8ee] px-2 py-0.5" onClick={() => onChange({ status: "matched", tool: option, name: option.name, choice: option.hosting === "saas" ? "saas" : "unknown" })}>{option.name}</button>)}</div>
+          <div className="flex flex-wrap gap-1.5">{row.options.map((option) => <button key={option.name} type="button" className="rounded-full border border-[#e6e8ee] px-2 py-0.5" onClick={() => onChange({ status: "matched", tool: option, name: option.name, choice: choiceForTool(option) })}>{option.name}</button>)}</div>
         )}
         {question === "hosting" && (
           <div>
-            <p className="mb-1">Where does it live?</p>
+            <p className="mb-1">{row.kind === "platform" ? "Platform hosting" : "Where does it live?"}</p>
             <div className="flex flex-wrap gap-1.5">
-              {([["saas", "SaaS"], ["own", "Our server"], ["unknown", "Don't know"]] as const).map(([choice, label]) => (
+              {hostingChoices(row.kind).map(({ choice, label }) => (
                 <button key={choice} type="button" className={`rounded-full border px-2 py-0.5 ${row.choice === choice ? "border-[#5b4ce6] bg-[#ece9ff]" : "border-[#e6e8ee]"}`} onClick={() => onChange({ choice })}>{label}</button>
               ))}
             </div>
@@ -327,10 +332,12 @@ export function AskAdd({
   initialText,
   kind = "app",
   onSaved,
+  onClose,
 }: {
   initialText: string;
   kind?: "app" | "platform";
   onSaved?: (receipt: AddReceipt) => void;
+  onClose?: () => void;
 }) {
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
   const { getToken } = useAuth();
@@ -342,8 +349,9 @@ export function AskAdd({
   const [error, setError] = useState("");
   const [reduced, setReduced] = useState(false);
   const [closed, setClosed] = useState(false);
-  const [snapshot, setSnapshot] = useState<{ added: string; kept: string; todos: string[]; canUndo: boolean; objectIds: string[]; relationshipIds: string[]; undoUntil: number } | null>(null);
+  const [snapshot, setSnapshot] = useState<AddReceipt | null>(null);
   const edited = useRef(false);
+  const kindRef = useRef(kind);
   const objects = catalog.data?.objects ?? [];
   const relationships = catalog.data?.relationships ?? [];
   const estate = useMemo(() => estateItems(objects), [objects]);
@@ -360,23 +368,19 @@ export function AskAdd({
   }, [initialText]);
 
   useEffect(() => {
+    if (kindRef.current === kind) return;
+    if (phase === "saved") return;
+    kindRef.current = kind;
+    edited.current = false;
+    setClosed(false);
+    setError("");
+    if (phase !== "idle") setPhase("idle");
+  }, [kind, phase]);
+
+  useEffect(() => {
     if (edited.current || phase !== "idle") return;
     setRows(prepareRows(initialText, kind, estate));
   }, [initialText, estate, phase, kind]);
-
-  useEffect(() => {
-    if (phase === "saving" || (rows.length === 0 && phase !== "saved")) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setRows([]);
-      setSnapshot(null);
-      setError("");
-      setPhase("idle");
-      setClosed(true);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [phase, rows.length]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -413,6 +417,7 @@ export function AskAdd({
       for (const object of saved.objects) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object });
       for (const relationship of saved.relationships) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship });
       const created = planned.filter((row) => !row.existing);
+      const names = created.map((row) => row.name);
       const kept = planned.filter((row) => row.existing).map((row) => row.name);
       const afterObjects = [...objects, ...saved.objects.filter((object) => object.type === "application").map((object) => ({ type: object.type }))];
       const afterRels = [...relationships, ...saved.relationships.map((rel) => ({ type: rel.type }))];
@@ -421,7 +426,8 @@ export function AskAdd({
       }
       const receipt: AddReceipt = {
         question: initialText,
-        added: savedAdded(created.map((row) => row.name)),
+        added: savedAdded(names),
+        names,
         kept: savedKept(kept),
         todos: todoLines(planned.map((row) => ({ name: row.name, kind: row.kind, kept: Boolean(row.existing), updating: false, owner: "", renewal: "", choice: row.choice, hint: row.hint }))),
         canUndo: saved.created_object_ids.length + saved.created_relationship_ids.length > 0,
@@ -445,8 +451,17 @@ export function AskAdd({
     await addApi.undo(orgSlug, workspaceSlug, { object_ids: snapshot.objectIds, relationship_ids: snapshot.relationshipIds }, token);
     for (const id of snapshot.objectIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeId: id });
     for (const id of snapshot.relationshipIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
-    setSnapshot(null);
-    setPhase("idle");
+    const undone: AddReceipt = {
+      ...snapshot,
+      added: undoneSentence(snapshot.names ?? []),
+      kept: "",
+      todos: [],
+      canUndo: false,
+      objectIds: [],
+      relationshipIds: [],
+    };
+    onSaved?.(undone);
+    setSnapshot(undone);
   };
 
   const fillGap = async (id: string, field: GapField, value: string) => {
@@ -485,6 +500,10 @@ export function AskAdd({
       onSave={() => { void save(); }}
       onUndo={() => { void undo(); }}
       onCancel={() => {
+        if (onClose) {
+          onClose();
+          return;
+        }
         setRows([]);
         setError("");
         setClosed(true);

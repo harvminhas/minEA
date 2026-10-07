@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
-import { matchEntries, planHosting, SAMPLE_COMPANY, TOOL_CATALOG } from "./match-tools.ts";
+import { fileURLToPath } from "node:url";
+import { setupCreate } from "./add-plan.ts";
+import { isSetupApp, matchEntries, planHosting, SAMPLE_COMPANY, setupMatch, TOOL_CATALOG } from "./match-tools.ts";
 
 describe("tool matcher", () => {
   const harbor = matchEntries(SAMPLE_COMPANY);
@@ -46,6 +50,58 @@ describe("tool matcher", () => {
 
   it("collapses duplicates", () => {
     assert.equal(matchEntries("Salesforce, salesforce, Salesforce").length, 1);
+  });
+
+  it("setup creates an exact platform as a cloud service and leaves AWS and Azure typed", () => {
+    const rows = setupMatch("AWS, Azure, Snowflake, HubSpot, AWS Lambda");
+    for (const name of ["AWS", "Azure"]) {
+      const row = rows.find((item) => item.input === name);
+      assert.equal(row?.status, "custom", name);
+      assert.equal(row?.tool, null, name);
+      assert.equal(row?.input, name);
+      assert.equal(setupCreate(row!)?.type, "application", name);
+    }
+    const snowflake = rows.find((item) => item.input === "Snowflake");
+    assert.equal(snowflake?.status, "matched");
+    assert.equal(snowflake?.tool?.kind, "platform");
+    assert.equal(isSetupApp(snowflake!), false);
+    const created = setupCreate(snowflake!);
+    assert.equal(created?.type, "cloud_service");
+    assert.equal(created?.name, "Snowflake");
+    assert.equal(created?.properties.vendor, "Snowflake");
+    assert.equal(created?.properties.category, "Analytics");
+    assert.equal(created?.properties.hosting_model, "saas");
+    assert.equal(created?.properties.platform_type, undefined);
+    const lambda = setupCreate(rows.find((item) => item.input === "AWS Lambda")!);
+    assert.equal(lambda?.type, "cloud_service");
+    assert.equal(lambda?.properties.vendor, "Amazon");
+    assert.equal(lambda?.properties.category, "Infrastructure");
+    assert.equal(lambda?.properties.hosting_model, "paas");
+    assert.equal(lambda?.properties.platform_type, undefined);
+    assert.equal(rows.find((item) => item.input === "HubSpot")?.tool?.kind, "app");
+  });
+
+  it("an app match never returns a platform tool", () => {
+    for (const tool of TOOL_CATALOG.filter((item) => item.kind === "platform")) {
+      const row = matchEntries(tool.name, "app")[0];
+      assert.equal(row?.tool, null, tool.name);
+      assert.equal(row?.status, "custom", tool.name);
+    }
+  });
+
+  it("Dynamics 365 does not match Microsoft 365", () => {
+    const row = matchEntries("Dynamics 365", "app")[0];
+    assert.equal(row?.input, "Dynamics 365");
+    assert.equal(row?.tool, null);
+    assert.equal(row?.status, "custom");
+    assert.equal(matchEntries("Microsoft 365", "app")[0]?.tool?.name, "Microsoft 365");
+    assert.equal(matchEntries("ms 365", "app")[0]?.tool?.name, "Microsoft 365");
+  });
+
+  it("tools.json equals TOOL_CATALOG", () => {
+    const path = join(dirname(fileURLToPath(import.meta.url)), "../catalog/tools.json");
+    const json = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    assert.deepEqual(json, TOOL_CATALOG);
   });
 
   it("shares one server across apps", () => {

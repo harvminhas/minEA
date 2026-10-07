@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { APP_OR_PLATFORM, nextPreset, typeGuidance } from "./type-guidance.ts";
+import { APP_OR_PLATFORM, askListKind, nextPreset, typeGuidance } from "./type-guidance.ts";
 
 test("the guidance line names applications and platforms", () => {
   assert.match(APP_OR_PLATFORM, /HubSpot, QuickBooks/);
@@ -50,4 +50,10 @@ test("a manual chip choice is never overridden", () => {
   assert.equal(nextPreset("app", "Azure", true), "app");
   assert.equal(nextPreset("platform", "HubSpot", true), "platform");
   assert.equal(nextPreset("vendor", "HubSpot", true), "vendor");
+});
+
+test("a list of platform names is a platform add", () => {
+  assert.equal(askListKind("AWS, Azure"), "platform");
+  assert.equal(askListKind("Snowflake"), "platform");
+  assert.equal(askListKind("HubSpot, Snowflake"), "app");
 });

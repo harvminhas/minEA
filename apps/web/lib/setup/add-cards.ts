@@ -2,6 +2,7 @@ import { annualCost } from "@/lib/cost/service";
 import { readCostLines } from "@/lib/cost/math";
 import { prepareRows, type AddRow } from "@/lib/setup/add-plan";
 import type { EstateItem } from "@/lib/setup/add-plan";
+import type { HostingChoice } from "@/lib/setup/match-tools";
 
 export const MOTION_CSS =
   "@keyframes add-card-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}.add-card-rise{animation:add-card-rise 320ms ease both;animation-delay:calc(var(--add-i) * 60ms)}@keyframes add-check{from{transform:scale(.6)}to{transform:scale(1)}}.add-check{animation:add-check 320ms ease}@keyframes add-saved-in{from{opacity:0}to{opacity:1}}.add-saved-in{animation:add-saved-in 320ms ease}";
@@ -15,6 +16,7 @@ export type AddReceipt = {
   objectIds: string[];
   relationshipIds: string[];
   undoUntil: number;
+  names?: string[];
 };
 
 const RECEIPT_KEY = "bubomap-add-receipt";
@@ -71,8 +73,28 @@ export function cardQuestion(row: AddRow): CardQuestion {
   if (row.existing) return "none";
   if (row.status === "weak" || row.status === "pick") return "fuzzy";
   if (row.kind === "server" || row.kind === "location" || row.kind === "vendor" || row.kind === "capability") return "none";
+  if (row.kind === "platform") {
+    const known = row.choice === "saas" || row.choice === "paas" || row.choice === "self_hosted" || row.tool?.hosting === "saas" || row.tool?.hosting === "paas";
+    return known ? "none" : "hosting";
+  }
   if (row.tool?.hosting === "saas" || row.choice === "saas") return "none";
   return "hosting";
+}
+
+export function hostingChoices(kind: string): { choice: HostingChoice; label: string }[] {
+  if (kind === "platform") {
+    return [
+      { choice: "saas", label: "SaaS" },
+      { choice: "paas", label: "PaaS" },
+      { choice: "self_hosted", label: "Self-hosted" },
+      { choice: "unknown", label: "Don't know" },
+    ];
+  }
+  return [
+    { choice: "saas", label: "SaaS" },
+    { choice: "own", label: "Our server" },
+    { choice: "unknown", label: "Don't know" },
+  ];
 }
 
 export function recordsTitle(rows: { name: string }[]): string {
@@ -80,9 +102,14 @@ export function recordsTitle(rows: { name: string }[]): string {
   return `You already have all ${rows.length}`;
 }
 
-export function cardsTitle(count: number): string {
-  const word = count === 1 ? "app" : "apps";
-  return `Add ${count} ${word} to your map`;
+function addNoun(rows: { kind: string }[]): string {
+  const platform = rows.length > 0 && rows.every((row) => row.kind === "platform");
+  if (platform) return rows.length === 1 ? "platform" : "platforms";
+  return rows.length === 1 ? "app" : "apps";
+}
+
+export function cardsTitle(rows: { kind: string }[]): string {
+  return `Add ${rows.length} ${addNoun(rows)} to your map`;
 }
 
 export function cardsSubtitle(questionCount: number): string {
@@ -91,13 +118,31 @@ export function cardsSubtitle(questionCount: number): string {
   return `We filled in what we know; ${questions}. Owners and renewals can wait.`;
 }
 
-export function askButtonLabel(count: number): string {
-  return `Add ${count} ${count === 1 ? "app" : "apps"}`;
+export function askButtonLabel(rows: { kind: string }[]): string {
+  return `Add ${rows.length} ${addNoun(rows)}`;
+}
+
+/** The line under a catalog match. A platform says platform hosting. */
+export function catalogHostingLine(row: AddRow): string | null {
+  if (cardQuestion(row) !== "none") return null;
+  if (row.kind === "platform") {
+    const known = row.choice === "saas" || row.choice === "paas" || row.choice === "self_hosted" || row.tool?.hosting === "saas" || row.tool?.hosting === "paas";
+    return known ? "Platform hosting, nothing to ask" : null;
+  }
+  const saas = row.choice === "saas" || row.tool?.hosting === "saas";
+  if (!saas) return null;
+  return "Cloud app (SaaS), nothing to ask";
 }
 
 export function savedAdded(names: string[]): string {
   if (names.length === 0) return "";
   return `Added ${names.length} ${names.length === 1 ? "app" : "apps"}: ${names.join(", ")}.`;
+}
+
+export function undoneSentence(names: string[]): string {
+  if (names.length === 1) return `Undone: ${names[0]} removed`;
+  if (names.length > 1) return `Undone: ${names.join(", ")} removed`;
+  return "Undone.";
 }
 
 export function savedKept(names: string[]): string {
@@ -199,12 +244,12 @@ export function viewFromRows(rows: AddRow[], phase: AddPhase, reduced = false): 
   const questionCount = questions.filter((question) => question !== "none").length;
   return {
     mode: "cards",
-    title: cardsTitle(fresh.length),
+    title: cardsTitle(fresh),
     subtitle: cardsSubtitle(questionCount),
     recordCards: [],
     addCards: fresh,
     alreadyLines: known,
-    button: phase === "saving" ? "Adding…" : phase === "error" ? "Retry" : askButtonLabel(fresh.length),
+    button: phase === "saving" ? "Adding…" : phase === "error" ? "Retry" : askButtonLabel(fresh),
     showsAdded: false,
     questions,
     motion,
@@ -215,10 +260,11 @@ export function describeAddResult(input: {
   text: string;
   estate: EstateItem[];
   phase: AddPhase;
+  kind?: "app" | "platform";
   removed?: string[];
   reduced?: boolean;
 }): AddResultView {
   const removed = new Set(input.removed ?? []);
-  const rows = prepareRows(input.text, "app", input.estate).filter((row) => !removed.has(row.key));
+  const rows = prepareRows(input.text, input.kind ?? "app", input.estate).filter((row) => !removed.has(row.key));
   return viewFromRows(rows, input.phase, input.reduced);
 }
