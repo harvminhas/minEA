@@ -18,10 +18,12 @@ import { dollarsFromCents, readCostLines, runCents } from "@/lib/cost/math";
 import { locationPresence } from "@/lib/infra/locations";
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
+import { actsAsFlag, actsAsLabel, readActsAs } from "@/lib/ai/acts-as";
 import { emptyTypeHint } from "@/lib/relationship-targets";
 import { infraStatus } from "@/lib/infra/status";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { CostSection } from "@/components/mvp/CostSection";
+import { ActsAsPicker } from "@/components/mvp/ActsAsPicker";
 import { AddChip } from "@/components/mvp/pills";
 import { usePermissions } from "@/lib/use-permissions";
 
@@ -196,6 +198,7 @@ function displayValue(def: FieldDef, record: FieldRecord, object: MinEAObject, e
     return "";
   }
   const value = readField(def, record, edges);
+  if (def.key === "acts_as") return actsAsLabel(value);
   if (def.editor === "owner") {
     const owner = value as OwnershipValue;
     if (!owner.ownerTeamName.trim() && !owner.pointOfContactName.trim()) return "";
@@ -491,7 +494,8 @@ export function InlineField({
   };
 
   const start = () => {
-    if (!canEdit || def.editor === "none" || def.editor === "custom" || def.editor === "costLines") return;
+    if (!canEdit || def.editor === "none" || def.editor === "costLines") return;
+    if (def.editor === "custom" && def.key !== "acts_as") return;
     openFromCurrent();
   };
 
@@ -575,6 +579,14 @@ export function InlineField({
         onSave={(value) => void persist(value)}
       />
     );
+  } else if (editing && def.key === "acts_as") {
+    editor = (
+      <ActsAsPicker
+        value={readActsAs(readField(def, record, edges))}
+        onCancel={close}
+        onSave={(value) => void persist(value)}
+      />
+    );
   } else if (editing && def.editor === "relation" && def.source.kind === "rel") {
     editor = (
       <RelationPopover
@@ -586,6 +598,8 @@ export function InlineField({
       />
     );
   }
+
+  const actsFlag = !editing && def.key === "acts_as" ? actsAsFlag(readField(def, record, edges)) : null;
 
   return (
     <div className={bare ? "" : "py-1.5"} title={def.readOnlyReason}>
@@ -607,6 +621,7 @@ export function InlineField({
               <AddChip label="Add" onClick={start} />
             )
           )}
+          {actsFlag && <p className="mt-1 text-[12px] text-[#b45309]">{actsFlag}</p>}
           {error && <p className="mt-1 text-[12px] text-[#b42318]">{error}</p>}
           {canEdit && def.key === "vendor" && !shown && !editing && suggestion && !dismissed && (
             <p className="mt-1 text-[12px] text-[#8b90a0]">

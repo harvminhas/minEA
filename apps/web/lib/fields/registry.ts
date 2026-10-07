@@ -515,6 +515,7 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
       editor: "relation",
       source: { kind: "rel", edge: "can_call", dir: "out", target: ["agent", "tool"], single: false },
     },
+    { key: "acts_as", label: "Acts as", section: "hosting", editor: "custom", source: { kind: "prop", key: "acts_as" } },
     { key: "cost", label: "Annual cost", section: "cost", editor: "costLines", source: { kind: "prop", key: "cost_lines" } },
     { key: "human_escalation_point", label: "Escalates to (person)", section: "lifecycle", editor: "text", source: { kind: "prop", key: "human_escalation_point" } },
     descriptionCol,

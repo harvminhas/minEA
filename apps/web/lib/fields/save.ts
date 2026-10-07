@@ -1,4 +1,5 @@
 import type { ObjectUpdate, RelationshipCreate } from "@minea/types";
+import { isActsAsShape, readActsAs, sameActsAs } from "@/lib/ai/acts-as";
 import type { FieldDef } from "@/lib/fields/registry";
 import { ownershipFromEntity, ownershipToPayload, type OwnershipValue } from "@/lib/owner-fields";
 import { isSystemObjectType } from "@/lib/platform-relationship-utils";
@@ -48,6 +49,7 @@ export type FieldPatch = {
 const LIFECYCLE_TYPES = new Set(["model", "cloud_service", "tool"]);
 
 export function sameFieldValue(stored: unknown, next: unknown): boolean {
+  if (isActsAsShape(stored) || isActsAsShape(next)) return sameActsAs(stored, next);
   if (Array.isArray(stored) || Array.isArray(next)) {
     const list = (value: unknown) =>
       Array.isArray(value) ? value.map(String) : value == null || value === "" ? [] : [String(value)];
@@ -201,7 +203,9 @@ export function toPatch(
 
   const stored = def.key === "is_custom_built"
     ? (empty ? null : value === "yes")
-    : (empty ? null : value);
+    : def.key === "acts_as"
+      ? readActsAs(value)
+      : (empty ? null : value);
   const properties: Record<string, unknown> = { [def.source.key]: stored };
   if (def.key === "access_method") properties.console_url = stored;
   const object: ObjectUpdate = { properties };

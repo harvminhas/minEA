@@ -507,7 +507,7 @@ test("agent and AI model fields follow the spec and only use allowed links", () 
   assert.deepEqual(sections("ai_model"), ["basics", "ownership", "hosting", "cost", "lifecycle", "notes"]);
   assert.deepEqual(
     REGISTRY.agent.filter((field) => field.section === "hosting").map((field) => field.label),
-    ["Built with", "Model", "Reads from", "Writes to", "Can call"]
+    ["Built with", "Model", "Reads from", "Writes to", "Can call", "Acts as"]
   );
   assert.deepEqual(
     REGISTRY.agent.find((field) => field.key === "job")?.options?.map((option) => option.value),
@@ -531,4 +531,32 @@ test("agent and AI model fields follow the spec and only use allowed links", () 
       }
     }
   }
+});
+
+test("acts as saves each shape, clears, and notices a different pick", () => {
+  const def = REGISTRY.agent.find((field) => field.key === "acts_as");
+  assert.ok(def);
+  const record = blankRecord("agent");
+  const shapes = [
+    { type: "contact" as const, id: "c1", name: "Ana Silva" },
+    { type: "team" as const, id: "t1", name: "Sales" },
+    { type: "service_account" as const, name: "svc-sales" },
+  ];
+  for (const shape of shapes) {
+    const saved = applyPatch(record, toPatch(def, shape, record, []), []);
+    assert.deepEqual(readField(def, saved, []), shape);
+    const cleared = applyPatch(saved, toPatch(def, null, saved, []), []);
+    assert.equal(Object.hasOwn(cleared.properties, "acts_as"), false);
+  }
+  const rejected = applyPatch(record, toPatch(def, { type: "contact", name: "Ana" }, record, []), []);
+  assert.equal(Object.hasOwn(rejected.properties, "acts_as"), false);
+
+  const ana = { type: "contact", id: "c1", name: "Ana Silva" };
+  const bob = { type: "contact", id: "c2", name: "Bob" };
+  const team = { type: "team", id: "t1", name: "Sales" };
+  assert.equal(sameFieldValue(ana, bob), false);
+  assert.equal(sameFieldValue(ana, team), false);
+  assert.equal(sameFieldValue(ana, { ...ana }), true);
+  assert.equal(sameFieldValue(ana, ""), false);
+  assert.equal(sameFieldValue("", null), true);
 });
