@@ -22,6 +22,7 @@ from app.schemas.objects import (
     TypeSwitchRequest,
     TypeSwitchResult,
 )
+from app.services.ai_features import apply_ai_features
 from app.services.authorization import require_limit
 from app.services.capability_validation import validate_object_write
 from app.services.cost_lines import apply_cost_lines
@@ -196,7 +197,7 @@ async def create_object(
         tags=body.tags,
         external_id=body.external_id,
         source=body.source,
-        properties=apply_cost_lines(body.type, dict(body.properties or {})),
+        properties=apply_ai_features(body.type, apply_cost_lines(body.type, dict(body.properties or {}))),
         created_by=ctx.user_id,
         updated_by=ctx.user_id,
     )
@@ -372,6 +373,7 @@ async def update_object(
                 if val is None:
                     merged.pop(key, None)
             merged = apply_cost_lines(obj.type, merged)
+            merged = apply_ai_features(obj.type, merged, strict="ai_features" in value)
             if merged != (obj.properties or {}):
                 field_changes["properties"] = {"old": obj.properties, "new": merged}
             obj.properties = merged

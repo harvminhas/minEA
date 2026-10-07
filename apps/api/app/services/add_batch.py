@@ -16,6 +16,7 @@ from app.schemas.objects import ObjectCreate, ObjectRead
 from app.schemas.relationships import RelationshipCreate, RelationshipRead
 from app.services.relationship_write import save_relationship
 from app.services.capability_validation import validate_object_write
+from app.services.ai_features import apply_ai_features
 from app.services.cost_lines import apply_cost_lines
 from app.services.infra_fields import validate_infra_patch
 from app.services.owner_fields import apply_ownership_write_resolved
@@ -120,7 +121,7 @@ async def apply_add_batch(
             tags=create.tags,
             external_id=create.external_id,
             source=create.source,
-            properties=apply_cost_lines(create.type, dict(create.properties or {})),
+            properties=apply_ai_features(create.type, apply_cost_lines(create.type, dict(create.properties or {}))),
             created_by=user_id,
             updated_by=user_id,
         )
@@ -165,7 +166,11 @@ async def apply_add_batch(
         patch = empty_property_patch(obj.properties or {}, item.properties)
         changed = False
         if patch:
-            merged = apply_cost_lines(obj.type, {**(obj.properties or {}), **patch})
+            merged = apply_ai_features(
+                obj.type,
+                apply_cost_lines(obj.type, {**(obj.properties or {}), **patch}),
+                strict="ai_features" in patch,
+            )
             if merged != (obj.properties or {}):
                 obj.properties = merged
                 changed = True

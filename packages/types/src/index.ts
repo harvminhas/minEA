@@ -1,5 +1,6 @@
 import allowedTripleRules from "./relationship-rules.json";
 import impactRules from "./impact-rules.json";
+import aiFeatureCatalog from "./ai-feature-catalog.json";
 
 // ─── Object Types ────────────────────────────────────────────────────────────
 
@@ -300,9 +301,55 @@ export interface ApplicationProperties {
   ai_role?: AiRole;
   /** Persisted node positions for the system relationship canvas. */
   node_layout?: Record<string, { x: number; y: number }>;
+  /** AI features turned on inside this tool (Copilot, Breeze, …). */
+  ai_features?: AiFeature[];
+  /** Kinds of sensitive data this tool holds; ["none"] = none of these. */
+  holds_data?: HoldsData[];
 }
 
 export type YesNoUnknown = "yes" | "no" | "unknown";
+
+export type AiFeatureStatus = "on" | "off" | "piloting" | "unreviewed";
+export type AiFeatureAudience = "everyone" | "some_groups" | "admins";
+export type HoldsData = "customer" | "financial" | "employee" | "none";
+
+/** Object types that can carry ai_features / holds_data (the API returns 400 elsewhere). */
+export const AI_FEATURE_TYPES = ["application", "solution", "technical_capability", "cloud_service"] as const;
+
+export interface AiFeature {
+  key: string;
+  name: string;
+  status: AiFeatureStatus;
+  audience?: AiFeatureAudience | null;
+  audience_note?: string | null;
+  sees_company_data: YesNoUnknown;
+  vendor_trains: YesNoUnknown;
+  cost_line_id?: string | null;
+  source: "catalog" | "user" | "onboarding";
+  confirmed_at?: string | null;
+  confirmed_by?: string | null;
+  note?: string | null;
+}
+
+export interface AiCatalogEntry {
+  key: string;
+  name: string;
+  vendor: string;
+  /** Exact name in apps/web/lib/catalog/tools.json, if present. */
+  tool: string | null;
+  /** normalizeTerm()'d host names this applies to. */
+  aliases: string[];
+  job: AiJob;
+  pricing: { model: "included" | "per_seat" | "usage"; seat_month_usd?: number; note: string };
+  default_on: boolean;
+  defaults: { sees_company_data: YesNoUnknown; vendor_trains: YesNoUnknown; audience: AiFeatureAudience };
+  data_note: string;
+  source_url: string;
+  checked: string;
+}
+
+/** Advisory seed catalog (prices checked 2026-10). */
+export const AI_FEATURE_CATALOG: readonly AiCatalogEntry[] = aiFeatureCatalog as AiCatalogEntry[];
 
 export type AiJob =
   | "writing_assist"
@@ -622,6 +669,8 @@ export interface CloudServiceProperties {
   sla_target?: "99_9" | "99_95" | "99_99" | "best_effort";
   lifecycle?: "planned" | "active" | "retiring" | "end_of_life" | "pilot" | "deprecated";
   criticality?: "low" | "medium" | "high" | "tier1";
+  ai_features?: AiFeature[];
+  holds_data?: HoldsData[];
 }
 
 export interface ModelProperties {

@@ -64,6 +64,8 @@ def _validate_line(line: object) -> dict:
         _fail("Seats and price per user per month are required.")
     if kind == "pct_of_license" and (not calc.get("pct_bp") or calc.get("license_amount_cents") is None):
         _fail("Percentage and licence amount are required.")
+    if line.get("ai_feature") is not None and not isinstance(line.get("ai_feature"), str):
+        _fail("ai_feature must be the AI feature's key.")
     return line
 
 

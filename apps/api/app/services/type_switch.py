@@ -15,6 +15,7 @@ from app.models.objects import ChangeLog, MinEAObject
 from app.models.people import PeopleAccountability
 from app.models.relationships import Relationship
 from app.schemas.relationships import triple_allowed
+from app.services.ai_features import apply_ai_features, strip_ai_keys
 from app.services.cost_lines import apply_cost_lines
 from app.services.owner_accountability_sync import _OBJECT_OWNER_ACCOUNTABILITY
 from app.services.system_properties import SYSTEM_OBJECT_TYPES, normalize_system_properties
@@ -238,7 +239,7 @@ def properties_for_type(object_type: str, properties: dict | None) -> dict:
     props.pop("platform", None)
     if object_type in SYSTEM_OBJECT_TYPES:
         props = normalize_system_properties(props)
-    return apply_cost_lines(object_type, props)
+    return apply_ai_features(object_type, strip_ai_keys(object_type, apply_cost_lines(object_type, props)), strict=False)
 
 
 def cleared_platform_mirror(properties: dict | None, platform_id: str) -> dict | None:

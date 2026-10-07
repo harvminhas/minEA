@@ -95,6 +95,8 @@ export const INTERNAL_KEYS = [
   "catalog_tool",
   "vendor", // kept beside the supplied_by link; the Vendor field writes both
   "eu_ai_act_risk_class",
+  "ai_features", // AI section arrives in Step D2
+  "holds_data",
 ] as const;
 
 export const SYSTEM_LIFECYCLE_OPTIONS = [

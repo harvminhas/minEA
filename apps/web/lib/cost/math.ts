@@ -32,6 +32,8 @@ export type CostLine = {
   updated_at: string;
   updated_by: string;
   migrated_from?: "annual_cost";
+  /** Catalog key of the AI feature this paid add-on belongs to. */
+  ai_feature?: string;
 };
 
 export const COST_TYPE_LABEL: Record<CostLineType, string> = {
