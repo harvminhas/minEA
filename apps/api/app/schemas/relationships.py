@@ -80,8 +80,18 @@ ALLOWED_TRIPLES: set[tuple[str, str, str]] = {
     ("resolves", "roadmap_item", "tech_debt"),
     ("replaces", "application", "application"),
     # AI module
-    ("uses_model", "agent", "model"),
+    ("uses_model", "agent", "ai_model"),
+    ("can_call", "agent", "agent"),
     ("can_call", "agent", "tool"),
+    ("built_on", "agent", "cloud_service"),
+    ("built_on", "agent", "tool"),
+    ("reads", "agent", "application"),
+    ("reads", "agent", "cloud_service"),
+    ("reads", "agent", "data_store"),
+    ("writes", "agent", "application"),
+    ("writes", "agent", "cloud_service"),
+    ("writes", "agent", "data_store"),
+    ("runs_on", "ai_model", "cloud_service"),
     ("supports", "agent", "capability"),
     ("escalates_to", "agent", "application"),
     ("accesses", "tool", "data_object"),
@@ -96,6 +106,7 @@ ALLOWED_TRIPLES: set[tuple[str, str, str]] = {
     ("supplied_by", "application", "external_party"),
     ("supplied_by", "cloud_service", "external_party"),
     ("supplied_by", "model", "external_party"),
+    ("supplied_by", "ai_model", "external_party"),
     ("uses", "application", "integration_flow"),
 }
 

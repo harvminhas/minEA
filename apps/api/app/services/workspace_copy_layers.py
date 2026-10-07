@@ -16,7 +16,7 @@ WORKSPACE_COPY_LAYERS: list[dict[str, str]] = [
 LAYER_OBJECT_TYPES: dict[str, list[str]] = {
     "strategy": ["roadmap_item"],
     "business": ["business_domain", "capability", "value_stream"],
-    "application": ["application", "solution", "technical_capability", "component", "agent"],
+    "application": ["application", "solution", "technical_capability", "component", "agent", "ai_model"],
     "integration": ["api", "event", "integration_flow", "message_broker"],
     "data": ["data_object", "data_store", "data_domain"],
     "technology": ["cloud_service", "model", "tool", "message_broker"],
@@ -36,6 +36,7 @@ OBJECT_COPY_ORDER: list[str] = [
     "technical_capability",
     "component",
     "agent",
+    "ai_model",
     "cloud_service",
     "model",
     "tool",

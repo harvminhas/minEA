@@ -22,7 +22,7 @@ them as CIS v1.1 JSON. CIS (Common Information Schema) is minEA's standard impor
 
 Valid object types:
   Strategy Layer: capability, value_stream, roadmap_item
-  Application Layer: application, solution, technical_capability, agent
+  Application Layer: application, solution, technical_capability, agent, ai_model
   Data Layer: data_object, data_store
   Integration Layer: api, event, integration_flow, message_broker, tool
   Infrastructure Layer: cloud_service, model, location, external_party
@@ -55,7 +55,7 @@ Valid relationship types and allowed triples:
   located_at: model | cloud_service → location
   sends_data_to: application | cloud_service | external_party → application | cloud_service | external_party (data movement; does not change impact)
   built_on: application | solution | technical_capability | component → cloud_service (enterprise platform)
-  uses_model: agent → model
+  uses_model: agent → ai_model
   can_call: agent → tool
   supports: agent → capability
   escalates_to: agent → application

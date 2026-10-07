@@ -19,6 +19,7 @@ TYPE_LAYER: dict[str, int] = {
     "technical_capability": 2,
     "component": 2,
     "agent": 2,
+    "ai_model": 2,
     "api": 3,
     "data_object": 3,
     "data_store": 3,

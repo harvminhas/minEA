@@ -10,7 +10,7 @@ from app.schemas.relationships import RelationshipRead
 
 VALID_TYPES = {
     "business_domain", "capability", "value_stream", "roadmap_item",
-    "application", "solution", "technical_capability", "component", "agent",
+    "application", "solution", "technical_capability", "component", "agent", "ai_model",
     "data_object", "data_store", "data_domain",
     "api", "event", "integration_flow", "message_broker", "tool",
     "cloud_service", "model", "location", "external_party", "tech_debt",

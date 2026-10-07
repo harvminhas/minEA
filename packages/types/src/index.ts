@@ -15,6 +15,7 @@ export type ObjectType =
   | "technical_capability"
   | "component"
   | "agent"
+  | "ai_model"
   // Data Layer
   | "data_object"
   | "data_store"
@@ -73,7 +74,7 @@ export const LAYER_CONFIG: Record<Layer, {
   application: {
     label: "Application",
     color: "indigo",
-    types: ["application", "solution", "technical_capability", "component", "agent"],
+    types: ["application", "solution", "technical_capability", "component", "agent", "ai_model"],
   },
   data: {
     label: "Data",
@@ -102,6 +103,7 @@ export const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
   technical_capability: "Technical Capability",
   component: "Component",
   agent: "AI Agent",
+  ai_model: "AI Model",
   data_object: "Data Entity",
   data_store: "Data Store",
   data_domain: "Data Domain",

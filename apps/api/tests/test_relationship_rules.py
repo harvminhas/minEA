@@ -64,7 +64,8 @@ class RelationshipRulesTests(unittest.TestCase):
         self.assertNotIn(("calls", "application", "application"), ALLOWED_TRIPLES)
         self.assertNotIn(("exposes", "application", "tool"), ALLOWED_TRIPLES)
         self.assertIn(("affects", "roadmap_item", "application"), ALLOWED_TRIPLES)
-        self.assertIn(("uses_model", "agent", "model"), ALLOWED_TRIPLES)
+        self.assertIn(("uses_model", "agent", "ai_model"), ALLOWED_TRIPLES)
+        self.assertNotIn(("uses_model", "agent", "model"), ALLOWED_TRIPLES)
 
     def test_app_to_vendor_data_link_is_rejected(self):
         with self.assertRaises(ValidationError):
@@ -88,6 +89,63 @@ class RelationshipRulesTests(unittest.TestCase):
         found = identical_relationship([other, first, second], "located_at", "as400", "east")
         self.assertIs(found, first)
         self.assertIsNone(identical_relationship([other], "located_at", "as400", "east"))
+
+    def test_ai_agent_and_model_links(self):
+        accepted = [
+            ("uses_model", "agent", "ai_model"),
+            ("can_call", "agent", "agent"),
+            ("built_on", "agent", "cloud_service"),
+            ("built_on", "agent", "tool"),
+            ("runs_on", "ai_model", "cloud_service"),
+            ("supplied_by", "ai_model", "external_party"),
+            ("reads", "agent", "application"),
+            ("reads", "agent", "cloud_service"),
+            ("reads", "agent", "data_store"),
+            ("writes", "agent", "application"),
+            ("writes", "agent", "cloud_service"),
+            ("writes", "agent", "data_store"),
+            ("reads", "agent", "solution"),
+            ("writes", "agent", "technical_capability"),
+        ]
+        for rel_type, source, target in accepted:
+            self.assertEqual(_create(rel_type, source, target).type, rel_type)
+        with self.assertRaises(ValidationError):
+            _create("uses_model", "agent", "model")
+        with self.assertRaises(ValidationError) as hosted:
+            _create("built_on", "agent", "application")
+        self.assertIn(HOSTING_ON_APPLICATION, str(hosted.exception))
+        with self.assertRaises(ValidationError):
+            _create("sends_data_to", "data_store", "application")
+
+    def test_type_switch_labels_match_the_label_map(self):
+        import re
+        from pathlib import Path
+
+        from app.services.type_switch import _LABELS
+
+        path = (
+            Path(__file__).resolve().parents[3]
+            / "packages"
+            / "types"
+            / "src"
+            / "relationship-labels.ts"
+        )
+        source = path.read_text(encoding="utf-8")
+        found = {
+            name: (forward, reverse)
+            for name, forward, reverse in re.findall(
+                r'^\s+(\w+): label\("([^"]+)", "([^"]+)"',
+                source,
+                re.M,
+            )
+        }
+        self.assertGreater(len(found), 30)
+        self.assertEqual(found, _LABELS)
+
+    def test_workspace_copy_keeps_ai_models(self):
+        from app.services.workspace_copy_layers import object_types_for_layers
+
+        self.assertIn("ai_model", object_types_for_layers(["application"]))
 
 
 if __name__ == "__main__":

@@ -54,6 +54,7 @@ TYPE_LABELS = {
     "roadmap_item": "Roadmap Item",
     "tech_debt": "Tech Debt",
     "agent": "AI Agent",
+    "ai_model": "AI Model",
     "value_stream": "Value Stream",
     "business_domain": "Domain",
     "message_broker": "Message Broker",

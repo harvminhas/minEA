@@ -30,7 +30,10 @@ test("every allowed relationship type has one unique pair of labels", () => {
   assert.equal(RELATIONSHIP_LABELS.belongs_to.reverse, "Contains entity/store");
   assert.equal(RELATIONSHIP_LABELS.contains.reverse, "Stored in");
   assert.equal(RELATIONSHIP_LABELS.sends_data_to.reverse, "Gets data from");
-  assert.equal(RELATIONSHIP_LABELS.uses_model.forward, "Runs on server");
+  assert.equal(RELATIONSHIP_LABELS.uses_model.forward, "Uses model");
+  assert.equal(RELATIONSHIP_LABELS.uses_model.reverse, "Used by");
+  assert.equal(RELATIONSHIP_LABELS.uses_model.sentence("Sales Assistant", "GPT-4o"), "Sales Assistant uses model GPT-4o");
+  assert.equal(RELATIONSHIP_LABELS.writes.reverse, "Written to by");
   assert.equal(RELATIONSHIP_LABELS.supplied_by.forward, "Supplied by");
   assert.equal(RELATIONSHIP_LABELS.supplied_by.reverse, "Supplies");
   assert.equal(RELATIONSHIP_LABELS.supplied_by.sentence("Microsoft 365", "Microsoft"), "Microsoft 365 is supplied by Microsoft");

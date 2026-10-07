@@ -111,6 +111,16 @@
   ],
   [
     "built_on",
+    "agent",
+    "cloud_service"
+  ],
+  [
+    "built_on",
+    "agent",
+    "tool"
+  ],
+  [
+    "built_on",
     "application",
     "cloud_service"
   ],
@@ -128,6 +138,11 @@
     "built_on",
     "technical_capability",
     "cloud_service"
+  ],
+  [
+    "can_call",
+    "agent",
+    "agent"
   ],
   [
     "can_call",
@@ -431,6 +446,31 @@
   ],
   [
     "reads",
+    "agent",
+    "application"
+  ],
+  [
+    "reads",
+    "agent",
+    "cloud_service"
+  ],
+  [
+    "reads",
+    "agent",
+    "data_store"
+  ],
+  [
+    "reads",
+    "agent",
+    "solution"
+  ],
+  [
+    "reads",
+    "agent",
+    "technical_capability"
+  ],
+  [
+    "reads",
     "application",
     "data_object"
   ],
@@ -518,6 +558,11 @@
     "routes",
     "tool",
     "event"
+  ],
+  [
+    "runs_on",
+    "ai_model",
+    "cloud_service"
   ],
   [
     "runs_on",
@@ -726,6 +771,11 @@
   ],
   [
     "supplied_by",
+    "ai_model",
+    "external_party"
+  ],
+  [
+    "supplied_by",
     "application",
     "external_party"
   ],
@@ -817,7 +867,32 @@
   [
     "uses_model",
     "agent",
-    "model"
+    "ai_model"
+  ],
+  [
+    "writes",
+    "agent",
+    "application"
+  ],
+  [
+    "writes",
+    "agent",
+    "cloud_service"
+  ],
+  [
+    "writes",
+    "agent",
+    "data_store"
+  ],
+  [
+    "writes",
+    "agent",
+    "solution"
+  ],
+  [
+    "writes",
+    "agent",
+    "technical_capability"
   ],
   [
     "writes",
