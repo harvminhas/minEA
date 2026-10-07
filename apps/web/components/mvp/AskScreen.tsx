@@ -156,7 +156,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const orgName = useAppStore((state) => state.activeOrg?.name) || "Your estate";
   const setup = useWorkspaceSetup();
   const [setupOpen, setSetupOpen] = useState(false);
-  const showSetup = setup.enabled && setup.ready && !setup.state.met && (!setup.dismissed || setupOpen);
+  // Dev only: ?setup=preview opens the first-run flow on a workspace that is already set up (QA), without touching its setup state.
+  const setupPreview = process.env.NODE_ENV !== "production" && params.get("setup") === "preview";
+  const showSetup = setup.enabled && setup.ready && (setupPreview || (!setup.state.met && (!setup.dismissed || setupOpen)));
   const [setupLatched, setSetupLatched] = useState(false);
   useEffect(() => {
     if (showSetup) setSetupLatched(true);

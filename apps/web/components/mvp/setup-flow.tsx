@@ -106,6 +106,11 @@ function toDrafts(items: MatchItem[]): Draft[] {
   });
 }
 
+/** Dev only (see AskScreen): the preview never writes the workspace's setup state. */
+function setupPreview(): boolean {
+  return process.env.NODE_ENV !== "production" && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("setup") === "preview";
+}
+
 export function SetupFlow({ inline = false }: { inline?: boolean }) {
   const router = useRouter();
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
@@ -165,7 +170,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
   // Screens: 0 paste, 1 matched, 2 AI turned on?, 3 where, 4 owners. The stored setupStep keeps its old
   // numbers (see storedSetupStep), so workspaces that stopped mid-setup before this step existed read the same.
   const skip = async () => {
-    await setup.save({ setupDismissedAt: new Date().toISOString(), setupStep: storedSetupStep(SETUP_SCREENS[step] ?? "paste") });
+    if (!setupPreview()) await setup.save({ setupDismissedAt: new Date().toISOString(), setupStep: storedSetupStep(SETUP_SCREENS[step] ?? "paste") });
     if (step === 4) {
       openReadyMap();
       return;
