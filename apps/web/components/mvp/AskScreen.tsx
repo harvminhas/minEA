@@ -28,6 +28,8 @@ import { normalizeTerm, TOOL_CATALOG } from "@/lib/setup/match-tools";
 import { Pill } from "@/components/mvp/pills";
 import { countLabel } from "@/lib/labels";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
+import { aiLandscape } from "@/lib/ai/landscape";
+import { aiHomeCard, type AiHomeCard } from "@/lib/ai/home-card";
 import { relationshipVerb } from "@/lib/relationship-display";
 import type { ImpactEdge, ImpactNode } from "@/lib/impact/relationship-impact";
 import type { RelationshipType } from "@minea/types";
@@ -175,6 +177,10 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const support = supportCounts(rows);
   const platformCount = rows.filter((row) => row.kind === "platform").length;
   const serverCount = rows.filter((row) => row.kind === "runtime").length;
+  const aiCard = useMemo(
+    () => (mode === "home" && catalog.data ? aiHomeCard(aiLandscape({ objects: catalog.data.objects, relationships: catalog.data.relationships })) : null),
+    [mode, catalog.data]
+  );
 
   const submit = (value: string, nextFocusId?: string) => {
     const q = value.trim();
@@ -267,6 +273,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             <ReportTile href={reportPath(basePath, "ownership-gaps")} title="Ownership gaps" value={cards.ownership.value} detail={cards.ownership.detail} />
             <ReportTile href={`${modelPath(basePath, "servers")}?status=attention`} title="Aging infrastructure" value={cards.aging.value} detail={cards.aging.detail} alert={cards.aging.alert} />
           </div>
+          {aiCard && <AiCard card={aiCard} href={reportPath(basePath, "ai-landscape")} />}
           <div className="mt-4 flex items-center justify-between rounded-2xl border border-[#e6e8ee] bg-[#fafafb] px-4 py-3">
             <div>
               <div className="text-[14px] font-medium text-[#1c2230]">Model health: {stats.completeness}% complete, {stats.missing} fields missing</div>
@@ -694,6 +701,22 @@ function ReportTile({ href, title, value, detail, alert }: { href: string; title
       <div className="text-[12px] text-[#6b7289]">{title}</div>
       <div className={`mt-2 text-[20px] font-semibold ${alert ? "text-[#b42318]" : "text-[#1c2230]"}`}>{value}</div>
       <div className="text-[12px] text-[#8b90a0]">{detail}</div>
+    </Link>
+  );
+}
+
+function AiCard({ card, href }: { card: AiHomeCard; href: string }) {
+  return (
+    <Link href={href} className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-[#e6e8ee] bg-[#fafafb] px-4 py-3 hover:border-[#c9c6f5]">
+      <div className="flex flex-wrap items-center gap-2">
+        <Sparkles size={14} className="text-[#5b4ce6]" />
+        <span className="text-[14px] font-medium text-[#1c2230]">
+          {card.text}
+          {card.action && <span className="text-[#5b4ce6]"> · {card.action}</span>}
+        </span>
+        {card.flag && <span className="rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11px] font-semibold text-[#b42318]">{card.flag}</span>}
+      </div>
+      <ChevronRight size={16} className="shrink-0 text-[#94a3b8]" />
     </Link>
   );
 }
