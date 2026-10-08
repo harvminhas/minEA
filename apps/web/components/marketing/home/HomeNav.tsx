@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BuboMapWordmark } from "@/components/brand/BuboMapLogo";
+import { NavCtas } from "./visitor";
 
-/** Sticky marketing header: brand, in-page links, sign in and get started. */
+/** Sticky marketing header: brand, in-page links, sign in and get started (Open BuboMap when signed in). */
 export function HomeNav() {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -26,14 +26,7 @@ export function HomeNav() {
           <a href="#reports">Reports &amp; AI</a>
           <a href="#pricing">Pricing</a>
         </nav>
-        <div className="navright">
-          <Link className="link" href="/auth/sign-in">
-            Sign in
-          </Link>
-          <Link className="btn btn-primary btn-sm" href="/auth/sign-up">
-            Get started free
-          </Link>
-        </div>
+        <NavCtas />
       </div>
     </header>
   );

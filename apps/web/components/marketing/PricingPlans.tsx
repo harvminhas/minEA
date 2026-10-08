@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { Check } from "lucide-react";
 import {
@@ -16,6 +15,7 @@ import {
   yearlySavingsUsd,
   type BillingInterval,
 } from "@/lib/billing/plans";
+import { PlanCtaLink } from "@/components/marketing/home/visitor";
 
 /** Public pricing: Free plus the three licence packs. Shown when NEXT_PUBLIC_BILLING_UI is on. */
 export function PricingPlans() {
@@ -94,8 +94,7 @@ export function PricingPlans() {
                   </li>
                 ))}
               </ul>
-              <Link
-                href="/auth/sign-up"
+              <PlanCtaLink
                 className={`mt-6 inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors ${
                   featured
                     ? "bg-indigo-600 hover:bg-indigo-700"
@@ -103,7 +102,7 @@ export function PricingPlans() {
                 }`}
               >
                 {id === "free" ? "Start free" : "Get started"}
-              </Link>
+              </PlanCtaLink>
             </div>
           );
         })}

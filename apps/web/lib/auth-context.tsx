@@ -92,7 +92,8 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+/** Exported for tests and for pages that must render without a provider (useOptionalAuth). */
+export const AuthContext = createContext<AuthContextValue | null>(null);
 
 function mapFirebaseUser(user: User): AuthUser {
   const usesPassword = user.providerData.some((p) => p.providerId === "password");
@@ -364,6 +365,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+/** Like useAuth, but null outside AuthProvider instead of throwing (public marketing pages). */
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
 }
 
 export function useAuth(): AuthContextValue {

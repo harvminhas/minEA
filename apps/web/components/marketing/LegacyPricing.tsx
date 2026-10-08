@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PlanCtaLink } from "@/components/marketing/home/visitor";
 import { Check } from "lucide-react";
 
 /*
@@ -48,12 +49,9 @@ export function LegacyPricing() {
               </li>
             ))}
           </ul>
-          <Link
-            href="/auth/sign-up"
-            className="mt-7 inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:border-white/40"
-          >
+          <PlanCtaLink className="mt-7 inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:border-white/40">
             Start free
-          </Link>
+          </PlanCtaLink>
         </div>
 
         <div className="flex flex-col rounded-2xl border border-indigo-500/40 bg-indigo-950/40 p-7">

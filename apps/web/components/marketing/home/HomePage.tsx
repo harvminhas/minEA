@@ -9,6 +9,7 @@ import { HeroAsk } from "./HeroAsk";
 import { HomeNav } from "./HomeNav";
 import { Icon } from "./icons";
 import { SetupSteps } from "./SetupSteps";
+import { BandPrimaryCta, HeroCtas } from "./visitor";
 import type { AnswerKey } from "./ask-demo-data";
 
 /*
@@ -89,14 +90,7 @@ function HeroCopy({ billingUi }: { billingUi: boolean }) {
         Map your apps, vendors and AI from the tools you already use. Then ask anything and get{" "}
         <strong>answers with sources you can check.</strong>
       </p>
-      <div className="ctas">
-        <Link className="btn btn-primary btn-lg" href="/auth/sign-up">
-          Get started free
-        </Link>
-        <Link className="btn btn-ghost btn-lg" href="/auth/sign-in">
-          Sign in
-        </Link>
-      </div>
+      <HeroCtas />
       <p className="fine">
         {billingUi ? "Start free — no credit card required." : "Free for individuals — no credit card required."}
       </p>
@@ -338,9 +332,7 @@ export function HomePage() {
                   </p>
                 </div>
                 <div className="ctas">
-                  <Link className="btn btn-primary btn-sm" href="/auth/sign-up">
-                    Get started free
-                  </Link>
+                  <BandPrimaryCta />
                   <a className="btn btn-ghost btn-sm" href="#pricing">
                     See pricing
                   </a>
