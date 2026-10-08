@@ -21,6 +21,9 @@ import type {
   OrgMember,
   BillingStatus,
   SoloCheckoutResponse,
+  CheckoutRequest,
+  CheckoutResponse,
+  PortalResponse,
   WorkspaceMember,
   InvitePreview,
   Invite,
@@ -197,6 +200,19 @@ export const billingApi = {
     apiFetch<BillingStatus>(`/orgs/${orgSlug}/billing/status`, { token }),
   startSoloCheckout: (orgSlug: string, token: string) =>
     apiFetch<SoloCheckoutResponse>(`/orgs/${orgSlug}/billing/solo/checkout`, {
+      method: "POST",
+      token,
+    }),
+  /** Stripe Checkout for a pack. Returns the hosted Checkout URL to redirect to. */
+  startCheckout: (orgSlug: string, body: CheckoutRequest, token: string) =>
+    apiFetch<CheckoutResponse>(`/orgs/${orgSlug}/billing/checkout`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+  /** Stripe Customer Portal session (payment method, invoices, plan switch, cancel). */
+  openPortal: (orgSlug: string, token: string) =>
+    apiFetch<PortalResponse>(`/orgs/${orgSlug}/billing/portal`, {
       method: "POST",
       token,
     }),

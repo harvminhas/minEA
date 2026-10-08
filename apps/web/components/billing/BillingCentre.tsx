@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Eye } from "lucide-react";
+import { AlertTriangle, Check, CreditCard, Eye, Loader2 } from "lucide-react";
 import type { BillingStatus } from "@minea/types";
 import {
   CATALOG,
@@ -23,6 +23,15 @@ import {
 } from "@/lib/billing/plans";
 import { licencesUsedLabel, type LicenceSummary } from "@/lib/billing/licences";
 import { shareQuotaLabel, workspaceQuotaLabel } from "@/lib/plan-features";
+import {
+  billingErrorMessage,
+  canStartBilling,
+  checkoutReturnNotice,
+  overCapBanner,
+  packActionFor,
+  showManageBilling,
+  type CheckoutReturn,
+} from "@/lib/billing/checkout";
 import { CheckoutComingSoonDialog } from "./CheckoutComingSoonDialog";
 import { OnboardingCard } from "./OnboardingCard";
 
@@ -32,6 +41,12 @@ interface Props {
   previewing: boolean;
   billingStatus: BillingStatus | undefined;
   licences: LicenceSummary | null;
+  /** ?checkout=success|cancelled after returning from Stripe Checkout. */
+  checkoutReturn?: CheckoutReturn | null;
+  /** Starts Stripe Checkout and redirects. Only called when the API says checkout is available. */
+  onCheckout?: (pack: PackId, interval: BillingInterval) => Promise<void>;
+  /** Opens the Stripe Customer Portal and redirects. */
+  onOpenPortal?: () => Promise<void>;
 }
 
 function changeButton(change: PlanChange, label: string): { text: string; disabled: boolean } {
@@ -52,17 +67,90 @@ function changeButton(change: PlanChange, label: string): { text: string; disabl
   }
 }
 
-/** Plan & billing tab. Display only: Upgrade/Change opens a "coming soon" dialog. */
-export function BillingCentre({ displayPlan, realPlan, previewing, billingStatus, licences }: Props) {
+/**
+ * Plan & billing tab. When the API reports Stripe checkout for this org, pack buttons start
+ * Stripe Checkout (no subscription yet) or open the Customer Portal (already on a pack).
+ * Otherwise they open the "coming soon" dialog as before.
+ */
+export function BillingCentre({
+  displayPlan,
+  realPlan,
+  previewing,
+  billingStatus,
+  licences,
+  checkoutReturn,
+  onCheckout,
+  onOpenPortal,
+}: Props) {
   const [interval, setBillingInterval] = useState<BillingInterval>("monthly");
   const [checkoutPack, setCheckoutPack] = useState<PackId | null>(null);
+  const [busy, setBusy] = useState<PackId | "portal" | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const current = entitlementsFor(displayPlan);
   const real = entitlementsFor(realPlan);
   const used = licences?.used ?? 1;
+  const action = packActionFor(realPlan, billingStatus, previewing);
+  const allowed = canStartBilling(billingStatus);
+  const manageBilling = showManageBilling(billingStatus, previewing) && !!onOpenPortal;
+  const overCap =
+    !previewing &&
+    !!billingStatus?.over_licence_cap &&
+    billingStatus.licences_cap != null &&
+    billingStatus.licences_used != null;
+
+  async function run(target: PackId | "portal", fn: () => Promise<void>) {
+    setBusy(target);
+    setActionError(null);
+    try {
+      await fn(); // redirects to Stripe on success
+    } catch (err) {
+      setActionError(billingErrorMessage(err));
+      setBusy(null);
+    }
+  }
+
+  function onPackClick(id: PackId) {
+    if (action === "coming_soon" || !onCheckout || !onOpenPortal) {
+      setCheckoutPack(id);
+      return;
+    }
+    if (!allowed) return;
+    if (action === "portal") void run(id, onOpenPortal);
+    else void run(id, () => onCheckout(id, interval));
+  }
 
   return (
     <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6" data-testid="billing-centre">
       <h2 className="font-semibold text-gray-900 mb-4">Plan &amp; billing</h2>
+
+      {checkoutReturn && !previewing && (
+        <p
+          data-testid="checkout-return"
+          className={`mb-4 rounded-md border px-3 py-2 text-sm ${
+            checkoutReturn === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-gray-200 bg-gray-50 text-gray-700"
+          }`}
+        >
+          {checkoutReturnNotice(checkoutReturn)}
+        </p>
+      )}
+
+      {overCap && (
+        <p
+          data-testid="over-cap-banner"
+          className="mb-4 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+          {overCapBanner(billingStatus!.licences_used!, billingStatus!.licences_cap!)}
+        </p>
+      )}
+
+      {actionError && (
+        <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {actionError}
+        </p>
+      )}
 
       {previewing && (
         <p className="mb-4 flex items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
@@ -125,6 +213,28 @@ export function BillingCentre({ displayPlan, realPlan, previewing, billingStatus
             <Check size={12} /> {current.label} plan active
           </p>
         )}
+        {manageBilling && (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              data-testid="manage-billing"
+              disabled={!allowed || busy !== null}
+              onClick={() => onOpenPortal && void run("portal", onOpenPortal)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {busy === "portal" ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
+              Manage billing
+            </button>
+            <span className="text-xs text-gray-400">
+              Payment method, invoices, switching plans and cancelling.
+            </span>
+          </div>
+        )}
+        {action !== "coming_soon" && !allowed && (
+          <p className="mt-3 text-xs text-gray-500">
+            Only org owners and admins with a verified email can change the plan.
+          </p>
+        )}
       </div>
 
       {showsOnboarding(displayPlan) && (
@@ -183,14 +293,16 @@ export function BillingCentre({ displayPlan, realPlan, previewing, billingStatus
               </ul>
               <button
                 type="button"
-                disabled={button.disabled}
-                onClick={() => setCheckoutPack(id)}
-                className={`mt-4 rounded-md px-3 py-2 text-sm font-medium ${
-                  button.disabled
+                data-action={button.disabled ? undefined : action}
+                disabled={button.disabled || busy !== null || (action !== "coming_soon" && !allowed)}
+                onClick={() => onPackClick(id)}
+                className={`mt-4 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium ${
+                  button.disabled || (action !== "coming_soon" && !allowed)
                     ? "cursor-not-allowed border border-gray-200 text-gray-400"
-                    : "bg-indigo-600 text-white hover:bg-indigo-700"
+                    : "bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-70"
                 }`}
               >
+                {busy === id && <Loader2 size={14} className="animate-spin" />}
                 {button.text}
               </button>
             </div>

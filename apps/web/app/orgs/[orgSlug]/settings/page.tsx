@@ -19,7 +19,19 @@ import { BillingPreviewSwitch } from "@/components/billing/BillingPreviewSwitch"
 import { LicencesPanel } from "@/components/billing/LicencesPanel";
 import { billingPreviewEnabled, billingUiEnabled } from "@/lib/billing/flags";
 import { ADMIN_TABS, adminTabHref, resolveAdminTab, type AdminTab } from "@/lib/billing/admin-centre";
-import { entitlementsFor, parsePreviewPlan, resolveDisplayPlan } from "@/lib/billing/plans";
+import {
+  entitlementsFor,
+  parsePreviewPlan,
+  resolveDisplayPlan,
+  type BillingInterval,
+  type PackId,
+} from "@/lib/billing/plans";
+import {
+  billingErrorMessage,
+  checkoutBody,
+  parseCheckoutReturn,
+  type CheckoutReturn,
+} from "@/lib/billing/checkout";
 import { summarizeLicences } from "@/lib/billing/licences";
 import { useLicenceRoster } from "@/lib/billing/use-licence-roster";
 import { useAppStore } from "@/lib/store";
@@ -38,6 +50,7 @@ export default function OrgSettingsPage() {
     canManageBilling,
     canDeleteOrg,
     canInviteOrgMembers,
+    isOrgAdmin,
   } = usePermissions();
   const { plan } = usePlanFeatures();
   const { setActiveOrg, setActiveWorkspace } = useAppStore();
@@ -49,6 +62,7 @@ export default function OrgSettingsPage() {
   const [verifyLink, setVerifyLink] = useState<string | null>(null);
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
+  const [checkoutReturn, setCheckoutReturn] = useState<CheckoutReturn | null>(null);
 
   const emailVerified = user ? !user.requiresEmailVerification : false;
 
@@ -66,6 +80,34 @@ export default function OrgSettingsPage() {
       router.replace(`/orgs/${orgSlug}/settings`, { scroll: false });
     }
   }, [searchParams, orgSlug, queryClient, router]);
+
+  // Back from Stripe Checkout (?tab=billing&checkout=success|cancelled). The webhook updates the
+  // plan, so refetch a few times, then drop the query params.
+  useEffect(() => {
+    const value = parseCheckoutReturn(searchParams.get("checkout"));
+    if (!value) return;
+    setCheckoutReturn(value);
+    const refresh = () => {
+      void queryClient.invalidateQueries({ queryKey: ["org", orgSlug] });
+      void queryClient.invalidateQueries({ queryKey: ["billing-status", orgSlug] });
+    };
+    refresh();
+    const timers = value === "success" ? [2000, 5000, 10000].map((ms) => setTimeout(refresh, ms)) : [];
+    router.replace(adminTabHref(orgSlug, "billing"), { scroll: false });
+    return () => timers.forEach(clearTimeout);
+  }, [searchParams, orgSlug, queryClient, router]);
+
+  async function startCheckout(pack: PackId, interval: BillingInterval) {
+    const token = await getToken();
+    const { checkout_url } = await billingApi.startCheckout(orgSlug, checkoutBody(pack, interval), token!);
+    window.location.assign(checkout_url);
+  }
+
+  async function openBillingPortal() {
+    const token = await getToken();
+    const { portal_url } = await billingApi.openPortal(orgSlug, token!);
+    window.location.assign(portal_url);
+  }
 
   const { data: org } = useQuery({
     queryKey: ["org", orgSlug],
@@ -143,6 +185,8 @@ export default function OrgSettingsPage() {
     [roster.rows, displayPlan]
   );
   const billingHref = adminTabHref(orgSlug, "billing", preview);
+  // Billing tab: owner (as before) plus org admins. The API enforces owner/admin + verified email.
+  const canSeeBilling = canManageBilling || isOrgAdmin;
 
   // Non-admin members have no actions here — send them straight to their workspace
   useEffect(() => {
@@ -164,7 +208,7 @@ export default function OrgSettingsPage() {
       setLastInviteUrl(`${window.location.origin}${data.invite_url}`);
       queryClient.invalidateQueries({ queryKey: ["invites", orgSlug] });
     },
-    onError: (err: Error) => setInviteError(err.message),
+    onError: (err: Error) => setInviteError(billingUi ? billingErrorMessage(err) : err.message),
   });
 
   const revokeMutation = useMutation({
@@ -240,7 +284,7 @@ export default function OrgSettingsPage() {
 
       {billingUi && canManageOrg && (
         <nav className="mb-6 flex gap-1 border-b border-gray-200" aria-label="Admin centre">
-          {ADMIN_TABS.filter((t) => t.id !== "billing" || canManageBilling).map((t) => (
+          {ADMIN_TABS.filter((t) => t.id !== "billing" || canSeeBilling).map((t) => (
             <Link
               key={t.id}
               href={adminTabHref(orgSlug, t.id, preview)}
@@ -468,13 +512,16 @@ export default function OrgSettingsPage() {
       </section>
       )}
 
-      {billingUi && canManageBilling && show("billing") && (
+      {billingUi && canSeeBilling && show("billing") && (
         <BillingCentre
           displayPlan={displayPlan}
           realPlan={realPlan}
           previewing={!!preview}
           billingStatus={billingStatus}
           licences={licenceSummary}
+          checkoutReturn={checkoutReturn}
+          onCheckout={startCheckout}
+          onOpenPortal={openBillingPortal}
         />
       )}
 

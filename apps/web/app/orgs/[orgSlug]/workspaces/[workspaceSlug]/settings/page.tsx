@@ -9,6 +9,8 @@ import { ROLE_DEFINITIONS } from "@minea/types";
 import { workspacesApi } from "@/lib/api-client";
 import { usePermissions } from "@/lib/use-permissions";
 import { primaryViewPath } from "@/lib/tenancy";
+import { billingUiEnabled } from "@/lib/billing/flags";
+import { billingErrorMessage } from "@/lib/billing/checkout";
 
 export default function WorkspaceSettingsPage() {
   const { orgSlug, workspaceSlug } = useParams<{ orgSlug: string; workspaceSlug: string }>();
@@ -64,7 +66,8 @@ export default function WorkspaceSettingsPage() {
       setLastInviteUrl(`${window.location.origin}${data.invite_url}`);
       queryClient.invalidateQueries({ queryKey: ["workspace-invites", orgSlug, workspaceSlug] });
     },
-    onError: (err: Error) => setInviteError(err.message),
+    // Flag on: show the API's message (e.g. licence limit) instead of raw JSON.
+    onError: (err: Error) => setInviteError(billingUiEnabled() ? billingErrorMessage(err) : err.message),
   });
 
   const revokeMutation = useMutation({
