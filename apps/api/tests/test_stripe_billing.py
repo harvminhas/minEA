@@ -122,6 +122,14 @@ class Store:
         monkeypatch.setattr(sb, "apply_plan_to_org", apply_plan)
         monkeypatch.setattr(sb, "_fetch_subscription", lambda sub_id: self.stripe_subs.get(sub_id))
 
+        self.locks = []
+
+        async def lock_org(db, org):
+            self.locks.append(org.id)
+            return org
+
+        monkeypatch.setattr(sb, "_lock_org", lock_org)
+
     async def _commit(self):
         self.commits += 1
 
@@ -241,10 +249,19 @@ def test_automatic_tax_is_a_switch(configured, monkeypatch):
 
 
 class _FakeStripe:
-    def __init__(self, prices):
+    def __init__(self, prices, subscriptions=None, open_sessions=None):
         self.created_sessions = []
         self.created_customers = []
+        self.expired_sessions = []
+        self.subscriptions = subscriptions or []  # what Subscription.list returns for any customer
+        self.open_sessions = open_sessions or []
         outer = self
+
+        class Subscription:
+            @staticmethod
+            def list(customer, status, limit):
+                assert status == "all"
+                return SimpleNamespace(data=[s for s in outer.subscriptions if s.get("customer") == customer])
 
         class Price:
             @staticmethod
@@ -267,6 +284,15 @@ class _FakeStripe:
                 outer.created_sessions.append(kwargs)
                 return SimpleNamespace(id="cs_test_1", url="https://checkout.stripe.com/c/pay/cs_test_1")
 
+            @staticmethod
+            def list(customer, status, limit):
+                return SimpleNamespace(data=[SimpleNamespace(id=i) for i in outer.open_sessions])
+
+            @staticmethod
+            def expire(session_id):
+                outer.expired_sessions.append(session_id)
+
+        self.Subscription = Subscription
         self.Price = Price
         self.Customer = Customer
         self.checkout = SimpleNamespace(Session=Session)

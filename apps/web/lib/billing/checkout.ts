@@ -13,9 +13,9 @@ export function stripeLive(status: BillingStatus | undefined, previewing: boolea
 }
 
 /**
- * Free and Business (legacy) orgs have no subscription, so a pack button starts Checkout.
- * An org already on a pack switches in the Customer Portal (a second Checkout would create a
- * second subscription).
+ * An org with a Stripe subscription changes plans in the Customer Portal only. Starting Checkout
+ * would create a SECOND subscription (the live-test bug: right after a portal switch the tab
+ * briefly showed "Business (legacy)" with Switch buttons).
  */
 export function packActionFor(
   realPlan: DisplayPlanId,
@@ -23,12 +23,15 @@ export function packActionFor(
   previewing: boolean
 ): PackAction {
   if (!stripeLive(status, previewing)) return "coming_soon";
-  if (status?.has_subscription && realPlan !== "free" && realPlan !== "business_legacy") return "portal";
+  if (status?.has_subscription) return "portal";
+  // Older API without checkout_allowed: has_subscription above is the rule.
+  if (status?.checkout_allowed === false) return "portal";
   return "checkout";
 }
 
+/** Manage billing: any org with a Stripe subscription, plus orgs with past invoices (customer). */
 export function showManageBilling(status: BillingStatus | undefined, previewing: boolean): boolean {
-  return stripeLive(status, previewing) && !!status?.has_billing_account;
+  return stripeLive(status, previewing) && (!!status?.has_subscription || !!status?.has_billing_account);
 }
 
 export function canStartBilling(status: BillingStatus | undefined): boolean {
@@ -40,6 +43,16 @@ export type CheckoutReturn = "success" | "cancelled";
 export function parseCheckoutReturn(raw: string | null | undefined): CheckoutReturn | null {
   return raw === "success" || raw === "cancelled" ? raw : null;
 }
+
+/** True on the page the Customer Portal sends the user back to (?portal=return). */
+export function parsePortalReturn(raw: string | null | undefined): boolean {
+  return raw === "return";
+}
+
+export const PORTAL_RETURN_NOTICE = "Back from billing. Plan changes can take a few seconds to show here.";
+
+/** Re-read billing status this often (ms) after returning from Checkout or the portal. */
+export const RETURN_REFETCH_MS = [2000, 5000, 10000, 20000] as const;
 
 export function checkoutReturnNotice(value: CheckoutReturn): string {
   return value === "success"

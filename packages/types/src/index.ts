@@ -988,6 +988,12 @@ export interface BillingStatus {
   can_create_share_link: boolean;
   /** Stripe Checkout is live for this org (key set server-side and org allowed). Optional for older APIs. */
   checkout_available?: boolean;
+  /**
+   * Checkout may start: live for this org AND no open Stripe subscription (row or Stripe).
+   * False = change plans in the Customer Portal. Optional for older APIs.
+   */
+  checkout_allowed?: boolean;
+  /** Authoritative plan label. business_legacy only when there is no Stripe subscription at all. */
   display_plan?: "free" | "starter" | "team" | "business" | "business_legacy";
   licences_used?: number;
   /** null = no licence cap (Business legacy) */

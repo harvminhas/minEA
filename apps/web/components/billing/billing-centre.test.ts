@@ -112,3 +112,74 @@ test("dev preview never offers real checkout or the banner", () => {
   assert.ok(actions(html).every((a) => a === "coming_soon"));
   assert.doesNotMatch(html, /over-cap-banner|manage-billing/);
 });
+
+// ── live-test fix: never legacy / checkout while billing status is unknown ──
+
+test("repro: status still loading shows a loading state, no plan and no buttons", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(BillingCentre, {
+      displayPlan: null,
+      realPlan: null,
+      previewing: false,
+      billingStatus: undefined,
+      licences: null,
+      onCheckout: noop,
+      onOpenPortal: noop,
+    })
+  );
+  assert.match(html, /data-testid="billing-status-loading"/);
+  assert.doesNotMatch(html, /legacy/i);
+  assert.doesNotMatch(html, /Switch to/);
+  assert.deepEqual(actions(html), []);
+});
+
+test("status failed: error with retry, still no buttons", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(BillingCentre, {
+      displayPlan: null,
+      realPlan: null,
+      previewing: false,
+      billingStatus: undefined,
+      licences: null,
+      statusError: true,
+      onRetryStatus: () => {},
+    })
+  );
+  assert.match(html, /data-testid="billing-status-error"/);
+  assert.match(html, /Try again/);
+  assert.deepEqual(actions(html), []);
+});
+
+test("Business pack right after the portal switch: Manage billing, portal only, never checkout", () => {
+  const s = status({
+    plan: "business",
+    display_plan: "business",
+    has_subscription: true,
+    checkout_allowed: false,
+    has_billing_account: true,
+    licences_used: 1,
+    licences_cap: 10,
+  });
+  const html = render("business", s, { portalReturn: true });
+  assert.match(html, /data-testid="current-plan">Business</);
+  assert.doesNotMatch(html, /legacy/i);
+  assert.match(html, /data-testid="manage-billing"/);
+  assert.match(html, /data-testid="portal-return"/);
+  assert.ok(!actions(html).includes("checkout"));
+  assert.deepEqual(actions(html), ["portal", "portal"]);
+});
+
+test("Stripe has a subscription the org row doesn't show yet: no checkout buttons", () => {
+  const s = status({ plan: "free", display_plan: "team", has_subscription: true, checkout_allowed: false, has_billing_account: true, licences_cap: 5 });
+  const html = render("team", s);
+  assert.ok(!actions(html).includes("checkout"));
+  assert.match(html, /data-testid="manage-billing"/);
+});
+
+test("true legacy org (no subscription, no customer) still checks out", () => {
+  const s = status({ plan: "business", display_plan: "business_legacy", has_subscription: false, checkout_allowed: true, licences_cap: null });
+  const html = render("business_legacy", s);
+  assert.match(html, /Business \(legacy\)/);
+  assert.deepEqual(actions(html), ["checkout", "checkout", "checkout"]);
+  assert.doesNotMatch(html, /data-testid="manage-billing"/);
+});

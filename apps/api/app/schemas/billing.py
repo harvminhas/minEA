@@ -35,6 +35,8 @@ class BillingStatusResponse(BaseModel):
     can_create_share_link: bool
     # Self-serve packs (all optional for older clients)
     checkout_available: bool = False
+    # False whenever the org has (or may have) an open Stripe subscription: change plans in the portal.
+    checkout_allowed: bool = False
     display_plan: str = "free"  # free | starter | team | business | business_legacy
     licences_used: int = 0
     licences_cap: int | None = None  # None = no cap (Business legacy)

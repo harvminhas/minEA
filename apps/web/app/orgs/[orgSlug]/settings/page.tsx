@@ -22,7 +22,7 @@ import { ADMIN_TABS, adminTabHref, resolveAdminTab, type AdminTab } from "@/lib/
 import {
   entitlementsFor,
   parsePreviewPlan,
-  resolveDisplayPlan,
+  planFromStatus,
   type BillingInterval,
   type PackId,
 } from "@/lib/billing/plans";
@@ -30,6 +30,8 @@ import {
   billingErrorMessage,
   checkoutBody,
   parseCheckoutReturn,
+  parsePortalReturn,
+  RETURN_REFETCH_MS,
   type CheckoutReturn,
 } from "@/lib/billing/checkout";
 import { summarizeLicences } from "@/lib/billing/licences";
@@ -63,6 +65,7 @@ export default function OrgSettingsPage() {
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
   const [checkoutReturn, setCheckoutReturn] = useState<CheckoutReturn | null>(null);
+  const [portalReturn, setPortalReturn] = useState(false);
 
   const emailVerified = user ? !user.requiresEmailVerification : false;
 
@@ -81,18 +84,21 @@ export default function OrgSettingsPage() {
     }
   }, [searchParams, orgSlug, queryClient, router]);
 
-  // Back from Stripe Checkout (?tab=billing&checkout=success|cancelled). The webhook updates the
-  // plan, so refetch a few times, then drop the query params.
+  // Back from Stripe Checkout (?checkout=success|cancelled) or the Customer Portal
+  // (?portal=return). Webhooks update the plan, so refetch a few times, then drop the params.
   useEffect(() => {
-    const value = parseCheckoutReturn(searchParams.get("checkout"));
-    if (!value) return;
-    setCheckoutReturn(value);
+    const checkout = parseCheckoutReturn(searchParams.get("checkout"));
+    const portal = parsePortalReturn(searchParams.get("portal"));
+    if (!checkout && !portal) return;
+    if (checkout) setCheckoutReturn(checkout);
+    if (portal) setPortalReturn(true);
     const refresh = () => {
       void queryClient.invalidateQueries({ queryKey: ["org", orgSlug] });
       void queryClient.invalidateQueries({ queryKey: ["billing-status", orgSlug] });
     };
     refresh();
-    const timers = value === "success" ? [2000, 5000, 10000].map((ms) => setTimeout(refresh, ms)) : [];
+    const timers =
+      checkout === "success" || portal ? RETURN_REFETCH_MS.map((ms) => setTimeout(refresh, ms)) : [];
     router.replace(adminTabHref(orgSlug, "billing"), { scroll: false });
     return () => timers.forEach(clearTimeout);
   }, [searchParams, orgSlug, queryClient, router]);
@@ -143,7 +149,11 @@ export default function OrgSettingsPage() {
     },
   });
 
-  const { data: billingStatus } = useQuery({
+  const {
+    data: billingStatus,
+    isError: billingStatusError,
+    refetch: refetchBillingStatus,
+  } = useQuery({
     queryKey: ["billing-status", orgSlug],
     queryFn: async () => {
       const token = await getToken();
@@ -160,14 +170,9 @@ export default function OrgSettingsPage() {
   const tab = resolveAdminTab(searchParams.get("tab"), billingUi);
   const show = (t: AdminTab) => tab === null || tab === t;
   const preview = parsePreviewPlan(searchParams.get("preview"), billingPreviewEnabled());
-  const realPlan = resolveDisplayPlan({
-    plan: billingStatus?.plan ?? org?.plan,
-    hasSubscription: billingStatus?.has_subscription,
-  });
-  const displayPlan = resolveDisplayPlan(
-    { plan: billingStatus?.plan ?? org?.plan, hasSubscription: billingStatus?.has_subscription },
-    preview
-  );
+  // From billing status only; null while it loads (never guessed from org.plan).
+  const realPlan = planFromStatus(billingStatus);
+  const displayPlan = planFromStatus(billingStatus, preview);
   const roster = useLicenceRoster(
     orgSlug,
     members,
@@ -176,7 +181,7 @@ export default function OrgSettingsPage() {
   );
   const licenceSummary = useMemo(
     () =>
-      roster.rows
+      roster.rows && displayPlan
         ? summarizeLicences(
             roster.rows.filter((r) => r.hasLicence).length,
             entitlementsFor(displayPlan).licences
@@ -279,7 +284,7 @@ export default function OrgSettingsPage() {
       )}
 
       {billingUi && canManageOrg && billingPreviewEnabled() && (
-        <BillingPreviewSwitch preview={preview} realLabel={entitlementsFor(realPlan).label} />
+        <BillingPreviewSwitch preview={preview} realLabel={realPlan ? entitlementsFor(realPlan).label : "…"} />
       )}
 
       {billingUi && canManageOrg && (
@@ -519,7 +524,10 @@ export default function OrgSettingsPage() {
           previewing={!!preview}
           billingStatus={billingStatus}
           licences={licenceSummary}
+          statusError={billingStatusError && !billingStatus}
+          onRetryStatus={() => void refetchBillingStatus()}
           checkoutReturn={checkoutReturn}
+          portalReturn={portalReturn}
           onCheckout={startCheckout}
           onOpenPortal={openBillingPortal}
         />

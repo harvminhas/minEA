@@ -29,6 +29,7 @@ from app.services.stripe_billing import (
     create_portal_session,
     create_solo_checkout_session,
     stripe_configured,
+    subscription_state,
 )
 from app.services.tenancy import TenancyContext, get_org_context
 from app.utils.time import utc_now
@@ -50,8 +51,16 @@ def require_billing_manager(ctx: TenancyContext) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Verify your email to manage billing")
 
 
-def display_plan(plan: str, subscription_id: str | None) -> str:
-    if is_legacy_business(plan, subscription_id):
+def display_plan(plan: str, subscription_id: str | None, *, has_subscription: bool = False, live_plan: str | None = None) -> str:
+    """What the admin centre shows.
+
+    business_legacy means: plan business AND no subscription id on the org AND no open Stripe
+    subscription for its customer (has_subscription False). live_plan is the plan of an open
+    subscription the org row does not show yet; it wins so the page is right before the webhook.
+    """
+    if live_plan:
+        return live_plan
+    if is_legacy_business(plan, subscription_id) and not has_subscription:
         return "business_legacy"
     return normalize_plan(plan)
 
@@ -87,20 +96,28 @@ async def billing_status(
 
     usage = await load_usage(db, ctx.org_id)
     cap = await licence_cap(db, ctx.org_id)
+    has_subscription, live_plan = await subscription_state(ctx.org)
+    checkout_on = checkout_available(ctx.org)
 
     return BillingStatusResponse(
         plan=plan,
         stripe_configured=stripe_configured(),
         can_upgrade_solo=False,
-        has_subscription=bool(ctx.org.stripe_subscription_id),
+        has_subscription=has_subscription,
         own_workspace_count=owned_count,
         own_workspace_limit=workspace_limit,
         can_create_own_workspace=can_create_own_workspace(plan, owned_count),
         active_share_link_count=share_count,
         active_share_link_limit=share_limit,
         can_create_share_link=can_create_share_link(plan, share_count),
-        checkout_available=checkout_available(ctx.org),
-        display_plan=display_plan(ctx.org.plan, ctx.org.stripe_subscription_id),
+        checkout_available=checkout_on,
+        checkout_allowed=checkout_on and not has_subscription,
+        display_plan=display_plan(
+            ctx.org.plan,
+            ctx.org.stripe_subscription_id,
+            has_subscription=has_subscription,
+            live_plan=live_plan,
+        ),
         licences_used=usage.used,
         licences_cap=cap,
         over_licence_cap=cap is not None and usage.used > cap,

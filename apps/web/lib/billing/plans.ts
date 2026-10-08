@@ -150,10 +150,10 @@ export function planIncludes(plan: CatalogPlan): string[] {
 }
 
 /**
- * Mapping from the API plan to what the admin centre shows. Same rule as display_plan in
- * apps/api/app/routers/billing.py: starter/team/business are packs (set by Stripe); an org on
- * "business" without a Stripe subscription is a grandfathered Business (legacy) org.
- * Pre-pack slugs solo/growth also mean Business.
+ * Mapping from a plan slug plus a KNOWN subscription flag to what the admin centre shows.
+ * starter/team/business are packs (set by Stripe); "business" without a subscription is a
+ * grandfathered Business (legacy) org. Pre-pack slugs solo/growth also mean Business.
+ * Only call this with a loaded billing status; the page uses planFromStatus.
  */
 export function resolveDisplayPlan(
   source: { plan?: string | null; hasSubscription?: boolean | null },
@@ -165,6 +165,39 @@ export function resolveDisplayPlan(
   if (plan === "starter" || plan === "team") return plan;
   if (plan === "business") return source.hasSubscription ? "business" : "business_legacy";
   return "free";
+}
+
+const DISPLAY_PLAN_IDS: readonly string[] = ["free", "starter", "team", "business", "business_legacy"];
+
+/** The fields of GET /billing/status that decide the plan shown. */
+export interface PlanStatusSource {
+  plan?: string | null;
+  has_subscription?: boolean | null;
+  display_plan?: string | null;
+}
+
+/**
+ * The plan the admin centre shows, taken from GET /billing/status only. null = not loaded yet,
+ * and the page shows a loading state with no plan buttons.
+ *
+ * Never guessed from org.plan: "business" there can't tell Business (legacy) from a Business
+ * pack bought through Stripe. Guessing is what showed "Business (legacy)" with Switch buttons
+ * while the status request was still in flight after a portal plan switch.
+ * The API's display_plan already checks Stripe for a subscription the org row doesn't show yet.
+ */
+export function planFromStatus(
+  status: PlanStatusSource | null | undefined,
+  preview?: CatalogPlanId | null
+): DisplayPlanId | null {
+  if (preview) return preview;
+  if (!status) return null;
+  const fromApi = (status.display_plan ?? "").trim().toLowerCase();
+  if (DISPLAY_PLAN_IDS.includes(fromApi)) {
+    // Belt and braces: a subscription means it is not legacy, whatever the label says.
+    if (fromApi === "business_legacy" && status.has_subscription) return "business";
+    return fromApi as DisplayPlanId;
+  }
+  return resolveDisplayPlan({ plan: status.plan, hasSubscription: !!status.has_subscription });
 }
 
 export interface DisplayEntitlements {

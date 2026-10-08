@@ -29,6 +29,7 @@ import {
   checkoutReturnNotice,
   overCapBanner,
   packActionFor,
+  PORTAL_RETURN_NOTICE,
   showManageBilling,
   type CheckoutReturn,
 } from "@/lib/billing/checkout";
@@ -36,13 +37,19 @@ import { CheckoutComingSoonDialog } from "./CheckoutComingSoonDialog";
 import { OnboardingCard } from "./OnboardingCard";
 
 interface Props {
-  displayPlan: DisplayPlanId;
-  realPlan: DisplayPlanId;
+  /** null until GET /billing/status has answered (see planFromStatus). */
+  displayPlan: DisplayPlanId | null;
+  realPlan: DisplayPlanId | null;
   previewing: boolean;
   billingStatus: BillingStatus | undefined;
   licences: LicenceSummary | null;
+  /** The billing status request failed (after retries). */
+  statusError?: boolean;
+  onRetryStatus?: () => void;
   /** ?checkout=success|cancelled after returning from Stripe Checkout. */
   checkoutReturn?: CheckoutReturn | null;
+  /** ?portal=return after returning from the Customer Portal. */
+  portalReturn?: boolean;
   /** Starts Stripe Checkout and redirects. Only called when the API says checkout is available. */
   onCheckout?: (pack: PackId, interval: BillingInterval) => Promise<void>;
   /** Opens the Stripe Customer Portal and redirects. */
@@ -72,16 +79,45 @@ function changeButton(change: PlanChange, label: string): { text: string; disabl
  * Stripe Checkout (no subscription yet) or open the Customer Portal (already on a pack).
  * Otherwise they open the "coming soon" dialog as before.
  */
-export function BillingCentre({
+export function BillingCentre(props: Props) {
+  const { displayPlan, realPlan, billingStatus } = props;
+  // No plan, no buttons until the API has said what the org is on. Guessing from org.plan is
+  // what showed "Business (legacy)" + Switch buttons after a portal plan switch.
+  if (!billingStatus || !displayPlan || !realPlan) {
+    return (
+      <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6" data-testid="billing-centre">
+        <h2 className="font-semibold text-gray-900 mb-4">Plan &amp; billing</h2>
+        {props.statusError ? (
+          <div role="alert" data-testid="billing-status-error" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+            Couldn&apos;t load your plan.{" "}
+            {props.onRetryStatus && (
+              <button type="button" onClick={props.onRetryStatus} className="font-medium underline">
+                Try again
+              </button>
+            )}
+          </div>
+        ) : (
+          <p data-testid="billing-status-loading" className="flex items-center gap-2 text-sm text-gray-500">
+            <Loader2 size={14} className="animate-spin" /> Loading your plan…
+          </p>
+        )}
+      </section>
+    );
+  }
+  return <LoadedBillingCentre {...props} displayPlan={displayPlan} realPlan={realPlan} billingStatus={billingStatus} />;
+}
+
+function LoadedBillingCentre({
   displayPlan,
   realPlan,
   previewing,
   billingStatus,
   licences,
   checkoutReturn,
+  portalReturn,
   onCheckout,
   onOpenPortal,
-}: Props) {
+}: Props & { displayPlan: DisplayPlanId; realPlan: DisplayPlanId; billingStatus: BillingStatus }) {
   const [interval, setBillingInterval] = useState<BillingInterval>("monthly");
   const [checkoutPack, setCheckoutPack] = useState<PackId | null>(null);
   const [busy, setBusy] = useState<PackId | "portal" | null>(null);
@@ -133,6 +169,12 @@ export function BillingCentre({
           }`}
         >
           {checkoutReturnNotice(checkoutReturn)}
+        </p>
+      )}
+
+      {portalReturn && !checkoutReturn && !previewing && (
+        <p data-testid="portal-return" className="mb-4 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+          {PORTAL_RETURN_NOTICE}
         </p>
       )}
 

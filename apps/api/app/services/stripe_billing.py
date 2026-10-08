@@ -13,8 +13,10 @@ Active only when STRIPE_SECRET_KEY is set. Safety rules (PER-SEAT-PLAN §4.5):
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -106,6 +108,11 @@ def _stripe():
 
     stripe.api_key = stripe_secret_key()
     stripe.api_version = API_VERSION
+    stripe.max_network_retries = 2
+    # The library default is an 80 s timeout per attempt. These calls run inside request handlers,
+    # so bound them: a slow Stripe must never hold a webhook or a status request for minutes.
+    if stripe.default_http_client is None:
+        stripe.default_http_client = stripe.RequestsClient(timeout=20)
     return stripe
 
 
@@ -269,14 +276,24 @@ async def create_checkout_session(
     _require_ready(org)
     if plan not in PACK_ORDER or interval not in INTERVALS:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Unknown plan or billing interval")
+    # Hard guard against a second subscription. Plan changes go through the Customer Portal.
+    # The stored id covers the normal case; asking Stripe covers an org row that does not show
+    # the subscription yet (webhook not processed, or a lost update). If Stripe can't answer we
+    # refuse too: a retry costs the owner a click, a duplicate subscription costs them money.
     if org.stripe_subscription_id:
+        raise _already_subscribed()
+    try:
+        live = await open_subscription_for_customer(org.stripe_customer_id)
+    except StripeLookupError:
         raise HTTPException(
-            status.HTTP_409_CONFLICT,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
-                "code": "already_subscribed",
-                "message": "This organization already has a subscription. Use Manage billing to change it.",
+                "code": "billing_check_failed",
+                "message": "Couldn't confirm your billing status with Stripe. Try again in a moment.",
             },
-        )
+        ) from None
+    if live:
+        raise _already_subscribed()
     if licences_in_use > plan_licences(plan):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -290,6 +307,7 @@ async def create_checkout_session(
         )
     price_id = resolve_price_id(plan, interval)
     customer_id = await ensure_customer(db, org, email=user_email)
+    await asyncio.to_thread(_expire_open_checkout_sessions, customer_id)
     params = build_checkout_params(
         org,
         customer_id=customer_id,
@@ -299,7 +317,7 @@ async def create_checkout_session(
         user_id=user_id,
         automatic_tax=automatic_tax_enabled(),
     )
-    session = _stripe().checkout.Session.create(**params)
+    session = await asyncio.to_thread(lambda: _stripe().checkout.Session.create(**params))
     await log_audit(
         db,
         org_id=org.id,
@@ -310,6 +328,26 @@ async def create_checkout_session(
         metadata={"plan": plan, "interval": interval, "session_id": session.id},
     )
     return session.url, session.id
+
+
+def _already_subscribed() -> HTTPException:
+    return HTTPException(
+        status.HTTP_409_CONFLICT,
+        detail={
+            "code": "already_subscribed",
+            "message": "This organization already has a subscription. Use Manage billing to change it.",
+        },
+    )
+
+
+def _expire_open_checkout_sessions(customer_id: str) -> None:
+    """Only the newest Checkout can be paid: two tabs can't produce two subscriptions."""
+    stripe = _stripe()
+    try:
+        for session in stripe.checkout.Session.list(customer=customer_id, status="open", limit=20).data:
+            stripe.checkout.Session.expire(session.id)
+    except Exception as exc:
+        logger.warning("Could not expire open Checkout Sessions for %s: %s", customer_id, exc)
 
 
 # ── customer portal ──────────────────────────────────────────────────────────
@@ -339,11 +377,15 @@ async def create_portal_session(org: Org, *, licences_in_use: int) -> str:
             status.HTTP_409_CONFLICT,
             detail={"code": "no_billing_account", "message": "No billing account yet. Choose a plan first."},
         )
-    params: dict[str, Any] = {"customer": org.stripe_customer_id, "return_url": billing_url(org)}
+    # ?portal=return makes the page re-read billing status while the plan-change webhooks land.
+    params: dict[str, Any] = {
+        "customer": org.stripe_customer_id,
+        "return_url": billing_url(org, portal="return"),
+    }
     configuration = resolve_portal_configuration(portal_variant_for_licences(licences_in_use))
     if configuration:
         params["configuration"] = configuration
-    session = _stripe().billing_portal.Session.create(**params)
+    session = await asyncio.to_thread(lambda: _stripe().billing_portal.Session.create(**params))
     return session.url
 
 
@@ -404,6 +446,13 @@ async def _org_by_subscription(db: AsyncSession, subscription_id: str | None) ->
     return result.scalar_one_or_none()
 
 
+async def _lock_org(db: AsyncSession, org: Org) -> Org:
+    result = await db.execute(
+        select(Org).where(Org.id == org.id).with_for_update().execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none() or org
+
+
 async def _set_rls(db: AsyncSession, org_id: uuid.UUID) -> None:
     from app.services.tenancy import _set_rls_org
 
@@ -431,6 +480,73 @@ def _fetch_subscription(subscription_id: str) -> dict | None:
     except Exception as exc:  # network / missing — callers fall back to the event payload
         logger.warning("Could not retrieve subscription %s: %s", subscription_id, exc)
         return None
+
+
+class StripeLookupError(RuntimeError):
+    """Stripe could not be asked. Callers fail safe: no checkout, no "legacy" label."""
+
+
+def _customer_open_subscription(customer_id: str) -> dict | None:
+    """The customer's active/trialing/past_due subscription, straight from Stripe, or None.
+
+    Blocking (stripe-python is sync); call through open_subscription_for_customer.
+    """
+    try:
+        # status="all": the default list leaves out trialing/past_due in some API versions.
+        found = _stripe().Subscription.list(customer=customer_id, status="all", limit=20).data
+    except Exception as exc:
+        logger.warning("Could not list subscriptions for customer %s: %s", customer_id, exc)
+        raise StripeLookupError(str(exc)) from exc
+    for sub in found:
+        plain = _plain(sub)
+        if plain.get("status") in ACTIVE_STATUSES:
+            return plain
+    return None
+
+
+OPEN_SUBSCRIPTION_CACHE_SECONDS = 15.0
+_open_subscription_cache: dict[str, tuple[float, dict | None]] = {}
+
+
+async def open_subscription_for_customer(customer_id: str | None, *, cached: bool = False) -> dict | None:
+    """Ask Stripe (off the event loop) for the customer's open subscription.
+
+    cached=True reuses an answer up to OPEN_SUBSCRIPTION_CACHE_SECONDS old; only billing status
+    uses it (polled by several components). Checkout always asks fresh. Raises StripeLookupError.
+    """
+    if not customer_id:
+        return None
+    now = time.monotonic()
+    if cached:
+        hit = _open_subscription_cache.get(customer_id)
+        if hit and now - hit[0] < OPEN_SUBSCRIPTION_CACHE_SECONDS:
+            return hit[1]
+    found = await asyncio.to_thread(_customer_open_subscription, customer_id)
+    _open_subscription_cache[customer_id] = (now, found)
+    return found
+
+
+async def subscription_state(org: Org) -> tuple[bool, str | None]:
+    """(has_subscription, live_plan) for billing status.
+
+    has_subscription is True when the org row has a subscription id OR Stripe holds an open
+    subscription for the org's customer that the row does not show yet. live_plan is that
+    subscription's plan (None when the row is authoritative or the price is unknown).
+    When Stripe can't be asked we answer has_subscription=True: the page then offers Manage
+    billing instead of checkout buttons, which is the safe side.
+    """
+    if org.stripe_subscription_id:
+        return True, None
+    if not org.stripe_customer_id or not checkout_available(org):
+        return False, None
+    try:
+        live = await open_subscription_for_customer(org.stripe_customer_id, cached=True)
+    except StripeLookupError:
+        return True, None
+    if not live:
+        return False, None
+    mapped = plan_for_price(subscription_price(live))
+    return True, mapped[0] if mapped else None
 
 
 async def handle_stripe_event(db: AsyncSession, event: dict) -> str:
@@ -461,6 +577,11 @@ async def handle_stripe_event(db: AsyncSession, event: dict) -> str:
         return "ignored:org_not_allowed"
 
     await _set_rls(db, org.id)
+    # One event per org at a time. Stripe sends several events for one change within a second
+    # (checkout: 4-6, portal switch: 5). Without the lock two of them can both pass the
+    # duplicate check and race on the org_limits upsert. populate_existing refreshes the row,
+    # so this handler sees whatever the previous event committed.
+    org = await _lock_org(db, org)
     if event_id and await _event_seen(db, org.id, event_id):
         return "duplicate"
 
@@ -535,7 +656,7 @@ async def _sync_subscription(
 ) -> str:
     if not subscription_id:
         return "ignored:no_subscription"
-    subscription = _fetch_subscription(subscription_id) or payload
+    subscription = await asyncio.to_thread(_fetch_subscription, subscription_id) or payload
     if not subscription:
         # Nothing recorded, so Stripe's retry will process this event again.
         raise StripeRetryableError(f"subscription {subscription_id} unavailable")
@@ -546,7 +667,18 @@ async def _sync_subscription(
     if previous_sub and previous_sub != subscription_id:
         if not linking:
             return "ignored:subscription_mismatch"
-        logger.warning("Org %s: checkout replaces subscription %s", org.slug, previous_sub)
+        # Should not happen any more (checkout refuses when a subscription exists), but if it
+        # does, the old subscription is still billing: leave a trail so it can be refunded.
+        logger.error("Org %s: checkout replaces subscription %s with %s", org.slug, previous_sub, subscription_id)
+        await log_audit(
+            db,
+            org_id=org.id,
+            actor_user_id=None,
+            action="billing.duplicate_subscription",
+            target_type="org",
+            target_id=org.id,
+            metadata={"previous_subscription_id": previous_sub, "subscription_id": subscription_id},
+        )
 
     if sub_status in ENDED_STATUSES:
         if previous_sub != subscription_id:

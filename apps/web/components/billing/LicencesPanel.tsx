@@ -16,7 +16,8 @@ interface Props {
   rows: RosterRow[] | null;
   error: string | null;
   summary: LicenceSummary | null;
-  displayPlan: DisplayPlanId;
+  /** null while billing status loads; summary is null then too. */
+  displayPlan: DisplayPlanId | null;
   billingHref: string;
   pendingInvites: number;
 }
@@ -26,9 +27,10 @@ interface Props {
  * there is no API to change a workspace role to viewer, so nothing here changes access.
  */
 export function LicencesPanel({ rows, error, summary, displayPlan, billingHref, pendingInvites }: Props) {
-  const plan = entitlementsFor(displayPlan);
+  const plan = entitlementsFor(displayPlan ?? "free");
   const canAssign = summary ? canAssignLicence(summary) : false;
-  const next = summary && summary.total != null ? nextPackWithRoom(summary.used + 1, displayPlan) : null;
+  const next =
+    summary && summary.total != null && displayPlan ? nextPackWithRoom(summary.used + 1, displayPlan) : null;
 
   return (
     <div data-testid="licences-panel">
