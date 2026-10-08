@@ -62,10 +62,16 @@ class Settings(BaseSettings):
     # Web app URL (verification links, invites)
     web_app_url: str = "http://localhost:3001"
 
-    # Stripe (Solo self-serve checkout)
+    # Stripe (self-serve packs). Checkout, portal and subscription sync are only active when
+    # STRIPE_SECRET_KEY is set. Prices are found by lookup_key (scripts/stripe_bootstrap.py).
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
-    stripe_solo_price_id: str = ""
+    stripe_solo_price_id: str = ""  # legacy, unused
+    # 1 = Stripe Tax on Checkout (automatic_tax). Off by default.
+    stripe_automatic_tax: bool = False
+    # Comma-separated org slugs a TEST-mode key may touch (dev and prod share one database).
+    # Ignored with a live key. Empty = no org can use test-mode checkout.
+    stripe_test_org_slugs: str = ""
 
     # CORS — override in production via env, e.g.
     # CORS_ORIGINS=["https://your-web.vercel.app","http://localhost:3000"]

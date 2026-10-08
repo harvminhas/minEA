@@ -30,6 +30,7 @@ from app.services.authorization import (
     require_limit,
     require_role_capacity,
 )
+from app.services.licences import invite_grants_licence, require_licence
 from app.services.share_access import validate_share_create
 from app.services.roles import ORG_ADMIN_ROLES, effective_workspace_role
 from app.services.tenancy import TenancyContext, get_org_context, get_workspace_context
@@ -401,6 +402,8 @@ async def create_workspace_invite(
 
     await require_limit(db, ctx.org_id, "max_pending_invites", pending_delta=1)
     await require_role_capacity(db, ctx.org_id, body.role)
+    if invite_grants_licence(workspace_id=ctx.workspace.id, role=body.role):
+        await require_licence(db, ctx.org_id, email=body.email)
 
     raw_token, token_hash = generate_invite_token()
     invite = Invite(

@@ -10,6 +10,7 @@ from app.models.tenancy import Invite, Org, OrgMembership, User, WorkspaceMember
 from app.schemas.tenancy import InvitePreview
 from app.services.audit import log_audit
 from app.services.authorization import hash_token, invite_is_active, require_role_capacity
+from app.services.licences import invite_grants_licence, require_licence
 from app.services.tenancy import _resolve_user, _set_rls_org, enroll_org_member_in_workspaces
 from app.utils.time import as_utc_naive, utc_now
 
@@ -118,6 +119,10 @@ async def accept_invite(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already a member of this workspace")
 
         await require_role_capacity(db, invite.org_id, invite.role)
+        if invite_grants_licence(workspace_id=invite.workspace_id, role=invite.role):
+            await require_licence(
+                db, invite.org_id, user_id=user.id, email=user.email, exclude_invite_id=invite.id
+            )
         db.add(
             WorkspaceMembership(
                 user_id=user.id,
@@ -132,6 +137,10 @@ async def accept_invite(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already a member of this org")
 
         await require_role_capacity(db, invite.org_id, invite.role)
+        if invite_grants_licence(workspace_id=None, role=invite.role):
+            await require_licence(
+                db, invite.org_id, user_id=user.id, email=user.email, exclude_invite_id=invite.id
+            )
         db.add(OrgMembership(user_id=user.id, org_id=invite.org_id, role=invite.role))
         await db.flush()
         assigned_role = invite.role

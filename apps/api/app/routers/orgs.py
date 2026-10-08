@@ -27,6 +27,7 @@ from app.services.authorization import (
     require_role_capacity,
     seed_org_limits,
 )
+from app.services.licences import EDITOR_ORG_ROLES, invite_grants_licence, require_licence
 from app.services.roles import ORG_OWNER
 from app.services.tenancy import TenancyContext, get_org_context, _resolve_user, _set_rls_org
 
@@ -234,6 +235,8 @@ async def create_invite(
     assert_plan_allows_invites(ctx.org.plan)
     await require_limit(db, ctx.org_id, "max_pending_invites", pending_delta=1)
     await require_role_capacity(db, ctx.org_id, body.role)
+    if invite_grants_licence(workspace_id=None, role=body.role):
+        await require_licence(db, ctx.org_id, email=body.email)
 
     if not body.workspace_slug and body.role not in ("admin", "member"):
         raise HTTPException(
@@ -341,6 +344,8 @@ async def change_member_role(
 
     if body.role != membership.role:
         await require_role_capacity(db, ctx.org_id, body.role)
+        if body.role in EDITOR_ORG_ROLES:
+            await require_licence(db, ctx.org_id, user_id=user_id, email=user.email)
 
     old_role = membership.role
     membership.role = body.role

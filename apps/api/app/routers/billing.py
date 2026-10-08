@@ -1,4 +1,4 @@
-"""Org billing — plan status and quotas."""
+"""Org billing — plan status, quotas, Stripe Checkout and Customer Portal."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,20 +6,54 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.objects import Workspace
 from app.models.shares import ShareLink
-from app.schemas.billing import BillingStatusResponse, SoloCheckoutResponse
+from app.schemas.billing import (
+    BillingStatusResponse,
+    CheckoutRequest,
+    CheckoutResponse,
+    PortalResponse,
+    SoloCheckoutResponse,
+)
 from app.services.authorization import get_org_limit
+from app.services.licences import licence_cap, load_usage
 from app.services.plan_features import (
     can_create_own_workspace,
     can_create_share_link,
+    is_legacy_business,
     normalize_plan,
     plan_max_active_share_links,
     plan_max_own_workspaces,
 )
-from app.services.stripe_billing import create_solo_checkout_session, stripe_configured
+from app.services.stripe_billing import (
+    checkout_available,
+    create_checkout_session,
+    create_portal_session,
+    create_solo_checkout_session,
+    stripe_configured,
+)
 from app.services.tenancy import TenancyContext, get_org_context
 from app.utils.time import utc_now
 
 router = APIRouter(prefix="/orgs/{org_slug}/billing", tags=["billing"])
+
+BILLING_ROLES = ("owner", "admin")
+
+
+def can_manage_billing(ctx: TenancyContext) -> bool:
+    """Org owner/admin with a verified email (same verification rule as other billing actions)."""
+    return ctx.org_role in BILLING_ROLES and bool(ctx.email_verified)
+
+
+def require_billing_manager(ctx: TenancyContext) -> None:
+    if ctx.org_role not in BILLING_ROLES:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Only org owners and admins can manage billing")
+    if not ctx.email_verified:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Verify your email to manage billing")
+
+
+def display_plan(plan: str, subscription_id: str | None) -> str:
+    if is_legacy_business(plan, subscription_id):
+        return "business_legacy"
+    return normalize_plan(plan)
 
 
 @router.get("/status", response_model=BillingStatusResponse)
@@ -51,6 +85,9 @@ async def billing_status(
     if share_limit is None:
         share_limit = plan_max_active_share_links(plan)
 
+    usage = await load_usage(db, ctx.org_id)
+    cap = await licence_cap(db, ctx.org_id)
+
     return BillingStatusResponse(
         plan=plan,
         stripe_configured=stripe_configured(),
@@ -62,7 +99,48 @@ async def billing_status(
         active_share_link_count=share_count,
         active_share_link_limit=share_limit,
         can_create_share_link=can_create_share_link(plan, share_count),
+        checkout_available=checkout_available(ctx.org),
+        display_plan=display_plan(ctx.org.plan, ctx.org.stripe_subscription_id),
+        licences_used=usage.used,
+        licences_cap=cap,
+        over_licence_cap=cap is not None and usage.used > cap,
+        has_billing_account=bool(ctx.org.stripe_customer_id),
+        can_manage_billing=can_manage_billing(ctx),
     )
+
+
+@router.post("/checkout", response_model=CheckoutResponse)
+async def start_checkout(
+    body: CheckoutRequest,
+    ctx: TenancyContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+) -> CheckoutResponse:
+    """Stripe Checkout for a pack (subscription mode). Owner/admin with verified email only."""
+    require_billing_manager(ctx)
+    usage = await load_usage(db, ctx.org_id)
+    checkout_url, session_id = await create_checkout_session(
+        db,
+        ctx.org,
+        plan=body.plan,
+        interval=body.interval,
+        user_email=ctx.user.email,
+        user_id=ctx.user_id,
+        licences_in_use=usage.used,
+    )
+    await db.commit()
+    return CheckoutResponse(checkout_url=checkout_url, session_id=session_id)
+
+
+@router.post("/portal", response_model=PortalResponse)
+async def open_portal(
+    ctx: TenancyContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+) -> PortalResponse:
+    """Stripe Customer Portal (payment method, invoices, plan switch, cancel)."""
+    require_billing_manager(ctx)
+    usage = await load_usage(db, ctx.org_id)
+    url = await create_portal_session(ctx.org, licences_in_use=usage.used)
+    return PortalResponse(portal_url=url)
 
 
 @router.post("/solo/checkout", response_model=SoloCheckoutResponse)
