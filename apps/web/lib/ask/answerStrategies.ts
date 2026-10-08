@@ -4,7 +4,7 @@
  */
 
 export const criticalityThresholds = {
-  /** Depth-1 dependents with severity "direct". Three or more infer high. */
+  /** Depth-1 dependents with severity "direct" or "loses_sign_in". Three or more infer high. */
   highMinDirectDependents: 3,
 } as const;
 
@@ -27,7 +27,7 @@ export type AskIntent =
 
 export type InferenceInput = {
   relationshipCount: number;
-  /** Severity direct and not reached through another item. */
+  /** Severity direct or loses_sign_in, and not reached through another item. */
   directDependents: number;
   dependentCount: number;
   supportsCapability: boolean;
@@ -72,7 +72,7 @@ export const strategyPrompt = `Answer the intent of the question, not only the l
 
 Intents:
 - importance (how important, why is it important, how critical, can we live without): stated criticality, impact_of counts by severity, capabilities it supports, seats when a per-user cost line has them, and annual cost.
-- impact (what breaks if it is down): impact_of.
+- impact (what breaks if it is down): impact_of. Severity loses_sign_in means people can't sign in to that item; it is still running, so say "can't sign in", not "stops working".
 - cost (what does this item cost): the cost total and the cost lines for that item.
 - ownership (who owns this item): the owner column. If it is blank, owners of related items, labelled inferred.
 - gaps, lists, and spend: find_gaps or aggregate. A missing-field question is not a vendor list.
@@ -84,7 +84,7 @@ Answer rules:
 - If the stated field is set, use that value and back it with evidence. inferred is false.
 - If the field is blank, give a verdict from the evidence, prefixed "Likely", and set inferred to true. Never present an inference as stored data.
 - Criticality when the field is blank:
-  - high when direct dependents (severity direct, depth 1) are >= ${criticalityThresholds.highMinDirectDependents}, OR the item supports a capability, OR a dependent is itself high or critical
+  - high when direct dependents (severity direct or loses_sign_in, depth 1) are >= ${criticalityThresholds.highMinDirectDependents}, OR the item supports a capability, OR a dependent is itself high or critical
   - medium when something depends on it and the high bar is not met, including 3 or more dependents that are only indirect
   - low when nothing depends on it and it supports no capability
   - unknown when it has no relationships at all. Say so. Do not guess a level.

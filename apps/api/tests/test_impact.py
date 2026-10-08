@@ -1,6 +1,6 @@
 import unittest
 
-from app.ai.ask.impact import RULES, RISK_EDGE_TYPES, ImpactEdge, impact_of
+from app.ai.ask.impact import RULES, RISK_EDGE_TYPES, TERMINAL_SEVERITIES, ImpactEdge, impact_of
 
 
 class ImpactTests(unittest.TestCase):
@@ -121,6 +121,54 @@ class ImpactTests(unittest.TestCase):
         self.assertEqual([hit["name"] for hit in hits], ["EDI Gateway", "Inventory", "Order Entry"])
         self.assertTrue(all(hit["severity"] == "direct" and hit["indirect"] is False for hit in hits))
         self.assertEqual(hits[0]["path"][0]["label"], "EDI Gateway runs on AS400")
+
+    def test_m365_sign_in_stops_at_the_app(self) -> None:
+        names = {"m365": "Microsoft 365", "exo": "Exchange Online", "sf": "Salesforce", "q2o": "Quote-to-order"}
+        edges = [
+            ImpactEdge("part_of", "exo", "m365"),
+            ImpactEdge("authenticates_via", "sf", "m365"),
+            ImpactEdge("depends_on", "q2o", "sf"),
+        ]
+        hits = {hit["name"]: hit for hit in impact_of(names, edges, "m365")}
+        self.assertEqual(hits["Exchange Online"]["severity"], "direct")
+        self.assertEqual(hits["Salesforce"]["severity"], "loses_sign_in")
+        self.assertEqual(hits["Salesforce"]["path"][0]["label"], "Salesforce signs in with Microsoft 365")
+        self.assertNotIn("Quote-to-order", hits)
+
+    def test_worst_link_wins(self) -> None:
+        names = {"m365": "Microsoft 365", "intra": "Intranet", "tool": "Team Tool", "srv": "Server", "app": "App"}
+        edges = [
+            ImpactEdge("authenticates_via", "intra", "m365"),
+            ImpactEdge("built_on", "intra", "m365"),
+            ImpactEdge("depends_on", "tool", "intra"),
+        ]
+        hits = {hit["name"]: hit for hit in impact_of(names, edges, "m365")}
+        self.assertEqual(hits["Intranet"]["severity"], "direct")
+        self.assertEqual(hits["Team Tool"]["severity"], "direct")
+        reads = [ImpactEdge("reads", "app", "srv"), ImpactEdge("runs_on", "app", "srv")]
+        self.assertEqual(impact_of(names, reads, "srv")[0]["severity"], "direct")
+
+    def test_a_sign_in_hit_gives_way_to_a_later_stop(self) -> None:
+        names = {"m365": "Microsoft 365", "exo": "Exchange Online", "sf": "Salesforce", "q2o": "Quote-to-order"}
+        edges = [
+            ImpactEdge("authenticates_via", "sf", "m365"),
+            ImpactEdge("part_of", "exo", "m365"),
+            ImpactEdge("depends_on", "sf", "exo"),
+            ImpactEdge("depends_on", "q2o", "sf"),
+        ]
+        hits = {hit["name"]: hit for hit in impact_of(names, edges, "m365")}
+        self.assertEqual(hits["Salesforce"]["severity"], "direct")
+        self.assertEqual(hits["Salesforce"]["depth"], 2)
+        self.assertEqual(hits["Quote-to-order"]["severity"], "direct")
+
+    def test_terminal_lanes_match_the_shared_types(self) -> None:
+        import re
+        from pathlib import Path
+
+        source = (Path(__file__).resolve().parents[3] / "packages" / "types" / "src" / "index.ts").read_text(encoding="utf-8")
+        match = re.search(r"TERMINAL_IMPACT_SEVERITIES[^=]*=\s*\[([^\]]*)\]", source)
+        self.assertIsNotNone(match)
+        self.assertEqual(set(re.findall(r'"(\w+)"', match.group(1))), set(TERMINAL_SEVERITIES))
 
 
 if __name__ == "__main__":

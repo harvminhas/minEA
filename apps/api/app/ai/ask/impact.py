@@ -21,6 +21,7 @@ RULES: dict[str, dict] = {
     },
     "runs_on": {"when_target_fails": "direct", "label": "{source} runs on {target}"},
     "built_on": {"when_target_fails": "direct", "label": "{source} is built on {target}"},
+    "authenticates_via": {"when_target_fails": "loses_sign_in", "label": "{source} signs in with {target}"},
     "located_at": {"when_target_fails": "direct", "label": "{source} is located at {target}"},
     "uses_model": {"when_target_fails": "direct", "label": "{source} uses model {target}"},
     "sends_data_to": {"when_source_fails": "degraded", "label": "{source} sends data to {target}"},
@@ -43,7 +44,11 @@ RULES: dict[str, dict] = {
 
 RISK_EDGE_TYPES = ("writes",)
 
-SEVERITY_ORDER = {"direct": 0, "degraded": 1, "loses_support": 2}
+SEVERITY_ORDER = {"direct": 0, "loses_sign_in": 1, "degraded": 2, "loses_support": 3}
+
+# Lanes that stop at the affected item: it is still running, so nothing that depends on it is hit.
+# Same list as TERMINAL_IMPACT_SEVERITIES in packages/types/src/index.ts.
+TERMINAL_SEVERITIES = frozenset({"loses_sign_in"})
 
 
 @dataclass
@@ -72,13 +77,13 @@ def impact_of(names: dict[str, str], edges: list[ImpactEdge], failed_id: str) ->
         listing.sort(key=lambda edge: (edge.type, edge.from_id, edge.to_id))
 
     hits: dict[str, dict] = {}
-    seen = {failed_id}
     queue: list[tuple[str, int, list[dict]]] = [(failed_id, 0, [])]
 
     while queue:
         current, depth, path = queue.pop(0)
         if depth >= MAX_DEPTH:
             continue
+        candidates: list[tuple[ImpactEdge, str, str, dict]] = []
         for edge in adjacent.get(current, []):
             rule = RULES.get(edge.type)
             if not rule:
@@ -91,9 +96,19 @@ def impact_of(names: dict[str, str], edges: list[ImpactEdge], failed_id: str) ->
             elif edge.from_id == current and rule.get("when_source_fails"):
                 affected = edge.to_id
                 severity = rule["when_source_fails"]
-            if not severity or not affected or affected == current or affected in seen:
+            if not severity or not affected or affected == current or affected == failed_id:
                 continue
-            seen.add(affected)
+            candidates.append((edge, affected, severity, rule))
+        # Worst link first, so an item reached by both a stop and a softer link is a stop.
+        candidates.sort(key=lambda item: SEVERITY_ORDER[item[2]])
+        for edge, affected, severity, rule in candidates:
+            existing = hits.get(affected)
+            # A terminal hit (can't sign in) gives way to a stop found later; nothing else is revisited.
+            if existing and not (
+                existing["severity"] in TERMINAL_SEVERITIES
+                and SEVERITY_ORDER[severity] < SEVERITY_ORDER[existing["severity"]]
+            ):
+                continue
             label = rule["label"].format(
                 source=names.get(edge.from_id, edge.from_id),
                 target=names.get(edge.to_id, edge.to_id),
@@ -109,6 +124,7 @@ def impact_of(names: dict[str, str], edges: list[ImpactEdge], failed_id: str) ->
                 "depth": next_depth,
                 "path": next_path,
             }
-            queue.append((affected, next_depth, next_path))
+            if severity not in TERMINAL_SEVERITIES:
+                queue.append((affected, next_depth, next_path))
 
     return sorted(hits.values(), key=lambda hit: (hit["depth"], SEVERITY_ORDER[hit["severity"]], hit["name"]))

@@ -12,6 +12,7 @@ import {
 import { dollarsFromCents, formatDollars, lineAnnualCents, lineTitle, readCostLines } from "@/lib/cost/math";
 import { presentImpact, type ImpactRecord } from "@/lib/impact/impact-answer";
 import { impactOf, type ImpactEdge, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
+import { isOwnLogin, isSignInCandidate } from "@/lib/sign-in";
 import { moneyLabel, vendorRollup, type CatalogMissing, type CatalogRow } from "@/lib/model-catalog";
 import { modelItemPath, reportPath, sectionForKind } from "@/lib/mvp-paths";
 import { aiLandscape, dataAccess, type AiLandscape, type LandscapeEdge, type LandscapeFlag, type LandscapeObject } from "@/lib/ai/landscape";
@@ -561,6 +562,7 @@ function impactRecord(row: CatalogRow): ImpactRecord {
     missingOwner: row.missing.owner,
     missingCriticality: row.missing.criticality,
     hostingModel: typeof hosting === "string" ? hosting.trim() : "",
+    signIn: { candidate: isSignInCandidate(row.object), ownLogin: isOwnLogin(row.object.properties) },
   };
 }
 
@@ -884,7 +886,8 @@ function importanceAnswer(target: CatalogRow, rows: CatalogRow[], graph: AskGrap
   const touching = graph.edges.filter((edge) => edge.fromId === target.id || edge.toId === target.id);
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
   const rowById = new Map(rows.map((row) => [row.id, row]));
-  const direct = hits.filter((hit) => hit.severity === "direct" && !hit.indirect);
+  // A sign-in provider counts its sign-in dependents like direct ones: losing it locks people out.
+  const direct = hits.filter((hit) => (hit.severity === "direct" || hit.severity === "loses_sign_in") && !hit.indirect);
   const supportsCapability = hits.some((hit) => nodeById.get(hit.id)?.typeLabel === "Capability") || touching.some((edge) => {
     if (edge.type !== "supported_by" && edge.type !== "supports") return false;
     const other = edge.fromId === target.id ? edge.toId : edge.fromId;
@@ -930,12 +933,19 @@ function importanceAnswer(target: CatalogRow, rows: CatalogRow[], graph: AskGrap
 
 function importanceEvidence(target: CatalogRow, hits: ImpactHit[], nodeById: Map<string, ImpactNode>): AskEvidence[] {
   const direct = hits.filter((hit) => hit.severity === "direct" && !hit.indirect);
+  const signIn = hits.filter((hit) => hit.severity === "loses_sign_in" && !hit.indirect);
   const capabilities = hits.filter((hit) => nodeById.get(hit.id)?.typeLabel === "Capability");
   const bullets: AskEvidence[] = [];
   if (direct.length) {
     bullets.push({
       text: `${joinNames(direct.map((hit) => hit.name))} ${direct.length === 1 ? "stops" : "stop"} working if ${target.name} goes down.`,
       citationIds: direct.map((hit) => hit.id),
+    });
+  }
+  if (signIn.length) {
+    bullets.push({
+      text: `${joinNames(signIn.map((hit) => hit.name))} can't sign in if ${target.name} goes down.`,
+      citationIds: signIn.map((hit) => hit.id),
     });
   }
   if (capabilities.length) {

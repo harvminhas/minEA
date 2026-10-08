@@ -92,3 +92,47 @@ test("a depth-2 path renders from the affected item back to the source", () => {
   const caller = presented.rows.find((row) => row.record.id === "x");
   assert.equal(caller?.connection, "Depends on A → part of B");
 });
+
+test("Microsoft 365: can't sign in is its own section and the unrecorded apps are a gap", () => {
+  const signIn = (ownLogin = false) => ({ signIn: { candidate: true, ownLogin } });
+  const source = record("m365", "Microsoft 365", "Application", { owner: "IT Ops", ...signIn() });
+  const records = [
+    source,
+    record("exo", "Exchange Online", "Application", signIn()),
+    record("sf", "Salesforce", "Application", signIn()),
+    record("ns", "NetSuite", "Application", signIn()),
+    record("shop", "Shopify Plus", "Application", signIn()),
+    record("qbo", "QuickBooks Online", "Application", signIn(true)),
+    record("as400", "AS400", "Server", { signIn: { candidate: false, ownLogin: false } }),
+  ];
+  const edges: ImpactEdge[] = [
+    { type: "part_of", fromId: "exo", toId: "m365" },
+    { type: "authenticates_via", fromId: "sf", toId: "m365" },
+    { type: "authenticates_via", fromId: "ns", toId: "m365" },
+    { type: "authenticates_via", fromId: "exo", toId: "m365" },
+  ];
+  const nodes: ImpactNode[] = records.map((item) => ({ id: item.id, name: item.name, typeLabel: item.typeLabel }));
+  const presented = presentImpact({ source, records, nodes, edges });
+  assert.equal(presented.sentence, "If Microsoft 365 [1] goes down, Exchange Online stops working and NetSuite and Salesforce can't sign in.");
+  assert.deepEqual(
+    presented.rows.map((row) => [row.record.name, row.section, row.connection]),
+    [
+      ["Exchange Online", "Stops working", "Part of Microsoft 365"],
+      ["NetSuite", "Can't sign in", "Signs in with Microsoft 365"],
+      ["Salesforce", "Can't sign in", "Signs in with Microsoft 365"],
+    ]
+  );
+  assert.ok(presented.gaps.includes("Shopify Plus has no sign-in recorded, so it may be affected too."));
+  assert.equal(presented.gaps.some((gap) => gap.includes("QuickBooks") || gap.includes("AS400")), false);
+});
+
+test("no sign-in gap when nothing signs in with the failed record", () => {
+  const source = record("srv", "File server", "Server");
+  const presented = presentImpact({
+    source,
+    records: [source, record("app", "App", "Application", { signIn: { candidate: true, ownLogin: false } })],
+    nodes: [{ id: "srv", name: "File server" }, { id: "app", name: "App" }],
+    edges: [{ type: "runs_on", fromId: "app", toId: "srv" }],
+  });
+  assert.equal(presented.gaps.some((gap) => gap.includes("sign-in")), false);
+});

@@ -206,3 +206,76 @@ test("AI agent impact", () => {
   assert.equal(byDynamics.get("Sales Assistant")?.severity, "degraded");
   assert.equal(byDynamics.get("Sales Assistant")?.depth, 2);
 });
+
+const m365: ImpactNode[] = [
+  { id: "m365", name: "Microsoft 365" },
+  { id: "exo", name: "Exchange Online" },
+  { id: "sf", name: "Salesforce" },
+  { id: "ns", name: "NetSuite" },
+  { id: "q2o", name: "Quote-to-order" },
+  { id: "intra", name: "Intranet" },
+  { id: "tool", name: "Team Tool" },
+];
+
+test("Microsoft 365 down: sign-in apps can't sign in and it stops there", () => {
+  const edges: ImpactEdge[] = [
+    { type: "part_of", fromId: "exo", toId: "m365" },
+    { type: "authenticates_via", fromId: "sf", toId: "m365" },
+    { type: "authenticates_via", fromId: "ns", toId: "m365" },
+    { type: "depends_on", fromId: "q2o", toId: "sf" },
+  ];
+  const hits = impactOf(m365, edges, "m365");
+  const byName = new Map(hits.map((hit) => [hit.name, hit]));
+  assert.equal(byName.get("Exchange Online")?.severity, "direct");
+  assert.equal(byName.get("Salesforce")?.severity, "loses_sign_in");
+  assert.equal(byName.get("NetSuite")?.severity, "loses_sign_in");
+  assert.equal(byName.get("Salesforce")?.path[0]?.label, "Salesforce signs in with Microsoft 365");
+  assert.equal(byName.has("Quote-to-order"), false, "Salesforce is still running, so its dependents are not hit");
+  assert.equal(relationshipImpactRules.authenticates_via?.step("Salesforce", "Microsoft 365"), "Signs in with Microsoft 365");
+});
+
+test("worst link wins: built on and signs in with the same record is a stop that cascades", () => {
+  const edges: ImpactEdge[] = [
+    { type: "authenticates_via", fromId: "intra", toId: "m365" },
+    { type: "built_on", fromId: "intra", toId: "m365" },
+    { type: "depends_on", fromId: "tool", toId: "intra" },
+  ];
+  const hits = impactOf(m365, edges, "m365");
+  const byName = new Map(hits.map((hit) => [hit.name, hit]));
+  assert.equal(byName.get("Intranet")?.severity, "direct");
+  assert.equal(byName.get("Intranet")?.path[0]?.type, "built_on");
+  assert.equal(byName.get("Team Tool")?.severity, "direct");
+  assert.equal(byName.get("Team Tool")?.indirect, true);
+});
+
+test("worst link wins for existing lanes too: runs on beats reads from", () => {
+  const nodes = [
+    { id: "srv", name: "Server" },
+    { id: "app", name: "App" },
+  ];
+  const edges = [
+    { type: "reads", fromId: "app", toId: "srv" },
+    { type: "runs_on", fromId: "app", toId: "srv" },
+  ];
+  assert.equal(impactOf(nodes, edges, "srv")[0]?.severity, "direct");
+});
+
+test("a can't-sign-in hit gives way to a stop found one step further", () => {
+  const edges: ImpactEdge[] = [
+    { type: "authenticates_via", fromId: "sf", toId: "m365" },
+    { type: "part_of", fromId: "exo", toId: "m365" },
+    { type: "depends_on", fromId: "sf", toId: "exo" },
+    { type: "depends_on", fromId: "q2o", toId: "sf" },
+  ];
+  const hits = impactOf(m365, edges, "m365");
+  const byName = new Map(hits.map((hit) => [hit.name, hit]));
+  assert.equal(byName.get("Salesforce")?.severity, "direct");
+  assert.equal(byName.get("Salesforce")?.depth, 2);
+  assert.equal(byName.get("Quote-to-order")?.severity, "direct");
+});
+
+test("sign-in is a terminal lane in the shared rules", () => {
+  assert.deepEqual(IMPACT_LANES.authenticates_via, { whenTargetFails: "loses_sign_in" });
+  assert.equal(RELATIONSHIP_LABELS.authenticates_via.forward, "Signs in with");
+  assert.equal(RELATIONSHIP_LABELS.authenticates_via.reverse, "Sign-in for");
+});

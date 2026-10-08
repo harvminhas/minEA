@@ -287,6 +287,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
   const selected = byId.get(opening.selectedId);
   const hits = opening.selectedId ? impactOf(opening.nodes, opening.edges, opening.selectedId) : [];
   const bands = groupChain(hits, (id) => byId.get(id)?.kind ?? "other");
+  const slowSignIn = bands.slow.some((hit) => hit.severity === "loses_sign_in");
   const dollars = chainRunDollars(selected, hits, opening.items);
   const caption = spofCaption(opening.candidates[0], opening.showingDefault);
   const todos = chainTodos(selected, hits, opening.items, opening.edges);
@@ -465,6 +466,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
                     {card.reached > 0 && (
                       <>
                         <span className="bg-[#e11d48]" style={{ flexGrow: card.direct }} />
+                        <span className="bg-[#f97316]" style={{ flexGrow: card.signIn }} />
                         <span className="bg-[#f5b942]" style={{ flexGrow: card.degraded }} />
                         <span className="bg-[#7c3aed]" style={{ flexGrow: card.losesSupport }} />
                       </>
@@ -491,7 +493,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
         <p className="mb-3 flex flex-wrap gap-x-2 text-[13px]">
           <Count n={bands.stop.length} text="apps stop" color="text-[#e11d48]" />
           <Dot />
-          <Count n={bands.slow.length} text="slow down" color="text-[#b45309]" />
+          <Count n={bands.slow.length} text={slowSignIn ? "slow down or can't sign in" : "slow down"} color="text-[#b45309]" />
           <Dot />
           <Count n={bands.capabilities.length} text="capabilities hit" color="text-[#7c3aed]" />
           <Dot />
@@ -528,7 +530,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
                   <HitBox key={hit.id} hit={hit} nodes={opening.nodes} item={byId.get(hit.id)} tone="capability" delay={delay(4)} />
                 ))}
               </Lane>
-              <Lane label="Apps that slow down" delay={delay(3)} thin={bands.slow.length === 0}>
+              <Lane label={slowSignIn ? "Apps that slow down or can't sign in" : "Apps that slow down"} delay={delay(3)} thin={bands.slow.length === 0}>
                 {bands.slow.map((hit) => (
                   <HitBox key={hit.id} hit={hit} nodes={opening.nodes} item={byId.get(hit.id)} tone="slow" delay={delay(3)} />
                 ))}

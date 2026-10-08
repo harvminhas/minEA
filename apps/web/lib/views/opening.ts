@@ -25,6 +25,8 @@ export type Candidate = {
   direct: number;
   degraded: number;
   losesSupport: number;
+  /** Apps and platforms people can't sign in to. */
+  signIn: number;
 };
 
 export type ChainTodo = {
@@ -55,6 +57,7 @@ export function impactCandidates(items: ChainItem[], nodes: ImpactNode[], edges:
         direct: hits.filter((hit) => hit.severity === "direct").length,
         degraded: hits.filter((hit) => hit.severity === "degraded").length,
         losesSupport: hits.filter((hit) => hit.severity === "loses_support").length,
+        signIn: hits.filter((hit) => hit.severity === "loses_sign_in").length,
       };
     })
     .sort((a, b) => b.reached - a.reached || b.apps - a.apps || a.name.localeCompare(b.name));
@@ -92,6 +95,8 @@ export function groupChain(hits: ImpactHit[], kindOf: (id: string) => ChainKind)
   for (const hit of hits) {
     const kind = kindOf(hit.id);
     if (hit.severity === "loses_support" || kind === "capability") capabilities.push(hit);
+    // Can't sign in: still running, so it sits with the apps that slow down, never with the stops.
+    else if (hit.severity === "loses_sign_in") slow.push(hit);
     else if (kind === "application" && hit.severity === "degraded") slow.push(hit);
     else if (kind === "application") stop.push(hit);
     else if (kind === "runtime" || kind === "platform") infra.push(hit);

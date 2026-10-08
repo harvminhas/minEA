@@ -4,6 +4,7 @@
   "part_of": { "whenTargetFails": "direct", "whenSourceFails": "degraded" },
   "runs_on": { "whenTargetFails": "direct" },
   "built_on": { "whenTargetFails": "direct" },
+  "authenticates_via": { "whenTargetFails": "loses_sign_in" },
   "located_at": { "whenTargetFails": "direct" },
   "uses_model": { "whenTargetFails": "direct" },
   "sends_data_to": { "whenSourceFails": "degraded" },

@@ -129,7 +129,11 @@ export const ALLOWED_TRIPLES: readonly [string, string, string][] =
 
 export { RELATIONSHIP_LABELS, type RelationshipLabel } from "./relationship-labels";
 
-export type ImpactLane = { whenTargetFails?: "direct" | "degraded" | "loses_support"; whenSourceFails?: "direct" | "degraded" | "loses_support" };
+export type ImpactSeverityName = "direct" | "loses_sign_in" | "degraded" | "loses_support";
+export type ImpactLane = { whenTargetFails?: ImpactSeverityName; whenSourceFails?: ImpactSeverityName };
+
+/** Lanes that stop at the affected item: it is still running, so nothing that depends on it is hit. */
+export const TERMINAL_IMPACT_SEVERITIES: readonly ImpactSeverityName[] = ["loses_sign_in"];
 
 export const IMPACT_LANES: Readonly<Record<string, ImpactLane>> = Object.fromEntries(
   Object.entries(impactRules).filter(([key]) => !key.startsWith("_")),

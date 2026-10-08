@@ -6,11 +6,17 @@
  *
  * Direct (apps that stop) comes only from runs_on, built_on, depends_on,
  * part_of, and located_at. calls and hosts do not propagate as a stop.
+ *
+ * authenticates_via gives "Can't sign in" (loses_sign_in). It is terminal: the
+ * app is still running, so nothing that depends on it is hit through it.
+ * When one item is reached by several links, the worst lane wins.
  */
 
-import { IMPACT_LANES, RELATIONSHIP_LABELS, type RelationshipType } from "@minea/types";
+import { IMPACT_LANES, RELATIONSHIP_LABELS, TERMINAL_IMPACT_SEVERITIES, type RelationshipType } from "@minea/types";
 
-export type ImpactSeverity = "direct" | "degraded" | "loses_support";
+export type ImpactSeverity = "direct" | "loses_sign_in" | "degraded" | "loses_support";
+
+const TERMINAL = new Set<ImpactSeverity>(TERMINAL_IMPACT_SEVERITIES);
 
 export type ImpactRule = {
   /** Failed record is the stored target. The source is affected. */
@@ -43,6 +49,7 @@ export const relationshipImpactRules: Record<string, ImpactRule> = Object.fromEn
 
 export const impactSectionTitle: Record<ImpactSeverity, string> = {
   direct: "Stops working",
+  loses_sign_in: "Can't sign in",
   degraded: "Degraded",
   loses_support: "Loses support",
 };
@@ -76,8 +83,9 @@ const MAX_DEPTH = 4;
 
 const SEVERITY_ORDER: Record<ImpactSeverity, number> = {
   direct: 0,
-  degraded: 1,
-  loses_support: 2,
+  loses_sign_in: 1,
+  degraded: 2,
+  loses_support: 3,
 };
 
 export function impactOf(nodes: ImpactNode[], edges: ImpactEdge[], failedId: string): ImpactHit[] {
@@ -94,12 +102,12 @@ export function impactOf(nodes: ImpactNode[], edges: ImpactEdge[], failedId: str
   }
 
   const hits = new Map<string, ImpactHit>();
-  const seen = new Set<string>([failedId]);
   const queue: { id: string; depth: number; path: ImpactStep[] }[] = [{ id: failedId, depth: 0, path: [] }];
 
   while (queue.length > 0) {
     const current = queue.shift()!;
     if (current.depth >= MAX_DEPTH) continue;
+    const candidates: { edge: ImpactEdge; affectedId: string; severity: ImpactSeverity; rule: ImpactRule }[] = [];
     for (const edge of adjacent.get(current.id) ?? []) {
       const rule = relationshipImpactRules[edge.type];
       if (!rule) continue;
@@ -112,8 +120,15 @@ export function impactOf(nodes: ImpactNode[], edges: ImpactEdge[], failedId: str
         affectedId = edge.toId;
         severity = rule.whenSourceFails;
       }
-      if (!severity || !affectedId || affectedId === current.id || seen.has(affectedId)) continue;
-      seen.add(affectedId);
+      if (!severity || !affectedId || affectedId === current.id || affectedId === failedId) continue;
+      candidates.push({ edge, affectedId, severity, rule });
+    }
+    // Worst link first, so an item reached by both a stop and a softer link is a stop.
+    candidates.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+    for (const { edge, affectedId, severity, rule } of candidates) {
+      const existing = hits.get(affectedId);
+      // A terminal hit (can't sign in) gives way to a stop found later; nothing else is revisited.
+      if (existing && !(TERMINAL.has(existing.severity) && SEVERITY_ORDER[severity] < SEVERITY_ORDER[existing.severity])) continue;
       const step: ImpactStep = {
         type: edge.type,
         fromId: edge.fromId,
@@ -130,7 +145,7 @@ export function impactOf(nodes: ImpactNode[], edges: ImpactEdge[], failedId: str
         depth,
         path,
       });
-      queue.push({ id: affectedId, depth, path });
+      if (!TERMINAL.has(severity)) queue.push({ id: affectedId, depth, path });
     }
   }
 
@@ -154,7 +169,7 @@ export function connectionPhrase(hit: ImpactHit, nodes: ImpactNode[]): string {
 }
 
 export function groupImpactHits(hits: ImpactHit[]): { title: string; severity: ImpactSeverity; hits: ImpactHit[] }[] {
-  const order: ImpactSeverity[] = ["direct", "degraded", "loses_support"];
+  const order: ImpactSeverity[] = ["direct", "loses_sign_in", "degraded", "loses_support"];
   return order
     .map((severity) => ({
       title: impactSectionTitle[severity],
@@ -165,6 +180,7 @@ export function groupImpactHits(hits: ImpactHit[]): { title: string; severity: I
 }
 
 export function impactReachLabel(hit: ImpactHit): string {
+  if (hit.severity === "loses_sign_in") return "Can't sign in";
   if (hit.severity === "loses_support") return "Loses support";
   if (hit.severity === "degraded") return "Degraded";
   return hit.indirect ? "Indirect" : "Direct";
@@ -199,6 +215,8 @@ export type ImpactRecord = {
   missingOwner: boolean;
   missingCriticality: boolean;
   hostingModel: string;
+  /** Set on applications and platforms: whether a sign-in link could apply, and whether it is confirmed as its own login. */
+  signIn?: { candidate: boolean; ownLogin: boolean };
 };
 
 export type ImpactRow = {
@@ -253,10 +271,12 @@ export function presentImpact(input: {
   );
 
   const direct = rows.filter((row) => row.severity === "direct");
+  const signIn = rows.filter((row) => row.severity === "loses_sign_in");
   const degraded = rows.filter((row) => row.severity === "degraded");
   const support = rows.filter((row) => row.severity === "loses_support");
   const clauses = [
     clause(direct, "stops working", "stop working"),
+    clause(signIn, "can't sign in", "can't sign in"),
     clause(degraded, "is degraded", "are degraded"),
     clause(support, "loses support", "lose support"),
   ].filter(Boolean);
@@ -268,7 +288,10 @@ export function presentImpact(input: {
     sentence,
     context: sourceContext(input.source),
     rows,
-    gaps: impactGaps(input.source, rows.map((row) => row.record), input.edges),
+    gaps: [
+      ...impactGaps(input.source, rows.map((row) => row.record), input.edges),
+      ...signInGaps(input.source, input.records, input.edges),
+    ],
     followUps: [
       `What does ${input.source.name} cost us?`,
       `Who owns ${(direct[0] ?? rows[0])?.record.name || input.source.name}?`,
@@ -314,4 +337,21 @@ function impactGaps(source: ImpactRecord, affected: ImpactRecord[], edges: Impac
     gaps.push(`${source.name} has no host linked.`);
   }
   return gaps;
+}
+
+/**
+ * When something signs in with the failed record, the apps and platforms with no sign-in
+ * recorded may be affected too. Apps confirmed as their own login are not listed.
+ */
+export function signInGaps(source: ImpactRecord, records: ImpactRecord[], edges: ImpactEdge[]): string[] {
+  if (!edges.some((edge) => edge.type === "authenticates_via" && edge.toId === source.id)) return [];
+  const signsIn = new Set(edges.filter((edge) => edge.type === "authenticates_via").map((edge) => edge.fromId));
+  const unknown = records.filter(
+    (record) => record.id !== source.id && record.signIn?.candidate && !record.signIn.ownLogin && !signsIn.has(record.id)
+  );
+  if (!unknown.length) return [];
+  const names = nameList(unknown.map((record) => record.name));
+  return unknown.length === 1
+    ? [`${names} has no sign-in recorded, so it may be affected too.`]
+    : [`${unknown.length} apps have no sign-in recorded, so they may be affected too: ${names}.`];
 }

@@ -99,6 +99,7 @@ def impact_of(bag: ToolBag, args: dict) -> dict:
         "indirect": len(indirect),
         "degraded": sum(1 for hit in affected if hit["severity"] == "degraded"),
         "loses_support": sum(1 for hit in affected if hit["severity"] == "loses_support"),
+        "loses_sign_in": sum(1 for hit in affected if hit["severity"] == "loses_sign_in"),
         "critical_direct": len(critical),
     }
     by_type: dict[str, int] = {}
@@ -478,7 +479,7 @@ TOOLS: list[AskTool] = [
     ),
     AskTool(
         name="impact_of",
-        description="What is affected if this item fails. Each result includes type_label, severity direct, degraded, or loses_support, indirect true when it is more than one step away, and a path of labels. by_type counts each type. Use those counts. Do not add items the lookup did not return.",
+        description="What is affected if this item fails. Each result includes type_label, severity direct, loses_sign_in (people can't sign in to it; it is still running), degraded, or loses_support, indirect true when it is more than one step away, and a path of labels. by_type counts each type. Use those counts. Do not add items the lookup did not return.",
         parameters={
             "type": "object",
             "properties": {"id": {"type": "string"}},
