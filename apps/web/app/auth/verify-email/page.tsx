@@ -6,9 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { authApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { passwordSignInEnabled } from "@/lib/auth/flags";
 
 function VerifyEmailContent() {
-  const { user, isLoaded, sessionReady, resendVerificationEmail, reloadUser } = useAuth();
+  const { user, isLoaded, sessionReady, resendVerificationEmail, reloadUser, signOut } = useAuth();
+  const passwordSignIn = passwordSignInEnabled();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get("redirect_url") ?? "/home";
@@ -94,6 +96,26 @@ function VerifyEmailContent() {
   }
 
   if (!user && !token) {
+    // Production has no password sign-in, so there is nothing to verify from here.
+    if (!passwordSignIn) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+          <div className="w-full max-w-md bg-white rounded-xl border border-gray-200 p-8 shadow-sm text-center">
+            <h1 className="text-xl font-bold text-gray-900 mb-2">Sign in to BuboMap</h1>
+            <p className="text-sm text-gray-600 mb-4">
+              Email verification was only needed for email-and-password accounts. Sign in with
+              Google or Microsoft using the same email instead.
+            </p>
+            <Link
+              href="/auth/sign-in"
+              className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white rounded-md px-4 py-2.5 text-sm font-medium"
+            >
+              Sign in
+            </Link>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="w-full max-w-md bg-white rounded-xl border border-gray-200 p-8 shadow-sm text-center">
@@ -166,11 +188,22 @@ function VerifyEmailContent() {
           </div>
         )}
 
+        {showResend && (
+          <p className="mt-4 text-xs text-gray-500" data-testid="verify-alternative">
+            Or skip this: sign out and continue with Google or Microsoft using{" "}
+            {user?.email ?? "the same email"}. No verification email needed.
+          </p>
+        )}
+
         <p className="mt-6 text-sm text-gray-500 text-center">
           Wrong address?{" "}
-          <Link href="/auth/sign-in" className="text-indigo-600 hover:text-indigo-700 font-medium">
-            Sign in with a different account
-          </Link>
+          <button
+            type="button"
+            onClick={() => void signOut().then(() => router.replace("/auth/sign-in"))}
+            className="text-indigo-600 hover:text-indigo-700 font-medium"
+          >
+            Sign out and use a different account
+          </button>
         </p>
       </div>
     </div>

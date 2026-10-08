@@ -5,10 +5,11 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import AuthContext, get_auth_context
+from app.auth import MICROSOFT_PROVIDER, AuthContext, get_auth_context
 from app.database import get_db
 from app.models.objects import Workspace
 from app.models.tenancy import Org, OrgMembership, User, WorkspaceMembership
+from app.services.auth_status import microsoft_sign_in_verified
 from app.services.authorization import AuthScope, can, require_permission
 from app.services.roles import ORG_ADMIN_ROLES, WS_ADMIN, WS_MEMBER, WS_VIEWER, effective_workspace_role
 from app.utils.time import utc_now
@@ -122,15 +123,33 @@ async def _set_rls_org(db: AsyncSession, org_id: uuid.UUID) -> None:
     await db.execute(text("SELECT set_config('app.org_id', :org_id, true)"), {"org_id": str(org_id)})
 
 
+async def _token_email_verified(auth: AuthContext, user: User | None) -> bool:
+    """The token's email_verified, or for a Microsoft sign-in the rule in auth_status.
+
+    The Microsoft check (one Firebase Admin lookup) runs only while the user isn't recorded as
+    verified yet; once email_verified_at is set it is never repeated.
+    """
+    if auth.email_verified:
+        return True
+    if auth.sign_in_provider != MICROSOFT_PROVIDER or not auth.email:
+        return False
+    if user is not None and user.email_verified_at is not None:
+        return False  # already recorded; nothing to add
+    return await microsoft_sign_in_verified(auth.firebase_uid, auth.email)
+
+
 async def _resolve_user(db: AsyncSession, auth: AuthContext, *, create_if_missing: bool = False) -> User:
     result = await db.execute(select(User).where(User.firebase_uid == auth.firebase_uid))
     user = result.scalar_one_or_none()
+    if not user and not create_if_missing:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not provisioned")
+    verified = await _token_email_verified(auth, user)
     if not user and create_if_missing:
         user = User(
             firebase_uid=auth.firebase_uid,
             email=auth.email or f"{auth.firebase_uid}@unknown.local",
             full_name=auth.full_name,
-            email_verified_at=utc_now() if auth.email_verified else None,
+            email_verified_at=utc_now() if verified else None,
         )
         db.add(user)
         await db.flush()
@@ -139,7 +158,7 @@ async def _resolve_user(db: AsyncSession, auth: AuthContext, *, create_if_missin
             user.email = auth.email
         if auth.full_name and user.full_name != auth.full_name:
             user.full_name = auth.full_name
-        if auth.email_verified and not user.email_verified_at:
+        if verified and not user.email_verified_at:
             user.email_verified_at = utc_now()
     if not user:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not provisioned")

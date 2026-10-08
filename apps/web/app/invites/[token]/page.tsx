@@ -7,10 +7,14 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { invitesApi, workspacesApi } from "@/lib/api-client";
 import { primaryViewPath } from "@/lib/tenancy";
+import { passwordSignInEnabled } from "@/lib/auth/flags";
+import { SocialSignIn } from "@/components/auth/SocialSignIn";
+import { PasswordUsersNote } from "@/components/auth/ProviderButtons";
 
 export default function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isSignedIn, refreshSession, user } = useAuth();
+  const showPassword = passwordSignInEnabled();
   const router = useRouter();
 
   const { data: preview, isLoading } = useQuery({
@@ -62,21 +66,38 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
         )}
 
         {!isSignedIn ? (
-          <div className="space-y-2">
-            <Link
-              href={`/auth/sign-in?redirect_url=/invites/${token}`}
-              className="block w-full text-center bg-indigo-600 text-white rounded-md py-2.5 text-sm font-medium"
-            >
-              Sign in to accept
-            </Link>
-            <Link
-              href={`/auth/sign-up?redirect_url=/invites/${token}`}
-              className="block w-full text-center border border-gray-200 rounded-md py-2.5 text-sm font-medium text-gray-700"
-            >
-              Create account
-            </Link>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Sign in with <strong>{preview.email}</strong> to accept.
+            </p>
+            <SocialSignIn onSignedIn={async () => void (await refreshSession())} />
+            {showPassword ? (
+              <div className="flex gap-2 text-xs">
+                <Link
+                  href={`/auth/sign-in?redirect_url=/invites/${token}`}
+                  className="flex-1 text-center border border-gray-200 rounded-md py-2 font-medium text-gray-700"
+                >
+                  Email sign-in (test accounts)
+                </Link>
+                <Link
+                  href={`/auth/sign-up?redirect_url=/invites/${token}`}
+                  className="flex-1 text-center border border-gray-200 rounded-md py-2 font-medium text-gray-700"
+                >
+                  Email sign-up (test accounts)
+                </Link>
+              </div>
+            ) : (
+              <PasswordUsersNote />
+            )}
           </div>
         ) : (
+          <>
+          {user?.email && user.email.toLowerCase() !== preview.email.toLowerCase() && (
+            <p className="mb-3 text-xs text-amber-700">
+              You&apos;re signed in as {user.email}. This invite is for {preview.email}; sign out and use
+              that account to accept it.
+            </p>
+          )}
           <button
             onClick={() => acceptMutation.mutate()}
             disabled={preview.consumed || preview.expired || acceptMutation.isPending}
@@ -84,6 +105,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
           >
             {acceptMutation.isPending ? "Accepting..." : "Accept invite"}
           </button>
+          </>
         )}
 
         {acceptMutation.isError && (

@@ -6,13 +6,12 @@
  * Display only: nothing behind this flag changes an org's plan, limits or roles.
  */
 
+import { devDefaultFlag } from "../env-flag";
+
 export interface BillingFlagEnv {
   flag?: string | undefined;
   nodeEnv?: string | undefined;
 }
-
-const ON = new Set(["1", "true", "on", "yes"]);
-const OFF = new Set(["0", "false", "off", "no"]);
 
 // Next.js inlines NEXT_PUBLIC_* and NODE_ENV only when written out literally like this.
 function readEnv(): BillingFlagEnv {
@@ -20,10 +19,7 @@ function readEnv(): BillingFlagEnv {
 }
 
 export function billingUiEnabled(env: BillingFlagEnv = readEnv()): boolean {
-  const value = env.flag?.trim().toLowerCase();
-  if (value && ON.has(value)) return true;
-  if (value && OFF.has(value)) return false;
-  return env.nodeEnv !== "production";
+  return devDefaultFlag(env.flag, env.nodeEnv);
 }
 
 /**

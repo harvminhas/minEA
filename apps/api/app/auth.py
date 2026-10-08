@@ -117,8 +117,16 @@ def _ensure_firebase() -> None:
     firebase_admin.initialize_app(cred, {"projectId": settings.firebase_project_id})
 
 
+MICROSOFT_PROVIDER = "microsoft.com"
+
+
 class AuthContext:
-    """Validated identity from Firebase ID token — no tenant scope."""
+    """Validated identity from Firebase ID token — no tenant scope.
+
+    email_verified is the token's own claim and nothing else. Microsoft sign-ins always carry
+    email_verified=false (Firebase never marks Microsoft emails verified); see
+    app.services.auth_status.microsoft_email_verified for when we trust them.
+    """
 
     def __init__(
         self,
@@ -126,11 +134,29 @@ class AuthContext:
         email: str = "",
         email_verified: bool = False,
         full_name: str | None = None,
+        sign_in_provider: str | None = None,
     ):
         self.firebase_uid = firebase_uid
         self.email = email
         self.email_verified = email_verified
         self.full_name = full_name
+        self.sign_in_provider = sign_in_provider
+
+
+def auth_context_from_claims(decoded: dict[str, Any]) -> AuthContext:
+    """Map verified Firebase ID token claims to an AuthContext (any sign-in provider)."""
+    uid = decoded.get("uid") or decoded.get("sub", "")
+    if not uid:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing uid claim")
+    firebase_claims = decoded.get("firebase") or {}
+    provider = firebase_claims.get("sign_in_provider") if isinstance(firebase_claims, dict) else None
+    return AuthContext(
+        firebase_uid=uid,
+        email=(decoded.get("email") or "").strip(),
+        email_verified=decoded.get("email_verified") is True,
+        full_name=decoded.get("name"),
+        sign_in_provider=provider if isinstance(provider, str) else None,
+    )
 
 
 async def get_auth_context(
@@ -149,16 +175,7 @@ async def get_auth_context(
     try:
         _ensure_firebase()
         decoded: dict[str, Any] = firebase_auth.verify_id_token(token)
-        uid = decoded.get("uid") or decoded.get("sub", "")
-        if not uid:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing uid claim")
-
-        return AuthContext(
-            firebase_uid=uid,
-            email=decoded.get("email", "") or "",
-            email_verified=bool(decoded.get("email_verified", False)),
-            full_name=decoded.get("name"),
-        )
+        return auth_context_from_claims(decoded)
     except firebase_auth.InvalidIdTokenError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {e}")
     except firebase_auth.ExpiredIdTokenError:
