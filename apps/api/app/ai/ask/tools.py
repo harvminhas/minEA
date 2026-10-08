@@ -267,6 +267,88 @@ def find_gaps(bag: ToolBag, args: dict) -> dict:
     return {"gaps": gaps[:50], "count": len(gaps), "by_type": by_type}
 
 
+SIGN_IN_EDGE = "authenticates_via"
+OWN_LOGIN = "own_login"
+_SIGN_IN_TYPES = {"application", "solution", "technical_capability", "cloud_service"}
+_RETIRED = {"retired", "end_of_life"}
+
+
+def _sign_in_candidate(obj: dict) -> bool:
+    """Apps and platforms still in use. Same rule as isSignInCandidate in apps/web/lib/sign-in.ts."""
+    props = obj.get("properties") or {}
+    lifecycle = props.get("lifecycle") if isinstance(props.get("lifecycle"), str) else ""
+    return obj.get("type") in _SIGN_IN_TYPES and obj.get("status") not in _RETIRED and lifecycle not in _RETIRED
+
+
+def sign_in(bag: ToolBag, args: dict) -> dict:
+    """Sign-in (single sign-on) links: who signs in with what, and what has nothing recorded."""
+    objects = {str(obj.get("id")): obj for obj in bag.graph.objects}
+    links = [edge for edge in bag.graph.edges if edge.relation == SIGN_IN_EDGE]
+    signs_in_with: dict[str, list[str]] = {}
+    sign_in_for: dict[str, list[str]] = {}
+    for edge in links:
+        signs_in_with.setdefault(edge.from_id, []).append(edge.to_id)
+        sign_in_for.setdefault(edge.to_id, []).append(edge.from_id)
+
+    def summary(record_id: str) -> dict:
+        rec = bag.graph.get(record_id)
+        if rec:
+            bag.note_record(rec)
+            return rec.summary()
+        obj = objects.get(record_id) or {}
+        bag.note_name(str(obj.get("name") or ""))
+        return {"id": record_id, "name": obj.get("name") or record_id}
+
+    def own_login(record_id: str) -> bool:
+        props = (objects.get(record_id) or {}).get("properties") or {}
+        return props.get("sign_in") == OWN_LOGIN and record_id not in signs_in_with
+
+    record_id = str(args.get("id") or "")
+    if record_id:
+        if record_id not in objects and not bag.graph.get(record_id):
+            return {"error": "not_found", "message": "That item is not in this workspace."}
+        users = sorted(sign_in_for.get(record_id, []))
+        providers = sorted(signs_in_with.get(record_id, []))
+        bag.note_number(len(users))
+        return {
+            "target": summary(record_id),
+            "signs_in_with": [summary(item) for item in providers],
+            "own_login": own_login(record_id),
+            "sign_in_for": [summary(item) for item in users],
+            "sign_in_for_count": len(users),
+        }
+
+    candidates = [obj_id for obj_id, obj in objects.items() if _sign_in_candidate(obj)]
+    # Part of a provider (Exchange Online in Microsoft 365) signs in with it by definition.
+    part_of_provider = {edge.from_id for edge in bag.graph.edges if edge.relation == "part_of" and edge.to_id in sign_in_for}
+    own = sorted((obj_id for obj_id in candidates if own_login(obj_id)), key=lambda item: str(objects[item].get("name") or ""))
+    not_recorded = sorted(
+        (
+            obj_id
+            for obj_id in candidates
+            if obj_id not in signs_in_with
+            and obj_id not in sign_in_for
+            and obj_id not in part_of_provider
+            and not own_login(obj_id)
+        ),
+        key=lambda item: str(objects[item].get("name") or ""),
+    )
+    providers = sorted(sign_in_for, key=lambda item: (-len(sign_in_for[item]), str((objects.get(item) or {}).get("name") or "")))
+    for value in [len(links), len(own), len(not_recorded), len(providers), *(len(sign_in_for[item]) for item in providers)]:
+        bag.note_number(value)
+    return {
+        "providers": [
+            {"provider": summary(item), "count": len(sign_in_for[item]), "sign_in_for": [summary(user) for user in sorted(sign_in_for[item])]}
+            for item in providers
+        ],
+        "own_login": [summary(item) for item in own],
+        "own_login_count": len(own),
+        "not_recorded": [summary(item) for item in not_recorded[:50]],
+        "not_recorded_count": len(not_recorded),
+        "links_recorded": len(links),
+    }
+
+
 AI_GROUPS = {"features", "agents", "platforms"}
 AI_FLAGS = {"F1", "F2", "F3", "F4", "F5", "F6"}
 
@@ -521,6 +603,21 @@ TOOLS: list[AskTool] = [
             },
         },
         run=find_gaps,
+    ),
+    AskTool(
+        name="sign_in",
+        description=(
+            "Single sign-on: which apps and platforms sign in with which (Signs in with links). "
+            "With id: what that item signs in with (or own_login true for its own login, no SSO), and what signs in with it. "
+            "Without id: each provider with what signs in with it, apps with their own login (no SSO), and not_recorded: "
+            "apps and platforms in use with no sign-in recorded. A question about what doesn't use SSO lists not_recorded, "
+            "with own_login listed separately. Use the counts as given."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {"id": {"type": "string"}},
+        },
+        run=sign_in,
     ),
     AskTool(
         name="ai_landscape",

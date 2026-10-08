@@ -23,6 +23,7 @@ export type AskIntent =
   | "vendors"
   | "aging"
   | "ai"
+  | "sign_in"
   | "unknown";
 
 export type InferenceInput = {
@@ -77,6 +78,7 @@ Intents:
 - ownership (who owns this item): the owner column. If it is blank, owners of related items, labelled inferred.
 - gaps, lists, and spend: find_gaps or aggregate. A missing-field question is not a vendor list.
 - aging (out of support, unsupported OS, old servers, what needs replacing): list of infrastructure past support. End-of-life questions stay on the lifecycle list. The counts come from the infrastructure status module when that split is on.
+- sign_in (single sign-on: what signs in with an item, what an item signs in with, what doesn't use SSO): sign_in. Not recorded and own login (no SSO) are different: list not_recorded as the gap and own_login separately. An app with no sign-in recorded is not "no SSO".
 - ai (what AI do we use, AI agents, AI models, Copilot and other AI features, what AI can see or change, AI risks, AI spend): ai_landscape. Use its numbers as given. An AI feature is a setting on an app, not a separate item: cite the app.
 
 Answer rules:
@@ -132,10 +134,18 @@ export function isAiDataQuestion(question: string): boolean {
 }
 const IMPORTANCE_TRIGGER = /how important|why .{0,80} important|how critical|why .{0,80} critical|can we live without|business critical/;
 const IMPACT_TRIGGER = /break|fail|goes down|is down|outage|depend|impact/;
+/** Single sign-on wording: SSO, sign in with, log in with, sign-in, own login. */
+const SIGN_IN_TRIGGER = /\bsso\b|single sign[- ]?on|\bsign(?:s|ed)? ?in\b|\bsign-in\b|\blog(?:s|ged)? ?in (?:with|through|via|to)\b|\b(?:own )?logins?\b/;
+
+export function isSignInQuestion(question: string): boolean {
+  return classifyIntent(question) === "sign_in";
+}
 
 export function classifyIntent(question: string): AskIntent {
   const q = question.toLowerCase();
   if (AI_TRIGGER.test(q) && !IMPORTANCE_TRIGGER.test(q) && !IMPACT_TRIGGER.test(q)) return "ai";
+  // "What breaks if Okta goes down?" stays impact; it lists who can't sign in.
+  if (SIGN_IN_TRIGGER.test(q) && !IMPORTANCE_TRIGGER.test(q) && !IMPACT_TRIGGER.test(q)) return "sign_in";
   if (GAP_TRIGGER.test(q)) {
     if (/vendor/.test(q)) return "gaps";
     if (/owner/.test(q)) return "gaps";

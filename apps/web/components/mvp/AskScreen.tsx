@@ -56,7 +56,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const question = initial.trim();
   const focusId = mode === "answer" ? params.get("focus") ?? undefined : undefined;
 
-  const impactQuery = /break|fail|goes down|is down|outage|depend|impact|important|how critical|live without|who owns/i.test(question);
+  const impactQuery = /break|fail|goes down|is down|outage|depend|impact|important|how critical|live without|who owns|\bsso\b|single sign|sign ?in|sign-in|log ?in|login/i.test(question);
   const impact = useImpactGraph();
   const anywhere = addAnywhereEnabled();
   const [readAs, setReadAs] = useState<"auto" | "add" | "ask">("auto");
@@ -153,7 +153,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     const fromModel = remote.data ? answerFromModel(remote.data, rows, basePath, question) : null;
     // Customer / financial / personal data: the F1 rule (each app's Holds data) answers, not the model's reading of it.
     if (local.handler === "ai" && isAiDataQuestion(question)) return local;
-    if (local.handler === "gaps" || local.handler === "impact" || local.handler === "importance" || local.handler === "cost" || local.handler === "ownership" || local.handler === "clarify" || local.handler === "aging") return local;
+    if (local.handler === "gaps" || local.handler === "impact" || local.handler === "importance" || local.handler === "cost" || local.handler === "ownership" || local.handler === "clarify" || local.handler === "aging" || local.handler === "sign_in") return local;
     if (!fromModel || fromModel.handler === "unsupported") return local;
     if (local.handler === "vendors" && fromModel.citations.length === 0) return local;
     return fromModel;

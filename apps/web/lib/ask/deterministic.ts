@@ -12,9 +12,9 @@ import {
 import { dollarsFromCents, formatDollars, lineAnnualCents, lineTitle, readCostLines } from "@/lib/cost/math";
 import { presentImpact, type ImpactRecord } from "@/lib/impact/impact-answer";
 import { impactOf, type ImpactEdge, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
-import { isOwnLogin, isSignInCandidate } from "@/lib/sign-in";
+import { OWN_LOGIN_LABEL, SIGN_IN_EDGE, isOwnLogin, isSignInCandidate } from "@/lib/sign-in";
 import { moneyLabel, vendorRollup, type CatalogMissing, type CatalogRow } from "@/lib/model-catalog";
-import { modelItemPath, reportPath, sectionForKind } from "@/lib/mvp-paths";
+import { modelItemPath, modelPath, reportPath, sectionForKind } from "@/lib/mvp-paths";
 import { aiLandscape, dataAccess, type AiLandscape, type LandscapeEdge, type LandscapeFlag, type LandscapeObject } from "@/lib/ai/landscape";
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { agingSummary } from "@/lib/infra/status";
@@ -67,6 +67,7 @@ export type AskAnswer = {
     | "gaps"
     | "aging"
     | "ai"
+    | "sign_in"
     | "clarify"
     | "unsupported";
   answerText: string;
@@ -131,6 +132,7 @@ const HANDLER_INTENTS: Record<string, AskAnswer["handler"]> = {
   criticality: "criticality",
   aging: "aging",
   ai: "ai",
+  sign_in: "sign_in",
 };
 
 const SUGGESTED = [
@@ -270,7 +272,7 @@ export function answerFromRecords(input: {
     if (isAiDataQuestion(question)) return aiDataAnswer(result, input.landscape, input.rows, input.basePath, today);
     return aiAnswer(result, input.landscape.objects, input.rows, input.basePath, today);
   }
-  if (/uptime|invoice|ticket|forecast|google workspace|opinion/.test(q) || /customer data|sensitive|personal data/.test(q)) {
+  if (/uptime|invoice|ticket|forecast|opinion/.test(q) || /customer data|sensitive|personal data/.test(q)) {
     return {
       ...empty(
         "unsupported",
@@ -282,6 +284,10 @@ export function answerFromRecords(input: {
   }
 
   const intent = classifyIntent(question);
+  if (intent === "sign_in") {
+    if (input.loading) return { ...empty("sign_in", "Looking up sign-in links…", today), loading: true };
+    return signInAnswer(question, input.rows, input.graph, input.basePath, today, input.focusId);
+  }
   const wantsSubject = intent === "importance" || intent === "impact" || intent === "cost" || (intent === "ownership" && /who owns/.test(q));
   const resolution = wantsSubject ? resolveSubject(question, input.rows) : { status: "none" as const, matches: [] };
   const focused = input.focusId ? resolution.matches.find((row) => row.id === input.focusId) : undefined;
@@ -878,6 +884,7 @@ function clarifyQuestion(intent: string, name: string): string {
   if (intent === "impact") return `What breaks if ${name} goes down?`;
   if (intent === "cost") return `What does ${name} cost?`;
   if (intent === "ownership") return `Who owns ${name}?`;
+  if (intent === "sign_in") return `What signs in with ${name}?`;
   return name;
 }
 
@@ -1106,5 +1113,181 @@ function empty(handler: AskAnswer["handler"], answerText: string, today: string)
     gaps: [],
     followUps: [],
     caption: { generatedAt: today, recordCount: 0, gapCount: 0 },
+  };
+}
+
+/** Words that say "sign-in question" but never name the item. Stripped before the name lookup. */
+const SIGN_IN_FILLER =
+  /\b(?:sso|single sign[- ]?on|sign(?:s|ed)?[- ]?in|log(?:s|ged)?[- ]?in|logins?|own|through|via|uses?|using|doesn't|does|don't|do|not|without|no|people|staff|users|employees|we|to|recorded|apps?|platforms?|tools?|everything|anything|everyone)\b/gi;
+const SIGN_IN_NOT_RECORDED =
+  /\b(?:doesn't|does not|don't|do not|aren't|are not|isn't|is not|not|without|no|missing|lacks?)\b.{0,40}\b(?:sso|single sign|sign[- ]?in|log ?in)|\bown logins?\b|\bno sso\b/;
+const SIGN_IN_USERS = /\b(?:what|which|who)\b(?: \w+){0,3} (?:signs?|logs?) ?in (?:with|through|via|using)\b|\buses? .+ for (?:sso|single sign|sign[- ]?in)\b|\bsign-in for\b/;
+const SIGN_IN_OWN = /\b(?:what|how) (?:does|do) (?!people|staff|users|we|employees).+ (?:sign|log) ?in\b|\bhow do (?:people|staff|users|we|employees) (?:sign|log) ?in(?:to| to)\b/;
+
+/**
+ * Sign-in (single sign-on) answers from Signs in with links:
+ * - a named provider: what signs in with it
+ * - a named app: what it signs in with, its own login, or nothing recorded
+ * - "What doesn't use SSO?": apps with no sign-in recorded, and own-login apps listed apart
+ * - otherwise: every provider with what signs in with it
+ */
+function signInAnswer(question: string, rows: CatalogRow[], graph: AskGraph, basePath: string, today: string, focusId?: string): AskAnswer {
+  const q = question.toLowerCase();
+  const links = graph.edges.filter((edge) => edge.type === SIGN_IN_EDGE);
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const usersOf = new Map<string, string[]>();
+  const providersOf = new Map<string, string[]>();
+  for (const edge of links) {
+    usersOf.set(edge.toId, [...(usersOf.get(edge.toId) ?? []), edge.fromId]);
+    providersOf.set(edge.fromId, [...(providersOf.get(edge.fromId) ?? []), edge.toId]);
+  }
+  const rowOf = (id: string) => rowById.get(id) ?? placeholderRow(id, graph.nodes.find((node) => node.id === id)?.name ?? "Item");
+  const byName = (a: CatalogRow, b: CatalogRow) => a.name.localeCompare(b.name);
+  const ownLogin = (row: CatalogRow) => isOwnLogin(row.object.properties) && !providersOf.has(row.id);
+  const candidates = rows.filter((row) => isSignInCandidate(row.object));
+  const ownRows = candidates.filter(ownLogin).sort(byName);
+  // Part of a provider (Exchange Online in Microsoft 365) signs in with it by definition.
+  const partOfProvider = new Set(graph.edges.filter((edge) => edge.type === "part_of" && usersOf.has(edge.toId)).map((edge) => edge.fromId));
+  const notRecorded = candidates
+    .filter((row) => !providersOf.has(row.id) && !usersOf.has(row.id) && !partOfProvider.has(row.id) && !ownLogin(row))
+    .sort(byName);
+  const providers = [...usersOf.keys()].map(rowOf).sort((a, b) => (usersOf.get(b.id)?.length ?? 0) - (usersOf.get(a.id)?.length ?? 0) || byName(a, b));
+  const ownSection = (start: number): AskCitation[] =>
+    ownRows.slice(0, 12).map((row, index) => ({ n: start + index, recordId: row.id, relationship: OWN_LOGIN_LABEL, section: OWN_LOGIN_LABEL, row }));
+  const nothingRecorded = links.length === 0 && ownRows.length === 0;
+  const startHere = {
+    text: "Open an app, then set Signs in with in Details: pick the app or platform people sign in through, such as Microsoft 365, or Own login (no SSO).",
+    fillHref: modelPath(basePath, "applications"),
+  };
+
+  if (SIGN_IN_NOT_RECORDED.test(q)) {
+    if (nothingRecorded) {
+      return {
+        ...empty("sign_in", "No sign-in is recorded yet, so I can't tell which apps use single sign-on.", today),
+        gaps: [{ ...startHere, fillHref: notRecorded[0] ? itemHref(basePath, notRecorded[0]) : startHere.fillHref }],
+        followUps: ["What has no owner?", "What renews in the next 90 days?", "Where is our money going?"],
+      };
+    }
+    const shown = notRecorded.slice(0, 12);
+    const citations: AskCitation[] = [
+      ...shown.map((row, index) => ({ n: index + 1, recordId: row.id, relationship: "No sign-in recorded", section: "No sign-in recorded", row })),
+      ...ownSection(shown.length + 1),
+    ];
+    const head = notRecorded.length
+      ? `**${describeTypes(typeLabels(notRecorded))} ${notRecorded.length === 1 ? "has" : "have"} no sign-in recorded**: ${joinNames(notRecorded.map((row) => row.name))}.`
+      : "**Every app and platform in use has sign-in recorded.**";
+    const own = ownRows.length
+      ? ` ${joinNames(ownRows.map((row) => row.name))} ${ownRows.length === 1 ? "has its" : "have their"} own login (no SSO).`
+      : "";
+    return {
+      handler: "sign_in",
+      answerText: `${head}${own}`,
+      citations,
+      gaps: shown.slice(0, 6).map((row) => ({ text: `${row.name}: set Signs in with, or Own login (no SSO).`, fillHref: itemHref(basePath, row) })),
+      followUps: providers[0]
+        ? [`What signs in with ${providers[0].name}?`, `What breaks if ${providers[0].name} goes down?`, "What has no owner?"]
+        : ["What has no owner?", "What renews in the next 90 days?", "Where is our money going?"],
+      caption: { generatedAt: today, recordCount: citations.length, gapCount: notRecorded.length },
+    };
+  }
+
+  const stripped = question.replace(SIGN_IN_FILLER, " ");
+  const resolution = resolveSubject(stripped, rows);
+  const providerMatches = resolution.matches.filter((row) => usersOf.has(row.id));
+  const focused = focusId ? resolution.matches.find((row) => row.id === focusId) : undefined;
+  const matches = focused ? [focused] : providerMatches.length === 1 ? providerMatches : resolution.matches;
+  if (matches.length > 1) return clarifyAnswer("sign_in", matches, today);
+  const named = matches[0];
+
+  const wantsUsers = named ? !SIGN_IN_OWN.test(q) && (SIGN_IN_USERS.test(q) || usersOf.has(named.id)) : false;
+  if (named && !wantsUsers) {
+    const through = (providersOf.get(named.id) ?? []).map(rowOf).sort(byName);
+    if (through.length) {
+      return {
+        handler: "sign_in",
+        answerText: `${named.name} [1] signs in with **${joinNames(through.map((row) => row.name))}**.`,
+        citations: [
+          { n: 1, recordId: named.id, relationship: `Signs in with ${joinNames(through.map((row) => row.name))}`, row: named },
+          ...through.map((row, index) => ({ n: index + 2, recordId: row.id, relationship: `Sign-in for ${named.name}`, row })),
+        ],
+        gaps: [],
+        followUps: [`What breaks if ${through[0].name} goes down?`, `What signs in with ${through[0].name}?`, "What doesn't use single sign-on?"],
+        caption: { generatedAt: today, recordCount: through.length + 1, gapCount: 0 },
+      };
+    }
+    const own = ownLogin(named);
+    return {
+      handler: "sign_in",
+      answerText: own
+        ? `${named.name} [1] has its own login (no SSO).`
+        : `No sign-in is recorded for ${named.name} [1].`,
+      citations: [{ n: 1, recordId: named.id, relationship: own ? OWN_LOGIN_LABEL : "No sign-in recorded", row: named }],
+      gaps: own ? [] : [{ text: `${named.name}: set Signs in with, or Own login (no SSO).`, fillHref: itemHref(basePath, named) }],
+      followUps: ["What doesn't use single sign-on?", `What breaks if ${named.name} goes down?`, `Who owns ${named.name}?`],
+      caption: { generatedAt: today, recordCount: 1, gapCount: own ? 0 : 1 },
+    };
+  }
+
+  if (named) {
+    const users = (usersOf.get(named.id) ?? []).map(rowOf).sort(byName);
+    if (users.length === 0) {
+      return {
+        ...empty("sign_in", `Nothing in your model signs in with ${named.name} [1] yet.`, today),
+        citations: [{ n: 1, recordId: named.id, relationship: "No sign-in links", row: named }],
+        gaps: [{ ...startHere, text: `Open each app people sign in to with ${named.name}, then set Signs in with to ${named.name} in Details.` }],
+        followUps: ["What doesn't use single sign-on?", `What breaks if ${named.name} goes down?`, `Who owns ${named.name}?`],
+        caption: { generatedAt: today, recordCount: 1, gapCount: 1 },
+      };
+    }
+    const citations: AskCitation[] = users.slice(0, 20).map((row, index) => ({
+      n: index + 1,
+      recordId: row.id,
+      relationship: `Signs in with ${named.name}`,
+      row,
+    }));
+    return {
+      handler: "sign_in",
+      answerText: `**${describeTypes(typeLabels(users))} ${users.length === 1 ? "signs" : "sign"} in with ${named.name}**: ${joinNames(users.map((row) => row.name))}.`,
+      citations,
+      gaps: notRecorded.length
+        ? [{ text: `${notRecorded.length === 1 ? "1 app has" : `${notRecorded.length} apps have`} no sign-in recorded, so this list may be short.`, fillHref: itemHref(basePath, notRecorded[0]) }]
+        : [],
+      followUps: [`What breaks if ${named.name} goes down?`, "What doesn't use single sign-on?", `Who owns ${named.name}?`],
+      caption: { generatedAt: today, recordCount: citations.length, gapCount: notRecorded.length ? 1 : 0 },
+    };
+  }
+
+  if (nothingRecorded) {
+    return {
+      ...empty("sign_in", "No sign-in is recorded yet.", today),
+      gaps: [startHere],
+      followUps: ["What has no owner?", "What renews in the next 90 days?", "Where is our money going?"],
+    };
+  }
+  const citations: AskCitation[] = [];
+  for (const provider of providers) {
+    for (const row of (usersOf.get(provider.id) ?? []).map(rowOf).sort(byName)) {
+      citations.push({ n: citations.length + 1, recordId: row.id, relationship: `Signs in with ${provider.name}`, section: `Signs in with ${provider.name}`, row });
+    }
+  }
+  citations.push(...ownSection(citations.length + 1));
+  const signedIn = new Set(links.map((edge) => edge.fromId)).size;
+  const byProvider = providers.map((provider) => `${usersOf.get(provider.id)?.length ?? 0} with ${provider.name}`);
+  const head = signedIn
+    ? `**${signedIn === 1 ? "1 app or platform signs" : `${signedIn} apps and platforms sign`} in through single sign-on**: ${joinNames(byProvider)}.`
+    : "**No app signs in through single sign-on yet.**";
+  const own = ownRows.length ? ` ${ownRows.length === 1 ? "1 has its" : `${ownRows.length} have their`} own login (no SSO).` : "";
+  const unknown = notRecorded.length ? ` ${notRecorded.length === 1 ? "1 has" : `${notRecorded.length} have`} no sign-in recorded.` : "";
+  return {
+    handler: "sign_in",
+    answerText: `${head}${own}${unknown}`,
+    citations,
+    gaps: notRecorded.length
+      ? [{ text: `${notRecorded.length === 1 ? "1 app has" : `${notRecorded.length} apps have`} no sign-in recorded. Ask “What doesn't use single sign-on?” for the list.`, fillHref: itemHref(basePath, notRecorded[0]) }]
+      : [],
+    followUps: providers[0]
+      ? [`What breaks if ${providers[0].name} goes down?`, "What doesn't use single sign-on?", `What signs in with ${providers[0].name}?`]
+      : ["What doesn't use single sign-on?", "What has no owner?", "Where is our money going?"],
+    caption: { generatedAt: today, recordCount: citations.length, gapCount: notRecorded.length ? 1 : 0 },
   };
 }

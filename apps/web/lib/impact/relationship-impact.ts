@@ -281,7 +281,7 @@ export function presentImpact(input: {
     clause(support, "loses support", "lose support"),
   ].filter(Boolean);
   const sentence = clauses.length
-    ? `If ${input.source.name} [1] goes down, ${clauses.join(" and ")}.`
+    ? `If ${input.source.name} [1] goes down, ${clauses.length > 1 ? `${clauses.slice(0, -1).join(", ")}, and ${clauses[clauses.length - 1]}` : clauses[0]}.`
     : `Nothing in your model depends on ${input.source.name} [1].`;
 
   return {
@@ -290,7 +290,7 @@ export function presentImpact(input: {
     rows,
     gaps: [
       ...impactGaps(input.source, rows.map((row) => row.record), input.edges),
-      ...signInGaps(input.source, input.records, input.edges),
+      ...signInGaps(input.source, input.records, input.edges, new Set(rows.map((row) => row.record.id))),
     ],
     followUps: [
       `What does ${input.source.name} cost us?`,
@@ -343,11 +343,16 @@ function impactGaps(source: ImpactRecord, affected: ImpactRecord[], edges: Impac
  * When something signs in with the failed record, the apps and platforms with no sign-in
  * recorded may be affected too. Apps confirmed as their own login are not listed.
  */
-export function signInGaps(source: ImpactRecord, records: ImpactRecord[], edges: ImpactEdge[]): string[] {
+export function signInGaps(source: ImpactRecord, records: ImpactRecord[], edges: ImpactEdge[], affected: ReadonlySet<string> = new Set()): string[] {
   if (!edges.some((edge) => edge.type === "authenticates_via" && edge.toId === source.id)) return [];
   const signsIn = new Set(edges.filter((edge) => edge.type === "authenticates_via").map((edge) => edge.fromId));
   const unknown = records.filter(
-    (record) => record.id !== source.id && record.signIn?.candidate && !record.signIn.ownLogin && !signsIn.has(record.id)
+    (record) =>
+      record.id !== source.id &&
+      !affected.has(record.id) &&
+      record.signIn?.candidate &&
+      !record.signIn.ownLogin &&
+      !signsIn.has(record.id)
   );
   if (!unknown.length) return [];
   const names = nameList(unknown.map((record) => record.name));

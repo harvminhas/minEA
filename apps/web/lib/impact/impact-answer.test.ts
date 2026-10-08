@@ -113,7 +113,7 @@ test("Microsoft 365: can't sign in is its own section and the unrecorded apps ar
   ];
   const nodes: ImpactNode[] = records.map((item) => ({ id: item.id, name: item.name, typeLabel: item.typeLabel }));
   const presented = presentImpact({ source, records, nodes, edges });
-  assert.equal(presented.sentence, "If Microsoft 365 [1] goes down, Exchange Online stops working and NetSuite and Salesforce can't sign in.");
+  assert.equal(presented.sentence, "If Microsoft 365 [1] goes down, Exchange Online stops working, and NetSuite and Salesforce can't sign in.");
   assert.deepEqual(
     presented.rows.map((row) => [row.record.name, row.section, row.connection]),
     [
