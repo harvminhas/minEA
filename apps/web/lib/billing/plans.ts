@@ -1,0 +1,241 @@
+/**
+ * Display-only plan catalogue for the pricing page and admin centre.
+ * Enforcement still lives in apps/api/app/services/plan_features.py and is unchanged.
+ */
+
+export type PackId = "starter" | "team" | "business";
+export type CatalogPlanId = "free" | PackId;
+/** What the admin centre shows. business_legacy = an org already on Business before packs. */
+export type DisplayPlanId = CatalogPlanId | "business_legacy";
+export type BillingInterval = "monthly" | "yearly";
+
+export interface CatalogPlan {
+  id: CatalogPlanId;
+  label: string;
+  tagline: string;
+  /** Licences = people who can edit. Viewers are free and unlimited on every plan. */
+  licences: number;
+  monthlyUsd: number;
+  yearlyUsd: number;
+  aiAnswersPerMonth: number;
+  /** null = unlimited */
+  appsPlatforms: number | null;
+  onboardingHours: number;
+  highlights: string[];
+}
+
+export const PRICE_NOTE = "Prices in USD. Taxes may apply.";
+export const VIEWERS_NOTE = "Viewers are free and unlimited on every plan.";
+
+export const CATALOG: Record<CatalogPlanId, CatalogPlan> = {
+  free: {
+    id: "free",
+    label: "Free",
+    tagline: "Try BuboMap on your own estate.",
+    licences: 1,
+    monthlyUsd: 0,
+    yearlyUsd: 0,
+    aiAnswersPerMonth: 25,
+    appsPlatforms: 25,
+    onboardingHours: 0,
+    highlights: ["All reports and views", "One workspace, one share link"],
+  },
+  starter: {
+    id: "starter",
+    label: "Starter",
+    tagline: "One editor mapping the whole estate.",
+    licences: 1,
+    monthlyUsd: 99,
+    yearlyUsd: 990,
+    aiAnswersPerMonth: 500,
+    appsPlatforms: null,
+    onboardingHours: 0,
+    highlights: ["Unlimited workspaces", "Share any report", "AI chat and insights"],
+  },
+  team: {
+    id: "team",
+    label: "Team",
+    tagline: "CTO, security and infrastructure on one map.",
+    licences: 5,
+    monthlyUsd: 449,
+    yearlyUsd: 4490,
+    aiAnswersPerMonth: 2500,
+    appsPlatforms: null,
+    onboardingHours: 4,
+    highlights: ["Everything in Starter"],
+  },
+  business: {
+    id: "business",
+    label: "Business",
+    tagline: "For larger IT teams keeping the estate current.",
+    licences: 10,
+    monthlyUsd: 799,
+    yearlyUsd: 7990,
+    aiAnswersPerMonth: 5000,
+    appsPlatforms: null,
+    onboardingHours: 4,
+    highlights: ["Everything in Team"],
+  },
+};
+
+export const PACK_ORDER: PackId[] = ["starter", "team", "business"];
+export const PLAN_ORDER: CatalogPlanId[] = ["free", ...PACK_ORDER];
+
+export function priceFor(plan: CatalogPlan, interval: BillingInterval): number {
+  return interval === "yearly" ? plan.yearlyUsd : plan.monthlyUsd;
+}
+
+/** How much a year costs on monthly billing minus the yearly price. */
+export function yearlySavingsUsd(plan: CatalogPlan): number {
+  return plan.monthlyUsd * 12 - plan.yearlyUsd;
+}
+
+export function monthsFreeOnYearly(plan: CatalogPlan): number {
+  if (plan.monthlyUsd === 0) return 0;
+  return Math.round(yearlySavingsUsd(plan) / plan.monthlyUsd);
+}
+
+/** Yearly price spread over 12 months, to the cent. */
+export function yearlyPerMonthUsd(plan: CatalogPlan): number {
+  return Math.round((plan.yearlyUsd / 12) * 100) / 100;
+}
+
+export function perLicencePerMonthUsd(plan: CatalogPlan, interval: BillingInterval): number {
+  const monthly = interval === "yearly" ? plan.yearlyUsd / 12 : plan.monthlyUsd;
+  return Math.round((monthly / plan.licences) * 100) / 100;
+}
+
+export function formatUsd(amount: number): string {
+  const whole = Number.isInteger(amount);
+  return `$${amount.toLocaleString("en-US", {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: whole ? 0 : 2,
+  })}`;
+}
+
+export function priceLabel(plan: CatalogPlan, interval: BillingInterval): string {
+  if (plan.monthlyUsd === 0) return "$0";
+  return `${formatUsd(priceFor(plan, interval))}${interval === "yearly" ? "/yr" : "/mo"}`;
+}
+
+export function formatCount(n: number): string {
+  return n.toLocaleString("en-US");
+}
+
+/**
+ * Display-only mapping from the API plan to what the admin centre shows.
+ * The API still normalises legacy starter/team/solo/growth slugs to "business", so any
+ * business-equivalent org without a Stripe subscription is a grandfathered legacy org.
+ */
+export function resolveDisplayPlan(
+  source: { plan?: string | null; hasSubscription?: boolean | null },
+  preview?: CatalogPlanId | null
+): DisplayPlanId {
+  if (preview) return preview;
+  const raw = (source.plan ?? "free").trim().toLowerCase();
+  const businessLike = new Set(["business", "starter", "team", "solo", "growth"]);
+  if (!businessLike.has(raw)) return "free";
+  if (raw === "business" && source.hasSubscription) return "business";
+  return "business_legacy";
+}
+
+export interface DisplayEntitlements {
+  id: DisplayPlanId;
+  label: string;
+  /** null = unchanged legacy limits */
+  licences: number | null;
+  aiAnswersPerMonth: number | null;
+  appsPlatforms: number | null;
+  onboardingHours: number;
+  isLegacy: boolean;
+  isPack: boolean;
+}
+
+export function entitlementsFor(id: DisplayPlanId): DisplayEntitlements {
+  if (id === "business_legacy") {
+    return {
+      id,
+      label: "Business (legacy)",
+      licences: null,
+      aiAnswersPerMonth: null,
+      appsPlatforms: null,
+      onboardingHours: 0,
+      isLegacy: true,
+      isPack: false,
+    };
+  }
+  const plan = CATALOG[id];
+  return {
+    id,
+    label: plan.label,
+    licences: plan.licences,
+    aiAnswersPerMonth: plan.aiAnswersPerMonth,
+    appsPlatforms: plan.appsPlatforms,
+    onboardingHours: plan.onboardingHours,
+    isLegacy: false,
+    isPack: id !== "free",
+  };
+}
+
+export type PlanChange =
+  | { kind: "current" }
+  | { kind: "upgrade" }
+  | { kind: "downgrade" }
+  | { kind: "switch" }
+  | { kind: "blocked"; unassignFirst: number };
+
+/** Moving between packs is free in either direction, as long as licences in use fit. */
+export function planChangeFor(
+  current: DisplayPlanId,
+  target: PackId,
+  licencesInUse: number
+): PlanChange {
+  if (current === target) return { kind: "current" };
+  const targetLicences = CATALOG[target].licences;
+  if (licencesInUse > targetLicences) {
+    return { kind: "blocked", unassignFirst: licencesInUse - targetLicences };
+  }
+  if (current === "free") return { kind: "upgrade" };
+  if (current === "business_legacy") return { kind: "switch" };
+  return CATALOG[target].monthlyUsd > CATALOG[current].monthlyUsd
+    ? { kind: "upgrade" }
+    : { kind: "downgrade" };
+}
+
+export function nextPackWithRoom(licencesNeeded: number, after?: DisplayPlanId): PackId | null {
+  const start = after && after !== "free" && after !== "business_legacy" ? PACK_ORDER.indexOf(after) + 1 : 0;
+  for (const id of PACK_ORDER.slice(start)) {
+    if (CATALOG[id].licences >= licencesNeeded) return id;
+  }
+  return null;
+}
+
+export function showsOnboarding(id: DisplayPlanId): boolean {
+  return entitlementsFor(id).onboardingHours > 0;
+}
+
+/** Booking link for onboarding hours. Only http(s) URLs are used; anything else = not set. */
+export function onboardingBookingUrl(
+  raw: string | undefined = process.env.NEXT_PUBLIC_ONBOARDING_BOOKING_URL
+): string | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+export const PREVIEW_PLANS: CatalogPlanId[] = ["free", "starter", "team", "business"];
+
+/** ?preview= value for the dev-only switch. Ignored entirely when the switch is off. */
+export function parsePreviewPlan(
+  raw: string | null | undefined,
+  previewEnabled: boolean
+): CatalogPlanId | null {
+  if (!previewEnabled || !raw) return null;
+  const value = raw.trim().toLowerCase() as CatalogPlanId;
+  return PREVIEW_PLANS.includes(value) ? value : null;
+}
