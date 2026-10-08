@@ -969,7 +969,8 @@ export interface Org {
   id: string;
   name: string;
   slug: string;
-  plan: "free" | "business";
+  /** starter/team/business = self-serve packs; business without a subscription = legacy */
+  plan: "free" | "starter" | "team" | "business";
   role: OrgRole;
   created_at: string;
 }
@@ -985,11 +986,39 @@ export interface BillingStatus {
   active_share_link_count: number;
   active_share_link_limit: number | null;
   can_create_share_link: boolean;
+  /** Stripe Checkout is live for this org (key set server-side and org allowed). Optional for older APIs. */
+  checkout_available?: boolean;
+  display_plan?: "free" | "starter" | "team" | "business" | "business_legacy";
+  licences_used?: number;
+  /** null = no licence cap (Business legacy) */
+  licences_cap?: number | null;
+  over_licence_cap?: boolean;
+  /** The org has a Stripe customer, so the Customer Portal can open. */
+  has_billing_account?: boolean;
+  /** Org owner/admin with a verified email. */
+  can_manage_billing?: boolean;
 }
 
 export interface SoloCheckoutResponse {
   checkout_url: string;
   session_id: string;
+}
+
+export type BillingPackId = "starter" | "team" | "business";
+export type BillingIntervalId = "monthly" | "yearly";
+
+export interface CheckoutRequest {
+  plan: BillingPackId;
+  interval: BillingIntervalId;
+}
+
+export interface CheckoutResponse {
+  checkout_url: string;
+  session_id: string;
+}
+
+export interface PortalResponse {
+  portal_url: string;
 }
 
 export interface OrgMember {

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.authz import OrgLimit
 from app.models.tenancy import Org
-from app.services.plan_features import limits_for_plan, normalize_plan
+from app.services.plan_features import EDITOR_SEATS_KEY, limits_for_plan, normalize_plan
 
 LIMIT_KEYS = (
     "max_owners",
@@ -19,6 +19,7 @@ LIMIT_KEYS = (
     "max_objects_per_workspace",
     "max_pending_invites",
     "max_active_share_links",
+    EDITOR_SEATS_KEY,
 )
 
 
@@ -31,10 +32,16 @@ async def apply_plan_to_org(
     stripe_customer_id: str | None = None,
     stripe_subscription_id: str | None = None,
     clear_stripe: bool = False,
+    stripe_managed: bool = False,
 ) -> Org:
+    """Set org.plan and its limits. Never touches memberships, roles or data.
+
+    stripe_managed=True applies the pack limits (licence cap = pack licences). Without it,
+    "business" keeps the legacy hand-set limits and no licence cap.
+    """
     normalized = normalize_plan(plan)
-    target_limits = limits_for_plan(normalized)
-    if normalized == "business" and contributors is not None:
+    target_limits = limits_for_plan(normalized, stripe_managed=stripe_managed)
+    if normalized == "business" and not stripe_managed and contributors is not None:
         target_limits["max_members"] = contributors
 
     result = await db.execute(select(Org).where(Org.id == org_id))

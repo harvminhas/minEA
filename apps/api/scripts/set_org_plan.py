@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 API_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(API_ROOT))
 
-from app.services.plan_features import PLANS, limits_for_plan, normalize_plan  # noqa: E402
+from app.services.plan_features import MANUAL_PLANS, limits_for_plan, normalize_plan  # noqa: E402
 
 LIMIT_KEYS = (
     "max_owners",
@@ -39,6 +39,7 @@ LIMIT_KEYS = (
     "max_objects_per_workspace",
     "max_pending_invites",
     "max_active_share_links",
+    "max_editor_seats",  # licence cap; NULL (unlimited) for hand-set Business
 )
 
 
@@ -99,7 +100,7 @@ def _upsert_limits(cur, org_id, limits: dict[str, int | None]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Assign Free / Business plan for an org")
     parser.add_argument("--org", required=True, help="Org slug (e.g. edomains-inc)")
-    parser.add_argument("--plan", choices=PLANS, help="Target plan: free or business")
+    parser.add_argument("--plan", choices=MANUAL_PLANS, help="Target plan: free or business")
     parser.add_argument(
         "--contributors",
         type=int,

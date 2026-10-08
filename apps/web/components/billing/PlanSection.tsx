@@ -9,6 +9,7 @@ import {
   BUSINESS_CONTACT_EMAIL,
   PLAN_DESCRIPTIONS,
   PLAN_LABELS,
+  isPaidPlan,
   normalizePlan,
   shareCreateBlockedMessage,
   shareQuotaLabel,
@@ -98,10 +99,10 @@ export function PlanSection({ orgSlug, org, billingMessage, onClearBillingMessag
         </p>
       )}
 
-      {plan === "business" && (
+      {isPaidPlan(plan) && (
         <p className="text-xs text-emerald-700 mt-2 flex items-center gap-1">
           <Check size={12} />
-          Business plan active
+          {PLAN_LABELS[plan]} plan active
         </p>
       )}
 
@@ -135,7 +136,7 @@ export function PlanSection({ orgSlug, org, billingMessage, onClearBillingMessag
         </div>
       )}
 
-      {plan === "business" && (
+      {isPaidPlan(plan) && (
         <p className="text-xs text-gray-400 mt-3">
           Need to adjust contributor licenses or add workspaces?{" "}
           <Link

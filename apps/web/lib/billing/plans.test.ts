@@ -88,9 +88,12 @@ test("display plan: free, legacy business, future paid business", () => {
   assert.equal(resolveDisplayPlan({ plan: "nonsense" }), "free");
   assert.equal(resolveDisplayPlan({ plan: "business", hasSubscription: false }), "business_legacy");
   assert.equal(resolveDisplayPlan({ plan: "business" }), "business_legacy");
-  // Old slugs the API still normalises to business are grandfathered too.
-  assert.equal(resolveDisplayPlan({ plan: "team" }), "business_legacy");
-  assert.equal(resolveDisplayPlan({ plan: "starter", hasSubscription: true }), "business_legacy");
+  // Pre-pack slugs mean Business and are grandfathered too.
+  assert.equal(resolveDisplayPlan({ plan: "solo" }), "business_legacy");
+  assert.equal(resolveDisplayPlan({ plan: "growth", hasSubscription: false }), "business_legacy");
+  // Packs come from Stripe and are no longer folded into Business.
+  assert.equal(resolveDisplayPlan({ plan: "team", hasSubscription: true }), "team");
+  assert.equal(resolveDisplayPlan({ plan: "starter", hasSubscription: true }), "starter");
   assert.equal(resolveDisplayPlan({ plan: "business", hasSubscription: true }), "business");
 });
 

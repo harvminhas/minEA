@@ -152,16 +152,14 @@ Always `--show` first on production.
 
 ## Legacy plan names
 
-Old values are migrated automatically:
+Migration `apps/api/migrations/031_plans_free_business.sql` rewrote the old values
+(`starter`, `growth`, `solo`, `team`) to `business`. `solo` and `growth` still read as Business.
 
-| Old | New |
-|-----|-----|
-| `starter` | `business` |
-| `growth` | `business` |
-| `solo` | `business` |
-| `team` | `business` |
-
-Migration: `apps/api/migrations/031_plans_free_business.sql`.
+Since the self-serve packs, `starter`, `team` and `business` are distinct plan keys again, but
+`starter` and `team` are only ever set by Stripe (see [stripe-billing.md](stripe-billing.md)).
+`set_org_plan.py` still only sets `free` or `business`. An org on `business` with no Stripe
+subscription is **Business (legacy)**: its hand-set limits stay as they are and it has no
+licence cap.
 
 ---
 

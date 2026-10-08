@@ -1,0 +1,51 @@
+{
+  "_comment": "Canonical plan catalogue. Python loads this file (app/services/plans.py); apps/web/lib/billing/plans.ts mirrors it and parity tests on both sides compare against it. Prices are USD.",
+  "currency": "usd",
+  "plans": {
+    "free": {
+      "label": "Free",
+      "licences": 1,
+      "monthly_usd": 0,
+      "yearly_usd": 0,
+      "ai_answers_per_month": 25,
+      "apps_platforms": 25,
+      "onboarding_hours": 0
+    },
+    "starter": {
+      "label": "Starter",
+      "licences": 1,
+      "monthly_usd": 99,
+      "yearly_usd": 990,
+      "ai_answers_per_month": 500,
+      "apps_platforms": null,
+      "onboarding_hours": 0
+    },
+    "team": {
+      "label": "Team",
+      "licences": 5,
+      "monthly_usd": 449,
+      "yearly_usd": 4490,
+      "ai_answers_per_month": 2500,
+      "apps_platforms": null,
+      "onboarding_hours": 4
+    },
+    "business": {
+      "label": "Business",
+      "licences": 10,
+      "monthly_usd": 799,
+      "yearly_usd": 7990,
+      "ai_answers_per_month": 5000,
+      "apps_platforms": null,
+      "onboarding_hours": 4
+    }
+  },
+  "pack_order": ["starter", "team", "business"],
+  "intervals": {"monthly": "month", "yearly": "year"},
+  "lookup_key_prefix": "bubomap",
+  "legacy_aliases": {"solo": "business", "growth": "business"},
+  "portal_configurations": {
+    "all": ["starter", "team", "business"],
+    "team_up": ["team", "business"],
+    "business_only": ["business"]
+  }
+}

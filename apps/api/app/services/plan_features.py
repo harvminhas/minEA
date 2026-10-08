@@ -1,12 +1,26 @@
-"""Billing plan capabilities — single source of truth for Free / Business."""
+"""Billing plan capabilities — Free and the paid packs (Starter / Team / Business).
+
+Plan keys, licences and prices come from plans.json (see app/services/plans.py).
+Every paid pack has the same features; packs differ only in licences (people who edit).
+
+Grandfathering: an org on "business" with no Stripe subscription is "Business (legacy)".
+It keeps its hand-set limits and has no licence cap (max_editor_seats is never written for it).
+"""
 
 from __future__ import annotations
 
 from fastapi import HTTPException, status
 
 from app.services.defaults import DEFAULT_ORG_LIMITS
+from app.services.plans import LEGACY_ALIASES, PACK_ORDER, PLAN_KEYS, plan_licences
 
-PLANS = ("free", "business")
+PLANS = PLAN_KEYS  # ("free", "starter", "team", "business")
+PAID_PLANS = PACK_ORDER
+# Plans an operator may set by hand (scripts/set_org_plan.py). Packs are only set by Stripe.
+MANUAL_PLANS = ("free", "business")
+
+# Licence cap key in org_limits. NULL / missing = no cap (legacy orgs).
+EDITOR_SEATS_KEY = "max_editor_seats"
 
 ALL_VIEW_KEYS = frozenset(
     {
@@ -19,78 +33,101 @@ ALL_VIEW_KEYS = frozenset(
     }
 )
 
-PLAN_VIEW_KEYS: dict[str, frozenset[str]] = {
-    "free": ALL_VIEW_KEYS,
-    "business": ALL_VIEW_KEYS,
-}
+_ALL_SHARE_TYPES = {"view", "roadmap", "object", "capability_map", "capability_domain"}
 
-PLAN_SHARE_RESOURCE_TYPES: dict[str, set[str]] = {
-    "free": {"view"},
-    "business": {"view", "roadmap", "object", "capability_map", "capability_domain"},
-}
 
-PLAN_AI_CHAT: dict[str, bool] = {
-    "free": False,
-    "business": True,
-}
+def _per_plan(free_value, paid_value) -> dict:
+    return {"free": free_value, **{plan: paid_value for plan in PAID_PLANS}}
 
-PLAN_INVITES: dict[str, bool] = {
-    "free": False,
-    "business": True,
-}
+
+PLAN_VIEW_KEYS: dict[str, frozenset[str]] = _per_plan(ALL_VIEW_KEYS, ALL_VIEW_KEYS)
+
+PLAN_SHARE_RESOURCE_TYPES: dict[str, set[str]] = _per_plan({"view"}, _ALL_SHARE_TYPES)
+
+PLAN_AI_CHAT: dict[str, bool] = _per_plan(False, True)
+
+PLAN_INVITES: dict[str, bool] = _per_plan(False, True)
 
 # Owned workspaces in this org (guest workspaces elsewhere are unlimited).
-PLAN_MAX_OWN_WORKSPACES: dict[str, int | None] = {
-    "free": 1,
-    "business": None,
+PLAN_MAX_OWN_WORKSPACES: dict[str, int | None] = _per_plan(1, None)
+
+PLAN_MAX_ACTIVE_SHARE_LINKS: dict[str, int | None] = _per_plan(1, 50)
+
+# Free: owner only. max_editor_seats = 1 matters after a paid org cancels (existing editors keep
+# access; nobody new can be added).
+_FREE_LIMITS: dict[str, int | None] = {
+    "max_workspaces": 1,
+    "max_objects_per_workspace": 50,
+    "max_pending_invites": 0,
+    "max_admins": 0,
+    "max_members": 0,
+    "max_viewers": 0,
+    "max_active_share_links": 1,
+    EDITOR_SEATS_KEY: plan_licences("free"),
 }
 
-PLAN_MAX_ACTIVE_SHARE_LINKS: dict[str, int | None] = {
-    "free": 1,
-    "business": 50,
+# Hand-set Business (legacy) — unchanged from before packs. No licence cap.
+LEGACY_BUSINESS_LIMITS: dict[str, int | None] = {
+    "max_workspaces": None,
+    "max_objects_per_workspace": None,
+    "max_viewers": None,
+    "max_members": 10,
+    "max_active_share_links": 50,
+    "max_pending_invites": 50,
+    EDITOR_SEATS_KEY: None,
 }
 
-# Per-plan org limit overrides (None = unlimited)
-PLAN_LIMIT_OVERRIDES: dict[str, dict[str, int | None]] = {
-    "free": {
-        "max_workspaces": 1,
-        "max_objects_per_workspace": 50,
-        "max_pending_invites": 0,
-        "max_admins": 0,
-        "max_members": 0,
-        "max_viewers": 0,
-        "max_active_share_links": 1,
-    },
-    "business": {
+
+def _pack_limits(plan: str) -> dict[str, int | None]:
+    # Licences govern editors (owner/admins + workspace admins/members); role caps are lifted.
+    return {
         "max_workspaces": None,
         "max_objects_per_workspace": None,
         "max_viewers": None,
-        "max_members": 10,
+        "max_members": None,
+        "max_admins": None,
         "max_active_share_links": 50,
         "max_pending_invites": 50,
-    },
+        EDITOR_SEATS_KEY: plan_licences(plan),
+    }
+
+
+# Per-plan org limit overrides (None = unlimited). "business" here is the Stripe pack.
+PLAN_LIMIT_OVERRIDES: dict[str, dict[str, int | None]] = {
+    "free": _FREE_LIMITS,
+    **{plan: _pack_limits(plan) for plan in PAID_PLANS},
 }
 
 
 def normalize_plan(plan: str | None) -> str:
-    """Map legacy plan slugs and validate."""
+    """Validate a stored plan slug. starter/team/business are distinct packs; solo/growth are
+    pre-pack slugs that mean Business. Unknown values fall back to free."""
     if not plan:
         return "free"
-    legacy = {
-        "starter": "business",
-        "growth": "business",
-        "solo": "business",
-        "team": "business",
-    }
-    normalized = legacy.get(plan, plan)
-    if normalized not in PLANS:
+    value = plan.strip().lower()
+    value = LEGACY_ALIASES.get(value, value)
+    if value not in PLANS:
         return "free"
-    return normalized
+    return value
 
 
-def limits_for_plan(plan: str) -> dict[str, int | None]:
+def is_paid_plan(plan: str | None) -> bool:
+    return normalize_plan(plan) in PAID_PLANS
+
+
+def is_legacy_business(plan: str | None, stripe_subscription_id: str | None) -> bool:
+    """Business set by hand before packs (no Stripe subscription)."""
+    return normalize_plan(plan) == "business" and not stripe_subscription_id
+
+
+def limits_for_plan(plan: str, *, stripe_managed: bool = False) -> dict[str, int | None]:
+    """Org limits for a plan. Business without Stripe = legacy limits (unchanged, no licence cap)."""
+    normalized = normalize_plan(plan)
     base = dict(DEFAULT_ORG_LIMITS)
-    base.update(PLAN_LIMIT_OVERRIDES.get(normalize_plan(plan), {}))
+    if normalized == "business" and not stripe_managed:
+        base.update(LEGACY_BUSINESS_LIMITS)
+    else:
+        base.update(PLAN_LIMIT_OVERRIDES.get(normalized, {}))
     return base
 
 

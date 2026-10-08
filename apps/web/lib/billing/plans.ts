@@ -1,6 +1,7 @@
 /**
- * Display-only plan catalogue for the pricing page and admin centre.
- * Enforcement still lives in apps/api/app/services/plan_features.py and is unchanged.
+ * Plan catalogue for the pricing page and admin centre.
+ * Mirrors apps/api/app/services/plans.json (the canonical copy the API and Stripe bootstrap use);
+ * plans-parity.test.ts fails if the two drift. Enforcement lives in the API.
  */
 
 export type PackId = "starter" | "team" | "business";
@@ -149,9 +150,10 @@ export function planIncludes(plan: CatalogPlan): string[] {
 }
 
 /**
- * Display-only mapping from the API plan to what the admin centre shows.
- * The API still normalises legacy starter/team/solo/growth slugs to "business", so any
- * business-equivalent org without a Stripe subscription is a grandfathered legacy org.
+ * Mapping from the API plan to what the admin centre shows. Same rule as display_plan in
+ * apps/api/app/routers/billing.py: starter/team/business are packs (set by Stripe); an org on
+ * "business" without a Stripe subscription is a grandfathered Business (legacy) org.
+ * Pre-pack slugs solo/growth also mean Business.
  */
 export function resolveDisplayPlan(
   source: { plan?: string | null; hasSubscription?: boolean | null },
@@ -159,10 +161,10 @@ export function resolveDisplayPlan(
 ): DisplayPlanId {
   if (preview) return preview;
   const raw = (source.plan ?? "free").trim().toLowerCase();
-  const businessLike = new Set(["business", "starter", "team", "solo", "growth"]);
-  if (!businessLike.has(raw)) return "free";
-  if (raw === "business" && source.hasSubscription) return "business";
-  return "business_legacy";
+  const plan = raw === "solo" || raw === "growth" ? "business" : raw;
+  if (plan === "starter" || plan === "team") return plan;
+  if (plan === "business") return source.hasSubscription ? "business" : "business_legacy";
+  return "free";
 }
 
 export interface DisplayEntitlements {

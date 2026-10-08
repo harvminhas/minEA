@@ -7,18 +7,30 @@ const SELF_SERVE_UPGRADE = "Upgrade in Settings → Plan & billing";
 
 export type OrgPlan = Org["plan"];
 
-const LEGACY_PLAN_MAP: Record<string, OrgPlan> = {
-  starter: "business",
-  growth: "business",
+/** Pre-pack slugs that mean Business. Mirrors legacy_aliases in apps/api/app/services/plans.json. */
+export const LEGACY_PLAN_MAP: Record<string, OrgPlan> = {
   solo: "business",
-  team: "business",
+  growth: "business",
 };
 
+export const PAID_PLANS: OrgPlan[] = ["starter", "team", "business"];
+const ALL_PLANS: OrgPlan[] = ["free", ...PAID_PLANS];
+
+/** Same rules as normalize_plan in apps/api/app/services/plan_features.py (parity-tested). */
 export function normalizePlan(plan: string | undefined | null): OrgPlan {
   if (!plan) return "free";
-  const mapped = LEGACY_PLAN_MAP[plan] ?? plan;
-  if (mapped === "free" || mapped === "business") return mapped;
-  return "free";
+  const value = plan.trim().toLowerCase();
+  const mapped = LEGACY_PLAN_MAP[value] ?? value;
+  return (ALL_PLANS as string[]).includes(mapped) ? (mapped as OrgPlan) : "free";
+}
+
+/** Starter, Team and Business all have the paid features; packs differ only in licences. */
+export function isPaidPlan(plan: string | undefined | null): boolean {
+  return normalizePlan(plan) !== "free";
+}
+
+function perPlan<T>(free: T, paid: T): Record<OrgPlan, T> {
+  return { free, starter: paid, team: paid, business: paid };
 }
 
 const ALL_SHARE_TYPES: ShareResourceType[] = [
@@ -29,34 +41,32 @@ const ALL_SHARE_TYPES: ShareResourceType[] = [
   "capability_domain",
 ];
 
-const PLAN_SHARE: Record<OrgPlan, Set<ShareResourceType>> = {
-  free: new Set(["view"]),
-  business: new Set(ALL_SHARE_TYPES),
-};
+const PLAN_SHARE: Record<OrgPlan, Set<ShareResourceType>> = perPlan(
+  new Set<ShareResourceType>(["view"]),
+  new Set(ALL_SHARE_TYPES)
+);
 
 export const PLAN_LABELS: Record<OrgPlan, string> = {
   free: "Free",
+  starter: "Starter",
+  team: "Team",
   business: "Business",
 };
 
-export const PLAN_OWN_WORKSPACE_LIMITS: Record<OrgPlan, number | null> = {
-  free: 1,
-  business: null,
-};
+export const PLAN_OWN_WORKSPACE_LIMITS: Record<OrgPlan, number | null> = perPlan<number | null>(1, null);
 
-export const PLAN_OBJECT_LIMITS: Record<OrgPlan, number | null> = {
-  free: 50,
-  business: null,
-};
+export const PLAN_OBJECT_LIMITS: Record<OrgPlan, number | null> = perPlan<number | null>(50, null);
 
-export const PLAN_SHARE_LINK_LIMITS: Record<OrgPlan, number | null> = {
-  free: 1,
-  business: 50,
-};
+export const PLAN_SHARE_LINK_LIMITS: Record<OrgPlan, number | null> = perPlan<number | null>(1, 50);
+
+const PACK_DESCRIPTION =
+  "Unlimited workspaces and repository objects, AI chat, team collaboration. Viewers are free.";
 
 export const PLAN_DESCRIPTIONS: Record<OrgPlan, string> = {
   free:
     "One user, one workspace, up to 50 repository objects, all views. Join unlimited workspaces others share with you.",
+  starter: `1 licence. ${PACK_DESCRIPTION}`,
+  team: `5 licences. ${PACK_DESCRIPTION}`,
   business:
     "Unlimited workspaces, AI chat, team collaboration, and guided onboarding. Contact us for pricing.",
 };
@@ -131,11 +141,11 @@ export function objectCreateBlockedMessage(
 }
 
 export function planAllowsAiChat(plan: OrgPlan | string | undefined | null): boolean {
-  return normalizePlan(plan ?? "free") === "business";
+  return isPaidPlan(plan);
 }
 
 export function planAllowsInvites(plan: OrgPlan | string | undefined | null): boolean {
-  return normalizePlan(plan ?? "free") === "business";
+  return isPaidPlan(plan);
 }
 
 export function planAllowsView(
@@ -164,7 +174,7 @@ export function planAllowsShareResource(
     ]);
     return !!resourceKey && shareable.has(resourceKey);
   }
-  return p === "business";
+  return isPaidPlan(p);
 }
 
 export function viewUpgradeMessage(viewLabel: string): string {
