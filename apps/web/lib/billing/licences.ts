@@ -27,6 +27,11 @@ export function licenceStatusFor(orgRole: string, workspaceRoles: string[]): Lic
   return "no_access";
 }
 
+export function workspaceRoleLabel(role: string): string {
+  if (role === "member" || role === "editor") return "editor";
+  return role;
+}
+
 export function holdsLicence(status: LicenceStatus): boolean {
   return status === "owner" || status === "admin" || status === "editor";
 }
@@ -34,7 +39,7 @@ export function holdsLicence(status: LicenceStatus): boolean {
 export interface RosterMember {
   user_id: string;
   email: string;
-  full_name: string | null;
+  full_name?: string | null;
   role: string;
 }
 

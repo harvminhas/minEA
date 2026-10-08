@@ -14,9 +14,17 @@ import {
   workspaceQuotaLabel,
 } from "@/lib/plan-features";
 import { PlanSection } from "@/components/billing/PlanSection";
+import { BillingCentre } from "@/components/billing/BillingCentre";
+import { BillingPreviewSwitch } from "@/components/billing/BillingPreviewSwitch";
+import { LicencesPanel } from "@/components/billing/LicencesPanel";
+import { billingPreviewEnabled, billingUiEnabled } from "@/lib/billing/flags";
+import { ADMIN_TABS, adminTabHref, resolveAdminTab, type AdminTab } from "@/lib/billing/admin-centre";
+import { entitlementsFor, parsePreviewPlan, resolveDisplayPlan } from "@/lib/billing/plans";
+import { summarizeLicences } from "@/lib/billing/licences";
+import { useLicenceRoster } from "@/lib/billing/use-licence-roster";
 import { useAppStore } from "@/lib/store";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 export default function OrgSettingsPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
@@ -105,6 +113,37 @@ export default function OrgSettingsPage() {
   const canCreateOwnWorkspace =
     canCreateWorkspace && (billingStatus?.can_create_own_workspace ?? true);
 
+  // Admin centre (NEXT_PUBLIC_BILLING_UI). Flag off: tab is null and every section renders as before.
+  const billingUi = billingUiEnabled();
+  const tab = resolveAdminTab(searchParams.get("tab"), billingUi);
+  const show = (t: AdminTab) => tab === null || tab === t;
+  const preview = parsePreviewPlan(searchParams.get("preview"), billingPreviewEnabled());
+  const realPlan = resolveDisplayPlan({
+    plan: billingStatus?.plan ?? org?.plan,
+    hasSubscription: billingStatus?.has_subscription,
+  });
+  const displayPlan = resolveDisplayPlan(
+    { plan: billingStatus?.plan ?? org?.plan, hasSubscription: billingStatus?.has_subscription },
+    preview
+  );
+  const roster = useLicenceRoster(
+    orgSlug,
+    members,
+    workspaces,
+    billingUi && canManageOrg && (tab === "licences" || tab === "billing")
+  );
+  const licenceSummary = useMemo(
+    () =>
+      roster.rows
+        ? summarizeLicences(
+            roster.rows.filter((r) => r.hasLicence).length,
+            entitlementsFor(displayPlan).licences
+          )
+        : null,
+    [roster.rows, displayPlan]
+  );
+  const billingHref = adminTabHref(orgSlug, "billing", preview);
+
   // Non-admin members have no actions here — send them straight to their workspace
   useEffect(() => {
     if (!org || !workspaces) return;
@@ -186,13 +225,39 @@ export default function OrgSettingsPage() {
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">{org?.name ?? orgSlug} — Settings</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">
+        {org?.name ?? orgSlug} — {billingUi && canManageOrg ? "Admin centre" : "Settings"}
+      </h1>
       {org && (
         <p className="text-sm text-gray-500 mb-6 capitalize">
           Your role: <span className="font-medium text-gray-700">{org.role}</span>
         </p>
       )}
 
+      {billingUi && canManageOrg && billingPreviewEnabled() && (
+        <BillingPreviewSwitch preview={preview} realLabel={entitlementsFor(realPlan).label} />
+      )}
+
+      {billingUi && canManageOrg && (
+        <nav className="mb-6 flex gap-1 border-b border-gray-200" aria-label="Admin centre">
+          {ADMIN_TABS.filter((t) => t.id !== "billing" || canManageBilling).map((t) => (
+            <Link
+              key={t.id}
+              href={adminTabHref(orgSlug, t.id, preview)}
+              aria-current={tab === t.id ? "page" : undefined}
+              className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${
+                tab === t.id
+                  ? "border-indigo-600 text-indigo-700"
+                  : "border-transparent text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              {t.label}
+            </Link>
+          ))}
+        </nav>
+      )}
+
+      {show("general") && (
       <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <div className="flex items-center justify-between mb-1">
           <h2 className="font-semibold text-gray-900">Workspaces</h2>
@@ -246,6 +311,7 @@ export default function OrgSettingsPage() {
           </p>
         )}
       </section>
+      )}
 
       {!canManageOrg && (
         <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
@@ -294,8 +360,21 @@ export default function OrgSettingsPage() {
         </section>
       )}
 
-      {canManageOrg && (
+      {canManageOrg && show("licences") && (
       <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        {billingUi ? (
+          <div className="mb-4">
+            <LicencesPanel
+              rows={roster.rows}
+              error={roster.error}
+              summary={licenceSummary}
+              displayPlan={displayPlan}
+              billingHref={billingHref}
+              pendingInvites={(invites ?? []).filter((i) => i.status === "pending").length}
+            />
+          </div>
+        ) : (
+        <>
         <h2 className="font-semibold text-gray-900 mb-4">Members</h2>
         <div className="divide-y divide-gray-100 mb-4">
           {(members ?? []).map((m) => (
@@ -311,18 +390,29 @@ export default function OrgSettingsPage() {
             <p className="text-sm text-gray-400 py-2">Loading members…</p>
           )}
         </div>
+        </>
+        )}
 
         <div className="border-t border-gray-100 pt-4">
             <h3 className="text-sm font-medium text-gray-700 mb-2">Invite to org</h3>
             {!canInviteOrgMembers ? (
               <div className="rounded-md bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
                 <p>{inviteUpgradeMessage(plan)}</p>
+                {billingUi ? (
+                  <Link
+                    href={billingHref}
+                    className="inline-block mt-2 text-indigo-600 font-medium hover:text-indigo-700"
+                  >
+                    See plans →
+                  </Link>
+                ) : (
                 <Link
                   href={`mailto:${TEAM_CONTACT_EMAIL}?subject=BuboMap%20Business%20plan`}
                   className="inline-block mt-2 text-indigo-600 font-medium hover:text-indigo-700"
                 >
                   Contact us for Business →
                 </Link>
+                )}
               </div>
             ) : (
               <>
@@ -343,8 +433,12 @@ export default function OrgSettingsPage() {
                     onChange={(e) => setInviteRole(e.target.value)}
                     className="border border-gray-200 rounded-md px-2 py-2 text-sm"
                   >
-                    <option value="member">Member — contributor license</option>
-                    <option value="admin">Admin — contributor license</option>
+                    <option value="member">
+                      {billingUi ? "Member — no workspace access until added" : "Member — contributor license"}
+                    </option>
+                    <option value="admin">
+                      {billingUi ? "Admin — uses a licence" : "Admin — contributor license"}
+                    </option>
                   </select>
                   <button
                     onClick={() => inviteMutation.mutate()}
@@ -364,7 +458,9 @@ export default function OrgSettingsPage() {
                   </p>
                 )}
                 <p className="text-xs text-gray-400 mt-2">
-                  Business plan: contributor licenses are capped; viewers are unlimited.
+                  {billingUi
+                    ? "Licences cover people who edit; viewers are free and unlimited. Give workspace access from each workspace's Members page."
+                    : "Business plan: contributor licenses are capped; viewers are unlimited."}
                 </p>
               </>
             )}
@@ -372,7 +468,17 @@ export default function OrgSettingsPage() {
       </section>
       )}
 
-      {canManageBilling && (
+      {billingUi && canManageBilling && show("billing") && (
+        <BillingCentre
+          displayPlan={displayPlan}
+          realPlan={realPlan}
+          previewing={!!preview}
+          billingStatus={billingStatus}
+          licences={licenceSummary}
+        />
+      )}
+
+      {!billingUi && canManageBilling && (
         <PlanSection
           orgSlug={orgSlug}
           org={org}
@@ -381,7 +487,7 @@ export default function OrgSettingsPage() {
         />
       )}
 
-      {canDeleteOrg && (
+      {canDeleteOrg && show("general") && (
         <section className="bg-white rounded-lg border border-red-100 p-6 mb-6">
           <h2 className="font-semibold text-red-900 mb-2">Danger zone</h2>
           <p className="text-sm text-gray-600 mb-4">
@@ -421,7 +527,7 @@ export default function OrgSettingsPage() {
         </section>
       )}
 
-      {canManageOrg && (
+      {canManageOrg && show("licences") && (
         <section className="bg-white rounded-lg border border-gray-200 p-6">
           <h2 className="font-semibold text-gray-900 mb-4">Pending invites</h2>
           <div className="divide-y divide-gray-100">

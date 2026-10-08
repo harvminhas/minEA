@@ -7,6 +7,7 @@ import {
   licenceStatusFor,
   licencesUsedLabel,
   summarizeLicences,
+  workspaceRoleLabel,
 } from "./licences.ts";
 
 test("licence holders are owner, admins and workspace editors", () => {
@@ -74,4 +75,10 @@ test("used labels", () => {
   assert.equal(licencesUsedLabel(summarizeLicences(1, 1)), "1 of 1 licence used");
   assert.equal(licencesUsedLabel(summarizeLicences(3, 5)), "3 of 5 licences used");
   assert.equal(licencesUsedLabel(summarizeLicences(1, null)), "1 licence in use");
+});
+
+test("workspace role labels call members editors", () => {
+  assert.equal(workspaceRoleLabel("member"), "editor");
+  assert.equal(workspaceRoleLabel("admin"), "admin");
+  assert.equal(workspaceRoleLabel("viewer"), "viewer");
 });

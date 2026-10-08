@@ -1,5 +1,9 @@
 import type { Org, ShareResourceType } from "@minea/types";
 import type { ViewId } from "@/lib/views";
+import { billingUiEnabled } from "@/lib/billing/flags";
+
+/** Self-serve upgrade hint used instead of "Contact us" when NEXT_PUBLIC_BILLING_UI is on. */
+const SELF_SERVE_UPGRADE = "Upgrade in Settings → Plan & billing";
 
 export type OrgPlan = Org["plan"];
 
@@ -77,6 +81,9 @@ export function shareCreateBlockedMessage(
 ): string {
   const p = normalizePlan(plan ?? "free");
   if (p === "free") {
+    if (billingUiEnabled()) {
+      return `Free includes one active share link. ${SELF_SERVE_UPGRADE} for more, or revoke an existing link first.`;
+    }
     return "Free includes one active share link. Contact us for Business for more, or revoke an existing link first.";
   }
   const cap = limit ?? PLAN_SHARE_LINK_LIMITS[p];
@@ -89,6 +96,12 @@ export function workspaceCreateBlockedMessage(
 ): string {
   const p = normalizePlan(plan ?? "free");
   if (p === "free") {
+    if (billingUiEnabled()) {
+      return (
+        `Free includes one workspace. ${SELF_SERVE_UPGRADE} to create more, ` +
+        "or join unlimited workspaces shared with you by others."
+      );
+    }
     return (
       "Free includes one workspace. Contact us for Business to create more workspaces, " +
       "or join unlimited workspaces shared with you by others."
@@ -108,8 +121,12 @@ export function objectCreateBlockedMessage(
   const p = normalizePlan(plan ?? "free");
   if (p === "free") {
     const cap = limit ?? PLAN_OBJECT_LIMITS.free;
+    if (billingUiEnabled()) {
+      return `Free includes up to ${cap} repository objects. ${SELF_SERVE_UPGRADE} to add more.`;
+    }
     return `Free includes up to ${cap} repository objects. Contact us for Business to add more.`;
   }
+  if (billingUiEnabled()) return "Repository object limit reached for your plan.";
   return "Repository object limit reached. Contact us to adjust your plan.";
 }
 
@@ -155,6 +172,9 @@ export function viewUpgradeMessage(viewLabel: string): string {
 }
 
 export function inviteUpgradeMessage(_plan: OrgPlan): string {
+  if (billingUiEnabled()) {
+    return "Inviting teammates needs a paid plan: Starter, Team or Business. Viewers are always free.";
+  }
   return "Inviting teammates requires a Business plan. Contact us for a quote based on contributor licenses.";
 }
 
