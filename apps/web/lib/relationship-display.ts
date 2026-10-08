@@ -30,8 +30,24 @@ export function relationshipEndpointLabel(type: ObjectType): string {
   return OBJECT_TYPE_LABELS[type] ?? type;
 }
 
+/**
+ * Words for a stored relationship type. A type this build doesn't know yet (a newer build
+ * wrote it to the shared database) falls back to its own name instead of throwing.
+ */
+export function relationshipWords(type: string): { forward: string; reverse: string; sentence: (from: string, to: string) => string } {
+  const known = (RELATIONSHIP_LABELS as Partial<Record<string, (typeof RELATIONSHIP_LABELS)[RelationshipType]>>)[type];
+  if (known) return known;
+  const plain = String(type ?? "").replaceAll("_", " ").trim() || "linked to";
+  const forward = plain.charAt(0).toUpperCase() + plain.slice(1);
+  return {
+    forward,
+    reverse: `${forward} (from)`,
+    sentence: (from, to) => `${from} ${plain} ${to}`,
+  };
+}
+
 export function relationshipVerb(type: RelationshipType): string {
-  return RELATIONSHIP_LABELS[type].forward.toLowerCase();
+  return relationshipWords(type).forward.toLowerCase();
 }
 
 export function formatRelationshipTriple(
@@ -42,7 +58,7 @@ export function formatRelationshipTriple(
 ): { nameLine: string; typeLine: string } {
   const fromName = rel.from_object_id === currentObjectId ? currentName : otherName;
   const toName = rel.to_object_id === currentObjectId ? currentName : otherName;
-  const words = RELATIONSHIP_LABELS[rel.type];
+  const words = relationshipWords(rel.type);
   const outbound = rel.from_object_id === currentObjectId;
   const verb = relationshipVerb(rel.type);
   const fromType = relationshipEndpointLabel(rel.from_type);
@@ -61,7 +77,7 @@ export function describeRelationship(
 ): { label: string; typeLabel: string } {
   const outbound = rel.from_object_id === currentObjectId;
   const otherType = otherRelationshipObjectType(rel, currentObjectId);
-  const words = RELATIONSHIP_LABELS[rel.type];
+  const words = relationshipWords(rel.type);
   const phrase = outbound ? words.forward : words.reverse;
 
   return {
