@@ -109,6 +109,13 @@ ALLOWED_TRIPLES: set[tuple[str, str, str]] = {
     ("supplied_by", "ai_model", "external_party"),
     ("sends_data_to", "cloud_service", "data_store"),
     ("uses", "application", "integration_flow"),
+    # Sign-in (single sign-on). The target is whatever people sign in through, usually
+    # Microsoft 365 recorded as an application or a platform. Both directions for both
+    # types so an app <-> platform switch keeps the link.
+    ("authenticates_via", "application", "application"),
+    ("authenticates_via", "application", "cloud_service"),
+    ("authenticates_via", "cloud_service", "application"),
+    ("authenticates_via", "cloud_service", "cloud_service"),
 }
 
 _FLOW_ENDS = ("application", "solution", "technical_capability", "cloud_service", "external_party")
@@ -122,6 +129,7 @@ _NOT_A_HOST = {"application", "solution", "technical_capability", "component"}
 HOSTING_ON_APPLICATION = (
     "Applications can't run on applications. Use Depends on, or pick a Platform or Server."
 )
+SIGN_IN_WITH_ITSELF = "A system can't sign in with itself. Pick the app or platform people sign in through."
 
 
 def _copy_application_links(alias: str) -> None:
@@ -201,6 +209,8 @@ class RelationshipCreate(BaseModel):
         message = relationship_rejection(self.type, self.from_type, self.to_type)
         if message:
             raise ValueError(message)
+        if self.type == "authenticates_via" and self.from_object_id == self.to_object_id:
+            raise ValueError(SIGN_IN_WITH_ITSELF)
         validate_flow_attributes(self.type, self.attributes)
         return self
 

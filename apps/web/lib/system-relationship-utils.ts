@@ -58,6 +58,7 @@ const RELATIONSHIP_DIAGRAM_ORDER: Partial<Record<RelationshipType, number>> = {
   belongs_to: 5,
   runs_on: 3,
   built_on: 4,
+  authenticates_via: 4,
   part_of: 5,
   calls: 6,
   consumes: 7,

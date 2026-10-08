@@ -103,6 +103,23 @@ class TypeSwitchTests(unittest.TestCase):
         self.assertEqual([item.id for item in planned.invalid], ["built"])
         self.assertEqual(planned.merged, [])
 
+    def test_sign_in_links_survive_an_app_platform_switch(self):
+        planned = plan_type_switch(
+            "m365",
+            "application",
+            "cloud_service",
+            [
+                link("sso", "authenticates_via", "application", "application", from_id="sf", to_id="m365"),
+                link("own", "authenticates_via", "application", "application", from_id="m365", to_id="okta"),
+            ],
+            {"sf": "Salesforce", "okta": "Okta"},
+        )
+        kept = {item.id: item for item in planned.kept}
+        self.assertEqual(set(kept), {"sso", "own"})
+        self.assertEqual(kept["sso"].to_type, "cloud_service")
+        self.assertEqual(kept["own"].from_type, "cloud_service")
+        self.assertEqual(planned.invalid, [])
+
     def test_a_duplicate_remap_is_a_merge(self):
         planned = plan_type_switch(
             "edi",

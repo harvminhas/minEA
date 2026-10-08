@@ -83,6 +83,7 @@ _REL_ORDER = (
     "reads", "writes", "owns", "creates", "updates", "belongs_to", "contains", "connects", "routes", "hosts",
     "carries", "runs_on", "located_at", "supplied_by", "sends_data_to", "built_on", "uses_model", "can_call",
     "supports", "escalates_to", "accesses", "connects_to", "affects", "resolves", "replaces",
+    "authenticates_via",
 )
 
 # (type, target) → note. (type, None) applies to every target of that type.
@@ -97,6 +98,7 @@ _NOTES: dict[tuple[str, str | None], str] = {
     ("built_on", None): "the platform or tool it is built with",
     ("uses_model", None): "the AI model an agent uses",
     ("can_call", None): "an agent calling a tool or another agent",
+    ("authenticates_via", None): "the app or platform people sign in through (single sign-on)",
 }
 
 

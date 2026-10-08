@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from app.schemas.relationships import (
     ALLOWED_TRIPLES,
     HOSTING_ON_APPLICATION,
+    SIGN_IN_WITH_ITSELF,
     RelationshipCreate,
     identical_relationship,
 )
@@ -60,12 +61,37 @@ class RelationshipRulesTests(unittest.TestCase):
             for rel_type, source, target in ALLOWED_TRIPLES
             if source == "application" and target == "application"
         }
-        self.assertEqual(verbs, {"depends_on", "sends_data_to", "part_of", "replaces"})
+        self.assertEqual(verbs, {"depends_on", "sends_data_to", "part_of", "replaces", "authenticates_via"})
         self.assertNotIn(("calls", "application", "application"), ALLOWED_TRIPLES)
         self.assertNotIn(("exposes", "application", "tool"), ALLOWED_TRIPLES)
         self.assertIn(("affects", "roadmap_item", "application"), ALLOWED_TRIPLES)
         self.assertIn(("uses_model", "agent", "ai_model"), ALLOWED_TRIPLES)
         self.assertNotIn(("uses_model", "agent", "model"), ALLOWED_TRIPLES)
+
+    def test_sign_in_links_apps_and_platforms_both_ways(self):
+        for source in ("application", "solution", "technical_capability", "cloud_service"):
+            for target in ("application", "solution", "technical_capability", "cloud_service"):
+                self.assertEqual(_create("authenticates_via", source, target).type, "authenticates_via")
+        for source, target in (
+            ("application", "model"),
+            ("agent", "application"),
+            ("model", "application"),
+            ("application", "external_party"),
+        ):
+            with self.assertRaises(ValidationError):
+                _create("authenticates_via", source, target)
+
+    def test_a_system_cannot_sign_in_with_itself(self):
+        same = uuid4()
+        with self.assertRaises(ValidationError) as ctx:
+            RelationshipCreate(
+                type="authenticates_via",
+                from_object_id=same,
+                from_type="application",
+                to_object_id=same,
+                to_type="application",
+            )
+        self.assertIn(SIGN_IN_WITH_ITSELF, str(ctx.exception))
 
     def test_app_to_vendor_data_link_is_rejected(self):
         with self.assertRaises(ValidationError):

@@ -49,4 +49,5 @@ export const RELATIONSHIP_LABELS: Record<RelationshipType, RelationshipLabel> = 
   located_at: label("Located at", "Location of", (from, to) => `${from} is located at ${to}`),
   supplied_by: label("Supplied by", "Supplies", (from, to) => `${from} is supplied by ${to}`),
   sends_data_to: label("Sends data to", "Gets data from", (from, to) => `${from} sends data to ${to}`),
+  authenticates_via: label("Signs in with", "Sign-in for", (from, to) => `${from} signs in with ${to}`),
 };

@@ -89,7 +89,7 @@ test("offered sections follow the sidebar for each source", () => {
       .filter((link) => link.target === "application")
       .map((link) => link.type)
       .sort(),
-    ["depends_on", "part_of", "replaces", "sends_data_to"]
+    ["authenticates_via", "depends_on", "part_of", "replaces", "sends_data_to"]
   );
   assert.deepEqual(
     linkTargetsFor("application")
@@ -221,4 +221,18 @@ test("a picked field-backed link routes through toPatch", () => {
       }
     }
   }
+});
+
+test("Signs in with is offered both ways between applications and platforms", () => {
+  for (const [source, target] of [
+    ["application", "application"],
+    ["application", "cloud_service"],
+    ["cloud_service", "application"],
+    ["cloud_service", "cloud_service"],
+  ] as const) {
+    const link = linksForTarget(source, target).find((item) => item.type === "authenticates_via");
+    assert.equal(link?.direction, "both", `${source} -> ${target}`);
+  }
+  assert.equal(linksForTarget("application", "model").some((link) => link.type === "authenticates_via"), false);
+  assert.equal(linksForTarget("agent", "application").some((link) => link.type === "authenticates_via"), false);
 });

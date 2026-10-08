@@ -58,6 +58,7 @@ _LABELS: dict[str, tuple[str, str]] = {
     "connects_to": ("Connects to", "Connected through"),
     "located_at": ("Located at", "Location of"),
     "supplied_by": ("Supplied by", "Supplies"),
+    "authenticates_via": ("Signs in with", "Sign-in for"),
     "sends_data_to": ("Sends data to", "Gets data from"),
 }
 

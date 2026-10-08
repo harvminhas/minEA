@@ -878,7 +878,8 @@ export type RelationshipType =
   | "connects_to"
   | "located_at"
   | "supplied_by"
-  | "sends_data_to";
+  | "sends_data_to"
+  | "authenticates_via";
 
 export interface Relationship {
   id: string;
