@@ -22,3 +22,43 @@ export function isSignInCandidate(object: { type: string; status?: string | null
   const lifecycle = typeof object.properties?.lifecycle === "string" ? object.properties.lifecycle : "";
   return !RETIRED.has(object.status ?? "") && !RETIRED.has(lifecycle);
 }
+
+/** Types a sign-in link can point at (and come from). Matches ALLOWED_TRIPLES after the solution/capability copy. */
+export const SIGN_IN_TARGETS = ["application", "solution", "technical_capability", "cloud_service"] as const;
+
+/** How many records sign in with each provider. */
+export function signInCounts(relationships: readonly { type: string; to_object_id: string }[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const rel of relationships) {
+    if (rel.type === SIGN_IN_EDGE) counts.set(rel.to_object_id, (counts.get(rel.to_object_id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * Picker order for "Signs in with": records others already sign in with (most used first),
+ * then known identity providers, then everything else in its original order.
+ */
+export function orderSignInChoices<T extends { id: string }>(
+  choices: readonly T[],
+  counts: ReadonlyMap<string, number>,
+  isIdentityProvider: (choice: T) => boolean = () => false
+): T[] {
+  const rank = (choice: T) => ((counts.get(choice.id) ?? 0) > 0 ? 0 : isIdentityProvider(choice) ? 1 : 2);
+  return choices
+    .map((choice, index) => ({ choice, index }))
+    .sort(
+      (a, b) =>
+        rank(a.choice) - rank(b.choice) ||
+        (counts.get(b.choice.id) ?? 0) - (counts.get(a.choice.id) ?? 0) ||
+        a.index - b.index
+    )
+    .map((item) => item.choice);
+}
+
+/** Exclusive pick: Own login clears the providers, and a provider clears Own login. */
+export function toggleSignInPick(current: readonly string[], id: string): string[] {
+  if (current.includes(id)) return current.filter((item) => item !== id);
+  if (id === OWN_LOGIN) return [OWN_LOGIN];
+  return [...current.filter((item) => item !== OWN_LOGIN), id];
+}

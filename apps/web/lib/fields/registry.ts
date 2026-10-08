@@ -18,6 +18,7 @@ import {
 import { RUNTIME_COST_MODEL, RUNTIME_HOSTING, RUNTIME_KINDS, RUNTIME_PROVIDERS } from "@/lib/runtime-utils";
 import { systemCategorySelectOptions } from "@/lib/system-category";
 import { systemGovernanceSelectOptions } from "@/lib/system-governance";
+import { SIGN_IN_EDGE, SIGN_IN_TARGETS } from "@/lib/sign-in";
 
 export type Section = "basics" | "ownership" | "cost" | "hosting" | "lifecycle" | "ai" | "notes";
 
@@ -97,6 +98,7 @@ export const INTERNAL_KEYS = [
   "catalog_tool",
   "vendor", // kept beside the supplied_by link; the Vendor field writes both
   "eu_ai_act_risk_class",
+  "sign_in", // "own_login" when Signs in with is Own login (no SSO); the field writes it
 ] as const;
 
 /** Fixed-options multi-select for properties.holds_data (order = stored order). */
@@ -194,6 +196,24 @@ function byValue(items: readonly { value: string; label: string }[]) {
 }
 
 const appOnly = (o: { type: string }) => o.type === "application";
+
+/** Apps and platforms: the app or platform people sign in through (single sign-on), or Own login. */
+const signsInWithField: FieldDef = {
+  key: "signs_in_with",
+  label: "Signs in with",
+  section: "hosting",
+  editor: "relation",
+  source: { kind: "rel", edge: SIGN_IN_EDGE, dir: "out", target: [...SIGN_IN_TARGETS], single: false },
+};
+
+const signInForField: FieldDef = {
+  key: "sign_in_for",
+  label: "Sign-in for",
+  section: "hosting",
+  editor: "none",
+  source: { kind: "derived" },
+  readOnlyReason: "Count of items that sign in with this",
+};
 const platformOther = (o: { properties: Record<string, unknown> }) => o.properties.platform_type === "other";
 const infraCustom = (o: { properties: Record<string, unknown> }) => o.properties.integration_infra_kind === "custom";
 const flowManual = (o: { properties: Record<string, unknown> }) => o.properties.mechanism === "manual";
@@ -287,6 +307,8 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
       editor: "relation",
       source: { kind: "rel", edge: "runs_on", dir: "out", target: ["model"], single: false },
     },
+    signsInWithField,
+    signInForField,
     {
       key: "located_at",
       label: "Location",
@@ -382,6 +404,8 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
     { key: "environments", label: "Environments", section: "hosting", editor: "tags", source: { kind: "prop", key: "environments" } },
     { key: "admin_url", label: "Admin URL", section: "hosting", editor: "text", source: { kind: "prop", key: "admin_url" } },
     { key: "built_on_it", label: "Built on it", section: "hosting", editor: "none", source: { kind: "derived" }, readOnlyReason: "Count of items built on this" },
+    signsInWithField,
+    signInForField,
     { key: "lifecycle", label: "Lifecycle", section: "lifecycle", editor: "select", source: { kind: "prop", key: "lifecycle" }, options: byValue(PLATFORM_LIFECYCLE) },
     { key: "criticality", label: "Criticality", section: "lifecycle", editor: "select", source: { kind: "prop", key: "criticality" }, options: CRITICALITY },
     { key: "sla_target", label: "SLA target", section: "lifecycle", editor: "select", source: { kind: "prop", key: "sla_target" }, options: byValue(PLATFORM_SLA) },

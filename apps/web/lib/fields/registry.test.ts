@@ -593,3 +593,47 @@ test("holds data saves in a fixed order, drops None beside a real kind, and clea
   assert.equal(sameFieldValue(["customer"], ["customer"]), true);
   assert.equal(sameFieldValue(["customer"], ["customer", "financial"]), false);
 });
+
+test("Signs in with: providers are links, Own login is a flag, and each clears the other", () => {
+  for (const type of ["application", "platform"] as const) {
+    const def = REGISTRY[type].find((field) => field.key === "signs_in_with")!;
+    assert.equal(def.label, "Signs in with", type);
+    assert.equal(def.section, "hosting", type);
+    assert.deepEqual(def.source, { kind: "rel", edge: "authenticates_via", dir: "out", target: ["application", "solution", "technical_capability", "cloud_service"], single: false });
+    assert.equal(REGISTRY[type].find((field) => field.key === "sign_in_for")?.editor, "none", type);
+    assert.equal(CREATE_FORM_KEYS[type].includes("signs_in_with"), false, type);
+  }
+  const def = REGISTRY.application.find((field) => field.key === "signs_in_with")!;
+  const app = blankRecord("application");
+  assert.deepEqual(readField(def, app, []), []);
+
+  const own = applyPatch(app, toPatch(def, ["own_login"], app, []), []);
+  assert.equal(own.properties.sign_in, "own_login");
+  assert.equal(own.edges?.length, 0);
+  assert.deepEqual(readField(def, own, []), ["own_login"]);
+
+  const typeOf = (id: string) => (id === "m365" ? "cloud_service" : "application");
+  const linked = applyPatch(own, toPatch(def, ["m365"], own, [], undefined, typeOf), []);
+  assert.equal("sign_in" in linked.properties, false);
+  assert.deepEqual(readField(def, linked, linked.edges), ["m365"]);
+  assert.equal(linked.edges?.[0]?.type, "authenticates_via");
+  assert.equal(linked.edges?.[0]?.to_type, "cloud_service");
+
+  // A provider added beside Own login (the Relationships dialog appends) wins.
+  const both = toPatch(def, ["own_login", "okta"], own, [], undefined, typeOf);
+  assert.deepEqual(both.addRel?.map((rel) => rel.to_object_id), ["okta"]);
+  assert.equal(both.object?.properties?.sign_in, null);
+
+  const back = applyPatch(linked, toPatch(def, ["own_login"], linked, linked.edges ?? []), linked.edges ?? []);
+  assert.equal(back.edges?.length, 0);
+  assert.equal(back.properties.sign_in, "own_login");
+
+  const cleared = applyPatch(back, toPatch(def, [], back, []), []);
+  assert.equal("sign_in" in cleared.properties, false);
+  assert.deepEqual(toPatch(def, [], app, []).object, undefined, "no property write when nothing was flagged");
+
+  // Links win over a stale flag.
+  const stale = { ...app, properties: { sign_in: "own_login" } };
+  assert.deepEqual(readField(def, stale, [outgoing(stale, "authenticates_via", "cloud_service", "m365")]), ["m365"]);
+  assert.equal(INTERNAL_KEYS.includes("sign_in" as never), true);
+});

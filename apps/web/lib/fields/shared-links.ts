@@ -1,6 +1,6 @@
 import { REGISTRY, recordTypeOf } from "@/lib/fields/registry";
 
-export const FIELD_MANAGED_EDGES = ["built_on", "runs_on", "located_at", "supplied_by"] as const;
+export const FIELD_MANAGED_EDGES = ["built_on", "runs_on", "located_at", "supplied_by", "authenticates_via"] as const;
 
 const CREATABLE = new Set(["cloud_service", "model", "location", "external_party"]);
 

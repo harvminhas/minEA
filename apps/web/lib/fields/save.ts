@@ -5,6 +5,7 @@ import type { FieldDef } from "@/lib/fields/registry";
 import { ownershipFromEntity, ownershipToPayload, type OwnershipValue } from "@/lib/owner-fields";
 import { isSystemObjectType } from "@/lib/platform-relationship-utils";
 import { lifecycleToStatus } from "@/lib/platform-utils";
+import { OWN_LOGIN, isOwnLogin } from "@/lib/sign-in";
 
 export type FieldEdge = {
   id: string;
@@ -115,6 +116,8 @@ export function readField(def: FieldDef, record: FieldRecord, edges?: FieldEdge[
   }
   if (def.source.kind === "rel") {
     const ids = list.filter((edge) => relMatches(def, edge, record.id)).map((edge) => relId(def, edge));
+    // Links win over a stale Own login flag; with no links the flag reads as the Own login choice.
+    if (def.key === "signs_in_with" && ids.length === 0 && isOwnLogin(record.properties)) return [OWN_LOGIN];
     return def.source.single ? (ids[0] ?? "") : ids;
   }
   return "";
@@ -147,7 +150,13 @@ export function toPatch(
   if (def.source.kind === "rel") {
     const source = def.source;
     const removeRelIds = edges.filter((edge) => relMatches(def, edge, record.id)).map((edge) => edge.id);
-    const ids = empty ? [] : Array.isArray(value) ? value.map(String) : [String(value)];
+    let ids = empty ? [] : Array.isArray(value) ? value.map(String) : [String(value)];
+    let ownLogin = false;
+    if (def.key === "signs_in_with") {
+      const providers = ids.filter((id) => id !== OWN_LOGIN);
+      ownLogin = providers.length === 0 && ids.includes(OWN_LOGIN);
+      ids = providers;
+    }
     const incoming = source.dir === "in";
     const endType = (id: string): string => {
       const matched = edges.find(
@@ -188,6 +197,9 @@ export function toPatch(
       }
     }
     const patch: FieldPatch = { addRel, removeRelIds };
+    if (def.key === "signs_in_with" && (ownLogin || isOwnLogin(record.properties))) {
+      patch.object = { properties: { sign_in: ownLogin ? OWN_LOGIN : null } };
+    }
     if (def.key === "vendor" && label !== undefined) {
       patch.object = { properties: { vendor: empty || !label ? null : label } };
     }

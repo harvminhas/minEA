@@ -66,3 +66,11 @@ test("an empty hosting picker offers to create the typed name", () => {
     null
   );
 });
+
+test("sign-in links are field-managed and tagged Signs in with on the app", () => {
+  assert.equal(isFieldManagedEdge("authenticates_via"), true);
+  const rel = { type: "authenticates_via", from_object_id: "app" };
+  assert.equal(alsoInDetailsLabel(rel, "app", "application"), "Signs in with");
+  assert.equal(alsoInDetailsLabel(rel, "m365", "cloud_service"), null);
+  assert.equal(detailsAlsoSetsHint("authenticates_via", "cloud_service"), "This also sets Signs in with in Details");
+});

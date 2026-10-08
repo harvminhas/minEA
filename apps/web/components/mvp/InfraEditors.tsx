@@ -21,6 +21,7 @@ import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { actsAsFlag, actsAsLabel, readActsAs } from "@/lib/ai/acts-as";
 import { holdsDataLabel, readHoldsData, suggestedHoldsData, toggleHoldsData } from "@/lib/ai/sensitive";
 import { emptyTypeHint } from "@/lib/relationship-targets";
+import { OWN_LOGIN, OWN_LOGIN_LABEL, SIGN_IN_EDGE, orderSignInChoices, signInCounts, toggleSignInPick } from "@/lib/sign-in";
 import { infraStatus } from "@/lib/infra/status";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { CostSection } from "@/components/mvp/CostSection";
@@ -191,6 +192,11 @@ function displayValue(def: FieldDef, record: FieldRecord, object: MinEAObject, e
       const count = edges.filter((edge) => edge.to_object_id === record.id && (edge.type === "built_on" || edge.type === "runs_on")).length;
       return count ? String(count) : "";
     }
+    if (def.key === "sign_in_for") {
+      const count = edges.filter((edge) => edge.to_object_id === record.id && edge.type === SIGN_IN_EDGE).length;
+      if (count === 0) return "";
+      return count === 1 ? "1 item" : `${count} items`;
+    }
     if (def.key === "used_by") {
       const count = edges.filter((edge) => edge.to_object_id === record.id && edge.type === "uses_model").length;
       if (count === 0) return "";
@@ -222,7 +228,7 @@ function displayValue(def: FieldDef, record: FieldRecord, object: MinEAObject, e
       const stored = record.properties.vendor;
       return displayVendor(typeof stored === "string" ? stored : "");
     }
-    return ids.map((id) => names.get(id) ?? id).join(", ");
+    return ids.map((id) => (id === OWN_LOGIN ? OWN_LOGIN_LABEL : names.get(id) ?? id)).join(", ");
   }
   if (def.editor === "select") {
     const stored = value == null ? "" : String(value);
@@ -266,6 +272,8 @@ export function RecordFields({
   for (const def of REGISTRY[type]) {
     if (omit.includes(def.key)) continue;
     if (def.showIf && !def.showIf({ properties: record.properties, type: record.type })) continue;
+    // Sign-in for shows only on a record others sign in with.
+    if (def.key === "sign_in_for" && !edges.some((edge) => edge.to_object_id === record.id && edge.type === SIGN_IN_EDGE)) continue;
     const group = groups.find((item) => item.section === def.section);
     if (group) group.fields.push(def);
     else groups.push({ section: def.section, fields: [def] });
@@ -799,9 +807,12 @@ function RelationPopover({
   if (!source) return null;
   const needle = query.trim().toLowerCase();
   const objects = catalog.data?.objects ?? [];
-  const choices = objects.filter(
+  const signIn = def.key === "signs_in_with";
+  const matching = objects.filter(
     (item) => item.id !== selfId && source.target.includes(item.type) && (!needle || item.name.toLowerCase().includes(needle))
   );
+  const choices = signIn ? orderSignInChoices(matching, signInCounts(catalog.data?.relationships ?? [])) : matching;
+  const showOwnLogin = signIn && (!needle || OWN_LOGIN_LABEL.toLowerCase().includes(needle) || "no sso".includes(needle));
   const partyNames = new Set(
     objects.filter((item) => item.type === "external_party").map((item) => item.name.trim().toLowerCase())
   );
@@ -822,6 +833,10 @@ function RelationPopover({
     if (source.single) {
       setQuery("");
       onSave(id, label);
+      return;
+    }
+    if (signIn) {
+      setPicked((current) => toggleSignInPick(current, id));
       return;
     }
     setPicked((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
@@ -888,6 +903,12 @@ function RelationPopover({
       >
         <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={noOptions && canCreate ? "Type a name to create" : "Search"} className="mb-2 h-8 w-full rounded-md border border-[#e6e8ee] px-2 text-[13px]" />
         <div className="max-h-48 space-y-1 overflow-y-auto">
+          {showOwnLogin && (
+            <button type="button" onClick={() => choose(OWN_LOGIN)} className="block w-full rounded-md border-b border-[#f3f4f8] px-2 py-1.5 text-left text-[13px] hover:bg-[#fafafb]">
+              <span className="mr-2">{picked.includes(OWN_LOGIN) ? "✓" : ""}</span>
+              {OWN_LOGIN_LABEL}
+            </button>
+          )}
           {choices.slice(0, 8).map((item) => (
             <button key={item.id} type="button" onClick={() => choose(item.id, def.key === "vendor" ? item.name : undefined)} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-[#fafafb]">
               {!source.single && <span className="mr-2">{picked.includes(item.id) ? "✓" : ""}</span>}
@@ -899,7 +920,7 @@ function RelationPopover({
               {name}
             </button>
           ))}
-          {choices.length === 0 && textNames.length === 0 && !createLabel && !noOptions && (
+          {choices.length === 0 && textNames.length === 0 && !createLabel && !noOptions && !showOwnLogin && (
             <p className="px-2 py-2 text-[12px] text-[#8b90a0]">Nothing matches.</p>
           )}
         </div>
