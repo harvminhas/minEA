@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, Mail } from "lucide-react";
 import { BuboMapWordmark } from "@/components/brand/BuboMapLogo";
 import { ContactForm } from "@/components/marketing/ContactForm";
+import { billingUiEnabled } from "@/lib/billing/flags";
 
 interface Props {
   searchParams: Promise<{ interest?: string }>;
@@ -9,7 +10,8 @@ interface Props {
 
 export default async function ContactPage({ searchParams }: Props) {
   const params = await searchParams;
-  const defaultInterest = params.interest ?? "business";
+  const billingUi = billingUiEnabled();
+  const defaultInterest = params.interest ?? (billingUi ? "other" : "business");
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white flex flex-col">
@@ -49,14 +51,25 @@ export default async function ContactPage({ searchParams }: Props) {
             Back to home
           </Link>
 
-          <h1 className="text-3xl font-bold tracking-tight mb-3">Contact us</h1>
+          <h1 className="text-3xl font-bold tracking-tight mb-3">
+            {billingUi ? "Get in touch" : "Contact us"}
+          </h1>
           <p className="text-white/55 mb-8 leading-relaxed">
-            Interested in Business, guided onboarding, or a walkthrough? Tell us about your team
-            and we&apos;ll get back to you shortly.
+            {billingUi ? (
+              <>
+                Questions about BuboMap, your plan or your onboarding hours? Send us a message and
+                we&apos;ll get back to you shortly.
+              </>
+            ) : (
+              <>
+                Interested in Business, guided onboarding, or a walkthrough? Tell us about your team
+                and we&apos;ll get back to you shortly.
+              </>
+            )}
           </p>
 
           <div className="rounded-2xl border border-white/8 bg-white/5 p-6 sm:p-8">
-            <ContactForm defaultInterest={defaultInterest} />
+            <ContactForm defaultInterest={defaultInterest} selfServe={billingUi} />
           </div>
 
           <div className="mt-8 flex items-start gap-3 rounded-xl border border-white/8 bg-white/[0.03] px-5 py-4">

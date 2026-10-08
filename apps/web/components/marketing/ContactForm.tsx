@@ -11,16 +11,31 @@ const INTEREST_OPTIONS = [
   { value: "other", label: "Something else" },
 ] as const;
 
+/** Self-serve copy (NEXT_PUBLIC_BILLING_UI): no sales, demo or "guided onboarding" options. */
+const SELF_SERVE_INTEREST_OPTIONS = [
+  { value: "business", label: "Plans & billing" },
+  { value: "onboarding", label: "Booking my onboarding hours" },
+  { value: "other", label: "Something else" },
+] as const;
+
 interface Props {
   defaultInterest?: string;
+  selfServe?: boolean;
 }
 
-export function ContactForm({ defaultInterest = "business" }: Props) {
+export function ContactForm({ defaultInterest = "business", selfServe = false }: Props) {
+  const interestOptions: readonly { value: string; label: string }[] = selfServe
+    ? SELF_SERVE_INTEREST_OPTIONS
+    : INTEREST_OPTIONS;
+  const initialInterest =
+    !selfServe || interestOptions.some((opt) => opt.value === defaultInterest)
+      ? defaultInterest
+      : "other";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState("");
   const [teamSize, setTeamSize] = useState("");
-  const [interest, setInterest] = useState(defaultInterest);
+  const [interest, setInterest] = useState(initialInterest);
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -163,7 +178,7 @@ export function ContactForm({ defaultInterest = "business" }: Props) {
           className={inputClass}
           disabled={submitting}
         >
-          {INTEREST_OPTIONS.map((opt) => (
+          {interestOptions.map((opt) => (
             <option key={opt.value} value={opt.value} className="bg-slate-900">
               {opt.label}
             </option>

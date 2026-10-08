@@ -9,6 +9,7 @@ import {
   monthsFreeOnYearly,
   nextPackWithRoom,
   onboardingBookingUrl,
+  planIncludes,
   parsePreviewPlan,
   perLicencePerMonthUsd,
   planChangeFor,
@@ -147,4 +148,23 @@ test("preview param is ignored when the switch is off", () => {
   assert.equal(parsePreviewPlan("business_legacy", true), null);
   assert.equal(parsePreviewPlan("enterprise", true), null);
   assert.equal(parsePreviewPlan(null, true), null);
+});
+
+test("pricing card lines: licences, free viewers, AI and onboarding hours", () => {
+  assert.deepEqual(planIncludes(CATALOG.free).slice(0, 4), [
+    "1 editor",
+    "Unlimited free viewers",
+    "Up to 25 apps & platforms",
+    "25 AI answers / month",
+  ]);
+  assert.equal(planIncludes(CATALOG.starter)[0], "1 licence (people who edit)");
+  assert.equal(planIncludes(CATALOG.team)[0], "5 licences (people who edit)");
+  assert.ok(planIncludes(CATALOG.team).includes("2,500 AI answers / month"));
+  assert.ok(planIncludes(CATALOG.team).includes("4 hours of onboarding included"));
+  assert.ok(planIncludes(CATALOG.business).includes("4 hours of onboarding included"));
+  assert.ok(!planIncludes(CATALOG.starter).some((l) => l.includes("onboarding")));
+  assert.ok(!planIncludes(CATALOG.free).some((l) => l.includes("onboarding")));
+  for (const id of ["free", "starter", "team", "business"] as const) {
+    assert.ok(!planIncludes(CATALOG[id]).some((l) => /contact us|talk to us|guided onboarding/i.test(l)));
+  }
 });

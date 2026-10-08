@@ -50,7 +50,11 @@ export const CATALOG: Record<CatalogPlanId, CatalogPlan> = {
     aiAnswersPerMonth: 500,
     appsPlatforms: null,
     onboardingHours: 0,
-    highlights: ["Unlimited workspaces", "Share any report", "AI chat and insights"],
+    highlights: [
+      "Unlimited workspaces and repository objects",
+      "AI architecture chat",
+      "Share links for views, roadmaps and objects",
+    ],
   },
   team: {
     id: "team",
@@ -120,6 +124,28 @@ export function priceLabel(plan: CatalogPlan, interval: BillingInterval): string
 
 export function formatCount(n: number): string {
   return n.toLocaleString("en-US");
+}
+
+/** "What's included" lines for a pricing card. */
+export function planIncludes(plan: CatalogPlan): string[] {
+  const lines: string[] = [];
+  lines.push(
+    plan.id === "free"
+      ? "1 editor"
+      : `${plan.licences} licence${plan.licences === 1 ? "" : "s"} (people who edit)`
+  );
+  lines.push("Unlimited free viewers");
+  lines.push(
+    plan.appsPlatforms == null
+      ? "Unlimited apps & platforms"
+      : `Up to ${plan.appsPlatforms} apps & platforms`
+  );
+  lines.push(`${formatCount(plan.aiAnswersPerMonth)} AI answers / month`);
+  lines.push(...plan.highlights);
+  if (plan.onboardingHours > 0) {
+    lines.push(`${plan.onboardingHours} hours of onboarding included`);
+  }
+  return lines;
 }
 
 /**
