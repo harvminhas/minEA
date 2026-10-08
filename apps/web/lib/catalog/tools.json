@@ -7,7 +7,8 @@
     "hosting": "saas",
     "kind": "app",
     "typicalAnnual": 18000,
-    "unit": "year"
+    "unit": "year",
+    "ssoUsual": true
   },
   {
     "name": "QuickBooks Online",
@@ -27,7 +28,8 @@
     "hosting": "saas",
     "kind": "app",
     "typicalAnnual": 15000,
-    "unit": "year"
+    "unit": "year",
+    "idp": true
   },
   {
     "name": "Shopify",
@@ -98,7 +100,8 @@
     "hosting": "saas",
     "kind": "app",
     "typicalAnnual": 1800,
-    "unit": "year"
+    "unit": "year",
+    "ssoUsual": true
   },
   {
     "name": "Oracle NetSuite",
@@ -108,7 +111,8 @@
     "hosting": "saas",
     "kind": "app",
     "typicalAnnual": 12000,
-    "unit": "year"
+    "unit": "year",
+    "ssoUsual": true
   },
   {
     "name": "Slack",
@@ -118,7 +122,8 @@
     "hosting": "saas",
     "kind": "app",
     "typicalAnnual": 900,
-    "unit": "year"
+    "unit": "year",
+    "ssoUsual": true
   },
   {
     "name": "Dropbox",
@@ -128,7 +133,8 @@
     "hosting": "saas",
     "kind": "app",
     "typicalAnnual": 720,
-    "unit": "year"
+    "unit": "year",
+    "ssoUsual": true
   },
   {
     "name": "HubSpot",
@@ -138,15 +144,19 @@
     "hosting": "saas",
     "kind": "app",
     "typicalAnnual": 10800,
-    "unit": "year"
+    "unit": "year",
+    "ssoUsual": true
   },
-  { "name": "Snowflake", "aliases": ["snowflake"], "vendor": "Snowflake", "category": "Analytics", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
-  { "name": "Databricks", "aliases": ["databricks"], "vendor": "Databricks", "category": "Analytics", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
+  { "name": "Snowflake", "aliases": ["snowflake"], "vendor": "Snowflake", "category": "Analytics", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year", "ssoUsual": true },
+  { "name": "Databricks", "aliases": ["databricks"], "vendor": "Databricks", "category": "Analytics", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year", "ssoUsual": true },
   { "name": "Microsoft Fabric", "aliases": ["microsoft fabric", "fabric"], "vendor": "Microsoft", "category": "Analytics", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
   { "name": "Azure Functions", "aliases": ["azure functions"], "vendor": "Microsoft", "category": "Infrastructure", "hosting": "paas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
   { "name": "AWS Lambda", "aliases": ["aws lambda", "lambda"], "vendor": "Amazon", "category": "Infrastructure", "hosting": "paas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
   { "name": "Azure AI Foundry", "aliases": ["azure ai foundry"], "vendor": "Microsoft", "category": "AI", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
   { "name": "Copilot Studio", "aliases": ["copilot studio"], "vendor": "Microsoft", "category": "AI", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
   { "name": "Bedrock", "aliases": ["bedrock", "amazon bedrock"], "vendor": "Amazon", "category": "AI", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
-  { "name": "Vertex AI", "aliases": ["vertex ai", "vertex"], "vendor": "Google", "category": "AI", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" }
+  { "name": "Vertex AI", "aliases": ["vertex ai", "vertex"], "vendor": "Google", "category": "AI", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year" },
+  {"name": "Google Workspace", "aliases": ["google workspace", "g suite", "gsuite", "gmail"], "vendor": "Google", "category": "Productivity", "hosting": "saas", "kind": "app", "typicalAnnual": null, "unit": "year", "idp": true},
+  {"name": "Okta", "aliases": ["okta"], "vendor": "Okta", "category": "Identity", "hosting": "saas", "kind": "app", "typicalAnnual": null, "unit": "year", "idp": true},
+  {"name": "Microsoft Entra ID", "aliases": ["entra", "entra id", "microsoft entra", "azure ad", "azure active directory"], "vendor": "Microsoft", "category": "Identity", "hosting": "saas", "kind": "platform", "typicalAnnual": null, "unit": "year", "idp": true}
 ]

@@ -13,6 +13,10 @@ export type ToolRecord = {
   typicalAnnual: number | null;
   unit: string;
   hints?: string[];
+  /** An identity provider: apps usually sign in with it (Signs in with suggestions). */
+  idp?: boolean;
+  /** Usually set up with single sign-on, so Details hints at Signs in with. */
+  ssoUsual?: boolean;
 };
 
 export const TOOL_CATALOG = catalog as ToolRecord[];

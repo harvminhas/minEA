@@ -807,7 +807,8 @@ export const components = [
   { id: "edi-translator", name: "Cloud translator",    app: "edi",         kind: "Service",              runsOn: "aws",   lifecycle: "Active" },
 ];
 
-// 11 connections (flow records). from -> to means "to" receives data from "from".
+// 10 connections (flow records). from -> to means "to" receives data from "from".
+// Sign-in (SSO) is not a flow: it is a Signs in with link (authenticates_via), in signsInWith below.
 export const flows = [
   { id: "f01", name: "Shipped orders to bill",             from: "order-entry", to: "invoicing" },
   { id: "f02", name: "Stock availability",                 from: "inventory",   to: "order-entry" },
@@ -818,7 +819,6 @@ export const flows = [
   { id: "f07", name: "Order acknowledgements to partners", from: "order-entry", to: "edi" },
   { id: "f08", name: "Partner purchase orders (EDI 850)",  from: "edi",         to: "order-entry" },
   { id: "f09", name: "Marketing leads",                    from: "hubspot",     to: "salesforce" },
-  { id: "f10", name: "Sign-in (SSO)",                      from: "m365",        to: "slack" },
   { id: "f11", name: "Closed-deal alerts",                 from: "salesforce",  to: "slack" },
 ];
 
@@ -877,6 +877,8 @@ export const techDebt = [
 // Edges not implied by the arrays above
 export const runsOn = [["order-entry", "as400"], ["inventory", "as400"], ["edi", "as400"], ["edi", "aws"], ["invoicing", "aws"]]; // labels: none (Plant PC)
 export const connectsThrough = [["order-entry", "firewall"], ["inventory", "firewall"], ["edi", "firewall"], ["invoicing", "firewall"]];
+// Signs in with (authenticates_via): [app, the app or platform people sign in through]. Was flow f10 "Sign-in (SSO)".
+export const signsInWith = [["slack", "m365"]];
 
 // Tenant-isolation fixture: a second workspace that must never appear in Meridian answers
 export const otherWorkspace = { slug: "acme", org: "Acme Test Co", applications: [{ id: "acme-erp", name: "Acme ERP", criticality: "Critical", annualCost: 50000 }] };
@@ -898,6 +900,8 @@ export const otherWorkspace = { slug: "acme", org: "Acme Test Co", applications:
 | Impact of Inventory | direct: Order Entry; indirect: Invoicing, EDI Gateway (Shop Floor Label Printing is upstream, so it isn't affected) |
 | Impact of Salesforce | direct: Order Entry, Slack; indirect: Invoicing, EDI Gateway; store Salesforce org → Customer |
 | No owner | AWS account, EDI Gateway, Slack (3; none critical) |
+| Impact of Microsoft 365 tenant | can't sign in: Slack (1). It stops there: Slack is still running, so nothing that depends on Slack is hit |
+| Sign-in | Slack signs in with Microsoft 365 tenant. No sign-in recorded: every other application and platform in use (servers and retired items are never listed). Own login (no SSO): none |
 | Capabilities with no application | Demand forecasting, Supplier quality management |
 
 The mockup's report cards use illustrative numbers in two places that this fixture computes differently: "Vendors holding sensitive data" shows 5 in the mockup, and the fixture rule (vendors of items that host a store holding a sensitive entity, or of apps that write one) gives 3. The golden set follows the fixture.

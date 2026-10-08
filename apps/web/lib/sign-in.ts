@@ -5,6 +5,8 @@
  * so a confirmed no-SSO app is distinct from one where nothing is recorded.
  */
 
+import { TOOL_CATALOG, normalizeTerm, type ToolRecord } from "@/lib/setup/match-tools";
+
 export const SIGN_IN_EDGE = "authenticates_via";
 export const OWN_LOGIN = "own_login";
 export const OWN_LOGIN_LABEL = "Own login (no SSO)";
@@ -61,4 +63,48 @@ export function toggleSignInPick(current: readonly string[], id: string): string
   if (current.includes(id)) return current.filter((item) => item !== id);
   if (id === OWN_LOGIN) return [OWN_LOGIN];
   return [...current.filter((item) => item !== OWN_LOGIN), id];
+}
+
+type CatalogObject = { id: string; type: string; name: string; status?: string | null; properties?: Record<string, unknown> | null };
+
+/** The catalog tool for a record: its catalog_tool, else a name equal to (or starting with) a catalog name or alias. */
+export function catalogToolFor(object: { name: string; properties?: Record<string, unknown> | null }): ToolRecord | null {
+  const stored = object.properties?.catalog_tool;
+  const toolTerm = typeof stored === "string" ? normalizeTerm(stored) : "";
+  const name = normalizeTerm(object.name ?? "");
+  const names = (tool: ToolRecord) => [tool.name, ...tool.aliases].map(normalizeTerm).filter(Boolean);
+  if (toolTerm) {
+    const byTool = TOOL_CATALOG.find((tool) => names(tool).includes(toolTerm));
+    if (byTool) return byTool;
+  }
+  return TOOL_CATALOG.find((tool) => names(tool).some((term) => name === term || name.startsWith(`${term} `))) ?? null;
+}
+
+export function isIdentityProvider(object: { name: string; properties?: Record<string, unknown> | null }): boolean {
+  return Boolean(catalogToolFor(object)?.idp);
+}
+
+export const SIGN_IN_HINT = "Usually signs in with your identity provider";
+
+/**
+ * Details hint for an empty Signs in with on a tool that usually uses single sign-on.
+ * provider is set when exactly one record is the obvious pick: the only one others sign in with,
+ * or, when nothing is linked yet, the only identity provider in the workspace.
+ */
+export function signInSuggestion(
+  object: CatalogObject,
+  objects: readonly CatalogObject[],
+  relationships: readonly { type: string; from_object_id: string; to_object_id: string }[]
+): { hint: string; provider: { id: string; name: string } | null } | null {
+  if (isOwnLogin(object.properties)) return null;
+  if (relationships.some((rel) => rel.type === SIGN_IN_EDGE && rel.from_object_id === object.id)) return null;
+  if (!catalogToolFor(object)?.ssoUsual) return null;
+  const pickable = objects.filter(
+    (item) => item.id !== object.id && (SIGN_IN_TARGETS as readonly string[]).includes(item.type) && isSignInCandidate(item)
+  );
+  const counts = signInCounts(relationships);
+  const used = pickable.filter((item) => (counts.get(item.id) ?? 0) > 0);
+  const pool = used.length ? used : pickable.filter(isIdentityProvider);
+  const only = pool.length === 1 ? pool[0]! : null;
+  return { hint: SIGN_IN_HINT, provider: only ? { id: only.id, name: only.name } : null };
 }

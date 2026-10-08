@@ -21,7 +21,7 @@ import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { actsAsFlag, actsAsLabel, readActsAs } from "@/lib/ai/acts-as";
 import { holdsDataLabel, readHoldsData, suggestedHoldsData, toggleHoldsData } from "@/lib/ai/sensitive";
 import { emptyTypeHint } from "@/lib/relationship-targets";
-import { OWN_LOGIN, OWN_LOGIN_LABEL, SIGN_IN_EDGE, orderSignInChoices, signInCounts, toggleSignInPick } from "@/lib/sign-in";
+import { OWN_LOGIN, OWN_LOGIN_LABEL, SIGN_IN_EDGE, isIdentityProvider, orderSignInChoices, signInCounts, signInSuggestion, toggleSignInPick } from "@/lib/sign-in";
 import { infraStatus } from "@/lib/infra/status";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
 import { CostSection } from "@/components/mvp/CostSection";
@@ -625,6 +625,10 @@ export function InlineField({
   }
 
   const actsFlag = !editing && def.key === "acts_as" ? actsAsFlag(readField(def, record, edges)) : null;
+  const signInHint =
+    def.key === "signs_in_with" && !shown && !editing
+      ? signInSuggestion(object, catalog.data?.objects ?? [], catalog.data?.relationships ?? [])
+      : null;
   const holdsSuggestion = def.key === "holds_data" && !shown && !editing ? suggestedHoldsData(record) : [];
 
   return (
@@ -655,6 +659,21 @@ export function InlineField({
                 <>
                   {" · "}
                   <button type="button" className="text-[#5b4ce6]" onClick={() => void persist(holdsSuggestion)}>Accept</button>
+                </>
+              )}
+            </p>
+          )}
+          {signInHint && !dismissed && (
+            <p className="mt-1 text-[12px] text-[#8b90a0]">
+              {signInHint.hint}
+              {canEdit && signInHint.provider && (
+                <>
+                  {": "}
+                  <button type="button" className="text-[#5b4ce6]" onClick={() => void persist([signInHint.provider!.id])}>
+                    {signInHint.provider.name}
+                  </button>
+                  {" · "}
+                  <button type="button" className="text-[#6b7289]" onClick={() => setDismissed(true)}>Dismiss</button>
                 </>
               )}
             </p>
@@ -811,7 +830,7 @@ function RelationPopover({
   const matching = objects.filter(
     (item) => item.id !== selfId && source.target.includes(item.type) && (!needle || item.name.toLowerCase().includes(needle))
   );
-  const choices = signIn ? orderSignInChoices(matching, signInCounts(catalog.data?.relationships ?? [])) : matching;
+  const choices = signIn ? orderSignInChoices(matching, signInCounts(catalog.data?.relationships ?? []), isIdentityProvider) : matching;
   const showOwnLogin = signIn && (!needle || OWN_LOGIN_LABEL.toLowerCase().includes(needle) || "no sso".includes(needle));
   const partyNames = new Set(
     objects.filter((item) => item.type === "external_party").map((item) => item.name.trim().toLowerCase())
