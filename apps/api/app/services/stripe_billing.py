@@ -99,6 +99,34 @@ def checkout_available(org: Org) -> bool:
     return stripe_configured() and org_allowed(org)
 
 
+def checkout_org_slugs() -> set[str]:
+    raw = settings.stripe_checkout_org_slugs or ""
+    return {s.strip().lower() for s in raw.split(",") if s.strip()}
+
+
+def checkout_open_to_all() -> bool:
+    """STRIPE_CHECKOUT_OPEN=1 with no STRIPE_CHECKOUT_ORG_SLUGS: anyone may buy a pack."""
+    return (settings.stripe_checkout_open or "").strip() == "1" and not checkout_org_slugs()
+
+
+def paid_plans_open_for(org: Org) -> bool:
+    """May this org START a new paid plan? (Coming-soon gate, independent of the Stripe key.)
+
+    - STRIPE_CHECKOUT_ORG_SLUGS set: only those orgs (even if STRIPE_CHECKOUT_OPEN=1).
+    - else STRIPE_CHECKOUT_OPEN=1: every org.
+    - else (default): no org. Paid plans show "Coming soon".
+    Orgs with a subscription keep the Customer Portal regardless; this only gates Checkout.
+    """
+    if checkout_open_to_all():
+        return True
+    return (org.slug or "").lower() in checkout_org_slugs()
+
+
+def paid_plans_available(org: Org) -> bool:
+    """Checkout can really start for this org: Stripe configured for it AND paid plans open to it."""
+    return checkout_available(org) and paid_plans_open_for(org)
+
+
 def automatic_tax_enabled() -> bool:
     return bool(settings.stripe_automatic_tax)
 
@@ -282,6 +310,14 @@ async def create_checkout_session(
     # refuse too: a retry costs the owner a click, a duplicate subscription costs them money.
     if org.stripe_subscription_id:
         raise _already_subscribed()
+    if not paid_plans_open_for(org):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "paid_plans_coming_soon",
+                "message": "Paid plans are coming soon. Your organization stays on its current plan.",
+            },
+        )
     try:
         live = await open_subscription_for_customer(org.stripe_customer_id)
     except StripeLookupError:

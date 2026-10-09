@@ -15,9 +15,13 @@ import {
   yearlySavingsUsd,
   type BillingInterval,
 } from "@/lib/billing/plans";
+import { PAID_COMING_SOON_LABEL } from "@/lib/billing/checkout";
 import { PlanCtaLink } from "@/components/marketing/home/visitor";
 
-/** Public pricing: Free plus the three licence packs. Shown when NEXT_PUBLIC_BILLING_UI is on. */
+/**
+ * Public pricing: Free plus the three licence packs. Shown when NEXT_PUBLIC_BILLING_UI is on.
+ * Starter/Team/Business show their prices with a disabled "Coming soon" button for now.
+ */
 export function PricingPlans() {
   const [interval, setBillingInterval] = useState<BillingInterval>("monthly");
 
@@ -94,15 +98,21 @@ export function PricingPlans() {
                   </li>
                 ))}
               </ul>
-              <PlanCtaLink
-                className={`mt-6 inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-colors ${
-                  featured
-                    ? "bg-indigo-600 hover:bg-indigo-700"
-                    : "border border-white/20 hover:border-white/40"
-                }`}
-              >
-                {id === "free" ? "Start free" : "Get started"}
-              </PlanCtaLink>
+              {id === "free" ? (
+                <PlanCtaLink className="mt-6 inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:border-white/40">
+                  Start free
+                </PlanCtaLink>
+              ) : (
+                // Paid plans are not on sale yet (the API refuses checkout too). Same for everyone.
+                <button
+                  type="button"
+                  disabled
+                  data-coming-soon={id}
+                  className="mt-6 inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-white/10 px-5 py-2.5 text-sm font-semibold text-white/40"
+                >
+                  {PAID_COMING_SOON_LABEL}
+                </button>
+              )}
             </div>
           );
         })}

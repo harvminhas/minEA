@@ -29,6 +29,7 @@ import {
   checkoutReturnNotice,
   overCapBanner,
   packActionFor,
+  PAID_COMING_SOON_LABEL,
   PORTAL_RETURN_NOTICE,
   showManageBilling,
   type CheckoutReturn,
@@ -146,6 +147,7 @@ function LoadedBillingCentre({
   }
 
   function onPackClick(id: PackId) {
+    if (action === "unavailable") return; // server refuses checkout (403 paid_plans_coming_soon)
     if (action === "coming_soon" || !onCheckout || !onOpenPortal) {
       setCheckoutPack(id);
       return;
@@ -272,7 +274,7 @@ function LoadedBillingCentre({
             </span>
           </div>
         )}
-        {action !== "coming_soon" && !allowed && (
+        {action !== "coming_soon" && action !== "unavailable" && !allowed && (
           <p className="mt-3 text-xs text-gray-500">
             Only org owners and admins with a verified email can change the plan.
           </p>
@@ -306,12 +308,22 @@ function LoadedBillingCentre({
         </div>
       </div>
 
+      {action === "unavailable" && (
+        <p data-testid="paid-coming-soon" className="mt-2 text-xs text-gray-500">
+          Paid plans are coming soon. Your organisation stays on its current plan for now.
+        </p>
+      )}
+
       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
         {PACK_ORDER.map((id) => {
           const plan = CATALOG[id];
           const change = planChangeFor(displayPlan, id, used);
-          const button = changeButton(change, plan.label);
           const isCurrent = change.kind === "current";
+          const button =
+            action === "unavailable" && !isCurrent
+              ? { text: PAID_COMING_SOON_LABEL, disabled: true }
+              : changeButton(change, plan.label);
+          const dataAction = action === "unavailable" && !isCurrent ? action : button.disabled ? undefined : action;
           return (
             <div
               key={id}
@@ -335,7 +347,7 @@ function LoadedBillingCentre({
               </ul>
               <button
                 type="button"
-                data-action={button.disabled ? undefined : action}
+                data-action={dataAction}
                 disabled={button.disabled || busy !== null || (action !== "coming_soon" && !allowed)}
                 onClick={() => onPackClick(id)}
                 className={`mt-4 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium ${

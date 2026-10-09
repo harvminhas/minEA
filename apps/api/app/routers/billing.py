@@ -26,6 +26,7 @@ from app.services.plan_features import (
 from app.services.stripe_billing import (
     checkout_available,
     create_checkout_session,
+    paid_plans_open_for,
     create_portal_session,
     create_solo_checkout_session,
     stripe_configured,
@@ -98,6 +99,7 @@ async def billing_status(
     cap = await licence_cap(db, ctx.org_id)
     has_subscription, live_plan = await subscription_state(ctx.org)
     checkout_on = checkout_available(ctx.org)
+    paid_open = checkout_on and paid_plans_open_for(ctx.org)
 
     return BillingStatusResponse(
         plan=plan,
@@ -111,7 +113,8 @@ async def billing_status(
         active_share_link_limit=share_limit,
         can_create_share_link=can_create_share_link(plan, share_count),
         checkout_available=checkout_on,
-        checkout_allowed=checkout_on and not has_subscription,
+        checkout_allowed=paid_open and not has_subscription,
+        paid_plans_available=paid_open,
         display_plan=display_plan(
             ctx.org.plan,
             ctx.org.stripe_subscription_id,

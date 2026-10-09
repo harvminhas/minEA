@@ -64,8 +64,8 @@ for (const flag of ["0", "1"]) {
     assert.doesNotMatch(html, /href="\/auth\/sign-up"/);
     assert.doesNotMatch(html, />Get started free</);
     assert.doesNotMatch(html, />Sign in</);
-    // nav, hero, band, plus plan cards: 4 (Free + 3 packs) with the flag, 1 (Free) without
-    const planButtons = flag === "1" ? 4 : 1;
+    // nav, hero, band, plus the Free plan card (paid packs read "Coming soon" for now)
+    const planButtons = 1;
     assert.equal(count(html, /href="\/home"[^>]*>Open BuboMap</g), 3 + planButtons);
     assert.equal(count(html, />Open BuboMap</g), 3 + planButtons);
     // Hero shows ONE primary button.

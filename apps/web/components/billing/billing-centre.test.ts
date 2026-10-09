@@ -183,3 +183,48 @@ test("true legacy org (no subscription, no customer) still checks out", () => {
   assert.deepEqual(actions(html), ["checkout", "checkout", "checkout"]);
   assert.doesNotMatch(html, /data-testid="manage-billing"/);
 });
+
+test("paid plans coming soon: Free org sees three disabled Coming soon buttons and a note", () => {
+  const html = render("free", status({ paid_plans_available: false, checkout_allowed: false }));
+  assert.deepEqual(actions(html), ["unavailable", "unavailable", "unavailable"]);
+  const buttons = [...html.matchAll(/<button type="button" data-action="unavailable"([^>]*)>([^<]*)<\/button>/g)];
+  assert.equal(buttons.length, 3);
+  for (const [, attrs, text] of buttons) {
+    assert.match(attrs, /disabled=""/);
+    assert.equal(text, "Coming soon");
+  }
+  assert.match(html, /data-testid="paid-coming-soon"/);
+  assert.doesNotMatch(html, /Upgrade to /);
+  assert.doesNotMatch(html, /data-action="checkout"/);
+  assert.doesNotMatch(html, /Only org owners and admins/);
+  // Prices stay visible.
+  assert.match(html, /\$99/);
+  assert.match(html, /\$449/);
+  assert.match(html, /\$799/);
+});
+
+test("paid plans coming soon: legacy Business keeps its current-plan view, packs Coming soon", () => {
+  const html = render("business_legacy", status({ plan: "business", display_plan: "business_legacy", paid_plans_available: false, checkout_allowed: false }));
+  assert.deepEqual(actions(html), ["unavailable", "unavailable", "unavailable"]);
+  assert.match(html, /data-testid="current-plan">Business \(legacy\)</);
+});
+
+test("paid plans coming soon: subscribed org still switches in the portal with Manage billing", () => {
+  const html = render(
+    "team",
+    status({ plan: "team", display_plan: "team", has_subscription: true, has_billing_account: true, licences_used: 1, licences_cap: 5, paid_plans_available: false, checkout_allowed: false })
+  );
+  assert.deepEqual(actions(html), ["portal", "portal"]);
+  assert.match(html, /data-testid="manage-billing"/);
+  assert.doesNotMatch(html, /Coming soon/);
+  assert.doesNotMatch(html, /data-testid="paid-coming-soon"/);
+});
+
+test("allowlisted org: pack buttons are enabled and start real checkout", () => {
+  const html = render("free", status({ paid_plans_available: true, checkout_allowed: true }));
+  assert.deepEqual(actions(html), ["checkout", "checkout", "checkout"]);
+  assert.match(html, /Upgrade to Starter/);
+  assert.doesNotMatch(html, /Coming soon/);
+  assert.doesNotMatch(html, /data-testid="paid-coming-soon"/);
+  assert.equal((html.match(/data-action="checkout"[^>]*disabled=""/g) ?? []).length, 0);
+});

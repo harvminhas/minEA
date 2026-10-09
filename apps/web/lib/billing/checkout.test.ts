@@ -96,3 +96,25 @@ test("API errors become readable messages", () => {
 test("checkout request body", () => {
   assert.deepEqual(checkoutBody("team", "yearly"), { plan: "team", interval: "yearly" });
 });
+
+test("paid plans coming soon: API paid_plans_available=false disables the pack buttons", () => {
+  const closed = status({ paid_plans_available: false, checkout_allowed: false });
+  assert.equal(packActionFor("free", closed, false), "unavailable");
+  assert.equal(packActionFor("business_legacy", closed, false), "unavailable");
+  // Same when Stripe is not set up for the org at all (new API reports false too).
+  assert.equal(packActionFor("free", status({ checkout_available: false, paid_plans_available: false }), false), "unavailable");
+  // Preview stays the harmless dialog.
+  assert.equal(packActionFor("free", closed, true), "coming_soon");
+});
+
+test("paid plans coming soon: subscribed orgs keep the portal and Manage billing", () => {
+  const subscribed = status({ plan: "team", has_subscription: true, has_billing_account: true, paid_plans_available: false, checkout_allowed: false });
+  assert.equal(packActionFor("team", subscribed, false), "portal");
+  assert.equal(showManageBilling(subscribed, false), true);
+});
+
+test("allowlisted org (paid_plans_available=true) gets real checkout", () => {
+  assert.equal(packActionFor("free", status({ paid_plans_available: true, checkout_allowed: true }), false), "checkout");
+  // Older API without the field: unchanged behaviour.
+  assert.equal(packActionFor("free", status({ checkout_allowed: true }), false), "checkout");
+});

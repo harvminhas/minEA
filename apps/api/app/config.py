@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     # Comma-separated org slugs a TEST-mode key may touch (dev and prod share one database).
     # Ignored with a live key. Empty = no org can use test-mode checkout.
     stripe_test_org_slugs: str = ""
+    # Paid plans (Starter/Team/Business) are "coming soon" unless opened. Checkout is allowed for:
+    #   - orgs in STRIPE_CHECKOUT_ORG_SLUGS (comma-separated), always;
+    #   - every org only when STRIPE_CHECKOUT_OPEN=1 AND STRIPE_CHECKOUT_ORG_SLUGS is empty.
+    # Default (neither set): nobody. Existing subscriptions keep the portal either way.
+    stripe_checkout_org_slugs: str = ""
+    stripe_checkout_open: str = ""
 
     # CORS — override in production via env, e.g.
     # CORS_ORIGINS=["https://your-web.vercel.app","http://localhost:3000"]

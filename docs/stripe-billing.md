@@ -11,12 +11,46 @@ Starter 1, Team 5, Business 10. Viewers are free. Free has 1 editor.
 | API | `STRIPE_SECRET_KEY` | Unset = everything Stripe is off (checkout/portal return 503, webhook events ignored). |
 | API | `STRIPE_WEBHOOK_SECRET` | Signing secret of the webhook endpoint. Unset = webhook returns 503. |
 | API | `STRIPE_TEST_ORG_SLUGS` | With a **test** key, only these org slugs can check out or be changed by webhooks (dev and prod share one database). Ignored with a live key. |
+| API | `STRIPE_CHECKOUT_ORG_SLUGS` | Paid-plans allowlist (comma-separated org slugs). When set, only these orgs can start Checkout, even if `STRIPE_CHECKOUT_OPEN=1`. See "Paid plans coming soon". |
+| API | `STRIPE_CHECKOUT_OPEN` | `1` = every org can start Checkout, but only while `STRIPE_CHECKOUT_ORG_SLUGS` is empty. Anything else (default) = closed. |
 | API | `STRIPE_AUTOMATIC_TAX` | `1` = Stripe Tax on Checkout (`automatic_tax`, billing address, tax ID). Needs Stripe Tax set up in the Dashboard (head office address) first. Default off. |
 | API | `WEB_APP_URL` | Base for Checkout success/cancel and portal return URLs (`/orgs/<slug>/settings?tab=billing`). |
 | Web | `NEXT_PUBLIC_BILLING_UI` | Shows the admin centre. Off in production until flipped. |
 
 The web shows real Checkout only when the API's billing status says `checkout_available`;
 otherwise the "Checkout coming soon" dialog stays.
+
+## Paid plans coming soon
+
+Starter, Team and Business are closed to new buyers until opened. The API enforces it; the UI
+just mirrors it.
+
+| `STRIPE_CHECKOUT_ORG_SLUGS` | `STRIPE_CHECKOUT_OPEN` | Who may start Checkout |
+|---|---|---|
+| unset | unset / not `1` | nobody (default) |
+| `a,b` | anything | only orgs `a` and `b` |
+| unset | `1` | every org |
+
+On top of that the Stripe key still applies: with a **test** key the org must also be in
+`STRIPE_TEST_ORG_SLUGS` (unchanged); with a live key that check passes for every org. So an org
+can check out when `checkout_available` (key configured and allowed for the org) AND the table
+above allows it.
+
+Everyone else:
+
+- `POST /api/v1/orgs/{slug}/billing/checkout` returns `403 {"code":"paid_plans_coming_soon","message":…}` (after the
+  plan/interval and existing-subscription checks, before any Stripe call).
+- Billing status reports `paid_plans_available: false` and `checkout_allowed: false`.
+- Plan & billing shows the packs with prices and a disabled "Coming soon" button.
+- Orgs that already have a subscription keep Manage billing and portal plan switches.
+
+The home page pricing cards (billing UI on) always show Starter/Team/Business as disabled
+"Coming soon"; Free keeps "Start free" / "Open BuboMap". That is static and changes in code when
+paid plans launch.
+
+Testing in production: set `STRIPE_CHECKOUT_ORG_SLUGS=<your-org-slug>` on the API project, then
+open `/orgs/<your-org-slug>/settings?tab=billing`. To open to everyone: remove
+`STRIPE_CHECKOUT_ORG_SLUGS` and set `STRIPE_CHECKOUT_OPEN=1`.
 
 ## Catalogue
 

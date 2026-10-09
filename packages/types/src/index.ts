@@ -993,6 +993,12 @@ export interface BillingStatus {
    * False = change plans in the Customer Portal. Optional for older APIs.
    */
   checkout_allowed?: boolean;
+  /**
+   * False = Starter/Team/Business are "coming soon" for this org (API env
+   * STRIPE_CHECKOUT_ORG_SLUGS / STRIPE_CHECKOUT_OPEN); checkout returns 403 paid_plans_coming_soon.
+   * Subscribed orgs still manage billing in the portal. Optional for older APIs.
+   */
+  paid_plans_available?: boolean;
   /** Authoritative plan label. business_legacy only when there is no Stripe subscription at all. */
   display_plan?: "free" | "starter" | "team" | "business" | "business_legacy";
   licences_used?: number;

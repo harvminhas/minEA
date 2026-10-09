@@ -5,8 +5,17 @@
 import type { BillingStatus } from "@minea/types";
 import type { DisplayPlanId, PackId } from "./plans";
 
-/** What a pack button does. coming_soon = Stripe not configured for this org (old dialog). */
-export type PackAction = "checkout" | "portal" | "coming_soon";
+/**
+ * What a pack button does.
+ * - checkout: start Stripe Checkout.
+ * - portal: change plan in the Customer Portal (org already has a subscription).
+ * - unavailable: paid plans are "coming soon" for this org (API paid_plans_available=false);
+ *   the button is disabled and reads "Coming soon".
+ * - coming_soon: Stripe not configured for this org on an older API, or previewing (old dialog).
+ */
+export type PackAction = "checkout" | "portal" | "unavailable" | "coming_soon";
+
+export const PAID_COMING_SOON_LABEL = "Coming soon";
 
 export function stripeLive(status: BillingStatus | undefined, previewing: boolean): boolean {
   return !previewing && !!status?.checkout_available;
@@ -22,8 +31,13 @@ export function packActionFor(
   status: BillingStatus | undefined,
   previewing: boolean
 ): PackAction {
-  if (!stripeLive(status, previewing)) return "coming_soon";
-  if (status?.has_subscription) return "portal";
+  if (previewing) return "coming_soon";
+  const live = stripeLive(status, previewing);
+  // Subscribed orgs keep the portal even while paid plans are closed to new buyers.
+  if (live && status?.has_subscription) return "portal";
+  // Server says this org may not start a paid plan: disabled "Coming soon".
+  if (status?.paid_plans_available === false) return "unavailable";
+  if (!live) return "coming_soon";
   // Older API without checkout_allowed: has_subscription above is the rule.
   if (status?.checkout_allowed === false) return "portal";
   return "checkout";

@@ -68,6 +68,10 @@ def configured(monkeypatch):
     monkeypatch.setattr(settings, "stripe_test_org_slugs", "qa-sso-test, other-test")
     monkeypatch.setattr(settings, "stripe_automatic_tax", False)
     monkeypatch.setattr(settings, "web_app_url", "https://app.example.com/")
+    # Paid plans open to all so the checkout tests exercise checkout itself; the coming-soon gate
+    # has its own tests (test_paid_coming_soon.py).
+    monkeypatch.setattr(settings, "stripe_checkout_org_slugs", "")
+    monkeypatch.setattr(settings, "stripe_checkout_open", "1")
 
 
 class Store:

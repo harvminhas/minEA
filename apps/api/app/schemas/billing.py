@@ -37,6 +37,9 @@ class BillingStatusResponse(BaseModel):
     checkout_available: bool = False
     # False whenever the org has (or may have) an open Stripe subscription: change plans in the portal.
     checkout_allowed: bool = False
+    # False = Starter/Team/Business are "coming soon" for this org (STRIPE_CHECKOUT_ORG_SLUGS /
+    # STRIPE_CHECKOUT_OPEN). Subscribed orgs still get Manage billing.
+    paid_plans_available: bool = False
     display_plan: str = "free"  # free | starter | team | business | business_legacy
     licences_used: int = 0
     licences_cap: int | None = None  # None = no cap (Business legacy)
