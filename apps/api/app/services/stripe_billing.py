@@ -42,7 +42,17 @@ from app.services.plans import (
 
 logger = logging.getLogger(__name__)
 
-API_VERSION = "2024-12-18.acacia"  # pinned; matches stripe==11.4.1 and the webhook endpoint
+# Pinned Stripe API version for every call this app makes. Must be 2025-03-31.basil or newer:
+# the account has Managed Payments on, and Checkout Session.create on 2024-12-18.acacia fails with
+# "Managed Payments is not supported on API version 2024-12-18.acacia" (the production 500).
+# stripe==11.4.1 sends this as the Stripe-Version header; we read responses as plain dicts.
+# Webhook events arrive in the ENDPOINT's version (the existing endpoint is acacia), so webhook
+# parsing accepts both shapes (see invoice_subscription_id). basil moved current_period_* onto
+# subscription items; nothing here reads them.
+API_VERSION = "2025-03-31.basil"
+
+STRIPE_TIMEOUT_SECONDS = 10
+STRIPE_MAX_NETWORK_RETRIES = 1
 EVENT_AUDIT_ACTION = "billing.stripe_event"
 
 # Subscription statuses that keep the paid plan (past_due = retries still running, D11).
@@ -136,12 +146,41 @@ def _stripe():
 
     stripe.api_key = stripe_secret_key()
     stripe.api_version = API_VERSION
-    stripe.max_network_retries = 2
-    # The library default is an 80 s timeout per attempt. These calls run inside request handlers,
-    # so bound them: a slow Stripe must never hold a webhook or a status request for minutes.
+    stripe.max_network_retries = STRIPE_MAX_NETWORK_RETRIES
+    # The library default is an 80 s timeout per attempt. These calls run inside request handlers
+    # (the web proxy allows 30 s), so bound them: 10 s per attempt, one retry.
     if stripe.default_http_client is None:
-        stripe.default_http_client = stripe.RequestsClient(timeout=20)
+        stripe.default_http_client = stripe.RequestsClient(timeout=STRIPE_TIMEOUT_SECONDS)
     return stripe
+
+
+STRIPE_ERROR_MESSAGES = {
+    "checkout": "Stripe couldn't start checkout right now. Please try again in a moment.",
+    "portal": "Stripe couldn't open billing right now. Please try again in a moment.",
+}
+
+
+def stripe_error_response(action: str, org: Org, exc: Exception) -> HTTPException:
+    """Log a Stripe failure and turn it into 502 {"code": "stripe_error", ...}, never a bare 500."""
+    logger.error(
+        "Stripe %s failed for org %s: %s: %s (code=%s, request_id=%s)",
+        action,
+        getattr(org, "slug", "?"),
+        type(exc).__name__,
+        getattr(exc, "user_message", None) or str(exc),
+        getattr(exc, "code", None),
+        getattr(exc, "request_id", None),
+    )
+    return HTTPException(
+        status.HTTP_502_BAD_GATEWAY,
+        detail={"code": "stripe_error", "message": STRIPE_ERROR_MESSAGES[action]},
+    )
+
+
+def _is_stripe_error(exc: BaseException) -> bool:
+    import stripe
+
+    return isinstance(exc, stripe.error.StripeError)
 
 
 def _plain(obj: Any) -> Any:
@@ -341,19 +380,28 @@ async def create_checkout_session(
                 ),
             },
         )
-    price_id = resolve_price_id(plan, interval)
-    customer_id = await ensure_customer(db, org, email=user_email)
-    await asyncio.to_thread(_expire_open_checkout_sessions, customer_id)
-    params = build_checkout_params(
-        org,
-        customer_id=customer_id,
-        price_id=price_id,
-        plan=plan,
-        interval=interval,
-        user_id=user_id,
-        automatic_tax=automatic_tax_enabled(),
-    )
-    session = await asyncio.to_thread(lambda: _stripe().checkout.Session.create(**params))
+    try:
+        price_id = resolve_price_id(plan, interval)
+        had_customer = bool(org.stripe_customer_id)
+        customer_id = await ensure_customer(db, org, email=user_email)
+        if had_customer:
+            # Best effort, never blocks checkout (errors are logged and swallowed). A customer
+            # created just now has no open sessions, so skip the round trip.
+            await asyncio.to_thread(_expire_open_checkout_sessions, customer_id)
+        params = build_checkout_params(
+            org,
+            customer_id=customer_id,
+            price_id=price_id,
+            plan=plan,
+            interval=interval,
+            user_id=user_id,
+            automatic_tax=automatic_tax_enabled(),
+        )
+        session = await asyncio.to_thread(lambda: _stripe().checkout.Session.create(**params))
+    except Exception as exc:
+        if _is_stripe_error(exc):
+            raise stripe_error_response("checkout", org, exc) from None
+        raise
     await log_audit(
         db,
         org_id=org.id,
@@ -380,8 +428,12 @@ def _expire_open_checkout_sessions(customer_id: str) -> None:
     """Only the newest Checkout can be paid: two tabs can't produce two subscriptions."""
     stripe = _stripe()
     try:
-        for session in stripe.checkout.Session.list(customer=customer_id, status="open", limit=20).data:
-            stripe.checkout.Session.expire(session.id)
+        # No retries: this is housekeeping, checkout goes ahead whatever happens here.
+        listed = stripe.checkout.Session.list(
+            customer=customer_id, status="open", limit=20, max_network_retries=0
+        )
+        for session in listed.data:
+            stripe.checkout.Session.expire(session.id, max_network_retries=0)
     except Exception as exc:
         logger.warning("Could not expire open Checkout Sessions for %s: %s", customer_id, exc)
 
@@ -418,10 +470,15 @@ async def create_portal_session(org: Org, *, licences_in_use: int) -> str:
         "customer": org.stripe_customer_id,
         "return_url": billing_url(org, portal="return"),
     }
-    configuration = resolve_portal_configuration(portal_variant_for_licences(licences_in_use))
-    if configuration:
-        params["configuration"] = configuration
-    session = await asyncio.to_thread(lambda: _stripe().billing_portal.Session.create(**params))
+    try:
+        configuration = resolve_portal_configuration(portal_variant_for_licences(licences_in_use))
+        if configuration:
+            params["configuration"] = configuration
+        session = await asyncio.to_thread(lambda: _stripe().billing_portal.Session.create(**params))
+    except Exception as exc:
+        if _is_stripe_error(exc):
+            raise stripe_error_response("portal", org, exc) from None
+        raise
     return session.url
 
 

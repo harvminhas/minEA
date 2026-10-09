@@ -257,6 +257,7 @@ class _FakeStripe:
         self.created_sessions = []
         self.created_customers = []
         self.expired_sessions = []
+        self.session_lists = []
         self.subscriptions = subscriptions or []  # what Subscription.list returns for any customer
         self.open_sessions = open_sessions or []
         outer = self
@@ -289,11 +290,12 @@ class _FakeStripe:
                 return SimpleNamespace(id="cs_test_1", url="https://checkout.stripe.com/c/pay/cs_test_1")
 
             @staticmethod
-            def list(customer, status, limit):
+            def list(customer, status, limit, **opts):
+                outer.session_lists.append(customer)
                 return SimpleNamespace(data=[SimpleNamespace(id=i) for i in outer.open_sessions])
 
             @staticmethod
-            def expire(session_id):
+            def expire(session_id, **opts):
                 outer.expired_sessions.append(session_id)
 
         self.Subscription = Subscription

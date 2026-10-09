@@ -118,3 +118,10 @@ test("allowlisted org (paid_plans_available=true) gets real checkout", () => {
   // Older API without the field: unchanged behaviour.
   assert.equal(packActionFor("free", status({ checkout_allowed: true }), false), "checkout");
 });
+
+test("502 stripe_error from checkout/portal shows Stripe's friendly message", () => {
+  const err = new Error(
+    `502 {"code":"stripe_error","message":"Stripe couldn't start checkout right now. Please try again in a moment."} (/api/v1/orgs/hmin-edomains/billing/checkout)`
+  );
+  assert.equal(billingErrorMessage(err), "Stripe couldn't start checkout right now. Please try again in a moment.");
+});

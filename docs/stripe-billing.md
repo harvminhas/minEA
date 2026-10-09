@@ -75,7 +75,7 @@ python scripts/stripe_bootstrap.py --key-env STRIPE_SECRET_KEY \
   customer can't downgrade below their licence count. Payment method update, invoice history,
   cancel at period end (with reasons), price switching with `always_invoice` proration;
   switching yearly → monthly is scheduled at period end.
-- Webhook endpoint (API version pinned to `2024-12-18.acacia`, same as `stripe==11.4.1`).
+- API calls pin Stripe API version `2025-03-31.basil` (needed: the account has Managed Payments, which acacia rejects on Checkout). The webhook endpoint created by the bootstrap script is on `2024-12-18.acacia`; webhook parsing accepts both acacia and basil payloads.
   The signing secret is written only to `--secret-out` (chmod 600).
 
 ## Endpoints
