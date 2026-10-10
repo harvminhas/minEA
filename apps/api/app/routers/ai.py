@@ -3,7 +3,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,8 +44,18 @@ class IngestRequest(BaseModel):
     text: str
 
 
+class AskTurn(BaseModel):
+    """One earlier turn of the conversation on the answer page (browser tab only, never stored)."""
+
+    question: str = Field(default="", max_length=500)
+    summary: str = Field(default="", max_length=600)
+    item_ids: list[str] = Field(default_factory=list, max_length=20)
+
+
 class AskRequest(BaseModel):
     question: str
+    # Up to the last 4 turns. Item ids are re-checked against the workspace before use.
+    context: list[AskTurn] = Field(default_factory=list, max_length=4)
 
 
 @router.post("/ask")
@@ -60,7 +70,7 @@ async def ask(
     is source=fallback so the screen can answer from the fixed handlers.
     """
     await ctx.require_read(db)
-    return await answer_with_model(db, ctx, body.question)
+    return await answer_with_model(db, ctx, body.question, context=[turn.model_dump() for turn in body.context])
 
 
 @router.post("/ask/stream")
@@ -75,7 +85,7 @@ async def ask_stream(
     await ctx.require_read(db)
     graph = await load_graph(db, ctx.workspace.id, ctx.org_id) if ctx.workspace and body.question.strip() else None
     return StreamingResponse(
-        stream_ask(None, ctx, body.question, graph=graph),
+        stream_ask(None, ctx, body.question, graph=graph, context=[turn.model_dump() for turn in body.context]),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )

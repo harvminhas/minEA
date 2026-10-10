@@ -95,6 +95,7 @@ import { apiV1Url } from "@/lib/api-base";
 import { apiRequestGate, shouldRetryRequest } from "@/lib/request-gate";
 import { getShareApiPath } from "@/lib/share-context";
 import { askWithStream, type StreamHandlers } from "@/lib/ask/stream";
+import type { AskContextTurn } from "@/lib/ask/thread";
 
 function wsBase(orgSlug: string, workspaceSlug: string) {
   return `/orgs/${orgSlug}/workspaces/${workspaceSlug}`;
@@ -1124,22 +1125,29 @@ export type AskStep = {
 };
 
 export const aiApi = {
-  ask: (orgSlug: string, workspaceSlug: string, question: string, token: string) =>
+  /** context: earlier turns of the conversation on the answer page (last 4; the server re-checks ids). */
+  ask: (orgSlug: string, workspaceSlug: string, question: string, token: string, context: AskContextTurn[] = []) =>
     apiFetch<AskModelPayload>(`${wsBase(orgSlug, workspaceSlug)}/ai/ask`, {
       method: "POST",
-      body: JSON.stringify({ question }),
+      body: JSON.stringify(context.length ? { question, context } : { question }),
       token,
     }),
 
   /** POST /ai/ask/stream with live steps and checked text; falls back to ask() once if the stream breaks. */
-  askStream: (orgSlug: string, workspaceSlug: string, question: string, token: string, handlers: StreamHandlers & { signal?: AbortSignal } = {}) =>
+  askStream: (
+    orgSlug: string,
+    workspaceSlug: string,
+    question: string,
+    token: string,
+    handlers: StreamHandlers & { signal?: AbortSignal; context?: AskContextTurn[] } = {}
+  ) =>
     askWithStream({
       url: apiV1Url(`${wsBase(orgSlug, workspaceSlug)}/ai/ask/stream`),
       token,
       question,
       revealMs: 0, // the answer card reveals the text (lib/ask/reveal.ts)
       ...handlers,
-      fallback: () => aiApi.ask(orgSlug, workspaceSlug, question, token),
+      fallback: () => aiApi.ask(orgSlug, workspaceSlug, question, token, handlers.context ?? []),
     }),
 
   ingest: (orgSlug: string, workspaceSlug: string, text: string, token: string) =>

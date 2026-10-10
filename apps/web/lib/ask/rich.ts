@@ -6,13 +6,14 @@
 import type { CatalogRow } from "@/lib/model-catalog";
 import { vendorRollup } from "@/lib/model-catalog";
 
-export type AskTableRow = { label: string; value: string; detail: string; recordId: string | null };
+/** items: the records named in the detail cell (vendor rows: its apps), each its own link. */
+export type AskTableRow = { label: string; value: string; detail: string; recordId: string | null; items?: { id: string; name: string }[] };
 export type AskTable = { kind: "vendors" | "renewals" | "cancel"; columns: [string, string, string]; rows: AskTableRow[] };
 export type AskChart = { kind: "bar"; title: string; unit: "usd"; bars: { label: string; value: number }[] };
 
 export type RichPayload = {
   summary?: string;
-  table?: { kind: string; columns: string[]; rows: { label: string; value: string; detail: string; record_id: string | null }[] } | null;
+  table?: { kind: string; columns: string[]; rows: { label: string; value: string; detail: string; record_id: string | null; items?: { id: string; name: string }[] }[] } | null;
   chart?: { kind: string; title: string; unit: string; bars: { label: string; value: number }[] } | null;
 };
 
@@ -25,7 +26,7 @@ export function tableFromPayload(payload: RichPayload): AskTable | undefined {
   return {
     kind: t.kind,
     columns: [t.columns[0] ?? "", t.columns[1] ?? "", t.columns[2] ?? ""],
-    rows: t.rows.map((row) => ({ label: row.label, value: row.value, detail: row.detail, recordId: row.record_id ?? null })),
+    rows: t.rows.map((row) => ({ label: row.label, value: row.value, detail: row.detail, recordId: row.record_id ?? null, ...(row.items?.length ? { items: row.items } : {}) })),
   };
 }
 
@@ -47,6 +48,7 @@ export function vendorBlocks(rows: CatalogRow[]): { table?: AskTable; chart?: As
       value: vendor.annual > 0 ? `${money(vendor.annual)} a year` : "No annual cost recorded",
       detail: vendor.items.map((item) => item.name).join(", "),
       recordId: vendor.items[0]?.id ?? null,
+      items: vendor.items.map((item) => ({ id: item.id, name: item.name })),
     })),
   };
   const bars = vendors.filter((vendor) => vendor.annual > 0).map((vendor) => ({ label: vendor.vendor, value: Math.round(vendor.annual) }));

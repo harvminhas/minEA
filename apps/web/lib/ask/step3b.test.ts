@@ -23,8 +23,8 @@ test("1. only the latest question's result renders: a late result for an earlier
   assert.equal(latestOnly(late, "Where is our money going?"), null);
   assert.equal(latestOnly(late, "Which vendors do we spend the most with?"), late);
   assert.match(src, /latestOnly\(remote\.data, question\)/);
-  assert.match(src, /queryFn: async \(\{ signal \}\)/); // react-query aborts the old stream
-  assert.match(src, /signal,\s*\n\s*onStep/);
+  assert.match(src, /queryFn: askQueryFn\(question, async \(asked, signal\)/); // react-query aborts the old stream (step 4: via askQueryFn)
+  assert.match(src, /signal,\s*\n\s*context,\s*\n\s*onStep/);
   // The question is owned by component state; a stale URL can't flip it back.
   assert.match(src, /pendingUrl\.current = q;\s*\n\s*setAsked\(q\);\s*\n\s*window\.history\.pushState/);
 });

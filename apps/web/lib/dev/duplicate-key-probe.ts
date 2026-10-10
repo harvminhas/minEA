@@ -33,3 +33,33 @@ export function installDuplicateKeyProbe(target: Console = console): void {
     original(...args);
   };
 }
+
+/**
+ * The same probe as an inline script for the root layout's <head>, so it is in place before any
+ * bundle runs (hydration, the dev overlay, devtools). The module version above installs later, which
+ * is why it could miss the warning. Self-contained (serialised with toString). Dev only.
+ */
+function earlyProbe() {
+  const w = window as unknown as { __bubomapEarlyProbe?: boolean; __bubomapDuplicateKeys?: unknown[] };
+  if (w.__bubomapEarlyProbe) return;
+  w.__bubomapEarlyProbe = true;
+  w.__bubomapDuplicateKeys = w.__bubomapDuplicateKeys || [];
+  for (const level of ["error", "warn"] as const) {
+    const orig = console[level];
+    console[level] = (...args: unknown[]) => {
+      const text = args.map((arg) => (typeof arg === "string" ? arg : "")).join(" ");
+      if (text.indexOf("two children with the same key") >= 0) {
+        const start = text.indexOf("same key, ") + 11;
+        const quoted = text.slice(start, text.indexOf(String.fromCharCode(96), start));
+        const key = quoted && quoted !== "%s" ? quoted : typeof args[1] === "string" ? args[1] : "(unknown)";
+        const stack = args.filter((arg) => typeof arg === "string" && /\n\s+at /.test(arg)).join("\n") || new Error().stack || "";
+        const hit = { key, stack, at: location.pathname + location.search, level };
+        w.__bubomapDuplicateKeys?.push(hit);
+        orig.call(console, `[BuboMap dev] duplicate React key "${key}" on ${hit.at}\n${stack}`);
+      }
+      return orig.apply(console, args as []);
+    };
+  }
+}
+
+export const EARLY_PROBE_SCRIPT = `(${earlyProbe.toString()})();`;

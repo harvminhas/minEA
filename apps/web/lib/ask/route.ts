@@ -75,7 +75,7 @@ export function pickAnswer(
   return { ...local, steps: [...seen, { id: "local", status: "done", label: LOCAL_ANSWER_STEP }] };
 }
 
-function sameQuestion(a: string, b: string): boolean {
+export function sameQuestion(a: string, b: string): boolean {
   const norm = (value: string) => value.trim().toLowerCase().replace(/[?.!\s]+$/g, "").replace(/\s+/g, " ");
   return norm(a) === norm(b);
 }

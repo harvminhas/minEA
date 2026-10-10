@@ -8,10 +8,13 @@ export function AskRichTable({
   table,
   hrefFor,
   onOpen,
+  itemHref,
 }: {
   table: AskTable;
   hrefFor: (row: { recordId: string | null; label: string }) => string | null;
   onOpen: (href: string) => void;
+  /** Link for an item named inside a row (a vendor's apps). */
+  itemHref?: (id: string) => string | null;
 }) {
   return (
     <table data-testid="ask-rich-table" className="mt-6 w-full text-left text-[13px]">
@@ -36,7 +39,26 @@ export function AskRichTable({
                 {href ? <Link href={href} onClick={(event) => event.stopPropagation()} className="text-[#5b4ce6] hover:underline">{row.label}</Link> : row.label}
               </td>
               <td className={`px-2 py-2.5 ${row.value.startsWith("No ") ? "text-[#8b90a0]" : "text-[#1c2230]"}`}>{row.value}</td>
-              <td className="px-2 py-2.5 text-[#6b7289]">{row.detail}</td>
+              <td data-testid="ask-rich-detail" className="px-2 py-2.5 text-[#6b7289]">
+                {row.items?.length && itemHref
+                  ? row.items.map((item, itemIndex) => {
+                      const link = itemHref(item.id);
+                      return (
+                        <span key={`${itemIndex}-${item.id}`}>
+                          {itemIndex > 0 && ", "}
+                          {link ? (
+                            // The app's own link; the rest of the cell (and row) opens the row's record.
+                            <Link href={link} onClick={(event) => event.stopPropagation()} className="hover:text-[#5b4ce6] hover:underline">
+                              {item.name}
+                            </Link>
+                          ) : (
+                            item.name
+                          )}
+                        </span>
+                      );
+                    })
+                  : row.detail}
+              </td>
             </tr>
           );
         })}

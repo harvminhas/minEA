@@ -17,6 +17,8 @@ import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
 import { splitSummary } from "@/lib/ask/rich";
 import { REVEAL_MS, latestOnly, revealText, revealTokens } from "@/lib/ask/reveal";
+import { askQueryFn, askQueryKey } from "@/lib/ask/remote";
+import { addTurn, clearThread, contextFor, earlierTurns, readThread, turnFromAnswer, writeThread, type Thread, type ThreadTurn } from "@/lib/ask/thread";
 import { AskBarChart, AskRichTable } from "@/components/mvp/AskRich";
 import { followUpsFor, pickAnswer, shouldAskModel, workingLine } from "@/lib/ask/route";
 import { AskLiveSteps, AskSteps } from "@/components/mvp/AskSteps";
@@ -152,23 +154,31 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   // Live working for the question being streamed (flag ask.stream.v1). Keyed by question so a
   // late event from an earlier question never shows under a new one.
   const [live, setLive] = useState<{ question: string; steps: AskStep[]; text: string }>({ question: "", steps: [], text: "" });
+  // The conversation in this tab (step 4). A ref feeds the query so the thread changing never re-keys it.
+  const [thread, setThread] = useState<Thread>({ turns: [] });
+  const threadRef = useRef<Thread>(thread);
+  threadRef.current = thread;
+  useEffect(() => {
+    if (orgSlug && workspaceSlug) setThread(readThread(window.sessionStorage, orgSlug, workspaceSlug));
+  }, [orgSlug, workspaceSlug]);
   const remote = useQuery({
-    queryKey: ["ask-model", orgSlug, workspaceSlug, question],
+    queryKey: askQueryKey(orgSlug, workspaceSlug, question),
     enabled: askModel,
     retry: false,
     // signal: react-query aborts it when the question changes, so an old stream is closed, not left to
     // finish late. The result is tagged with its question and only rendered for that question.
-    queryFn: async ({ signal }) => {
+    queryFn: askQueryFn(question, async (asked, signal) => {
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
-      if (!askStreamEnabled()) return { question, payload: await aiApi.ask(orgSlug, workspaceSlug, question, token) };
-      setLive({ question, steps: [], text: "" });
-      const payload = await aiApi.askStream(orgSlug, workspaceSlug, question, token, {
+      const context = contextFor(threadRef.current, asked);
+      if (!askStreamEnabled()) return aiApi.ask(orgSlug, workspaceSlug, asked, token, context);
+      setLive({ question: asked, steps: [], text: "" });
+      return aiApi.askStream(orgSlug, workspaceSlug, asked, token, {
         signal,
-        onStep: (step) => setLive((cur) => (cur.question === question ? { ...cur, steps: [...cur.steps, step] } : cur)),
+        context,
+        onStep: (step) => setLive((cur) => (cur.question === asked ? { ...cur, steps: [...cur.steps, step] } : cur)),
       });
-      return { question, payload };
-    },
+    }),
   });
   const remoteData = latestOnly(remote.data, question)?.payload;
   const liveNow = live.question === question ? live : { steps: [], text: "" };
@@ -205,6 +215,22 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   }, [remote.dataUpdatedAt, question]);
   const revealing = revealed && revealed.question === question && revealed.at === remote.dataUpdatedAt && revealed.n < revealTokens(answer.answerText).length;
   const shownText = revealing ? revealText(answer.answerText, revealed!.n) : answer.answerText;
+
+  // Keep each settled answer as a turn of the conversation (this tab only).
+  useEffect(() => {
+    if (mode !== "answer" || !question || thinking || revealing || showingAdd || ambiguous || !orgSlug || !workspaceSlug) return;
+    if (answer.handler === "clarify" || answer.loading) return;
+    setThread((current) => {
+      const next = addTurn(current, turnFromAnswer(question, answer));
+      if (next !== current) writeThread(window.sessionStorage, orgSlug, workspaceSlug, next);
+      return next;
+    });
+  }, [mode, question, thinking, revealing, showingAdd, ambiguous, answer, orgSlug, workspaceSlug]);
+  const earlier = mode === "answer" ? earlierTurns(thread, question) : [];
+  const newConversation = () => {
+    setThread(clearThread(window.sessionStorage, orgSlug, workspaceSlug));
+    router.push(askPath(basePath));
+  };
 
   const orgName = useAppStore((state) => state.activeOrg?.name) || "Your estate";
   const setup = useWorkspaceSetup();
@@ -417,6 +443,12 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         )}
         <button type="submit" className="rounded-xl bg-[#5b4ce6] px-4 py-2 text-[14px] font-semibold text-white">Ask →</button>
       </form>
+      {earlier.length > 0 && (
+        <ConversationThread turns={earlier} hrefFor={(id) => {
+          const row = rows.find((item) => item.id === id);
+          return row ? recordHref(basePath, row) : null;
+        }} onAsk={submit} onNew={newConversation} />
+      )}
       {visibleReceipt ? (
         <AddSaved added={visibleReceipt.added} kept={visibleReceipt.kept} todos={visibleReceipt.todos} canUndo={visibleReceipt.canUndo && Date.now() < visibleReceipt.undoUntil} motion={false} onUndo={() => void undoAdd()} />
       ) : showingAdd ? (
@@ -494,6 +526,10 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 table={answer.table}
                 hrefFor={(target) => richRowHref(basePath, answer.table!.kind, target, rows)}
                 onOpen={(href) => router.push(href)}
+                itemHref={(id) => {
+                  const row = rows.find((item) => item.id === id);
+                  return row ? recordHref(basePath, row) : null;
+                }}
               />
             )}
             {!revealing && !answer.table && tableCitations(answer).length > 0 && (
@@ -949,6 +985,58 @@ function SummaryAndRest({ text, nodes, onOpen }: { text: string; nodes: Paramete
         </span>
       )}
     </>
+  );
+}
+
+/** Earlier turns of this tab's conversation, oldest first, scrolled to the newest. */
+function ConversationThread({
+  turns,
+  hrefFor,
+  onAsk,
+  onNew,
+}: {
+  turns: ThreadTurn[];
+  hrefFor: (id: string) => string | null;
+  onAsk: (question: string) => void;
+  onNew: () => void;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (box.current) box.current.scrollTop = box.current.scrollHeight;
+  }, [turns.length]);
+  return (
+    <div data-testid="ask-thread" className="mb-4 rounded-2xl border border-[#e6e8ee] bg-[#fafafb]">
+      <div className="flex items-center justify-between border-b border-[#eef0f4] px-4 py-2">
+        <p className="text-[12px] font-medium text-[#6b7289]">Earlier in this conversation · {turns.length}</p>
+        <button type="button" onClick={onNew} className="text-[12px] font-medium text-[#5b4ce6] hover:underline">
+          New conversation
+        </button>
+      </div>
+      <div ref={box} className="max-h-[40vh] space-y-3 overflow-y-auto px-4 py-3">
+        {turns.map((turn, index) => (
+          <div key={`${index}-${turn.at}`} data-testid="ask-thread-turn" className="text-[13px]">
+            <button type="button" onClick={() => onAsk(turn.question)} className="font-semibold text-[#1c2230] hover:text-[#5b4ce6]">
+              {turn.question}
+            </button>
+            {turn.summary && <p className="mt-0.5 text-[#3c4254]">{turn.summary}</p>}
+            {turn.items.length > 0 && (
+              <p className="mt-0.5 text-[12px] text-[#8b90a0]">
+                {turn.items.slice(0, 6).map((item, itemIndex) => {
+                  const href = hrefFor(item.id);
+                  return (
+                    <span key={`${itemIndex}-${item.id}`}>
+                      {itemIndex > 0 && ", "}
+                      {href ? <Link href={href} className="hover:text-[#5b4ce6] hover:underline">{item.name}</Link> : item.name}
+                    </span>
+                  );
+                })}
+                {turn.items.length > 6 && ` +${turn.items.length - 6} more`}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

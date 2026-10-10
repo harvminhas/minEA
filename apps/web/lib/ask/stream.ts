@@ -116,6 +116,8 @@ export type AskStreamOptions = StreamHandlers & {
   url: string;
   token: string;
   question: string;
+  /** Earlier turns sent as context (step 4). */
+  context?: { question: string; summary: string; item_ids: string[] }[];
   /** POST /ai/ask, used once if the stream breaks. */
   fallback: () => Promise<AskModelPayload>;
   fetchImpl?: typeof fetch;
@@ -128,7 +130,7 @@ export async function askWithStream(options: AskStreamOptions): Promise<AskModel
     const response = await doFetch(options.url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${options.token}` },
-      body: JSON.stringify({ question: options.question }),
+      body: JSON.stringify(options.context?.length ? { question: options.question, context: options.context } : { question: options.question }),
       signal: options.signal,
     });
     return await readAskStream(response, options);

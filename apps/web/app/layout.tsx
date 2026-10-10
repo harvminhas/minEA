@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "@/components/providers";
 import "./globals.css";
+import { EARLY_PROBE_SCRIPT } from "@/lib/dev/duplicate-key-probe";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -41,6 +42,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      {process.env.NODE_ENV !== "production" && (
+        <head>
+          {/* Dev only: catch React duplicate-key warnings (key + stack) before any bundle runs. */}
+          <script dangerouslySetInnerHTML={{ __html: EARLY_PROBE_SCRIPT }} />
+        </head>
+      )}
       <body className={`${inter.className} app-boot-pending`}>
         <Providers>{children}</Providers>
       </body>

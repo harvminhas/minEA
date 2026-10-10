@@ -238,11 +238,39 @@ def _evidence_ids(evidence: list) -> list[str]:
     return ids
 
 
-async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str) -> dict:
+MAX_CONTEXT_TURNS = 4
+
+
+def conversation_prompt(question: str, context: list[dict], graph) -> tuple[str, list]:
+    """The question, preceded by up to 4 earlier turns so a follow-up ("which of those renew?") has
+    context. Earlier answers are context, not facts: item ids are re-checked against this workspace
+    (unknown ids are dropped) and the lookups stay the only source of numbers.
+    """
+    turns = [turn for turn in context if isinstance(turn, dict) and str(turn.get("question") or "").strip()][-MAX_CONTEXT_TURNS:]
+    if not turns:
+        return question, []
+    lines = ["Earlier in this conversation (context only; use the lookups for every name and number):"]
+    earlier = []
+    for index, turn in enumerate(turns, start=1):
+        recs = [graph.get(str(rid)) for rid in (turn.get("item_ids") or [])[:20]]
+        recs = [rec for rec in recs if rec is not None]
+        earlier.extend(recs)
+        lines.append(f"Q{index}: {str(turn.get('question')).strip()[:500]}")
+        summary = str(turn.get("summary") or "").strip()[:600]
+        if summary:
+            lines.append(f"A{index}: {summary}")
+        if recs:
+            lines.append("Items: " + "; ".join(f"{rec.name} ({rec.type_label()}, id {rec.id})" for rec in recs))
+    lines.append("")
+    lines.append(f"Current question: {question}")
+    return "\n".join(lines), earlier
+
+
+async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str, context: list[dict] | None = None) -> dict:
     """JSON contract of POST /ai/ask: the final answer, plus `steps` (what the server did)."""
     steps: list[dict] = []
     final: dict | None = None
-    async for event in run_ask(db, ctx, question):
+    async for event in run_ask(db, ctx, question, context=context):
         if event["event"] == "step":
             steps.append(event["data"])
         elif event["event"] == "final":
@@ -253,7 +281,13 @@ async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str
 
 
 async def run_ask(
-    db: AsyncSession | None, ctx: TenancyContext, question: str, *, clock=time.monotonic, graph=None
+    db: AsyncSession | None,
+    ctx: TenancyContext,
+    question: str,
+    *,
+    clock=time.monotonic,
+    graph=None,
+    context: list[dict] | None = None,
 ) -> AsyncIterator[dict]:
     """The Ask engine as a stream of events: {"event": "step"|"final", "data": {...}}.
 
@@ -282,7 +316,10 @@ async def run_ask(
     bag = ToolBag(graph=graph, seen_ids=set(), numbers=set())
     tools_used: list[str] = []
     ai_question = is_ai_question(question)
-    contents: list[types.Content] = [types.Content(role="user", parts=[types.Part.from_text(text=question)])]
+    prompt, earlier = conversation_prompt(question, context or [], graph)
+    for rec in earlier:
+        bag.note_record(rec)  # items from earlier turns, re-checked against this workspace, may be named again
+    contents: list[types.Content] = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM,
         tools=build_gemini_tools(tool_specs(include_ai=ai_question)),
@@ -388,6 +425,7 @@ def rich_blocks(bag: ToolBag) -> dict:
                 "value": f"{_money(g['annual_cost'])} a year" if g["annual_cost"] else "No annual cost recorded",
                 "detail": ", ".join(g["names"]),
                 "record_id": g["record_ids"][0] if g["record_ids"] else None,
+                "items": [{"id": rid, "name": name} for rid, name in zip(g["record_ids"], g["names"])],
             }
             for g in bag.vendor_groups
         ]
@@ -408,6 +446,7 @@ def rich_blocks(bag: ToolBag) -> dict:
                     "value": f"{_money(rec.annual)} a year" if rec.annual else "No annual cost recorded",
                     "detail": f"{rec.type_label()} · renews {when}",
                     "record_id": rec.id,
+                    "items": [{"id": rec.id, "name": rec.name}],
                 }
             )
             key = f"{_MONTHS[day.month - 1]} {day.year}"

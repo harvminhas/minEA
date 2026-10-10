@@ -16,8 +16,8 @@ def test_vendor_table_and_chart_cover_every_vendor():
     blocks = loop.rich_blocks(bag)
     rows = blocks["table"]["rows"]
     assert blocks["table"]["kind"] == "vendors" and len(rows) == 6
-    assert rows[0] == {"label": "Salesforce", "value": "$18,000 a year", "detail": "Salesforce", "record_id": "1"}
-    assert rows[4] == {"label": "Seagull", "value": "No annual cost recorded", "detail": "BarTender", "record_id": "7"}
+    assert rows[0] == {"label": "Salesforce", "value": "$18,000 a year", "detail": "Salesforce", "record_id": "1", "items": [{"id": "1", "name": "Salesforce"}]}
+    assert rows[4] == {"label": "Seagull", "value": "No annual cost recorded", "detail": "BarTender", "record_id": "7", "items": [{"id": "7", "name": "BarTender"}]}
     assert [b["label"] for b in blocks["chart"]["bars"]] == ["Salesforce", "Microsoft", "Intuit", "Shopify"]
 
 
