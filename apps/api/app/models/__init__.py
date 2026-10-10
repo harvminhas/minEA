@@ -1,5 +1,5 @@
 from app.models.authz import OrgLimit, Permission, Role, RolePermission
-from app.models.contact import ContactInquiry
+from app.models.contact import BusinessPlanRequest, ContactInquiry
 from app.models.objects import ChangeLog, MinEAObject, Workspace
 from app.models.workspace_snapshot import WorkspaceSnapshot
 from app.models.relationships import Relationship
@@ -11,6 +11,7 @@ from app.models.data_layer import DataLink
 from app.models.people import PeopleAccountability, PeopleRole, Team, TeamRoleAssignment
 
 __all__ = [
+    "BusinessPlanRequest",
     "Org",
     "Workspace",
     "WorkspaceSnapshot",

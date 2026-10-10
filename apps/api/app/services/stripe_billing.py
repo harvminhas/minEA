@@ -33,6 +33,7 @@ from app.services.plans import (
     CURRENCY,
     INTERVALS,
     PACK_ORDER,
+    interval_on_sale,
     lookup_key_for,
     parse_lookup_key,
     plan_licences,
@@ -343,6 +344,9 @@ async def create_checkout_session(
     _require_ready(org)
     if plan not in PACK_ORDER or interval not in INTERVALS:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Unknown plan or billing interval")
+    if not interval_on_sale(plan, interval):
+        # Starter is monthly only; its old yearly price stays for grandfathered subscribers.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=f"{plan.title()} is billed monthly only")
     # Hard guard against a second subscription. Plan changes go through the Customer Portal.
     # The stored id covers the normal case; asking Stripe covers an org row that does not show
     # the subscription yet (webhook not processed, or a lost update). If Stripe can't answer we

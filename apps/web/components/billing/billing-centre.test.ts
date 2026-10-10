@@ -57,21 +57,25 @@ const actions = (html: string) => [...html.matchAll(/data-action="([a-z_]+)"/g)]
 
 test("Stripe live for a Free org: pack buttons start checkout, no Manage billing yet", () => {
   const html = render("free", status());
-  assert.deepEqual(actions(html), ["checkout", "checkout", "checkout"]);
+  // Starter checks out; Business opens the Get started form; Team is not offered.
+  assert.deepEqual(actions(html), ["checkout", "get_started"]);
+  assert.doesNotMatch(html, /data-plan="team"/);
   assert.doesNotMatch(html, /data-testid="manage-billing"/);
 });
 
 test("Stripe not configured: pack buttons keep the coming-soon dialog", () => {
   const html = render("free", status({ checkout_available: false, stripe_configured: false }));
-  assert.deepEqual(actions(html), ["coming_soon", "coming_soon", "coming_soon"]);
+  assert.deepEqual(actions(html), ["coming_soon", "get_started"]);
 });
 
-test("org on Team: other packs switch in the portal and Manage billing shows", () => {
+test("org on Team (grandfathered): keeps its Team card, Business via Get started, Manage billing shows", () => {
   const html = render(
     "team",
     status({ plan: "team", display_plan: "team", has_subscription: true, has_billing_account: true, licences_used: 3, licences_cap: 5 })
   );
-  assert.deepEqual(actions(html), ["portal"]); // Starter blocked (3 > 1), Team current, Business via portal
+  assert.deepEqual(actions(html), ["get_started"]); // Starter blocked (3 > 1), Team current, Business form
+  assert.match(html, /data-plan="team"/);
+  assert.match(html, /data-testid="retired-plan-note"/);
   assert.match(html, /data-testid="manage-billing"/);
   assert.match(html, /Unassign 2 licences first/);
 });
@@ -89,7 +93,9 @@ test("over the cap after a downgrade: banner, nobody loses access", () => {
 test("member without billing rights sees disabled buttons and why", () => {
   const html = render("free", status({ can_manage_billing: false }));
   assert.match(html, /Only org owners and admins with a verified email can change the plan/);
-  assert.equal((html.match(/<button[^>]*data-action="checkout"[^>]*disabled=""/g) ?? []).length, 3);
+  assert.equal((html.match(/<button[^>]*data-action="checkout"[^>]*disabled=""/g) ?? []).length, 1);
+  // Anyone can ask for Business.
+  assert.doesNotMatch(html, /data-action="get_started"[^>]*disabled=""/);
 });
 
 test("checkout return notice", () => {
@@ -109,7 +115,8 @@ test("dev preview never offers real checkout or the banner", () => {
       onOpenPortal: noop,
     })
   );
-  assert.ok(actions(html).every((a) => a === "coming_soon"));
+  assert.ok(actions(html).every((a) => a === "coming_soon" || a === "get_started"));
+  assert.ok(!actions(html).includes("checkout"));
   assert.doesNotMatch(html, /over-cap-banner|manage-billing/);
 });
 
@@ -166,7 +173,7 @@ test("Business pack right after the portal switch: Manage billing, portal only, 
   assert.match(html, /data-testid="manage-billing"/);
   assert.match(html, /data-testid="portal-return"/);
   assert.ok(!actions(html).includes("checkout"));
-  assert.deepEqual(actions(html), ["portal", "portal"]);
+  assert.deepEqual(actions(html), ["portal"]); // Starter in the portal; Business is current
 });
 
 test("Stripe has a subscription the org row doesn't show yet: no checkout buttons", () => {
@@ -180,15 +187,15 @@ test("true legacy org (no subscription, no customer) still checks out", () => {
   const s = status({ plan: "business", display_plan: "business_legacy", has_subscription: false, checkout_allowed: true, licences_cap: null });
   const html = render("business_legacy", s);
   assert.match(html, /Business \(legacy\)/);
-  assert.deepEqual(actions(html), ["checkout", "checkout", "checkout"]);
+  assert.deepEqual(actions(html), ["checkout", "get_started"]);
   assert.doesNotMatch(html, /data-testid="manage-billing"/);
 });
 
-test("paid plans coming soon: Free org sees three disabled Coming soon buttons and a note", () => {
+test("paid plans coming soon: Free org sees Starter Coming soon, Business Get started, and a note", () => {
   const html = render("free", status({ paid_plans_available: false, checkout_allowed: false }));
-  assert.deepEqual(actions(html), ["unavailable", "unavailable", "unavailable"]);
+  assert.deepEqual(actions(html), ["unavailable", "get_started"]);
   const buttons = [...html.matchAll(/<button type="button" data-action="unavailable"([^>]*)>([^<]*)<\/button>/g)];
-  assert.equal(buttons.length, 3);
+  assert.equal(buttons.length, 1);
   for (const [, attrs, text] of buttons) {
     assert.match(attrs, /disabled=""/);
     assert.equal(text, "Coming soon");
@@ -197,15 +204,19 @@ test("paid plans coming soon: Free org sees three disabled Coming soon buttons a
   assert.doesNotMatch(html, /Upgrade to /);
   assert.doesNotMatch(html, /data-action="checkout"/);
   assert.doesNotMatch(html, /Only org owners and admins/);
-  // Prices stay visible.
-  assert.match(html, /\$99/);
-  assert.match(html, /\$449/);
-  assert.match(html, /\$799/);
+  // Starter's price stays visible; Business shows details, never a price; no Team.
+  assert.match(html, /\$149\/mo/);
+  assert.doesNotMatch(html, /\$99|\$990|Yearly|months free|aria-label="Billing period"/);
+  assert.doesNotMatch(html, /\$449|\$799|\$4,490|\$7,990/);
+  assert.match(html, /Starting from 5 licences/);
+  assert.match(html, /4 hours of onboarding consulting/);
+  assert.match(html, /Annual invoicing available/);
+  assert.match(html, />Get started</);
 });
 
 test("paid plans coming soon: legacy Business keeps its current-plan view, packs Coming soon", () => {
   const html = render("business_legacy", status({ plan: "business", display_plan: "business_legacy", paid_plans_available: false, checkout_allowed: false }));
-  assert.deepEqual(actions(html), ["unavailable", "unavailable", "unavailable"]);
+  assert.deepEqual(actions(html), ["unavailable", "get_started"]);
   assert.match(html, /data-testid="current-plan">Business \(legacy\)</);
 });
 
@@ -214,7 +225,7 @@ test("paid plans coming soon: subscribed org still switches in the portal with M
     "team",
     status({ plan: "team", display_plan: "team", has_subscription: true, has_billing_account: true, licences_used: 1, licences_cap: 5, paid_plans_available: false, checkout_allowed: false })
   );
-  assert.deepEqual(actions(html), ["portal", "portal"]);
+  assert.deepEqual(actions(html), ["portal", "get_started"]);
   assert.match(html, /data-testid="manage-billing"/);
   assert.doesNotMatch(html, /Coming soon/);
   assert.doesNotMatch(html, /data-testid="paid-coming-soon"/);
@@ -222,9 +233,26 @@ test("paid plans coming soon: subscribed org still switches in the portal with M
 
 test("allowlisted org: pack buttons are enabled and start real checkout", () => {
   const html = render("free", status({ paid_plans_available: true, checkout_allowed: true }));
-  assert.deepEqual(actions(html), ["checkout", "checkout", "checkout"]);
+  assert.deepEqual(actions(html), ["checkout", "get_started"]);
   assert.match(html, /Upgrade to Starter/);
   assert.doesNotMatch(html, /Coming soon/);
   assert.doesNotMatch(html, /data-testid="paid-coming-soon"/);
   assert.equal((html.match(/data-action="checkout"[^>]*disabled=""/g) ?? []).length, 0);
+});
+
+test("Starter is monthly only: no billing-period toggle, $149/mo billed monthly", () => {
+  const html = render("free", status({ paid_plans_available: true, checkout_allowed: true }));
+  assert.doesNotMatch(html, /aria-label="Billing period"|Yearly/);
+  assert.match(html, /\$149\/mo/);
+  assert.match(html, /Billed monthly/);
+});
+
+test("grandfathered Team card still shows its own yearly price, without a toggle", () => {
+  const html = render(
+    "team",
+    status({ plan: "team", display_plan: "team", has_subscription: true, has_billing_account: true, licences_used: 3, licences_cap: 5 })
+  );
+  assert.match(html, /\$449\/mo/);
+  assert.match(html, /or \$4,490\/yr/);
+  assert.doesNotMatch(html, /aria-label="Billing period"/);
 });

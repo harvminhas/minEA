@@ -306,7 +306,11 @@ class _FakeStripe:
 
 
 def _catalogue_prices():
-    out = []
+    """What Stripe holds: Starter's new $149 monthly price first, then every older price
+    (including Starter's retired $99/$990 ones under their original lookup keys)."""
+    starter_new = price("starter", "monthly")
+    starter_new.update(id="price_starter_monthly_149", unit_amount=14900, lookup_key="bubomap_starter_monthly_149")
+    out = [starter_new]
     for plan, (m, y) in {"starter": (9900, 99000), "team": (44900, 449000), "business": (79900, 799000)}.items():
         for interval, amount in (("monthly", m), ("yearly", y)):
             p = price(plan, interval)
@@ -751,3 +755,34 @@ def test_webhook_route_asks_stripe_to_retry(monkeypatch):
         run(webhooks.stripe_webhook(_SignedReq(payload, _signed(payload, "whsec_unit")), db=SimpleNamespace(rollback=rollback)))
     assert caught.value.status_code == 503
     assert rolled_back == [True]
+
+
+def test_new_starter_checkout_uses_the_149_monthly_price(configured, monkeypatch):
+    monkeypatch.setattr(sb, "_stripe", lambda: _FakeStripe(_catalogue_prices()))
+    monkeypatch.setattr(sb, "_price_cache", {})
+    assert sb.resolve_price_id("starter", "monthly") == "price_starter_monthly_149"
+
+
+def test_starter_yearly_checkout_is_refused(configured, monkeypatch):
+    fake = _FakeStripe(_catalogue_prices())
+    monkeypatch.setattr(sb, "_stripe", lambda: fake)
+    with pytest.raises(HTTPException) as exc:
+        run(
+            sb.create_checkout_session(
+                SimpleNamespace(flush=None), make_org(), plan="starter", interval="yearly",
+                user_email="o@example.com", user_id=uuid.uuid4(), licences_in_use=1,
+            )
+        )
+    assert exc.value.status_code == 400
+    assert fake.created_sessions == []
+
+
+@pytest.mark.parametrize(
+    "lookup,amount,interval",
+    [("bubomap_starter_monthly", 9900, "month"), ("bubomap_starter_yearly", 99000, "year"), ("bubomap_starter_monthly_149", 14900, "month")],
+)
+def test_grandfathered_and_new_starter_subscriptions_sync_as_starter(lookup, amount, interval):
+    p = {"currency": "usd", "lookup_key": lookup, "unit_amount": amount, "recurring": {"interval": interval}, "metadata": {}}
+    plan, iv, licences = sb.plan_for_price(p)
+    assert plan == "starter" and licences == 1
+    assert iv == ("yearly" if interval == "year" else "monthly")

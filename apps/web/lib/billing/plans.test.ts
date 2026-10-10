@@ -24,7 +24,7 @@ test("pack prices and licences match Harvinder's decisions", () => {
   assert.deepEqual(
     PACK_ORDER.map((id) => [id, CATALOG[id].licences, CATALOG[id].monthlyUsd, CATALOG[id].yearlyUsd]),
     [
-      ["starter", 1, 99, 990],
+      ["starter", 1, 149, null],
       ["team", 5, 449, 4490],
       ["business", 10, 799, 7990],
     ]
@@ -47,19 +47,21 @@ test("onboarding hours only on Team and Business", () => {
   assert.equal(showsOnboarding("business_legacy"), false);
 });
 
-test("yearly maths: 2 months free on every pack", () => {
-  assert.equal(yearlySavingsUsd(CATALOG.starter), 198);
+test("yearly maths: 2 months free on Team and Business; Starter has no yearly price", () => {
+  assert.equal(yearlySavingsUsd(CATALOG.starter), 0);
+  assert.equal(monthsFreeOnYearly(CATALOG.starter), 0);
+  assert.equal(yearlyPerMonthUsd(CATALOG.starter), 149);
   assert.equal(yearlySavingsUsd(CATALOG.team), 898);
   assert.equal(yearlySavingsUsd(CATALOG.business), 1598);
-  for (const id of PACK_ORDER) assert.equal(monthsFreeOnYearly(CATALOG[id]), 2);
+  for (const id of ["team", "business"] as const) assert.equal(monthsFreeOnYearly(CATALOG[id]), 2);
   assert.equal(monthsFreeOnYearly(CATALOG.free), 0);
-  assert.equal(yearlyPerMonthUsd(CATALOG.starter), 82.5);
   assert.equal(yearlyPerMonthUsd(CATALOG.team), 374.17);
   assert.equal(yearlyPerMonthUsd(CATALOG.business), 665.83);
 });
 
 test("per-licence prices fall as packs grow", () => {
-  assert.equal(perLicencePerMonthUsd(CATALOG.starter, "monthly"), 99);
+  assert.equal(perLicencePerMonthUsd(CATALOG.starter, "monthly"), 149);
+  assert.equal(perLicencePerMonthUsd(CATALOG.starter, "yearly"), 149);
   assert.equal(perLicencePerMonthUsd(CATALOG.team, "monthly"), 89.8);
   assert.equal(perLicencePerMonthUsd(CATALOG.business, "monthly"), 79.9);
   assert.equal(perLicencePerMonthUsd(CATALOG.team, "yearly"), 74.83);
@@ -127,12 +129,14 @@ test("plan changes: blocked when more licences are in use than the pack holds", 
   assert.deepEqual(planChangeFor("business_legacy", "business", 12), { kind: "blocked", unassignFirst: 2 });
 });
 
-test("next pack with room", () => {
-  assert.equal(nextPackWithRoom(2, "free"), "team");
-  assert.equal(nextPackWithRoom(2, "starter"), "team");
+test("next pack with room: Starter for one editor, otherwise Business, never Team", () => {
+  assert.equal(nextPackWithRoom(2, "free"), "business");
+  assert.equal(nextPackWithRoom(2, "starter"), "business");
   assert.equal(nextPackWithRoom(6, "team"), "business");
   assert.equal(nextPackWithRoom(11, "business"), null);
+  assert.equal(nextPackWithRoom(3, "business_legacy"), null);
   assert.equal(nextPackWithRoom(1), "starter");
+  assert.equal(nextPackWithRoom(1, "free"), "starter");
 });
 
 test("onboarding booking URL: http(s) only, unset means coming soon", () => {

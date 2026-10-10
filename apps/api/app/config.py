@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Resend
     resend_api_key: str = ""
     email_from: str = "minEA <onboarding@resend.dev>"
+    # Where Business "Get started" requests are emailed (via Resend, when RESEND_API_KEY is set).
+    # Empty = store only. Requests are always stored in business_plan_requests.
+    business_request_notify_email: str = "hello@bubomap.com"
 
     # Web app URL (verification links, invites)
     web_app_url: str = "http://localhost:3001"

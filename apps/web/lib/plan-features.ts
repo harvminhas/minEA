@@ -94,7 +94,7 @@ export function shareCreateBlockedMessage(
     if (billingUiEnabled()) {
       return `Free includes one active share link. ${SELF_SERVE_UPGRADE} for more, or revoke an existing link first.`;
     }
-    return "Free includes one active share link. Contact us for Business for more, or revoke an existing link first.";
+    return "Free includes one active share link. Upgrade to Business for more, or revoke an existing link first.";
   }
   const cap = limit ?? PLAN_SHARE_LINK_LIMITS[p];
   return `Your ${PLAN_LABELS[p]} plan allows up to ${cap} active share links. Revoke an existing link to create a new one.`;
@@ -113,7 +113,7 @@ export function workspaceCreateBlockedMessage(
       );
     }
     return (
-      "Free includes one workspace. Contact us for Business to create more workspaces, " +
+      "Free includes one workspace. Upgrade to Business to create more workspaces, " +
       "or join unlimited workspaces shared with you by others."
     );
   }
@@ -134,10 +134,10 @@ export function objectCreateBlockedMessage(
     if (billingUiEnabled()) {
       return `Free includes up to ${cap} repository objects. ${SELF_SERVE_UPGRADE} to add more.`;
     }
-    return `Free includes up to ${cap} repository objects. Contact us for Business to add more.`;
+    return `Free includes up to ${cap} repository objects. Upgrade to Business to add more.`;
   }
   if (billingUiEnabled()) return "Repository object limit reached for your plan.";
-  return "Repository object limit reached. Contact us to adjust your plan.";
+  return "Repository object limit reached for your plan.";
 }
 
 export function planAllowsAiChat(plan: OrgPlan | string | undefined | null): boolean {
@@ -183,9 +183,9 @@ export function viewUpgradeMessage(viewLabel: string): string {
 
 export function inviteUpgradeMessage(_plan: OrgPlan): string {
   if (billingUiEnabled()) {
-    return "Inviting teammates needs a paid plan: Starter, Team or Business. Viewers are always free.";
+    return "Inviting teammates who edit needs the Business plan, starting from 5 licences. Viewers are always free.";
   }
-  return "Inviting teammates requires a Business plan. Contact us for a quote based on contributor licenses.";
+  return "Inviting teammates requires a Business plan, starting from 5 licences.";
 }
 
 export const BUSINESS_CONTACT_EMAIL = "hello@bubomap.com";

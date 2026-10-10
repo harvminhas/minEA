@@ -111,7 +111,7 @@ test("no '15 minute' claim anywhere on the page or in its source", () => {
   }
 });
 
-test("pricing, flag off: today's live pricing copy, unchanged", () => {
+test("pricing, flag off: live pricing copy, Business Get started instead of Talk to us", () => {
   const html = renderHome("0");
   const t = text(html);
   assert.equal((html.match(/id="pricing"/g) ?? []).length, 1);
@@ -121,16 +121,18 @@ test("pricing, flag off: today's live pricing copy, unchanged", () => {
     "$0 forever",
     "Everything one person needs to map an architecture.",
     "All views — heatmap, journeys, investments, tech debt",
-    "Contact us",
+    "Starting from 5 licences",
     "For teams that run on their architecture model.",
     "AI architecture chat",
-    "Guided onboarding — we set you up for success",
-    "Talk to us",
+    "4 hours of onboarding consulting included",
+    "Get started",
     "Free for individuals — no credit card required.",
   ]) {
     assert.ok(t.includes(s), s);
   }
-  assert.match(html, /href="\/contact\?interest=business"/);
+  assert.match(html, /href="\/business\/get-started\?from=pricing"[^>]*>Get started</);
+  assert.doesNotMatch(t, /Talk to us|Contact us|contact sales/i);
+  assert.doesNotMatch(html, /interest=business/);
   assert.doesNotMatch(t, /Taxes may apply|Starter|per month/);
 });
 
@@ -139,7 +141,9 @@ test("pricing, flag on: the plan cards, no sales copy", () => {
   const t = text(html);
   assert.equal((html.match(/id="pricing"/g) ?? []).length, 1);
   assert.ok(t.includes("Prices in USD. Taxes may apply."));
-  for (const plan of ["Starter", "Team", "Business"]) assert.ok(t.includes(plan), plan);
+  for (const plan of ["Free", "Starter", "Business"]) assert.ok(t.includes(plan), plan);
+  assert.doesNotMatch(html, /data-plan="team"/);
+  assert.doesNotMatch(t, /contact sales|sales call/i);
   assert.ok(t.includes("Start free — no credit card required."));
   assert.doesNotMatch(t, /Talk to us|Guided onboarding|Contact us/);
   assert.doesNotMatch(html, /interest=business/);

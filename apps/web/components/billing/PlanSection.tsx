@@ -6,7 +6,6 @@ import { Check, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { billingApi } from "@/lib/api-client";
 import {
-  BUSINESS_CONTACT_EMAIL,
   PLAN_DESCRIPTIONS,
   PLAN_LABELS,
   isPaidPlan,
@@ -17,13 +16,15 @@ import {
   workspaceQuotaLabel,
 } from "@/lib/plan-features";
 import type { Org } from "@minea/types";
+import { businessGetStartedHref } from "@/lib/billing/business-request";
 
 const BUSINESS_FEATURES = [
   "Unlimited workspaces",
   "AI architecture chat",
-  "Team collaboration with contributor licenses",
+  "Team collaboration, starting from 5 licences",
   "Share links for views, roadmaps, and objects",
-  "Guided onboarding — expert setup to get you started right",
+  "4 hours of onboarding consulting included",
+  "Pay by invoice or card, monthly or annual",
 ];
 
 interface Props {
@@ -115,7 +116,7 @@ export function PlanSection({ orgSlug, org, billingMessage, onClearBillingMessag
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-gray-900 text-sm">Upgrade to Business</p>
               <p className="text-xs text-gray-600 mt-0.5">
-                Contact us for pricing — we&apos;ll tailor a plan for your team.
+                Tell us how many licences you need and how you&apos;d like to pay.
               </p>
               <ul className="mt-3 space-y-1">
                 {BUSINESS_FEATURES.map((f) => (
@@ -126,10 +127,10 @@ export function PlanSection({ orgSlug, org, billingMessage, onClearBillingMessag
                 ))}
               </ul>
               <Link
-                href={`mailto:${BUSINESS_CONTACT_EMAIL}?subject=BuboMap%20Business%20plan`}
+                href={businessGetStartedHref({ org: orgSlug, from: "plan_section" })}
                 className="mt-4 inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
               >
-                Contact us
+                Get started
               </Link>
             </div>
           </div>
@@ -138,12 +139,12 @@ export function PlanSection({ orgSlug, org, billingMessage, onClearBillingMessag
 
       {isPaidPlan(plan) && (
         <p className="text-xs text-gray-400 mt-3">
-          Need to adjust contributor licenses or add workspaces?{" "}
+          Need more licences?{" "}
           <Link
-            href={`mailto:${BUSINESS_CONTACT_EMAIL}?subject=BuboMap%20Business%20plan`}
+            href={businessGetStartedHref({ org: orgSlug, from: "plan_section" })}
             className="text-indigo-600 hover:text-indigo-700"
           >
-            Contact us
+            Request a Business change
           </Link>
           .
         </p>

@@ -1,5 +1,5 @@
 {
-  "_comment": "Canonical plan catalogue. Python loads this file (app/services/plans.py); apps/web/lib/billing/plans.ts mirrors it and parity tests on both sides compare against it. Prices are USD.",
+  "_comment": "Canonical plan catalogue. Python loads this file (app/services/plans.py); apps/web/lib/billing/plans.ts mirrors it and parity tests on both sides compare against it. Prices are USD. Starter is sold monthly only (sell_intervals) at $149 under its own lookup key (lookup_keys); its old $99/mo and $990/yr prices stay mapped to Starter through legacy_lookup_keys so existing subscribers keep working. yearly_usd null = no yearly price on sale.",
   "currency": "usd",
   "plans": {
     "free": {
@@ -14,8 +14,8 @@
     "starter": {
       "label": "Starter",
       "licences": 1,
-      "monthly_usd": 99,
-      "yearly_usd": 990,
+      "monthly_usd": 149,
+      "yearly_usd": null,
       "ai_answers_per_month": 500,
       "apps_platforms": null,
       "onboarding_hours": 0
@@ -42,6 +42,12 @@
   "pack_order": ["starter", "team", "business"],
   "intervals": {"monthly": "month", "yearly": "year"},
   "lookup_key_prefix": "bubomap",
+  "sell_intervals": {"starter": ["monthly"], "team": ["monthly", "yearly"], "business": ["monthly", "yearly"]},
+  "lookup_keys": {"starter": {"monthly": "bubomap_starter_monthly_149"}},
+  "legacy_lookup_keys": {
+    "bubomap_starter_monthly": {"plan": "starter", "interval": "monthly", "usd": 99},
+    "bubomap_starter_yearly": {"plan": "starter", "interval": "yearly", "usd": 990}
+  },
   "legacy_aliases": {"solo": "business", "growth": "business"},
   "portal_configurations": {
     "all": ["starter", "team", "business"],

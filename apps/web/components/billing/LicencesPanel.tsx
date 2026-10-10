@@ -10,6 +10,7 @@ import {
   type LicenceSummary,
   type RosterRow,
 } from "@/lib/billing/licences";
+import { businessGetStartedHref } from "@/lib/billing/business-request";
 import { CATALOG, entitlementsFor, nextPackWithRoom, type DisplayPlanId } from "@/lib/billing/plans";
 
 interface Props {
@@ -19,6 +20,8 @@ interface Props {
   /** null while billing status loads; summary is null then too. */
   displayPlan: DisplayPlanId | null;
   billingHref: string;
+  /** For the Business Get started link. */
+  orgSlug?: string;
   pendingInvites: number;
 }
 
@@ -26,7 +29,7 @@ interface Props {
  * Licences tab. READ-ONLY: the existing role-change API only switches org admin/member and
  * there is no API to change a workspace role to viewer, so nothing here changes access.
  */
-export function LicencesPanel({ rows, error, summary, displayPlan, billingHref, pendingInvites }: Props) {
+export function LicencesPanel({ rows, error, summary, displayPlan, billingHref, orgSlug, pendingInvites }: Props) {
   const plan = entitlementsFor(displayPlan ?? "free");
   const canAssign = summary ? canAssignLicence(summary) : false;
   const next =
@@ -69,12 +72,20 @@ export function LicencesPanel({ rows, error, summary, displayPlan, billingHref, 
               : summary.total === 1
                 ? `The 1 licence on ${plan.label} is in use.`
                 : `All ${summary.total} licences on ${plan.label} are in use.`}{" "}
-          {next ? (
+          {next === "business" ? (
+            <Link
+              href={businessGetStartedHref({ org: orgSlug, from: "licences" })}
+              data-testid="licences-business-get-started"
+              className="font-medium text-indigo-700 hover:text-indigo-800"
+            >
+              Get started with Business, from 5 licences →
+            </Link>
+          ) : next ? (
             <Link href={billingHref} className="font-medium text-indigo-700 hover:text-indigo-800">
-              Upgrade to {CATALOG[next].label} for {CATALOG[next].licences} licences →
+              Upgrade to {CATALOG[next].label} for {CATALOG[next].licences} licence{CATALOG[next].licences === 1 ? "" : "s"} →
             </Link>
           ) : (
-            <span>Business is the largest pack (10 licences).</span>
+            <span>Need more licences? Ask us to change your Business plan.</span>
           )}
         </div>
       )}

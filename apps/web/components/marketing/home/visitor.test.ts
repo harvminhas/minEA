@@ -70,9 +70,10 @@ for (const flag of ["0", "1"]) {
     assert.equal(count(html, />Open BuboMap</g), 3 + planButtons);
     // Hero shows ONE primary button.
     assert.match(html, /<div class="ctas" data-visitor="signed_in"><a class="btn btn-primary btn-lg" href="\/home">Open BuboMap<\/a><\/div>/);
-    // "See pricing" and the Business "Talk to us" contact link are not sign-up CTAs; they stay.
+    // "See pricing" and the Business "Get started" request link are not sign-up CTAs; they stay.
     assert.match(html, /href="#pricing">See pricing</);
-    if (flag === "0") assert.match(html, />Talk to us</);
+    if (flag === "0") assert.match(html, /href="\/business\/get-started\?from=pricing"[^>]*>Get started</);
+    assert.doesNotMatch(html, />Talk to us</);
   });
 }
 

@@ -8,13 +8,13 @@ import { primaryViewPath } from "@/lib/tenancy";
 import { usePermissions } from "@/lib/use-permissions";
 import { usePlanFeatures } from "@/lib/use-plan-features";
 import {
-  TEAM_CONTACT_EMAIL,
   inviteUpgradeMessage,
   workspaceCreateBlockedMessage,
   workspaceQuotaLabel,
 } from "@/lib/plan-features";
 import { PlanSection } from "@/components/billing/PlanSection";
 import { BillingCentre } from "@/components/billing/BillingCentre";
+import { businessGetStartedHref } from "@/lib/billing/business-request";
 import { BillingPreviewSwitch } from "@/components/billing/BillingPreviewSwitch";
 import { LicencesPanel } from "@/components/billing/LicencesPanel";
 import { billingPreviewEnabled, billingUiEnabled } from "@/lib/billing/flags";
@@ -419,6 +419,7 @@ export default function OrgSettingsPage() {
               summary={licenceSummary}
               displayPlan={displayPlan}
               billingHref={billingHref}
+              orgSlug={orgSlug}
               pendingInvites={(invites ?? []).filter((i) => i.status === "pending").length}
             />
           </div>
@@ -447,21 +448,13 @@ export default function OrgSettingsPage() {
             {!canInviteOrgMembers ? (
               <div className="rounded-md bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
                 <p>{inviteUpgradeMessage(plan)}</p>
-                {billingUi ? (
-                  <Link
-                    href={billingHref}
-                    className="inline-block mt-2 text-indigo-600 font-medium hover:text-indigo-700"
-                  >
-                    See plans →
-                  </Link>
-                ) : (
                 <Link
-                  href={`mailto:${TEAM_CONTACT_EMAIL}?subject=BuboMap%20Business%20plan`}
+                  href={businessGetStartedHref({ org: orgSlug, from: "invite" })}
+                  data-testid="invite-business-get-started"
                   className="inline-block mt-2 text-indigo-600 font-medium hover:text-indigo-700"
                 >
-                  Contact us for Business →
+                  Get started with Business →
                 </Link>
-                )}
               </div>
             ) : (
               <>
@@ -519,6 +512,7 @@ export default function OrgSettingsPage() {
 
       {billingUi && canSeeBilling && show("billing") && (
         <BillingCentre
+          orgSlug={orgSlug}
           displayPlan={displayPlan}
           realPlan={realPlan}
           previewing={!!preview}

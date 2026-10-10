@@ -44,16 +44,27 @@ function card(html: string, id: string): string {
 }
 
 for (const [name, auth] of STATES) {
-  test(`pricing cards, billing UI on, ${name}: packs disabled "Coming soon", prices visible`, () => {
+  test(`pricing cards, billing UI on, ${name}: Free, Starter Coming soon, Business Get started with no price`, () => {
     const html = render(React.createElement(PricingPlans), auth, "1");
-    for (const [id, price] of [["starter", "$99"], ["team", "$449"], ["business", "$799"]] as const) {
-      const c = card(html, id);
-      assert.match(c, new RegExp(`<button type="button" disabled="" data-coming-soon="${id}"[^>]*>Coming soon</button>`));
-      assert.ok(c.includes(price), `${id} price ${price} still shown`);
-      assert.doesNotMatch(c, /<a /, `${id} has no link`);
-      assert.doesNotMatch(c, /Get started/);
-    }
-    assert.equal((html.match(/>Coming soon</g) ?? []).length, 3);
+    assert.deepEqual([...html.matchAll(/data-plan="([a-z]+)"/g)].map((m) => m[1]), ["free", "starter", "business"]);
+    const starter = card(html, "starter");
+    assert.match(starter, /<button type="button" disabled="" data-coming-soon="starter"[^>]*>Coming soon<\/button>/);
+    assert.ok(starter.includes("$149"), "Starter price shown");
+    assert.match(starter, /Billed monthly/);
+    // Monthly only: no yearly price, no billing-period toggle on the page.
+    assert.doesNotMatch(html, /\$99|\$990|\/year|Yearly|months free|aria-label="Billing period"/);
+    assert.doesNotMatch(starter, /<a /);
+    assert.equal((html.match(/>Coming soon</g) ?? []).length, 1);
+    const business = card(html, "business");
+    assert.doesNotMatch(business, /\$/, "Business shows no price");
+    assert.match(business, /Starting from 5 licences/);
+    assert.match(business, /4 hours of onboarding consulting/);
+    assert.match(business, /invoice or card/i);
+    assert.match(business, /Annual invoicing available/);
+    // Enabled, for signed-out visitors too; opens the form (no link to checkout or sign-up).
+    assert.match(business, /<button type="button" data-get-started="business"[^>]*>Get started<\/button>/);
+    assert.doesNotMatch(business, /<a |disabled=""/);
+    assert.doesNotMatch(html, /contact sales|talk to us|sales call/i);
     const free = card(html, "free");
     assert.doesNotMatch(free, /Coming soon/);
     if (auth?.isLoaded && auth.isSignedIn) assert.match(free, /href="\/home"[^>]*>Open BuboMap</);
@@ -67,11 +78,14 @@ for (const flag of ["0", "1"]) {
       const html = render(React.createElement(HomePage), auth, flag);
       // Nothing on the page links a paid pack to sign-up / the app other than Free and the CTAs.
       if (flag === "1") {
-        assert.equal((html.match(/data-coming-soon="(starter|team|business)"[^>]*>Coming soon</g) ?? []).length, 3);
+        assert.equal((html.match(/data-coming-soon="(starter|team|business)"[^>]*>Coming soon</g) ?? []).length, 1);
+        // Business never checks out from the page: it opens the Get started form.
+        assert.equal((html.match(/data-get-started="business"/g) ?? []).length, 1);
       } else {
-        // Legacy pricing (flag off) has no Starter/Team/Business packs: Free + "Business: Talk to us" (sales contact).
+        // Legacy pricing (flag off): Free + Business, whose Get started goes to the request form.
         assert.doesNotMatch(html, /Coming soon/);
-        assert.match(html, />Talk to us</);
+        assert.doesNotMatch(html, />Talk to us</);
+        assert.match(html, /data-get-started="business"[^>]*>Get started</);
       }
     });
   }

@@ -10,7 +10,10 @@ Live keys are refused unless --allow-live is passed.
 
 Idempotency:
 - Products use fixed ids (bubomap_starter, bubomap_team, bubomap_business).
-- Prices are found by lookup_key (bubomap_<plan>_<interval>). A price whose amount, currency,
+- Prices are found by lookup_key (bubomap_<plan>_<interval>, or the override in plans.json
+  lookup_keys, e.g. bubomap_starter_monthly_149). Only intervals in sell_intervals are created
+  (Starter: monthly only). Retired prices under legacy_lookup_keys (Starter $99/$990) are never
+  touched, so grandfathered subscriptions keep billing. A price whose amount, currency,
   interval or product no longer matches is replaced by a new price that takes over the lookup_key
   (transfer_lookup_key); the old one is archived.
 - Portal configurations are found by metadata.bubomap_portal and updated in place.
@@ -45,7 +48,12 @@ CANCEL_REASONS = ["too_expensive", "missing_features", "switched_service", "unus
 
 
 def lookup_key(plan: str, interval: str) -> str:
-    return f"{CATALOG['lookup_key_prefix']}_{plan}_{interval}"
+    override = CATALOG.get("lookup_keys", {}).get(plan, {}).get(interval)
+    return override or f"{CATALOG['lookup_key_prefix']}_{plan}_{interval}"
+
+
+def sell_intervals(plan: str) -> list[str]:
+    return list(CATALOG.get("sell_intervals", {}).get(plan, CATALOG["intervals"]))
 
 
 def product_id(plan: str) -> str:
@@ -138,7 +146,7 @@ def portal_features(products: list[dict]) -> dict:
 
 def ensure_portal(variant: str, plans: list[str], prices: dict[str, dict[str, str]]):
     products = [
-        {"product": product_id(p), "prices": [prices[p]["monthly"], prices[p]["yearly"]]} for p in plans
+        {"product": product_id(p), "prices": [prices[p][i] for i in sell_intervals(p)]} for p in plans
     ]
     params = {
         "business_profile": {"headline": "Manage your BuboMap subscription"},
@@ -202,7 +210,7 @@ def main() -> int:
         product = ensure_product(plan)
         out["products"][plan] = product.id
         prices[plan] = {}
-        for interval in CATALOG["intervals"]:
+        for interval in sell_intervals(plan):
             price = ensure_price(plan, interval)
             prices[plan][interval] = price.id
             out["prices"][lookup_key(plan, interval)] = {

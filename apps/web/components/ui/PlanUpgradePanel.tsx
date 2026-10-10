@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Lock } from "lucide-react";
-import { BUSINESS_CONTACT_EMAIL } from "@/lib/plan-features";
+import { businessGetStartedHref } from "@/lib/billing/business-request";
 import { usePlanFeatures } from "@/lib/use-plan-features";
 import { billingUiEnabled } from "@/lib/billing/flags";
 import { adminTabHref } from "@/lib/billing/admin-centre";
@@ -47,14 +47,14 @@ export function PlanUpgradePanel({ title, message, showBusinessContact }: Props)
       {(showBusinessContact || isFree) && !billingUi && (
         <div className="space-y-2 text-sm">
           <p className="text-gray-600">
-            <span className="font-medium text-gray-800">Business</span> — unlimited workspaces, AI
-            chat, and guided onboarding.
+            <span className="font-medium text-gray-800">Business</span>: unlimited workspaces, AI
+            chat and 4 hours of onboarding, starting from 5 licences.
           </p>
           <Link
-            href={`mailto:${BUSINESS_CONTACT_EMAIL}?subject=BuboMap%20Business%20plan`}
+            href={businessGetStartedHref({ org: activeOrg?.slug, from: "upgrade_panel" })}
             className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
           >
-            Contact us
+            Get started
           </Link>
         </div>
       )}

@@ -19,7 +19,7 @@ def test_plan_keys_and_pack_order_come_from_json():
 
 @pytest.mark.parametrize(
     "plan,licences,monthly,yearly",
-    [("free", 1, 0, 0), ("starter", 1, 99, 990), ("team", 5, 449, 4490), ("business", 10, 799, 7990)],
+    [("free", 1, 0, 0), ("starter", 1, 149, None), ("team", 5, 449, 4490), ("business", 10, 799, 7990)],
 )
 def test_catalogue_values(plan, licences, monthly, yearly):
     spec = plans.PLAN_CATALOG[plan]
@@ -93,7 +93,7 @@ def test_business_without_stripe_is_legacy_with_unchanged_limits_and_no_cap():
 def test_lookup_keys_round_trip():
     assert plans.lookup_key_for("team", "yearly") == "bubomap_team_yearly"
     for plan in plans.PACK_ORDER:
-        for interval in plans.INTERVALS:
+        for interval in plans.SELL_INTERVALS[plan]:
             assert plans.parse_lookup_key(plans.lookup_key_for(plan, interval)) == (plan, interval)
     assert plans.parse_lookup_key("bubomap_free_monthly") is None
     assert plans.parse_lookup_key("other_team_monthly") is None
@@ -103,7 +103,9 @@ def test_lookup_keys_round_trip():
 
 
 def test_unit_amounts_are_cents():
-    assert plans.unit_amount_cents("starter", "monthly") == 9900
+    assert plans.unit_amount_cents("starter", "monthly") == 14900
+    with pytest.raises(ValueError):
+        plans.unit_amount_cents("starter", "yearly")
     assert plans.unit_amount_cents("business", "yearly") == 799000
 
 
@@ -113,3 +115,21 @@ def test_unit_amounts_are_cents():
 )
 def test_portal_variant_never_offers_a_pack_too_small(used, variant):
     assert plans.portal_variant_for_licences(used) == variant
+
+
+def test_starter_is_monthly_only_at_149_on_a_new_lookup_key():
+    assert plans.SELL_INTERVALS["starter"] == ("monthly",)
+    assert plans.SELL_INTERVALS["team"] == plans.SELL_INTERVALS["business"] == ("monthly", "yearly")
+    assert plans.lookup_key_for("starter", "monthly") == "bubomap_starter_monthly_149"
+    assert plans.interval_on_sale("starter", "yearly") is False
+    with pytest.raises(ValueError):
+        plans.lookup_key_for("starter", "yearly")
+
+
+def test_old_starter_prices_stay_mapped_to_starter():
+    # Grandfathered $99/mo and $990/yr subscriptions keep syncing as Starter.
+    assert plans.parse_lookup_key("bubomap_starter_monthly") == ("starter", "monthly")
+    assert plans.parse_lookup_key("bubomap_starter_yearly") == ("starter", "yearly")
+    assert plans.parse_lookup_key("bubomap_starter_monthly_149") == ("starter", "monthly")
+    assert plans.LEGACY_LOOKUP_KEYS["bubomap_starter_monthly"]["usd"] == 99
+    assert plans.LEGACY_LOOKUP_KEYS["bubomap_starter_yearly"]["usd"] == 990

@@ -17,7 +17,8 @@ export interface CatalogPlan {
   /** Licences = people who can edit. Viewers are free and unlimited on every plan. */
   licences: number;
   monthlyUsd: number;
-  yearlyUsd: number;
+  /** null = no yearly price on sale (Starter is monthly only). */
+  yearlyUsd: number | null;
   aiAnswersPerMonth: number;
   /** null = unlimited */
   appsPlatforms: number | null;
@@ -46,8 +47,8 @@ export const CATALOG: Record<CatalogPlanId, CatalogPlan> = {
     label: "Starter",
     tagline: "One editor mapping the whole estate.",
     licences: 1,
-    monthlyUsd: 99,
-    yearlyUsd: 990,
+    monthlyUsd: 149,
+    yearlyUsd: null,
     aiAnswersPerMonth: 500,
     appsPlatforms: null,
     onboardingHours: 0,
@@ -83,16 +84,63 @@ export const CATALOG: Record<CatalogPlanId, CatalogPlan> = {
   },
 };
 
+/** Every pack Stripe and the API know. Team stays here: live orgs can still be on it. */
 export const PACK_ORDER: PackId[] = ["starter", "team", "business"];
 export const PLAN_ORDER: CatalogPlanId[] = ["free", ...PACK_ORDER];
 
-export function priceFor(plan: CatalogPlan, interval: BillingInterval): number {
-  return interval === "yearly" ? plan.yearlyUsd : plan.monthlyUsd;
+/**
+ * What we sell today: Starter (self-serve card checkout) and Business (Get started form,
+ * no listed price). Team is retired from sale; orgs already on Team keep it (grandfathered).
+ */
+export const PUBLIC_PACK_ORDER: PackId[] = ["starter", "business"];
+export const PUBLIC_PLAN_ORDER: CatalogPlanId[] = ["free", ...PUBLIC_PACK_ORDER];
+/** Packs no longer offered to anyone who isn't already on them. */
+export const RETIRED_PACKS: readonly PackId[] = ["team"];
+
+export function isRetiredPack(id: string): boolean {
+  return (RETIRED_PACKS as readonly string[]).includes(id);
 }
 
-/** How much a year costs on monthly billing minus the yearly price. */
+/** Only Starter is bought by card checkout in the app. Business goes through Get started. */
+export function isSelfServePack(id: PackId): boolean {
+  return id === "starter";
+}
+
+export const BUSINESS_MIN_LICENCES = 5;
+export const BUSINESS_GET_STARTED_LABEL = "Get started";
+
+/** Business card on the pricing page and in the admin centre: details, never a price. */
+export const BUSINESS_DETAILS: readonly string[] = [
+  `Starting from ${BUSINESS_MIN_LICENCES} licences`,
+  "Unlimited free viewers",
+  "Unlimited apps & platforms",
+  "Everything in Starter",
+  "4 hours of onboarding consulting included",
+  "Pay by invoice or card",
+  "Annual invoicing available",
+];
+
+/** Packs shown in the admin centre: what's on sale, plus the org's own retired pack. */
+export function packsToShow(current: DisplayPlanId | null | undefined): PackId[] {
+  if (current && current !== "free" && current !== "business_legacy" && isRetiredPack(current)) {
+    return PACK_ORDER.filter((id) => id === current || PUBLIC_PACK_ORDER.includes(id));
+  }
+  return [...PUBLIC_PACK_ORDER];
+}
+
+/** True when the plan has a yearly price on sale. Starter is monthly only. */
+export function hasYearly(plan: CatalogPlan): boolean {
+  return plan.yearlyUsd != null && plan.monthlyUsd > 0;
+}
+
+/** Yearly falls back to monthly for a plan with no yearly price. */
+export function priceFor(plan: CatalogPlan, interval: BillingInterval): number {
+  return interval === "yearly" && plan.yearlyUsd != null ? plan.yearlyUsd : plan.monthlyUsd;
+}
+
+/** How much a year costs on monthly billing minus the yearly price (0 without one). */
 export function yearlySavingsUsd(plan: CatalogPlan): number {
-  return plan.monthlyUsd * 12 - plan.yearlyUsd;
+  return plan.yearlyUsd == null ? 0 : plan.monthlyUsd * 12 - plan.yearlyUsd;
 }
 
 export function monthsFreeOnYearly(plan: CatalogPlan): number {
@@ -102,11 +150,12 @@ export function monthsFreeOnYearly(plan: CatalogPlan): number {
 
 /** Yearly price spread over 12 months, to the cent. */
 export function yearlyPerMonthUsd(plan: CatalogPlan): number {
+  if (plan.yearlyUsd == null) return plan.monthlyUsd;
   return Math.round((plan.yearlyUsd / 12) * 100) / 100;
 }
 
 export function perLicencePerMonthUsd(plan: CatalogPlan, interval: BillingInterval): number {
-  const monthly = interval === "yearly" ? plan.yearlyUsd / 12 : plan.monthlyUsd;
+  const monthly = interval === "yearly" && plan.yearlyUsd != null ? plan.yearlyUsd / 12 : plan.monthlyUsd;
   return Math.round((monthly / plan.licences) * 100) / 100;
 }
 
@@ -120,7 +169,8 @@ export function formatUsd(amount: number): string {
 
 export function priceLabel(plan: CatalogPlan, interval: BillingInterval): string {
   if (plan.monthlyUsd === 0) return "$0";
-  return `${formatUsd(priceFor(plan, interval))}${interval === "yearly" ? "/yr" : "/mo"}`;
+  const yearly = interval === "yearly" && plan.yearlyUsd != null;
+  return `${formatUsd(priceFor(plan, interval))}${yearly ? "/yr" : "/mo"}`;
 }
 
 export function formatCount(n: number): string {
@@ -263,12 +313,16 @@ export function planChangeFor(
     : { kind: "downgrade" };
 }
 
+/**
+ * The pack to suggest when more licences are needed: Starter if one licence will do, otherwise
+ * Business (from 5 licences, sized on the Get started form). Never the retired Team pack.
+ */
 export function nextPackWithRoom(licencesNeeded: number, after?: DisplayPlanId): PackId | null {
-  const start = after && after !== "free" && after !== "business_legacy" ? PACK_ORDER.indexOf(after) + 1 : 0;
-  for (const id of PACK_ORDER.slice(start)) {
-    if (CATALOG[id].licences >= licencesNeeded) return id;
+  if (after === "business" || after === "business_legacy") return null;
+  if (after !== "starter" && after !== "team" && licencesNeeded <= CATALOG.starter.licences) {
+    return "starter";
   }
-  return null;
+  return "business";
 }
 
 export function showsOnboarding(id: DisplayPlanId): boolean {

@@ -4,18 +4,22 @@ import { useState } from "react";
 import { AlertTriangle, Check, CreditCard, Eye, Loader2 } from "lucide-react";
 import type { BillingStatus } from "@minea/types";
 import {
+  BUSINESS_DETAILS,
+  BUSINESS_GET_STARTED_LABEL,
   CATALOG,
-  PACK_ORDER,
+  isRetiredPack,
+  isSelfServePack,
+  packsToShow,
   PRICE_NOTE,
   VIEWERS_NOTE,
   entitlementsFor,
   formatCount,
   formatUsd,
+  hasYearly,
   planChangeFor,
   planIncludes,
   priceLabel,
   showsOnboarding,
-  yearlyPerMonthUsd,
   type BillingInterval,
   type DisplayPlanId,
   type PackId,
@@ -34,10 +38,13 @@ import {
   showManageBilling,
   type CheckoutReturn,
 } from "@/lib/billing/checkout";
+import { BusinessGetStartedDialog } from "./BusinessGetStartedDialog";
 import { CheckoutComingSoonDialog } from "./CheckoutComingSoonDialog";
 import { OnboardingCard } from "./OnboardingCard";
 
 interface Props {
+  /** Passed to the Business Get started form so the request names the org. */
+  orgSlug?: string;
   /** null until GET /billing/status has answered (see planFromStatus). */
   displayPlan: DisplayPlanId | null;
   realPlan: DisplayPlanId | null;
@@ -76,9 +83,11 @@ function changeButton(change: PlanChange, label: string): { text: string; disabl
 }
 
 /**
- * Plan & billing tab. When the API reports Stripe checkout for this org, pack buttons start
- * Stripe Checkout (no subscription yet) or open the Customer Portal (already on a pack).
- * Otherwise they open the "coming soon" dialog as before.
+ * Plan & billing tab. Plans on offer: Starter (self-serve card checkout, "Coming soon" outside
+ * the checkout allowlist) and Business (no price; "Get started" opens the request form).
+ * Team is retired: only an org already on Team sees its card (grandfathered).
+ * When the API reports Stripe checkout for this org, the Starter button starts Stripe Checkout
+ * (no subscription yet) or opens the Customer Portal (already on a pack).
  */
 export function BillingCentre(props: Props) {
   const { displayPlan, realPlan, billingStatus } = props;
@@ -109,6 +118,7 @@ export function BillingCentre(props: Props) {
 }
 
 function LoadedBillingCentre({
+  orgSlug,
   displayPlan,
   realPlan,
   previewing,
@@ -119,11 +129,14 @@ function LoadedBillingCentre({
   onCheckout,
   onOpenPortal,
 }: Props & { displayPlan: DisplayPlanId; realPlan: DisplayPlanId; billingStatus: BillingStatus }) {
-  const [interval, setBillingInterval] = useState<BillingInterval>("monthly");
+  // Starter, the only pack bought by checkout, is monthly only: no billing-period toggle.
+  const interval: BillingInterval = "monthly";
   const [checkoutPack, setCheckoutPack] = useState<PackId | null>(null);
+  const [businessOpen, setBusinessOpen] = useState(false);
   const [busy, setBusy] = useState<PackId | "portal" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const current = entitlementsFor(displayPlan);
+  const packs = packsToShow(displayPlan);
   const real = entitlementsFor(realPlan);
   const used = licences?.used ?? 1;
   const action = packActionFor(realPlan, billingStatus, previewing);
@@ -147,6 +160,11 @@ function LoadedBillingCentre({
   }
 
   function onPackClick(id: PackId) {
+    if (!isSelfServePack(id) && !isRetiredPack(id)) {
+      // Business is never bought through checkout: it starts with the Get started form.
+      setBusinessOpen(true);
+      return;
+    }
     if (action === "unavailable") return; // server refuses checkout (403 paid_plans_coming_soon)
     if (action === "coming_soon" || !onCheckout || !onOpenPortal) {
       setCheckoutPack(id);
@@ -291,21 +309,6 @@ function LoadedBillingCentre({
         <h3 className="text-sm font-semibold text-gray-900">
           {displayPlan === "free" ? "Upgrade" : "Change plan"}
         </h3>
-        <div role="group" aria-label="Billing period" className="inline-flex rounded-lg border border-gray-200 p-0.5">
-          {(["monthly", "yearly"] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={interval === value}
-              onClick={() => setBillingInterval(value)}
-              className={`rounded-md px-3 py-1 text-xs font-medium ${
-                interval === value ? "bg-indigo-600 text-white" : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              {value === "monthly" ? "Monthly" : "Yearly · 2 months free"}
-            </button>
-          ))}
-        </div>
       </div>
 
       {action === "unavailable" && (
@@ -314,16 +317,29 @@ function LoadedBillingCentre({
         </p>
       )}
 
-      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-        {PACK_ORDER.map((id) => {
+      <div className={`mt-3 grid grid-cols-1 gap-3 ${packs.length > 2 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+        {packs.map((id) => {
           const plan = CATALOG[id];
+          const isBusiness = id === "business";
+          const retired = isRetiredPack(id);
           const change = planChangeFor(displayPlan, id, used);
           const isCurrent = change.kind === "current";
-          const button =
-            action === "unavailable" && !isCurrent
+          const businessForm = isBusiness && !isCurrent;
+          const button = businessForm
+            ? { text: BUSINESS_GET_STARTED_LABEL, disabled: false }
+            : action === "unavailable" && !isCurrent
               ? { text: PAID_COMING_SOON_LABEL, disabled: true }
               : changeButton(change, plan.label);
-          const dataAction = action === "unavailable" && !isCurrent ? action : button.disabled ? undefined : action;
+          const dataAction = businessForm
+            ? "get_started"
+            : action === "unavailable" && !isCurrent
+              ? action
+              : button.disabled
+                ? undefined
+                : action;
+          // The Get started form is open to everyone; checkout/portal need a billing manager.
+          const needsManager = !businessForm && action !== "coming_soon";
+          const lines = isBusiness ? BUSINESS_DETAILS : planIncludes(plan);
           return (
             <div
               key={id}
@@ -333,12 +349,24 @@ function LoadedBillingCentre({
               }`}
             >
               <p className="font-semibold text-gray-900">{plan.label}</p>
-              <p className="mt-1 text-xl font-bold text-gray-900">{priceLabel(plan, interval)}</p>
-              <p className="text-xs text-gray-400 min-h-[1rem]">
-                {interval === "yearly" ? `${formatUsd(yearlyPerMonthUsd(plan))}/mo billed yearly` : `or ${formatUsd(plan.yearlyUsd)}/yr`}
-              </p>
+              {isBusiness ? (
+                <p className="mt-1 text-sm text-gray-500">Invoice or card, monthly or annual.</p>
+              ) : (
+                <>
+                  <p className="mt-1 text-xl font-bold text-gray-900">{priceLabel(plan, "monthly")}</p>
+                  <p className="text-xs text-gray-400 min-h-[1rem]">
+                    {/* Only a grandfathered Team card still has a yearly price to mention. */}
+                    {hasYearly(plan) && plan.yearlyUsd != null ? `or ${formatUsd(plan.yearlyUsd)}/yr` : "Billed monthly"}
+                  </p>
+                </>
+              )}
+              {retired && (
+                <p data-testid="retired-plan-note" className="mt-1 text-xs text-gray-500">
+                  No longer offered to new customers. Your organisation keeps it as long as you like.
+                </p>
+              )}
               <ul className="mt-3 flex-1 space-y-1">
-                {planIncludes(plan).map((line) => (
+                {lines.map((line) => (
                   <li key={line} className="flex items-start gap-1.5 text-xs text-gray-600">
                     <Check size={12} className="mt-0.5 flex-shrink-0 text-indigo-600" />
                     {line}
@@ -348,10 +376,10 @@ function LoadedBillingCentre({
               <button
                 type="button"
                 data-action={dataAction}
-                disabled={button.disabled || busy !== null || (action !== "coming_soon" && !allowed)}
+                disabled={button.disabled || busy !== null || (needsManager && !allowed)}
                 onClick={() => onPackClick(id)}
                 className={`mt-4 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium ${
-                  button.disabled || (action !== "coming_soon" && !allowed)
+                  button.disabled || (needsManager && !allowed)
                     ? "cursor-not-allowed border border-gray-200 text-gray-400"
                     : "bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-70"
                 }`}
@@ -365,10 +393,14 @@ function LoadedBillingCentre({
       </div>
 
       <div className="mt-4 space-y-1 text-xs text-gray-400">
-        <p>{VIEWERS_NOTE} Move between Starter, Team and Business in either direction when your licences fit.</p>
+        <p>{VIEWERS_NOTE} Business starts from 5 licences, billed by invoice or card.</p>
         <p>Free: 1 editor, 25 apps &amp; platforms, 25 AI answers a month.</p>
         <p>{PRICE_NOTE}</p>
       </div>
+
+      {businessOpen && (
+        <BusinessGetStartedDialog orgSlug={orgSlug} source="billing" onClose={() => setBusinessOpen(false)} />
+      )}
 
       {checkoutPack && (
         <CheckoutComingSoonDialog

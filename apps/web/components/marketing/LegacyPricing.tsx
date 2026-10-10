@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { PlanCtaLink } from "@/components/marketing/home/visitor";
 import { Check } from "lucide-react";
+import { businessGetStartedHref } from "@/lib/billing/business-request";
+import { BUSINESS_GET_STARTED_LABEL, BUSINESS_MIN_LICENCES } from "@/lib/billing/plans";
 
 /*
  * Today's live pricing section, shown while NEXT_PUBLIC_BILLING_UI is off.
- * Moved unchanged from app/page.tsx; do not edit the copy here.
+ * Moved from app/page.tsx. Business no longer says "Contact us" / "Talk to us": it shows its
+ * details (no price) and "Get started" goes to the Business request form.
  */
 
 const FREE_FEATURES = [
@@ -17,11 +20,12 @@ const FREE_FEATURES = [
 const BUSINESS_FEATURES = [
   "Unlimited workspaces and repository objects",
   "AI architecture chat",
-  "Team collaboration — contributor licenses, unlimited viewers",
-  "Guided onboarding — we set you up for success",
+  "Unlimited free viewers",
+  "4 hours of onboarding consulting included",
+  "Pay by invoice or card, annual invoicing available",
 ];
 
-const CONTACT_HREF = "/contact?interest=business";
+const BUSINESS_HREF = businessGetStartedHref({ from: "pricing" });
 
 export function LegacyPricing() {
   return (
@@ -56,7 +60,9 @@ export function LegacyPricing() {
 
         <div className="flex flex-col rounded-2xl border border-indigo-500/40 bg-indigo-950/40 p-7">
           <h3 className="text-lg font-semibold text-white">Business</h3>
-          <p className="mt-2 text-3xl font-bold">Contact us</p>
+          <p className="mt-2 text-3xl font-bold" data-testid="business-licences">
+            Starting from {BUSINESS_MIN_LICENCES} licences
+          </p>
           <p className="mt-2 mb-6 text-sm text-white/50">
             For teams that run on their architecture model.
           </p>
@@ -69,10 +75,11 @@ export function LegacyPricing() {
             ))}
           </ul>
           <Link
-            href={CONTACT_HREF}
+            href={BUSINESS_HREF}
+            data-get-started="business"
             className="mt-7 inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
           >
-            Talk to us
+            {BUSINESS_GET_STARTED_LABEL}
           </Link>
         </div>
       </div>
