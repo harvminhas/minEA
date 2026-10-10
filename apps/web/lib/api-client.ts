@@ -1132,12 +1132,12 @@ export const aiApi = {
     }),
 
   /** POST /ai/ask/stream with live steps and checked text; falls back to ask() once if the stream breaks. */
-  askStream: (orgSlug: string, workspaceSlug: string, question: string, token: string, handlers: StreamHandlers = {}) =>
+  askStream: (orgSlug: string, workspaceSlug: string, question: string, token: string, handlers: StreamHandlers & { signal?: AbortSignal } = {}) =>
     askWithStream({
       url: apiV1Url(`${wsBase(orgSlug, workspaceSlug)}/ai/ask/stream`),
       token,
       question,
-      revealMs: 28,
+      revealMs: 0, // the answer card reveals the text (lib/ask/reveal.ts)
       ...handlers,
       fallback: () => aiApi.ask(orgSlug, workspaceSlug, question, token),
     }),

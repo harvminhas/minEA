@@ -8,6 +8,10 @@ import { AppBootProvider } from "@/lib/app-boot-context";
 import { AppBootGate } from "@/components/ui/AppBootGate";
 import { LastAppPathTracker } from "@/components/LastAppPathTracker";
 import { Toaster } from "@/components/ui/toaster";
+import { installDuplicateKeyProbe } from "@/lib/dev/duplicate-key-probe";
+
+// Dev only (no-op in production): print the key and component stack of any duplicate-key warning.
+if (process.env.NODE_ENV !== "production") installDuplicateKeyProbe();
 
 const ReactQueryDevtools = dynamic(
   () => import("@tanstack/react-query-devtools").then((mod) => mod.ReactQueryDevtools),

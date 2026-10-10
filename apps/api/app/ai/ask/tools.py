@@ -243,11 +243,12 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
         with_cost = sum(1 for group in groups if group["annual_cost"])
         bag.note_number(len(groups))
         bag.note_number(with_cost)
+        bag.note_number(len(groups) - with_cost)  # "(2 with no cost recorded)": failed the check in the live test
         bag.note_number(int(spend))  # the total across vendors, whatever metric was asked for
         for k in range(1, min(len(groups), 5) + 1):
             bag.note_number(k)  # "the top three vendors"
         bag.vendor_groups = groups
-        vendor_summary = {"vendor_count": len(groups), "vendors_with_cost": with_cost, "vendor_spend_total": int(spend)}
+        vendor_summary = {"vendor_count": len(groups), "vendors_with_cost": with_cost, "vendors_without_cost": len(groups) - with_cost, "vendor_spend_total": int(spend)}
     return {
         "metric": metric,
         "count": len(rows),

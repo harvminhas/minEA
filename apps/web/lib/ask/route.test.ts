@@ -46,8 +46,8 @@ test("questions the model answers still call it once", () => {
   }
 });
 
-test("local-only handler set: impact, importance, cost, ownership, gaps, clarify, aging, sign-in", () => {
-  assert.deepEqual([...LOCAL_ONLY_HANDLERS].sort(), ["aging", "clarify", "cost", "gaps", "impact", "importance", "ownership", "sign_in"]);
+test("local-only handler set: impact, importance, cost, ownership, gaps, clarify, aging, sign-in, cancel", () => {
+  assert.deepEqual([...LOCAL_ONLY_HANDLERS].sort(), ["aging", "cancel", "clarify", "cost", "gaps", "impact", "importance", "ownership", "sign_in"]);
   for (const handler of LOCAL_ONLY_HANDLERS) assert.equal(localOnly(stub(handler), "x"), true);
   for (const handler of ["renewals", "spend", "vendors", "lifecycle", "criticality", "unsupported", "ai"] as const) {
     assert.equal(localOnly(stub(handler), "What AI do we use?"), false, handler);

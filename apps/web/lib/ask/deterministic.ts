@@ -69,6 +69,7 @@ export type AskAnswer = {
     | "aging"
     | "ai"
     | "sign_in"
+    | "cancel"
     | "clarify"
     | "unsupported";
   answerText: string;
@@ -205,7 +206,8 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
       ? { text: payload.verdict.text, inferred: payload.verdict.inferred, basis: payload.verdict.basis ?? [] }
       : undefined,
     evidence: (payload.evidence ?? []).map((item) => ({ text: item.text, citationIds: item.citation_ids ?? [] })),
-    fixActions: (payload.fix_actions ?? []).map((item) => ({
+    // The model can repeat a fix (same item, same field): show it once.
+    fixActions: (payload.fix_actions ?? []).filter((item, index, all) => all.findIndex((other) => other.record_id === item.record_id && other.field === item.field) === index).map((item) => ({
       recordId: item.record_id,
       field: item.field,
       suggestedValue: item.suggested_value,
@@ -340,6 +342,7 @@ export function answerFromRecords(input: {
   if (resolution.status === "many" && !focused) return clarifyAnswer(intent, resolution.matches, today);
   const named = focused ?? (resolution.status === "one" ? resolution.matches[0] : null);
 
+  if (CANCEL_QUESTION.test(q)) return cancelAnswer(input.rows, input.basePath, today);
   if (intent === "importance" || intent === "impact" || intent === "cost") {
     if (!named) {
       return empty(
@@ -646,6 +649,52 @@ function placeholderRow(id: string, name: string, typeLabel = "Item"): CatalogRo
     suggestion: null,
     missing,
     missingCount: 6,
+  };
+}
+
+export const CANCEL_QUESTION = /\b(cancel|cut costs?|save money|savings?|get rid of|stop paying)\b/i;
+
+/**
+ * "What can we cancel?" from the records: items that cost money and have a reason to review —
+ * marked retiring, no owner, or a second paid tool from the same vendor. Never a guess about usage.
+ */
+function cancelAnswer(rows: CatalogRow[], basePath: string, today: string): AskAnswer {
+  const paid = rows.filter((row) => (row.annualCostNumber ?? 0) > 0);
+  const byVendor = new Map<string, number>();
+  for (const row of paid) if (row.vendorKey) byVendor.set(row.vendorKey, (byVendor.get(row.vendorKey) ?? 0) + 1);
+  const hits = paid
+    .map((row) => {
+      const why: string[] = [];
+      if (["retiring", "deprecated"].includes(row.lifecycle)) why.push("marked Retiring");
+      if (!row.ownerTeam && !row.ownerPerson) why.push("no owner");
+      if (row.vendorKey && (byVendor.get(row.vendorKey) ?? 0) > 1) why.push(`another paid ${row.vendor} tool`);
+      return { row, why };
+    })
+    .filter((hit) => hit.why.length > 0)
+    .sort((a, b) => b.why.length - a.why.length || (b.row.annualCostNumber ?? 0) - (a.row.annualCostNumber ?? 0));
+  const total = hits.reduce((sum, hit) => sum + (hit.row.annualCostNumber ?? 0), 0);
+  const followUps = ["What has no owner?", "Which vendors do we spend the most with?", "What renews in the next 90 days?"];
+  if (!paid.length) {
+    return { ...empty("cancel", "No annual costs are recorded yet, so there is nothing to weigh up for cancelling.", today), followUps };
+  }
+  if (!hits.length) {
+    return {
+      ...empty("cancel", `Nothing stands out to cancel: all ${paid.length} paid items have an owner, none is marked Retiring, and no vendor has two paid tools.`, today),
+      followUps,
+    };
+  }
+  return {
+    handler: "cancel",
+    answerText: `**${hits.length} paid ${hits.length === 1 ? "item is worth" : "items are worth"} reviewing, ${moneyLabel(total)} a year.** Each has a reason in the records: marked Retiring, no owner, or a second paid tool from the same vendor. Check usage with the owner before cancelling.`,
+    citations: [],
+    gaps: [],
+    followUps,
+    table: {
+      kind: "cancel",
+      columns: ["Item", "Annual cost", "Why review it"],
+      rows: hits.map((hit) => ({ label: hit.row.name, value: `${moneyLabel(hit.row.annualCostNumber ?? 0)} a year`, detail: hit.why.join(" · "), recordId: hit.row.id })),
+    },
+    caption: { generatedAt: today, recordCount: hits.length, gapCount: 0 },
   };
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -16,6 +16,7 @@ import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
 import { splitSummary } from "@/lib/ask/rich";
+import { REVEAL_MS, latestOnly, revealText, revealTokens } from "@/lib/ask/reveal";
 import { AskBarChart, AskRichTable } from "@/components/mvp/AskRich";
 import { followUpsFor, pickAnswer, shouldAskModel, workingLine } from "@/lib/ask/route";
 import { AskLiveSteps, AskSteps } from "@/components/mvp/AskSteps";
@@ -40,7 +41,8 @@ import type { RelationshipType } from "@minea/types";
 
 export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const params = useSearchParams();
-  const initial = mode === "answer" ? params.get("q") ?? "" : "";
+  const urlQuestion = (mode === "answer" ? params.get("q") ?? "" : "").trim();
+  const initial = urlQuestion;
   const [draft, setDraft] = useState(initial);
   const [note, setNote] = useState("");
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -51,7 +53,20 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const catalog = useModelCatalog();
   const rows = catalog.data?.rows ?? [];
   const stats = catalogStats(rows);
-  const question = initial.trim();
+  // The question on screen is owned here, not read live from the URL. A new question sets it at once
+  // and the URL follows (history.pushState, no server round trip). A URL that still reports the
+  // previous q while that navigation settles is ignored, so it can never flip the page back to the
+  // first question's answer. Back/forward (a URL change we did not make) still switches question.
+  const [asked, setAsked] = useState(urlQuestion);
+  const pendingUrl = useRef<string | null>(null);
+  useEffect(() => {
+    if (pendingUrl.current !== null) {
+      if (urlQuestion === pendingUrl.current) pendingUrl.current = null;
+      return;
+    }
+    setAsked(urlQuestion);
+  }, [urlQuestion]);
+  const question = mode === "answer" ? asked : "";
   const focusId = mode === "answer" ? params.get("focus") ?? undefined : undefined;
 
   const impactQuery = /break|fail|goes down|is down|outage|depend|impact|important|how critical|live without|who owns|\bsso\b|single sign|sign ?in|sign-in|log ?in|login/i.test(question);
@@ -141,17 +156,21 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     queryKey: ["ask-model", orgSlug, workspaceSlug, question],
     enabled: askModel,
     retry: false,
-    queryFn: async () => {
+    // signal: react-query aborts it when the question changes, so an old stream is closed, not left to
+    // finish late. The result is tagged with its question and only rendered for that question.
+    queryFn: async ({ signal }) => {
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
-      if (!askStreamEnabled()) return aiApi.ask(orgSlug, workspaceSlug, question, token);
+      if (!askStreamEnabled()) return { question, payload: await aiApi.ask(orgSlug, workspaceSlug, question, token) };
       setLive({ question, steps: [], text: "" });
-      return aiApi.askStream(orgSlug, workspaceSlug, question, token, {
+      const payload = await aiApi.askStream(orgSlug, workspaceSlug, question, token, {
+        signal,
         onStep: (step) => setLive((cur) => (cur.question === question ? { ...cur, steps: [...cur.steps, step] } : cur)),
-        onText: (text) => setLive((cur) => (cur.question === question ? { ...cur, text } : cur)),
       });
+      return { question, payload };
     },
   });
+  const remoteData = latestOnly(remote.data, question)?.payload;
   const liveNow = live.question === question ? live : { steps: [], text: "" };
 
 
@@ -164,9 +183,28 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
 
   const answer = useMemo(() => {
     if (mode !== "answer" || !question) return local;
-    const fromModel = askModel && remote.data ? answerFromModel(remote.data, rows, basePath, question) : null;
-    return pickAnswer(local, fromModel, question, askModel ? remote.data?.steps : undefined);
-  }, [mode, question, askModel, remote.data, local, rows, basePath]);
+    const fromModel = askModel && remoteData ? answerFromModel(remoteData, rows, basePath, question) : null;
+    return pickAnswer(local, fromModel, question, askModel ? remoteData?.steps : undefined);
+  }, [mode, question, askModel, remoteData, local, rows, basePath]);
+
+  // Reveal a freshly streamed answer word by word in the card (cached answers show at once).
+  const [revealed, setRevealed] = useState<{ question: string; at: number; n: number } | null>(null);
+  useEffect(() => {
+    if (!askStreamEnabled() || !remoteData || !remote.dataUpdatedAt) return;
+    if (Date.now() - remote.dataUpdatedAt > 3000) return;
+    const total = revealTokens(answer.answerText).length;
+    let n = 0;
+    setRevealed({ question, at: remote.dataUpdatedAt, n: 0 });
+    const timer = window.setInterval(() => {
+      n += 1;
+      setRevealed({ question, at: remote.dataUpdatedAt, n });
+      if (n >= total) window.clearInterval(timer);
+    }, REVEAL_MS);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remote.dataUpdatedAt, question]);
+  const revealing = revealed && revealed.question === question && revealed.at === remote.dataUpdatedAt && revealed.n < revealTokens(answer.answerText).length;
+  const shownText = revealing ? revealText(answer.answerText, revealed!.n) : answer.answerText;
 
   const orgName = useAppStore((state) => state.activeOrg?.name) || "Your estate";
   const setup = useWorkspaceSetup();
@@ -207,6 +245,12 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     // Same question again: the URL wouldn't change, so router.push would do nothing visible. Re-run it.
     if (mode === "answer" && q === question && !nextFocusId) {
       if (askModel) void remote.refetch();
+      return;
+    }
+    if (mode === "answer") {
+      pendingUrl.current = q;
+      setAsked(q);
+      window.history.pushState(null, "", askPath(basePath, q, nextFocusId));
       return;
     }
     router.push(askPath(basePath, q, nextFocusId));
@@ -401,7 +445,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             <p data-testid="ask-working" className="mt-4 text-[15px] font-medium text-[#1c2230]">
               {catalogSettled ? workingLine(rows.length) : "Loading your estate"}
             </p>
-            <AskLiveSteps steps={liveNow.steps} text={liveNow.text} />
+            <AskLiveSteps steps={liveNow.steps} text="" />
           </div>
         ) : (
           <div className="px-5 py-5">
@@ -413,7 +457,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                   onChoose={submit}
                 />
               ) : (
-                <SummaryAndRest text={answer.answerText} nodes={impact.nodes} onOpen={setPreviewId} />
+                <span data-testid="ask-answer-text" data-revealing={revealing ? "1" : "0"}>
+                  <SummaryAndRest text={shownText} nodes={impact.nodes} onOpen={setPreviewId} />
+                </span>
               )}
               {answer.verdict?.inferred && (
                 <span className="ml-2 inline-flex rounded bg-[#fff7ed] px-1.5 py-0.5 align-middle text-[11px] font-semibold text-[#c2410c]">Inferred</span>
@@ -442,17 +488,15 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               />
             )}
 
-            {answer.chart && <AskBarChart chart={answer.chart} />}
-            {answer.table && (
+            {!revealing && answer.chart && <AskBarChart chart={answer.chart} />}
+            {!revealing && answer.table && (
               <AskRichTable
                 table={answer.table}
-                hrefFor={(id) => {
-                  const row = rows.find((item) => item.id === id);
-                  return row ? recordHref(basePath, row) : null;
-                }}
+                hrefFor={(target) => richRowHref(basePath, answer.table!.kind, target, rows)}
+                onOpen={(href) => router.push(href)}
               />
             )}
-            {!answer.table && tableCitations(answer).length > 0 && (
+            {!revealing && !answer.table && tableCitations(answer).length > 0 && (
               <table className="mt-6 w-full text-left text-[13px]">
                   <thead>
                     <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
@@ -820,8 +864,8 @@ function FixActions({
 
   return (
     <div className="mt-4 flex flex-wrap items-center gap-2">
-      {actions.map((action) => {
-        const key = `${action.recordId}:${action.field}`;
+      {actions.map((action, index) => {
+        const key = `${index}-${action.recordId}:${action.field}`;
         const others = action.field === "criticality" ? ["low", "medium", "high"].filter((value) => value !== action.suggestedValue) : [];
         return (
           <div key={key} className="flex flex-wrap items-center gap-2">
@@ -926,6 +970,13 @@ function criticalityCell(item: AskCitation, focus: AskAnswer["focusBlank"]) {
   if (item.row.criticalityLabel) return <Pill label={item.row.criticalityLabel} tone="criticality" />;
   if (focus === "criticality") return <span className="text-[#c2410c]">Add</span>;
   return <span className="text-[#b0b4c0]">—</span>;
+}
+
+/** Rich table rows: a vendor opens its vendor record; anything else opens the item's record. */
+function richRowHref(basePath: string, kind: string, target: { recordId: string | null; label: string }, rows: CatalogRow[]): string | null {
+  if (kind === "vendors") return modelItemPath(basePath, "vendors", target.label);
+  const row = target.recordId ? rows.find((item) => item.id === target.recordId) : undefined;
+  return row ? recordHref(basePath, row) : null;
 }
 
 function recordHref(basePath: string, row: { id: string; kind: string; object?: { type?: string } }): string {

@@ -228,11 +228,22 @@ _BUILDERS = {
 }
 
 
+_PROBLEM_WORDS = {
+    "ungrounded_number": "a number that isn't in the lookups",
+    "vendor_count": "a vendor count that didn't match the vendor list",
+    "unknown_record": "an item that isn't in the lookups",
+    "marker_without_citation": "a source marker with no source",
+    "missing_follow_ups": "missing follow-up questions",
+}
+
+
 def checking_step(problem: str | None, index: int = 1) -> dict:
     """index keeps ids unique when a correction round adds a second check (check-1, check-2)."""
     sid = f"check-{index}"
     if problem:
-        return step(sid, "Checked the answer against the lookups: needed a correction", status="error")
+        why = _PROBLEM_WORDS.get(problem.split(":")[0], "")
+        label = "Checked the answer against the lookups: needed a correction"
+        return step(sid, f"{label} ({why})" if why else label, status="error")
     return step(sid, "Checked every name and number against the lookups")
 
 

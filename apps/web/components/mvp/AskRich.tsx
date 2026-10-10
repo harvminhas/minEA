@@ -4,7 +4,15 @@ import Link from "next/link";
 import type { AskChart, AskTable } from "@/lib/ask/rich";
 
 /** Table built from lookup results; each row opens its record page. */
-export function AskRichTable({ table, hrefFor }: { table: AskTable; hrefFor: (recordId: string) => string | null }) {
+export function AskRichTable({
+  table,
+  hrefFor,
+  onOpen,
+}: {
+  table: AskTable;
+  hrefFor: (row: { recordId: string | null; label: string }) => string | null;
+  onOpen: (href: string) => void;
+}) {
   return (
     <table data-testid="ask-rich-table" className="mt-6 w-full text-left text-[13px]">
       <thead>
@@ -16,11 +24,16 @@ export function AskRichTable({ table, hrefFor }: { table: AskTable; hrefFor: (re
       </thead>
       <tbody>
         {table.rows.map((row, index) => {
-          const href = row.recordId ? hrefFor(row.recordId) : null;
+          const href = hrefFor(row);
           return (
-            <tr key={`${index}-${row.label}`} className="border-b border-[#f3f4f8]">
+            <tr
+              key={`${index}-${row.label}`}
+              data-href={href ?? undefined}
+              onClick={() => href && onOpen(href)}
+              className={`border-b border-[#f3f4f8] ${href ? "cursor-pointer hover:bg-[#fafafb]" : ""}`}
+            >
               <td className="px-2 py-2.5 font-medium text-[#1c2230]">
-                {href ? <Link href={href} className="text-[#5b4ce6] hover:underline">{row.label}</Link> : row.label}
+                {href ? <Link href={href} onClick={(event) => event.stopPropagation()} className="text-[#5b4ce6] hover:underline">{row.label}</Link> : row.label}
               </td>
               <td className={`px-2 py-2.5 ${row.value.startsWith("No ") ? "text-[#8b90a0]" : "text-[#1c2230]"}`}>{row.value}</td>
               <td className="px-2 py-2.5 text-[#6b7289]">{row.detail}</td>

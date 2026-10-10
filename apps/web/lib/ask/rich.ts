@@ -7,7 +7,7 @@ import type { CatalogRow } from "@/lib/model-catalog";
 import { vendorRollup } from "@/lib/model-catalog";
 
 export type AskTableRow = { label: string; value: string; detail: string; recordId: string | null };
-export type AskTable = { kind: "vendors" | "renewals"; columns: [string, string, string]; rows: AskTableRow[] };
+export type AskTable = { kind: "vendors" | "renewals" | "cancel"; columns: [string, string, string]; rows: AskTableRow[] };
 export type AskChart = { kind: "bar"; title: string; unit: "usd"; bars: { label: string; value: number }[] };
 
 export type RichPayload = {

@@ -11,6 +11,8 @@ from pathlib import Path
 from collections.abc import AsyncIterator
 from typing import Any
 
+import logging
+
 from google.genai import types
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -190,6 +192,9 @@ def _validate(answer: dict, bag: ToolBag, question: str) -> str | None:
     return None
 
 
+logger = logging.getLogger(__name__)
+_WITH_COST_TAIL = re.compile(r"^\s*(?:that\s+|which\s+)?(?:with|have|has|carry|charge|bill)\s+(?:a\s+|an\s+|any\s+)?(?:recorded\s+|annual\s+)?(?:cost|spend|price|charge)", re.I)
+_NO_COST_TAIL = re.compile(r"^\s*(?:that\s+)?(?:with\s+no|have\s+no|has\s+no|without(?:\s+a)?)\s+(?:recorded\s+|annual\s+)?(?:cost|spend)", re.I)
 _SHARE_LEAD = re.compile(r"(?:\btop|goes to|go to|largest|biggest|first)\s*$", re.I)
 
 
@@ -210,6 +215,14 @@ def _vendor_count_problem(body: str, bag: ToolBag) -> str | None:
         lead = body[max(0, match.start() - 14) : match.start()]
         if n < total and _SHARE_LEAD.search(lead):
             continue
+        # "4 vendors with a cost" / "2 with no cost recorded" are true sub-counts, not the vendor count.
+        tail = body[match.end() : match.end() + 30].lower()
+        with_cost = sum(1 for group in bag.vendor_groups if group.get("annual_cost"))
+        if n == with_cost and _WITH_COST_TAIL.match(tail):
+            continue
+        if n == total - with_cost and _NO_COST_TAIL.match(tail):
+            continue
+        logger.info("ask check: vendor_count said %s, vendor_count is %s", n, total)
         return "vendor_count"
     return None
 

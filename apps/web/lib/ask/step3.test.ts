@@ -43,7 +43,7 @@ test("(ii) model vendor answer keeps the server table of all 6 vendors even when
   assert.deepEqual(answer.table?.rows[4], { label: "Seagull", value: "No annual cost recorded", detail: "BarTender", recordId: "7" });
   assert.equal(answer.chart?.bars.length, 2);
   const src = readFileSync(new URL("../../components/mvp/AskScreen.tsx", import.meta.url), "utf8");
-  assert.match(src, /\{answer\.table && \(\s*<AskRichTable/); // not gated on evidence, unlike the citations table
+  assert.match(src, /\{!revealing && answer\.table && \(\s*<AskRichTable/); // not gated on evidence, unlike the citations table
 });
 
 test("browser answers use the same table and chart shapes", () => {
