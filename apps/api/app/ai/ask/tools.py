@@ -32,6 +32,9 @@ class ToolBag:
     graph: WorkspaceGraph
     seen_ids: set[str]
     numbers: set[str]
+    # Set by a vendor grouping: every named vendor (the one definition), for the answer's table and
+    # for checking any "N vendors" the model states.
+    vendor_groups: list[dict] | None = None
 
     def note_record(self, rec: Rec) -> None:
         self.seen_ids.add(rec.id)
@@ -198,6 +201,7 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
     if metric == "sum_annual_cost":
         bag.note_number(int(total))
     groups: list[dict] = []
+    vendor_summary: dict = {}
     if args.get("group_by") == "vendor":
         buckets: dict[str, list[Rec]] = {}
         for rec in rows:
@@ -212,12 +216,17 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
         )
         spend = sum(rec.annual or 0 for rec in rows if rec.annual)
         running = 0.0
-        for name, items in ranked[: int(args.get("top") or 10)]:
+        # Every vendor is returned (no top-N cut): the step, the stated count and the table must all
+        # match the Ask header, which counts every named vendor.
+        for name, items in ranked[:50]:
             amount = sum(rec.annual or 0 for rec in items if (rec.vendor or "").lower() == name.lower())
             running += amount
             share = round(amount / spend * 100) if spend else 0
             bag.note_number(int(amount))
             bag.note_number(share)
+            bag.note_number(round(running / spend * 100) if spend else 0)  # "the top N take 99%"
+            for rec in items:
+                bag.note_record(rec)
             groups.append(
                 {
                     "key": name,
@@ -225,11 +234,17 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
                     "annual_cost": int(amount) if amount else None,
                     "share_pct": share if amount else None,
                     "record_ids": [rec.id for rec in items],
+                    "names": [rec.name for rec in items],
                 }
             )
+        with_cost = sum(1 for group in groups if group["annual_cost"])
         bag.note_number(len(groups))
-        if groups and spend:
-            bag.note_number(round(running / spend * 100) if spend else 0)
+        bag.note_number(with_cost)
+        bag.note_number(int(spend))  # the total across vendors, whatever metric was asked for
+        for k in range(1, min(len(groups), 5) + 1):
+            bag.note_number(k)  # "the top three vendors"
+        bag.vendor_groups = groups
+        vendor_summary = {"vendor_count": len(groups), "vendors_with_cost": with_cost, "vendor_spend_total": int(spend)}
     return {
         "metric": metric,
         "count": len(rows),
@@ -239,6 +254,7 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
         "records": [rec.summary() for rec in rows[:50]],
         **({"with_renewal_date": with_renewal_date} if with_renewal_date is not None else {}),
         **({"window": window} if window else {}),
+        **(vendor_summary if args.get("group_by") == "vendor" else {}),
     }
 
 
@@ -591,7 +607,7 @@ TOOLS: list[AskTool] = [
     ),
     AskTool(
         name="aggregate",
-        description="Count applications, capabilities, or infrastructure, or sum annual cost. Use for any total, share, renewal window, or criticality question such as the most critical system. A list of vendors is group_by vendor: it always covers applications and infrastructure together, and every named vendor is returned, including vendors with no annual cost. An empty groups list means no vendor is named. filters.criticality is Critical, High, Medium, or Low. by_type counts each type_label. Do not add numbers yourself.",
+        description="Count applications, capabilities, or infrastructure, or sum annual cost. Use for any total, share, renewal window, or criticality question such as the most critical system. A list of vendors is group_by vendor: it always covers applications and infrastructure together, and every named vendor is returned (vendor_count). When you say how many vendors there are, use vendor_count; vendors with no annual cost still count. vendor_spend_total is the total spend, including vendors with no annual cost. An empty groups list means no vendor is named. filters.criticality is Critical, High, Medium, or Low. by_type counts each type_label. Do not add numbers yourself.",
         parameters={
             "type": "object",
             "properties": {

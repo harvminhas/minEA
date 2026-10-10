@@ -180,9 +180,36 @@ def _validate(answer: dict, bag: ToolBag, question: str) -> str | None:
             continue
         if re.search(rf"\b{word}\b", body, re.I) and number not in allowed:
             return "ungrounded_number"
+    vendor_problem = _vendor_count_problem(body, bag)
+    if vendor_problem:
+        return vendor_problem
     follow = answer.get("follow_ups") or []
     if not answer.get("unsupported") and (not isinstance(follow, list) or len(follow) < 1):
         return "missing_follow_ups"
+    return None
+
+
+_SHARE_LEAD = re.compile(r"(?:\btop|goes to|go to|largest|biggest|first)\s*$", re.I)
+
+
+def _vendor_count_problem(body: str, bag: ToolBag) -> str | None:
+    """After a vendor grouping, "N vendors" must be the full count, which is also the table's rows.
+
+    A share phrase ("the top three vendors", "99% goes to three vendors") may name fewer.
+    """
+    if bag.vendor_groups is None:
+        return None
+    total = len(bag.vendor_groups)
+    word_pattern = "|".join(WORDS)
+    for match in re.finditer(rf"\b(\d+|{word_pattern})\s+(?:named\s+|different\s+|distinct\s+)?vendors?\b", body, re.I):
+        raw = match.group(1).lower()
+        n = int(WORDS.get(raw, raw)) if (raw.isdigit() or raw in WORDS) else None
+        if n is None or n == total:
+            continue
+        lead = body[max(0, match.start() - 14) : match.start()]
+        if n < total and _SHARE_LEAD.search(lead):
+            continue
+        return "vendor_count"
     return None
 
 
@@ -285,6 +312,8 @@ async def run_ask(
                                 types.Part.from_text(
                                     text=(
                                         f"That answer failed the check ({problem}). "
+                                        + ("Say the vendor count as vendor_count (every named vendor, with or without a cost). " if problem == "vendor_count" else "")
+                                        + 
                                         "Reply with corrected JSON only. Use only items and numbers from the lookups. Name each item by its type_label. Never say record."
                                     )
                                 )
@@ -386,4 +415,16 @@ def _present(answer: dict, bag: ToolBag, tools_used: list[str], ai_question: boo
         "follow_ups": follow,
         "tools_used": tools_used,
         "unsupported": bool(answer.get("unsupported")),
+        # Vendor answers: the table is every vendor (vendor names, spend, the items under each), built
+        # by the server from the lookup, so its rows always equal the stated vendor count.
+        **(
+            {
+                "vendor_table": [
+                    {"vendor": g["key"], "annual_cost": g["annual_cost"], "share_pct": g["share_pct"], "record_ids": g["record_ids"], "names": g["names"]}
+                    for g in bag.vendor_groups
+                ]
+            }
+            if bag.vendor_groups
+            else {}
+        ),
     }

@@ -55,6 +55,8 @@ export function shouldAskModel(gate: ModelGate): boolean {
 }
 
 /** What the answer card shows. Same rules as before, now in one tested place. */
+export const LOCAL_ANSWER_STEP = "Showed the answer worked out from your catalogue; the model's answer wasn't used";
+
 export function pickAnswer(
   local: AskAnswer,
   fromModel: AskAnswer | null,
@@ -66,10 +68,10 @@ export function pickAnswer(
     return fromModel;
   }
   // The model was asked but its answer isn't shown (no answer, unsupported, or a vendor list without
-  // sources). Its lookups were still real, so show them; drop the "checked the answer" lines, which
-  // describe an answer that isn't on screen.
-  const lookups = (modelSteps ?? []).filter((step) => !step.id.startsWith("check"));
-  return lookups.length ? { ...local, steps: lookups } : local;
+  // sources). Keep every line the person saw live (so the count matches), and say which answer is shown.
+  const seen = modelSteps ?? [];
+  if (!seen.length) return local;
+  return { ...local, steps: [...seen, { id: "local", status: "done", label: LOCAL_ANSWER_STEP }] };
 }
 
 function sameQuestion(a: string, b: string): boolean {

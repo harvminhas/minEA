@@ -179,6 +179,8 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   }, [showSetup, setup.dismissed, setupOpen]);
   const keepSetup = showSetup || setupLatched;
   const emptyPreview = process.env.NODE_ENV !== "production" && params.get("demo") === "empty";
+  // Until the catalogue arrives, the report cards would read as false empty states ("No costs tracked").
+  const estateLoading = !catalog.data;
   const chips = askChips(rows, impact.edges, new Date(), catalog.data?.objects ?? []);
   const cards = popularCards(rows, impact.edges, new Date(), emptyPreview);
   const support = supportCounts(rows);
@@ -189,10 +191,17 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     [mode, catalog.data]
   );
 
+  // Home → answer is a route change (in dev it can compile for seconds). Show the working state the
+  // moment Ask is pressed instead of leaving the home page up with no feedback.
+  const [pendingQuestion, setPendingQuestion] = useState("");
+  useEffect(() => {
+    if (mode === "home" && basePath) router.prefetch(askPath(basePath, "prefetch"));
+  }, [mode, basePath, router]);
   const submit = (value: string, nextFocusId?: string) => {
     const q = value.trim();
     if (!q) return;
     setDraft(q);
+    if (mode === "home") setPendingQuestion(q);
     // Same question again: the URL wouldn't change, so router.push would do nothing visible. Re-run it.
     if (mode === "answer" && q === question && !nextFocusId) {
       if (askModel) void remote.refetch();
@@ -212,6 +221,33 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     return (
       <div className="mx-auto max-w-3xl px-6 pb-16 pt-12">
         <FirstRunAsk />
+      </div>
+    );
+  }
+
+  if (mode === "home" && pendingQuestion) {
+    return (
+      <div className="mx-auto max-w-4xl px-6 py-6" data-testid="ask-pending">
+        <div className="mb-6 flex items-center gap-2 rounded-2xl border border-[#e6e8ee] px-3 py-2">
+          <Sparkles size={16} className="text-[#5b4ce6]" />
+          <span className="h-10 flex-1 truncate py-2 text-[15px] text-[#1c2230]">{pendingQuestion}</span>
+        </div>
+        <section className="overflow-hidden rounded-2xl border border-[#e4e0ff] bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-[#efeaff] bg-[#f7f6ff] px-5 py-3">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.14em] text-[#5b4ce6]">
+              <Sparkles size={12} /> ANSWER
+            </p>
+            <span className="max-w-[70%] truncate text-[12px] font-medium text-[#5b4ce6]">Working on “{pendingQuestion}”</span>
+          </div>
+          <div className="px-5 py-6">
+            <div className="h-1.5 overflow-hidden rounded-full bg-[#ece9ff]">
+              <div className="diagram-saving-bar-indeterminate h-full w-2/5 rounded-full bg-[#5b4ce6]" />
+            </div>
+            <p data-testid="ask-working" className="mt-4 text-[15px] font-medium text-[#1c2230]">
+              {catalogSettled ? workingLine(rows.length) : "Loading your estate"}
+            </p>
+          </div>
+        </section>
       </div>
     );
   }
@@ -283,15 +319,15 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             <Link href={`${basePath}/reports`} className="text-[13px] text-[#5b4ce6]">All reports →</Link>
           </div>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <ReportTile href={cards.renewals.detail === "Add" ? modelPath(basePath, "applications") : reportPath(basePath, "renewals")} title="Renewals next 90 days" value={cards.renewals.value} detail={cards.renewals.detail} />
-            <ReportTile href={cards.spend.detail === "Add" ? modelPath(basePath, "applications") : reportPath(basePath, "spend")} title="Spend by vendor & category" value={cards.spend.value} detail={cards.spend.detail} />
-            <ReportTile href={reportPath(basePath, "ownership-gaps")} title="Ownership gaps" value={cards.ownership.value} detail={cards.ownership.detail} />
-            <ReportTile href={`${modelPath(basePath, "servers")}?status=attention`} title="Aging infrastructure" value={cards.aging.value} detail={cards.aging.detail} alert={cards.aging.alert} />
+            <ReportTile href={cards.renewals.detail === "Add" ? modelPath(basePath, "applications") : reportPath(basePath, "renewals")} title="Renewals next 90 days" value={estateLoading ? "…" : cards.renewals.value} detail={estateLoading ? "Loading…" : cards.renewals.detail} />
+            <ReportTile href={cards.spend.detail === "Add" ? modelPath(basePath, "applications") : reportPath(basePath, "spend")} title="Spend by vendor & category" value={estateLoading ? "…" : cards.spend.value} detail={estateLoading ? "Loading…" : cards.spend.detail} />
+            <ReportTile href={reportPath(basePath, "ownership-gaps")} title="Ownership gaps" value={estateLoading ? "…" : cards.ownership.value} detail={estateLoading ? "Loading…" : cards.ownership.detail} />
+            <ReportTile href={`${modelPath(basePath, "servers")}?status=attention`} title="Aging infrastructure" value={estateLoading ? "…" : cards.aging.value} detail={estateLoading ? "Loading…" : cards.aging.detail} alert={!estateLoading && cards.aging.alert} />
           </div>
           {aiCard && <AiCard card={aiCard} href={reportPath(basePath, "ai-landscape")} />}
           <div className="mt-4 flex items-center justify-between rounded-2xl border border-[#e6e8ee] bg-[#fafafb] px-4 py-3">
             <div>
-              <div className="text-[14px] font-medium text-[#1c2230]">Model health: {stats.completeness}% complete, {stats.missing} fields missing</div>
+              <div className="text-[14px] font-medium text-[#1c2230]">{estateLoading ? "Model health: loading…" : `Model health: ${stats.completeness}% complete, ${stats.missing} fields missing`}</div>
               <p className="text-[12px] text-[#6b7289]">Answers get better as you fill gaps.</p>
             </div>
             <Link href={modelPath(basePath, "applications")} className="rounded-lg bg-[#fff4d6] px-3 py-1.5 text-[13px] font-medium text-[#92400e]">

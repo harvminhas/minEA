@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 PING_SECONDS = 8.0
 CHUNK_WORDS = 6
+# Pause between text chunks so they reach the screen as separate paints instead of one frame
+# (the whole checked answer exists already; without a pause every chunk lands in the same tick).
+DELTA_PAUSE_SECONDS = 0.06
 PROTOCOL_VERSION = 1
 
 
@@ -44,7 +47,9 @@ def chunks(text: str, words: int = CHUNK_WORDS) -> list[str]:
     return out
 
 
-async def ask_events(source: AsyncIterator[dict], *, ping_seconds: float = PING_SECONDS) -> AsyncIterator[str]:
+async def ask_events(
+    source: AsyncIterator[dict], *, ping_seconds: float = PING_SECONDS, delta_pause: float = DELTA_PAUSE_SECONDS
+) -> AsyncIterator[str]:
     """Turn engine events into SSE frames, with pings while waiting. `done` is always last."""
     yield frame("meta", {"version": PROTOCOL_VERSION})
     steps: list[dict] = []
@@ -74,7 +79,9 @@ async def ask_events(source: AsyncIterator[dict], *, ping_seconds: float = PING_
         final = {**final, "steps": steps}
         # The engine only yields an llm final after the check passed, so this text is verified.
         if final.get("source") == "llm":
-            for piece in chunks(str(final.get("answer_text") or "")):
+            for index, piece in enumerate(chunks(str(final.get("answer_text") or ""))):
+                if index and delta_pause:
+                    await asyncio.sleep(delta_pause)
                 yield frame("delta", {"text": piece})
         yield frame("final", final)
     except Exception:  # never a bare broken stream: tell the client, then end cleanly

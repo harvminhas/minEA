@@ -1106,6 +1106,8 @@ export type AskModelPayload = {
   unsupported?: boolean;
   /** What the server actually did, built from the lookup results (newer APIs only). */
   steps?: AskStep[];
+  /** Vendor answers: every named vendor (same definition as the Ask header), built by the server. */
+  vendor_table?: { vendor: string; annual_cost: number | null; share_pct: number | null; record_ids: string[]; names: string[] }[];
 };
 
 /** One working step of an Ask answer, e.g. "6 Applications renew in the next 90 days, $210,000 a year". */

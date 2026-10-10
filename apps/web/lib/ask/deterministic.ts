@@ -166,7 +166,8 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
   // An AI answer to a question with no AI wording ("show me the model") is a misroute: keep the local answer.
   if (aiAnswer && question !== undefined && !isAiQuestion(question)) return null;
   const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const citations: AskCitation[] = payload.citations.map((item) => ({
+  const vendorRows = vendorTableCitations(payload, rows);
+  const citations: AskCitation[] = vendorRows ?? payload.citations.map((item) => ({
     n: item.n,
     recordId: item.record_id,
     relationship: item.relationship,
@@ -175,13 +176,16 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
   const intent = payload.intent;
   const handler = payload.unsupported
     ? "unsupported"
-    : intent && intent in HANDLER_INTENTS
+    : vendorRows
+      ? "vendors" // not "impact": the impact table hides row 1 (the target), which dropped the top vendor
+      : intent && intent in HANDLER_INTENTS
       ? HANDLER_INTENTS[intent]
       : "impact";
   return {
     handler: handler === "impact" && aiAnswer ? "ai" : handler,
     ...(aiAnswer && !payload.unsupported ? { link: aiReportLink(basePath) } : {}),
-    answerText: withoutDuplicateRoster(payload.answer_text, citations),
+    // Vendor rows replace the model's own citations, so its [n] markers would point at the wrong rows.
+    answerText: vendorRows ? payload.answer_text.replace(/\s?\[\d+\]/g, "") : withoutDuplicateRoster(payload.answer_text, citations),
     citations,
     verdict: payload.verdict
       ? { text: payload.verdict.text, inferred: payload.verdict.inferred, basis: payload.verdict.basis ?? [] }
@@ -210,6 +214,29 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
     },
     ...(payload.steps?.length ? { steps: payload.steps } : {}),
   };
+}
+
+/** One table row per vendor: vendor name, spend, and the items it covers. Count = the stated vendor count. */
+function vendorTableCitations(payload: AskModelPayload, rows: CatalogRow[]): AskCitation[] | null {
+  const table = payload.vendor_table;
+  if (!table || table.length === 0) return null;
+  const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+  const out: AskCitation[] = [];
+  table.forEach((vendor, index) => {
+    const first = rows.find((row) => vendor.record_ids.includes(row.id));
+    if (!first) return;
+    const cost = vendor.annual_cost ? `${money(vendor.annual_cost)} a year` : "No annual cost recorded";
+    out.push({
+      n: index + 1,
+      recordId: first.id,
+      relationship: `${cost} · ${vendor.names.join(", ")}`,
+      displayName: vendor.vendor,
+      displayType: "Vendor",
+      // The vendor isn't the item: don't show the first item's owner or criticality on the vendor's row.
+      row: { ...first, ownerTeam: "", ownerPerson: "", criticality: "", criticalityLabel: "" },
+    });
+  });
+  return out.length ? out : null;
 }
 
 function rowForCitation(item: AskModelPayload["citations"][number], rows: CatalogRow[]): CatalogRow {
@@ -631,17 +658,24 @@ function vendorsAnswer(rows: CatalogRow[], today: string): AskAnswer {
 }
 
 function spendAnswer(rows: CatalogRow[], basePath: string, today: string): AskAnswer {
-  const rollup = vendorRollup(rows).filter((vendor) => vendor.annual > 0);
+  // Every vendor is a row (with or without a cost), so the stated vendor count equals the table.
+  const everyVendor = vendorRollup(rows);
+  const rollup = everyVendor.filter((vendor) => vendor.annual > 0);
   const total = rollup.reduce((sum, vendor) => sum + vendor.annual, 0);
   const top = rollup.slice(0, 3);
   const share = total ? Math.round((top.reduce((sum, vendor) => sum + vendor.annual, 0) / total) * 100) : 0;
   const retiring = rows.find((row) => row.annualCostNumber && ["retiring", "deprecated"].includes(row.lifecycle));
-  const citations: AskCitation[] = top.map((vendor, index) => ({
+  const citations: AskCitation[] = everyVendor.map((vendor, index) => ({
     n: index + 1,
     recordId: vendor.items[0].id,
-    relationship: `${moneyLabel(vendor.annual)} a year · ${total ? Math.round((vendor.annual / total) * 100) : 0}% of spend`,
-    row: vendor.items[0],
+    relationship: vendor.annual > 0
+      ? `${moneyLabel(vendor.annual)} a year · ${total ? Math.round((vendor.annual / total) * 100) : 0}% of spend · ${vendor.items.map((item) => item.name).join(", ")}`
+      : `No annual cost recorded · ${vendor.items.map((item) => item.name).join(", ")}`,
+    displayName: vendor.vendor,
+    displayType: "Vendor",
+    row: { ...vendor.items[0], ownerTeam: "", ownerPerson: "", criticality: "", criticalityLabel: "" },
   }));
+  const noCost = everyVendor.length - rollup.length;
   if (retiring && !citations.some((citation) => citation.recordId === retiring.id)) {
     citations.push({
       n: citations.length + 1,
@@ -656,7 +690,7 @@ function spendAnswer(rows: CatalogRow[], basePath: string, today: string): AskAn
   return {
     handler: "spend",
     answerText: total
-      ? `You spend **${moneyLabel(total)} a year** across ${rollup.length} vendors.${top.length ? ` **${share}% goes to ${top.length === 1 ? "one vendor" : top.length === 2 ? "two vendors" : "three vendors"}.**` : ""}${saving}`
+      ? `You spend **${moneyLabel(total)} a year** across ${everyVendor.length} ${everyVendor.length === 1 ? "vendor" : "vendors"}${noCost ? ` (${noCost} with no cost recorded)` : ""}.${top.length ? ` **${share}% goes to ${top.length === 1 ? "one vendor" : top.length === 2 ? "two vendors" : "three vendors"}.**` : ""}${saving}`
       : "No annual costs are recorded yet, so spend cannot be totaled.",
     citations,
     gaps: gapsFor(rows.filter((row) => row.missing.cost || row.missing.vendor).slice(0, 4), basePath),
