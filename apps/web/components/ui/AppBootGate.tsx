@@ -13,10 +13,13 @@ import {
   StartupLoader,
 } from "@/components/ui/StartupLoader";
 
-function isPublicBootPath(pathname: string): boolean {
+/** Marketing pages anyone can open signed out: never wait on the app boot loader. */
+export const PUBLIC_MARKETING_PATHS: readonly string[] = ["/contact", "/privacy", "/terms", "/business/get-started"];
+
+export function isPublicBootPath(pathname: string): boolean {
   if (pathname === "/") return true;
   if (pathname.startsWith("/auth")) return true;
-  if (pathname === "/contact") return true;
+  if (PUBLIC_MARKETING_PATHS.includes(pathname)) return true;
   if (pathname.startsWith("/share/")) return true;
   if (pathname.startsWith("/invites/")) return true;
   return false;

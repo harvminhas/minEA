@@ -149,13 +149,20 @@ test("pricing, flag on: the plan cards, no sales copy", () => {
   assert.doesNotMatch(html, /interest=business/);
 });
 
-test("footer: Contact always; Privacy and Terms only once their pages are configured", () => {
-  assert.deepEqual(footerLinks({}), [{ label: "Contact", href: "/contact" }]);
-  assert.deepEqual(footerLinks({ privacy: "/privacy", terms: " https://example.com/terms " }), [
+test("footer: Contact, Privacy and Terms link to their pages; env can override", () => {
+  assert.deepEqual(footerLinks({}), [
+    { label: "Contact", href: "/contact" },
+    { label: "Privacy", href: "/privacy" },
+    { label: "Terms", href: "/terms" },
+  ]);
+  assert.deepEqual(footerLinks({ privacy: " ", terms: " https://example.com/terms " }), [
     { label: "Contact", href: "/contact" },
     { label: "Privacy", href: "/privacy" },
     { label: "Terms", href: "https://example.com/terms" },
   ]);
   const html = renderHome("0");
-  assert.match(html, /<nav aria-label="Footer"><a href="\/contact">Contact<\/a><\/nav>/);
+  assert.match(
+    html,
+    /<nav aria-label="Footer"><a href="\/contact">Contact<\/a><a href="\/privacy">Privacy<\/a><a href="\/terms">Terms<\/a><\/nav>/
+  );
 });
