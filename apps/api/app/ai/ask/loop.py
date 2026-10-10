@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.ask.ai_landscape import is_ai_question
 from app.ai.ask.graph import load_graph
-from app.ai.ask.steps import checking_step, estate_step, tool_step
+from app.ai.ask.steps import checking_step, estate_step, same_step, tool_step
 from app.ai.ask.tools import ToolBag, run_tool, tool_specs
 from app.ai.gemini_client import build_gemini_tools, get_client, is_configured, model_name
 from app.services.tenancy import TenancyContext
@@ -247,6 +247,8 @@ async def run_ask(
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
     corrected = False
+    checks = 0
+    last_tool_step: dict | None = None
 
     try:
         for _round in range(MAX_ROUNDS):
@@ -268,7 +270,8 @@ async def run_ask(
                 problem = "not_json" if not parsed else _validate(parsed, bag, question)
                 if problem and not corrected:
                     corrected = True
-                    yield {"event": "step", "data": checking_step(problem)}
+                    checks += 1
+                    yield {"event": "step", "data": checking_step(problem, checks)}
                     contents.append(
                         types.Content(role="model", parts=[types.Part.from_text(text=_text(response) or "{}")])
                     )
@@ -289,7 +292,8 @@ async def run_ask(
                 if problem or not parsed:
                     yield {"event": "final", "data": _fallback(problem or "not_json", tools_used)}
                     return
-                yield {"event": "step", "data": checking_step(None)}
+                checks += 1
+                yield {"event": "step", "data": checking_step(None, checks)}
                 yield {"event": "final", "data": _present(parsed, bag, tools_used, ai_question)}
                 return
             if response.candidates and response.candidates[0].content:
@@ -302,7 +306,11 @@ async def run_ask(
                 tools_used.append(name)
                 raw = run_tool(bag, name, args) if ai_question or name != "ai_landscape" else NOT_AI
                 result = json.loads(json.dumps(raw, default=str))
-                yield {"event": "step", "data": tool_step(len(tools_used), name, args, result)}
+                line = tool_step(len(tools_used), name, args, result)
+                # The model sometimes repeats a lookup (same filters, same result). Show it once.
+                if not same_step(last_tool_step, line):
+                    yield {"event": "step", "data": line}
+                last_tool_step = line
                 parts.append(types.Part.from_function_response(name=name, response={"result": result}))
             contents.append(types.Content(role="user", parts=parts))
     except TimeoutError:

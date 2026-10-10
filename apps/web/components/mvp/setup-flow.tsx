@@ -163,6 +163,14 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
     return () => window.clearTimeout(timer);
   }, [text, step]);
 
+  // Fill the box AND show what it matched, so the click visibly does something even when the box
+  // already held the sample. Nothing is saved until the person saves on a later screen.
+  const loadSample = () => {
+    setText(SAMPLE_COMPANY);
+    setDrafts(toDrafts(setupMatch(SAMPLE_COMPANY)));
+    setStep(1);
+  };
+
   const openReadyMap = () => {
     router.push(`${basePath}/views?tab=impact&ready=1`);
   };
@@ -391,7 +399,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
             </button>
           </div>
           <p className="mt-4 text-center text-[13px]">
-            <button type="button" onClick={() => setText(SAMPLE_COMPANY)} className="font-medium text-[#5b4ce6]">Load sample company</button>
+            <button type="button" onClick={loadSample} className="font-medium text-[#5b4ce6]">Load sample company</button>
             <span className="mx-2 text-[#8b90a0]">·</span>
             <button type="button" onClick={() => void skip()} className="text-[#6b7289]">Skip for now</button>
           </p>
@@ -433,7 +441,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
             >
               Continue
             </button>
-            <button type="button" onClick={() => setText(SAMPLE_COMPANY)} className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px]">
+            <button type="button" onClick={loadSample} className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px]">
               Load sample company
             </button>
             <button type="button" onClick={() => void skip()} className="rounded-lg px-3 py-1.5 text-[13px] text-[#6b7289]">

@@ -713,6 +713,15 @@ function scopedRows(q: string, rows: CatalogRow[]): CatalogRow[] {
   return rows;
 }
 
+/** With nothing in scope there is nothing to check; saying "every item has X" would be false comfort. */
+export function nothingRecordedLine(q: string, rows: CatalogRow[]): string {
+  const applications = /\bapplications?\b|\bapps?\b/.test(q);
+  const infrastructure = /infrastructure|\bservers?\b|\bplatforms?\b/.test(q);
+  if (rows.length > 0 && applications && !infrastructure) return "No applications are recorded yet, so there's nothing to check.";
+  if (rows.length > 0 && infrastructure && !applications) return "No infrastructure is recorded yet, so there's nothing to check.";
+  return "No applications or infrastructure are recorded yet, so there's nothing to check.";
+}
+
 function missingFieldAnswer(
   missing: (typeof MISSING_FIELDS)[number],
   q: string,
@@ -728,7 +737,9 @@ function missingFieldAnswer(
     focusBlank: missing.field,
     answerText: hits.length
       ? `**${describeTypes(typeLabels(hits))} ${hits.length === 1 ? "has" : "have"} ${missing.phrase}.**`
-      : `Every ${who} here has ${missing.filled}.`,
+      : scope.length === 0
+        ? nothingRecordedLine(q, rows)
+        : `Every ${who} here has ${missing.filled}.`,
     citations: hits.slice(0, 12).map((row, index) => ({
       n: index + 1,
       recordId: row.id,
@@ -762,7 +773,9 @@ function ownershipAnswer(named: CatalogRow | null, rows: CatalogRow[], basePath:
     focusBlank: "owner",
     answerText: hits.length
       ? `**${describeTypes(typeLabels(hits))} ${hits.length === 1 ? "has" : "have"} no owner.**`
-      : "Every application and infrastructure item has an owner.",
+      : rows.length === 0
+        ? nothingRecordedLine("", rows)
+        : "Every application and infrastructure item has an owner.",
     citations: hits.slice(0, 8).map((row, index) => ({ n: index + 1, recordId: row.id, relationship: "No owner", row })),
     gaps: gapsFor(hits.slice(0, 6), basePath),
     followUps: ["Are any critical systems unowned?", "Where is our money going?", "What renews in the next 90 days?"],

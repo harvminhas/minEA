@@ -228,7 +228,14 @@ _BUILDERS = {
 }
 
 
-def checking_step(problem: str | None) -> dict:
+def checking_step(problem: str | None, index: int = 1) -> dict:
+    """index keeps ids unique when a correction round adds a second check (check-1, check-2)."""
+    sid = f"check-{index}"
     if problem:
-        return step("check", "Checked the answer against the lookups: needed a correction", status="error")
-    return step("check", "Checked every name and number against the lookups")
+        return step(sid, "Checked the answer against the lookups: needed a correction", status="error")
+    return step(sid, "Checked every name and number against the lookups")
+
+
+def same_step(a: dict | None, b: dict) -> bool:
+    """Two lookups that read the same to a person (same line, same counts) are shown once."""
+    return bool(a) and a.get("label") == b.get("label") and a.get("counts") == b.get("counts")

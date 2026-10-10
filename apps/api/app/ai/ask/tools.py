@@ -153,9 +153,18 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
         rows = [rec for rec in rows if (rec.criticality or "").lower() == criticality]
     within = filters.get("renewal_within_days")
     with_renewal_date: int | None = None
+    window: dict | None = None
     if isinstance(within, int):
-        end = date.today() + timedelta(days=within)
+        start = date.today()
+        end = start + timedelta(days=within)
         bag.note_number(within)
+        # Give the model the window's dates so it never works them out itself. Without this it wrote
+        # e.g. "between October 10, 2026 and January 8, 2027", and those numbers failed the grounding
+        # check (a false "needed a correction", most visible on an empty estate where nothing else is said).
+        window = {"from": start.isoformat(), "to": end.isoformat()}
+        for day in (start, end):
+            for part in (day.year, day.month, day.day):
+                bag.note_number(part)
         kept = []
         with_renewal_date = 0
         for rec in rows:
@@ -224,6 +233,7 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
         "groups": groups,
         "records": [rec.summary() for rec in rows[:50]],
         **({"with_renewal_date": with_renewal_date} if with_renewal_date is not None else {}),
+        **({"window": window} if window else {}),
     }
 
 

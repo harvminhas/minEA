@@ -15,7 +15,7 @@ import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
 import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
-import { pickAnswer, shouldAskModel, workingLine } from "@/lib/ask/route";
+import { followUpsFor, pickAnswer, shouldAskModel, workingLine } from "@/lib/ask/route";
 import { AskSteps } from "@/components/mvp/AskSteps";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { AddSaved } from "@/components/add/AddCards";
@@ -129,6 +129,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     hasWorkspace: Boolean(orgSlug && workspaceSlug),
     catalogSettled,
     local,
+    estateEmpty: catalog.isSuccess && rows.length === 0,
   });
   const remote = useQuery({
     queryKey: ["ask-model", orgSlug, workspaceSlug, question],
@@ -152,7 +153,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const answer = useMemo(() => {
     if (mode !== "answer" || !question) return local;
     const fromModel = askModel && remote.data ? answerFromModel(remote.data, rows, basePath, question) : null;
-    return pickAnswer(local, fromModel, question);
+    return pickAnswer(local, fromModel, question, askModel ? remote.data?.steps : undefined);
   }, [mode, question, askModel, remote.data, local, rows, basePath]);
 
   const orgName = useAppStore((state) => state.activeOrg?.name) || "Your estate";
@@ -182,6 +183,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     const q = value.trim();
     if (!q) return;
     setDraft(q);
+    // Same question again: the URL wouldn't change, so router.push would do nothing visible. Re-run it.
+    if (mode === "answer" && q === question && !nextFocusId) {
+      if (askModel) void remote.refetch();
+      return;
+    }
     router.push(askPath(basePath, q, nextFocusId));
   };
 
@@ -466,11 +472,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
       </section>
       )}
 
-      {!showingAdd && !ambiguous && !thinking && answer.handler !== "clarify" && answer.followUps.length > 0 && (
+      {!showingAdd && !ambiguous && !thinking && answer.handler !== "clarify" && followUpsFor(answer.followUps, question).length > 0 && (
         <div className="mt-5 rounded-2xl border border-[#e6e8ee] bg-[#fafafb] px-5 py-4">
           <p className="mb-2 text-[13px] font-medium text-[#1c2230]">Ask next</p>
           <div className="flex flex-wrap gap-2">
-            {uniqueFollowUps(answer.followUps).map((follow) => (
+            {followUpsFor(answer.followUps, question).map((follow) => (
               <button key={follow} type="button" onClick={() => submit(follow)} className="rounded-full border border-[#e6e8ee] bg-white px-3 py-1.5 text-[13px] text-[#3c4254] hover:border-[#c9c6f5]">
                 {follow}
               </button>
@@ -814,18 +820,6 @@ function GapsList({ gaps }: { gaps: { text: string; fillHref: string }[] }) {
       )}
     </div>
   );
-}
-
-function uniqueFollowUps(items: string[]): string[] {
-  const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const item of items) {
-    const key = item.trim().toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    unique.push(item.trim());
-  }
-  return unique;
 }
 
 function labelFor(value: string): string {

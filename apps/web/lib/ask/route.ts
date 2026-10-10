@@ -8,6 +8,7 @@
  */
 import { isAiDataQuestion } from "./answerStrategies";
 import type { AskAnswer } from "./deterministic";
+import type { AskStep } from "@/lib/api-client";
 
 /** Handlers whose local answer is always shown, so the model is never asked. */
 export const LOCAL_ONLY_HANDLERS: ReadonlySet<AskAnswer["handler"]> = new Set([
@@ -39,6 +40,8 @@ export type ModelGate = {
   /** The catalogue has loaded (or failed), so the local handler is final. */
   catalogSettled: boolean;
   local: Pick<AskAnswer, "handler">;
+  /** The catalogue loaded and holds no applications or infrastructure: there is nothing to look up. */
+  estateEmpty?: boolean;
 };
 
 export function shouldAskModel(gate: ModelGate): boolean {
@@ -46,15 +49,51 @@ export function shouldAskModel(gate: ModelGate): boolean {
   // Wait for the catalogue: until then the local handler can still change (AI, clarify), and a
   // call started early could be one we then throw away.
   if (!gate.catalogSettled) return false;
+  // Empty estate: the local answer already says nothing is recorded; a model call would find nothing.
+  if (gate.estateEmpty) return false;
   return !localOnly(gate.local, gate.question);
 }
 
 /** What the answer card shows. Same rules as before, now in one tested place. */
-export function pickAnswer(local: AskAnswer, fromModel: AskAnswer | null, question: string): AskAnswer {
+export function pickAnswer(
+  local: AskAnswer,
+  fromModel: AskAnswer | null,
+  question: string,
+  modelSteps?: AskStep[]
+): AskAnswer {
   if (localOnly(local, question)) return local;
-  if (!fromModel || fromModel.handler === "unsupported") return local;
-  if (local.handler === "vendors" && fromModel.citations.length === 0) return local;
-  return fromModel;
+  if (fromModel && fromModel.handler !== "unsupported" && !(local.handler === "vendors" && fromModel.citations.length === 0)) {
+    return fromModel;
+  }
+  // The model was asked but its answer isn't shown (no answer, unsupported, or a vendor list without
+  // sources). Its lookups were still real, so show them; drop the "checked the answer" lines, which
+  // describe an answer that isn't on screen.
+  const lookups = (modelSteps ?? []).filter((step) => !step.id.startsWith("check"));
+  return lookups.length ? { ...local, steps: lookups } : local;
+}
+
+function sameQuestion(a: string, b: string): boolean {
+  const norm = (value: string) => value.trim().toLowerCase().replace(/[?.!\s]+$/g, "").replace(/\s+/g, " ");
+  return norm(a) === norm(b);
+}
+
+/** "Ask next" chips: unique, and never the question just asked. */
+export function followUpsFor(items: string[], question: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of items) {
+    const text = item.trim();
+    const key = text.toLowerCase();
+    if (!text || seen.has(key) || (question && sameQuestion(text, question))) continue;
+    seen.add(key);
+    out.push(text);
+  }
+  return out;
+}
+
+/** Steps can repeat an id (older servers sent "check" twice); keys must still be unique. */
+export function stepKey(step: Pick<AskStep, "id">, index: number): string {
+  return `${index}-${step.id}`;
 }
 
 /** The one honest line shown while the model works: what it is actually searching. */

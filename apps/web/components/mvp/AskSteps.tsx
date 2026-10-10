@@ -1,5 +1,6 @@
 import { AlertCircle, Check } from "lucide-react";
 import type { AskStep } from "@/lib/api-client";
+import { stepKey } from "@/lib/ask/route";
 
 /**
  * "How this was worked out": the server's real working steps for a model answer, each built from
@@ -12,8 +13,8 @@ export function AskSteps({ steps }: { steps: AskStep[] }) {
         How this was worked out · {steps.length} {steps.length === 1 ? "step" : "steps"}
       </summary>
       <ol className="mt-2 space-y-1.5">
-        {steps.map((step) => (
-          <li key={step.id} data-step={step.id} data-status={step.status} className="flex items-start gap-2">
+        {steps.map((step, index) => (
+          <li key={stepKey(step, index)} data-step={step.id} data-status={step.status} className="flex items-start gap-2">
             {step.status === "error" ? (
               <AlertCircle size={13} className="mt-0.5 flex-shrink-0 text-[#c2410c]" />
             ) : (
