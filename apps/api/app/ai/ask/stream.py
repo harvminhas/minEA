@@ -28,7 +28,7 @@ PING_SECONDS = 8.0
 CHUNK_WORDS = 6
 # Pause between text chunks so they reach the screen as separate paints instead of one frame
 # (the whole checked answer exists already; without a pause every chunk lands in the same tick).
-DELTA_PAUSE_SECONDS = 0.06
+DELTA_PAUSE_SECONDS = 0.03  # the browser also paces the reveal (lib/ask/stream.ts revealMs)
 PROTOCOL_VERSION = 1
 
 

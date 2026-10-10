@@ -1107,6 +1107,10 @@ export type AskModelPayload = {
   /** What the server actually did, built from the lookup results (newer APIs only). */
   steps?: AskStep[];
   /** Vendor answers: every named vendor (same definition as the Ask header), built by the server. */
+  /** Step 3 rich blocks, built by the server from lookup results. */
+  summary?: string;
+  table?: import("@/lib/ask/rich").RichPayload["table"];
+  chart?: import("@/lib/ask/rich").RichPayload["chart"];
   vendor_table?: { vendor: string; annual_cost: number | null; share_pct: number | null; record_ids: string[]; names: string[] }[];
 };
 
@@ -1133,6 +1137,7 @@ export const aiApi = {
       url: apiV1Url(`${wsBase(orgSlug, workspaceSlug)}/ai/ask/stream`),
       token,
       question,
+      revealMs: 28,
       ...handlers,
       fallback: () => aiApi.ask(orgSlug, workspaceSlug, question, token),
     }),

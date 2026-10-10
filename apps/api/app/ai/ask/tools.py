@@ -35,6 +35,8 @@ class ToolBag:
     # Set by a vendor grouping: every named vendor (the one definition), for the answer's table and
     # for checking any "N vendors" the model states.
     vendor_groups: list[dict] | None = None
+    # Set by a renewal-window lookup: the items renewing in the window, soonest first.
+    renewal_rows: list | None = None
 
     def note_record(self, rec: Rec) -> None:
         self.seen_ids.add(rec.id)
@@ -187,6 +189,7 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
                 kept.append(rec)
         rows = kept
         bag.note_number(with_renewal_date)
+        bag.renewal_rows = sorted(kept, key=lambda rec: (rec.renewal or "", rec.name))
     rank = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
     rows.sort(key=lambda rec: (-rank.get(rec.criticality or "", 0), rec.name))
     for rec in rows:

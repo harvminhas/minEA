@@ -1,3 +1,4 @@
+import { chartFromPayload, renewalBlocks, tableFromPayload, vendorBlocks, type AskChart, type AskTable } from "@/lib/ask/rich";
 import type { MinEAObject, Relationship } from "@minea/types";
 import type { AskModelPayload, AskStep } from "@/lib/api-client";
 import {
@@ -84,6 +85,11 @@ export type AskAnswer = {
   /** Blank cells for this field use the amber Add. Other blanks stay a grey dash. */
   focusBlank?: keyof CatalogMissing;
   caption: { generatedAt: string; recordCount: number; gapCount: number; extra?: string };
+  /** Step 3: the short line on top (server answers send it; others use the first sentence). */
+  summary?: string;
+  /** Step 3: a table from lookup results / catalogue rows; replaces the citations table when present. */
+  table?: AskTable;
+  chart?: AskChart;
   /** Model answers: the server's working steps (lookups and checks), shown under the answer. */
   steps?: AskStep[];
   /** A report that holds the full answer, shown under it. */
@@ -166,7 +172,10 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
   // An AI answer to a question with no AI wording ("show me the model") is a misroute: keep the local answer.
   if (aiAnswer && question !== undefined && !isAiQuestion(question)) return null;
   const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const vendorRows = vendorTableCitations(payload, rows);
+  const richTable = tableFromPayload(payload);
+  const richChart = chartFromPayload(payload);
+  // Older APIs (step 2b) sent only vendor_table: keep turning it into vendor rows.
+  const vendorRows = richTable ? null : vendorTableCitations(payload, rows);
   const citations: AskCitation[] = vendorRows ?? payload.citations.map((item) => ({
     n: item.n,
     recordId: item.record_id,
@@ -176,8 +185,10 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
   const intent = payload.intent;
   const handler = payload.unsupported
     ? "unsupported"
-    : vendorRows
-      ? "vendors" // not "impact": the impact table hides row 1 (the target), which dropped the top vendor
+    : vendorRows || richTable?.kind === "vendors"
+      ? "vendors"
+      : richTable?.kind === "renewals"
+        ? "renewals" // not "impact": the impact table hides row 1 (the target), which dropped the top vendor
       : intent && intent in HANDLER_INTENTS
       ? HANDLER_INTENTS[intent]
       : "impact";
@@ -185,6 +196,9 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
     handler: handler === "impact" && aiAnswer ? "ai" : handler,
     ...(aiAnswer && !payload.unsupported ? { link: aiReportLink(basePath) } : {}),
     // Vendor rows replace the model's own citations, so its [n] markers would point at the wrong rows.
+    ...(richTable ? { table: richTable } : {}),
+    ...(richChart ? { chart: richChart } : {}),
+    ...(payload.summary ? { summary: payload.summary } : {}),
     answerText: vendorRows ? payload.answer_text.replace(/\s?\[\d+\]/g, "") : withoutDuplicateRoster(payload.answer_text, citations),
     citations,
     verdict: payload.verdict
@@ -646,6 +660,7 @@ function vendorsAnswer(rows: CatalogRow[], today: string): AskAnswer {
     row: vendor.items[0],
   }));
   return {
+    ...vendorBlocks(rows),
     handler: "vendors",
     answerText: vendors.length
       ? `**${vendors.length === 1 ? "1 vendor is" : `${vendors.length} vendors are`}** named on applications and infrastructure.`
@@ -688,6 +703,7 @@ function spendAnswer(rows: CatalogRow[], basePath: string, today: string): AskAn
     ? ` ${retiring.name} [${citations.find((citation) => citation.recordId === retiring.id)?.n}] costs ${retiring.annualCostLabel} a year and is marked Retiring, so it is the clearest saving.`
     : "";
   return {
+    ...vendorBlocks(rows),
     handler: "spend",
     answerText: total
       ? `You spend **${moneyLabel(total)} a year** across ${everyVendor.length} ${everyVendor.length === 1 ? "vendor" : "vendors"}${noCost ? ` (${noCost} with no cost recorded)` : ""}.${top.length ? ` **${share}% goes to ${top.length === 1 ? "one vendor" : top.length === 2 ? "two vendors" : "three vendors"}.**` : ""}${saving}`
@@ -714,6 +730,7 @@ function renewalsAnswer(rows: CatalogRow[], basePath: string, today: string): As
     row,
   }));
   return {
+    ...renewalBlocks(hits),
     handler: "renewals",
     answerText: hits.length
       ? `**${hits.length} ${hits.length === 1 ? "contract renews" : "contracts renew"} in the next 90 days**${sum ? `, worth **${moneyLabel(sum)} a year**` : ""}.`

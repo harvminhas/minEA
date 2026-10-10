@@ -54,7 +54,16 @@ export type StreamHandlers = {
   onStep?: (step: AskStep) => void;
   /** Called with the checked text so far, growing chunk by chunk. */
   onText?: (text: string) => void;
+  /**
+   * Reveal checked text word by word, this many ms apart. Network hops (a tunnel, HTTP/2, a proxy)
+   * can coalesce the server's chunks into one read, and React would paint them as one update; pacing
+   * here makes the text visibly arrive whatever the transport did. The final payload is handed back
+   * only after the text has been revealed. 0 = no pacing (tests).
+   */
+  revealMs?: number;
 };
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class AskStreamError extends Error {}
 
@@ -84,8 +93,17 @@ export async function readAskStream(response: Response, handlers: StreamHandlers
       }
       if (item.event === "step") handlers.onStep?.(data as AskStep);
       else if (item.event === "delta") {
-        text += String((data as { text?: string }).text ?? "");
-        handlers.onText?.(text);
+        const piece = String((data as { text?: string }).text ?? "");
+        if (!handlers.revealMs) {
+          text += piece;
+          handlers.onText?.(text);
+        } else {
+          for (const word of piece.match(/\S+\s*|\s+/g) ?? []) {
+            text += word;
+            handlers.onText?.(text);
+            await sleep(handlers.revealMs);
+          }
+        }
       } else if (item.event === "final") final = data as AskModelPayload;
     }
     if (done) break;

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from datetime import date
 import time
 from pathlib import Path
 from collections.abc import AsyncIterator
@@ -354,6 +355,65 @@ async def run_ask(
     yield {"event": "final", "data": _fallback("round_budget", tools_used)}
 
 
+def _money(n: float) -> str:
+    return f"${int(round(n)):,}"
+
+
+_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def rich_blocks(bag: ToolBag) -> dict:
+    """The answer's table and chart, built from the lookup results (never from the model's text).
+
+    table.rows: label, value, detail, record_id (the page the row opens). chart.bars: label, value (USD).
+    A vendor grouping wins over a renewal window when both ran.
+    """
+    if bag.vendor_groups:
+        rows = [
+            {
+                "label": g["key"],
+                "value": f"{_money(g['annual_cost'])} a year" if g["annual_cost"] else "No annual cost recorded",
+                "detail": ", ".join(g["names"]),
+                "record_id": g["record_ids"][0] if g["record_ids"] else None,
+            }
+            for g in bag.vendor_groups
+        ]
+        bars = [{"label": g["key"], "value": g["annual_cost"]} for g in bag.vendor_groups if g["annual_cost"]]
+        return {
+            "table": {"kind": "vendors", "columns": ["Vendor", "Spend", "Applications and infrastructure"], "rows": rows},
+            "chart": {"kind": "bar", "title": "Spend by vendor", "unit": "usd", "bars": bars} if len(bars) >= 2 else None,
+        }
+    if bag.renewal_rows:
+        rows = []
+        months: dict[str, float] = {}
+        for rec in bag.renewal_rows:
+            day = date.fromisoformat(rec.renewal[:10])
+            when = f"{_MONTHS[day.month - 1]} {day.day}, {day.year}"
+            rows.append(
+                {
+                    "label": rec.name,
+                    "value": f"{_money(rec.annual)} a year" if rec.annual else "No annual cost recorded",
+                    "detail": f"{rec.type_label()} · renews {when}",
+                    "record_id": rec.id,
+                }
+            )
+            key = f"{_MONTHS[day.month - 1]} {day.year}"
+            months[key] = months.get(key, 0) + (rec.annual or 0)
+        bars = [{"label": k, "value": int(v)} for k, v in months.items()]
+        return {
+            "table": {"kind": "renewals", "columns": ["Item", "Annual cost", "Renewal"], "rows": rows},
+            "chart": {"kind": "bar", "title": "Renewals by month", "unit": "usd", "bars": bars} if any(b["value"] for b in bars) else None,
+        }
+    return {}
+
+
+def summary_of(text: str) -> str:
+    """The first sentence, without citation markers or bold: the short line shown at the top."""
+    plain = re.sub(r"\s?\[\d+\]", "", text).replace("**", "").strip()
+    match = re.match(r"(.+?[.!?])(\s|$)", plain, re.S)
+    return (match.group(1) if match else plain)[:240]
+
+
 def _present(answer: dict, bag: ToolBag, tools_used: list[str], ai_question: bool = True) -> dict:
     citations = []
     for item in answer.get("citations") or []:
@@ -402,6 +462,8 @@ def _present(answer: dict, bag: ToolBag, tools_used: list[str], ai_question: boo
         "source": "llm",
         "fallback_reason": None,
         "answer_text": str(answer.get("answer_markdown") or ""),
+        "summary": summary_of(str(answer.get("answer_markdown") or "")),
+        **rich_blocks(bag),
         "intent": "" if not ai_question and answer.get("intent") == "ai" else str(answer.get("intent") or ""),
         "verdict": (
             {"text": str(verdict.get("text") or ""), "inferred": bool(verdict.get("inferred")), "basis": [str(item) for item in (verdict.get("basis") or [])]}

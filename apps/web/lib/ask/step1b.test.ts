@@ -37,7 +37,8 @@ test("empty estate: no-owner and no-vendor say nothing is recorded, not 'every i
 
 test("'Ask next' never offers the question just asked", () => {
   const chips = followUpsFor(["What has no owner?", "Where is our money going?", "where is our money going?", "What renews in the next 90 days?"], "what has no owner");
-  assert.deepEqual(chips, ["Where is our money going?", "What renews in the next 90 days?"]);
+  // Step 3: topped up to three from the defaults, still skipping the question just asked.
+  assert.deepEqual(chips, ["Where is our money going?", "What renews in the next 90 days?", "Which vendors do we spend the most with?"]);
   const answer = local("What has no owner?");
   assert.ok(!followUpsFor(answer.followUps, "What has no owner?").some((chip) => /^what has no owner\??$/i.test(chip)));
 });

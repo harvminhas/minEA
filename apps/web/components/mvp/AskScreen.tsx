@@ -15,6 +15,8 @@ import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
 import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
+import { splitSummary } from "@/lib/ask/rich";
+import { AskBarChart, AskRichTable } from "@/components/mvp/AskRich";
 import { followUpsFor, pickAnswer, shouldAskModel, workingLine } from "@/lib/ask/route";
 import { AskLiveSteps, AskSteps } from "@/components/mvp/AskSteps";
 import type { AskStep } from "@/lib/api-client";
@@ -411,7 +413,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                   onChoose={submit}
                 />
               ) : (
-                <AnswerText text={answer.answerText} nodes={impact.nodes} onOpen={setPreviewId} />
+                <SummaryAndRest text={answer.answerText} nodes={impact.nodes} onOpen={setPreviewId} />
               )}
               {answer.verdict?.inferred && (
                 <span className="ml-2 inline-flex rounded bg-[#fff7ed] px-1.5 py-0.5 align-middle text-[11px] font-semibold text-[#c2410c]">Inferred</span>
@@ -440,7 +442,17 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               />
             )}
 
-            {tableCitations(answer).length > 0 && (
+            {answer.chart && <AskBarChart chart={answer.chart} />}
+            {answer.table && (
+              <AskRichTable
+                table={answer.table}
+                hrefFor={(id) => {
+                  const row = rows.find((item) => item.id === id);
+                  return row ? recordHref(basePath, row) : null;
+                }}
+              />
+            )}
+            {!answer.table && tableCitations(answer).length > 0 && (
               <table className="mt-6 w-full text-left text-[13px]">
                   <thead>
                     <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
@@ -877,6 +889,23 @@ function labelFor(value: string): string {
   if (value === "medium") return "Medium";
   if (value === "low") return "Low";
   return value;
+}
+
+/** Step 3: the first sentence is the summary line on top; the rest follows in normal weight. */
+function SummaryAndRest({ text, nodes, onOpen }: { text: string; nodes: Parameters<typeof AnswerText>[0]["nodes"]; onOpen: (id: string) => void }) {
+  const { summary, rest } = splitSummary(text);
+  return (
+    <>
+      <span data-testid="ask-summary" className="block text-[18px] font-semibold leading-7">
+        <AnswerText text={summary} nodes={nodes} onOpen={onOpen} />
+      </span>
+      {rest && (
+        <span className="mt-2 block">
+          <AnswerText text={rest} nodes={nodes} onOpen={onOpen} />
+        </span>
+      )}
+    </>
+  );
 }
 
 function tableCitations(answer: AskAnswer): AskCitation[] {

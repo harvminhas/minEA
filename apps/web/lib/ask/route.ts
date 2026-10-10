@@ -79,11 +79,20 @@ function sameQuestion(a: string, b: string): boolean {
   return norm(a) === norm(b);
 }
 
-/** "Ask next" chips: unique, and never the question just asked. */
+/** Topped up from here when an answer suggests fewer than three. */
+export const DEFAULT_FOLLOW_UPS = [
+  "What renews in the next 90 days?",
+  "Which vendors do we spend the most with?",
+  "What has no owner?",
+  "What's out of support?",
+];
+
+/** "Ask next" chips: three, unique, and never the question just asked. */
 export function followUpsFor(items: string[], question: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const item of items) {
+  for (const item of [...items, ...DEFAULT_FOLLOW_UPS]) {
+    if (out.length === 3) break;
     const text = item.trim();
     const key = text.toLowerCase();
     if (!text || seen.has(key) || (question && sameQuestion(text, question))) continue;
