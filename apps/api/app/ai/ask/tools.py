@@ -139,6 +139,11 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
     metric = str(args.get("metric") or "count")
     filters = args.get("filters") or {}
     rows = _estate(bag.graph)
+    # Vendors have ONE definition everywhere (the Ask header counts the same way): every distinct
+    # vendor named on an application or infrastructure item, from its vendor field or a cost line,
+    # ignoring hosting words and internal estimates. So a vendor grouping always spans the estate.
+    if args.get("group_by") == "vendor":
+        wanted = "estate"
     if wanted == "application":
         rows = [rec for rec in rows if rec.type == "application"]
     elif wanted == "infrastructure":
@@ -586,7 +591,7 @@ TOOLS: list[AskTool] = [
     ),
     AskTool(
         name="aggregate",
-        description="Count applications, capabilities, or infrastructure, or sum annual cost. Use for any total, share, renewal window, or criticality question such as the most critical system. A list of vendors is group_by vendor: every named vendor is returned, including vendors with no annual cost. An empty groups list means no vendor is named. filters.criticality is Critical, High, Medium, or Low. by_type counts each type_label. Do not add numbers yourself.",
+        description="Count applications, capabilities, or infrastructure, or sum annual cost. Use for any total, share, renewal window, or criticality question such as the most critical system. A list of vendors is group_by vendor: it always covers applications and infrastructure together, and every named vendor is returned, including vendors with no annual cost. An empty groups list means no vendor is named. filters.criticality is Critical, High, Medium, or Low. by_type counts each type_label. Do not add numbers yourself.",
         parameters={
             "type": "object",
             "properties": {

@@ -94,6 +94,7 @@ import type {
 import { apiV1Url } from "@/lib/api-base";
 import { apiRequestGate, shouldRetryRequest } from "@/lib/request-gate";
 import { getShareApiPath } from "@/lib/share-context";
+import { askWithStream, type StreamHandlers } from "@/lib/ask/stream";
 
 function wsBase(orgSlug: string, workspaceSlug: string) {
   return `/orgs/${orgSlug}/workspaces/${workspaceSlug}`;
@@ -1122,6 +1123,16 @@ export const aiApi = {
       method: "POST",
       body: JSON.stringify({ question }),
       token,
+    }),
+
+  /** POST /ai/ask/stream with live steps and checked text; falls back to ask() once if the stream breaks. */
+  askStream: (orgSlug: string, workspaceSlug: string, question: string, token: string, handlers: StreamHandlers = {}) =>
+    askWithStream({
+      url: apiV1Url(`${wsBase(orgSlug, workspaceSlug)}/ai/ask/stream`),
+      token,
+      question,
+      ...handlers,
+      fallback: () => aiApi.ask(orgSlug, workspaceSlug, question, token),
     }),
 
   ingest: (orgSlug: string, workspaceSlug: string, text: string, token: string) =>

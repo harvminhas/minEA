@@ -7,7 +7,9 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.ask.graph import load_graph
 from app.ai.ask.loop import answer_with_model
+from app.ai.ask.stream import stream_ask
 from app.ai.chat import stream_chat
 from app.ai.ingestion import extract_from_text
 from app.ai.insights import generate_insights, insight_to_dict
@@ -59,6 +61,24 @@ async def ask(
     """
     await ctx.require_read(db)
     return await answer_with_model(db, ctx, body.question)
+
+
+@router.post("/ask/stream")
+async def ask_stream(
+    body: AskRequest,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """POST /ask as Server-Sent Events: live working steps, then checked text, then the same final
+    payload. See app/ai/ask/stream.py for the frames. The workspace graph is read here, before the
+    response starts, because the request's DB session is closed once the streaming body runs."""
+    await ctx.require_read(db)
+    graph = await load_graph(db, ctx.workspace.id, ctx.org_id) if ctx.workspace and body.question.strip() else None
+    return StreamingResponse(
+        stream_ask(None, ctx, body.question, graph=graph),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/chat")

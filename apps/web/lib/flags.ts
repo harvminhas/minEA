@@ -14,3 +14,14 @@ export function addAnywhereEnabled(): boolean {
   if (flag === "1") return true;
   return process.env.NODE_ENV !== "production";
 }
+
+/**
+ * ask.stream.v1: Ask reads POST /ai/ask/stream (live working steps, then checked text in chunks).
+ * On in `next dev`; OFF in production builds unless NEXT_PUBLIC_ASK_STREAM=1. 0 forces it off.
+ */
+export function askStreamEnabled(): boolean {
+  const flag = process.env.NEXT_PUBLIC_ASK_STREAM;
+  if (flag === "0") return false;
+  if (flag === "1") return true;
+  return process.env.NODE_ENV !== "production";
+}

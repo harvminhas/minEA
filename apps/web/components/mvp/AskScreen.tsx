@@ -16,12 +16,13 @@ import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
 import { followUpsFor, pickAnswer, shouldAskModel, workingLine } from "@/lib/ask/route";
-import { AskSteps } from "@/components/mvp/AskSteps";
+import { AskLiveSteps, AskSteps } from "@/components/mvp/AskSteps";
+import type { AskStep } from "@/lib/api-client";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { AddSaved } from "@/components/add/AddCards";
 import { AddFlow } from "@/components/add/AddFlow";
 import { FirstRunAsk, SetupCard } from "@/components/mvp/FirstRunAsk";
-import { addAnywhereEnabled } from "@/lib/flags";
+import { addAnywhereEnabled, askStreamEnabled } from "@/lib/flags";
 import { addListText, classifyAddIntent, prefixAdd } from "@/lib/setup/add-intent";
 import { undoneSentence, readAddReceipt, writeAddReceipt, type AddReceipt } from "@/lib/setup/add-cards";
 import { askListKind } from "@/lib/setup/type-guidance";
@@ -131,6 +132,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     local,
     estateEmpty: catalog.isSuccess && rows.length === 0,
   });
+  // Live working for the question being streamed (flag ask.stream.v1). Keyed by question so a
+  // late event from an earlier question never shows under a new one.
+  const [live, setLive] = useState<{ question: string; steps: AskStep[]; text: string }>({ question: "", steps: [], text: "" });
   const remote = useQuery({
     queryKey: ["ask-model", orgSlug, workspaceSlug, question],
     enabled: askModel,
@@ -138,9 +142,15 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     queryFn: async () => {
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
-      return aiApi.ask(orgSlug, workspaceSlug, question, token);
+      if (!askStreamEnabled()) return aiApi.ask(orgSlug, workspaceSlug, question, token);
+      setLive({ question, steps: [], text: "" });
+      return aiApi.askStream(orgSlug, workspaceSlug, question, token, {
+        onStep: (step) => setLive((cur) => (cur.question === question ? { ...cur, steps: [...cur.steps, step] } : cur)),
+        onText: (text) => setLive((cur) => (cur.question === question ? { ...cur, text } : cur)),
+      });
     },
   });
+  const liveNow = live.question === question ? live : { steps: [], text: "" };
 
 
   // A disabled query stays "pending" in react-query v5, so only a model we actually asked counts.
@@ -213,6 +223,8 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         <h1 className="mt-6 text-center text-[36px] font-semibold tracking-tight text-[#1c2230]">What do you want to know?</h1>
         {!keepSetup && (
           <p className="mt-2 max-w-full text-center text-[14px] text-[#6b7289]">
+            {/* Never show zero counts for an estate that just hasn't loaded yet. */}
+            {!catalog.data ? <span data-testid="ask-header-loading">{orgName} · Loading your estate…</span> : <>
             {orgName} · {countLabel(stats.systems, "application", "applications")} · {countLabel(platformCount, "platform", "platforms")} · {countLabel(serverCount, "server or device", "servers & devices")} · {countLabel(stats.vendorCount, "vendor", "vendors")} · {moneyLabel(stats.spend || 0)} a year in tracked spend
             {support.out > 0 && (
               <>
@@ -222,6 +234,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 </Link>
               </>
             )}
+            </>}
           </p>
         )}
         <form
@@ -249,9 +262,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
           </button>
         </form>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
-          {chips.map((chip) => (
+          {chips.map((chip, index) => (
             <button
-              key={chip}
+              key={`${index}-${chip}`}
               type="button"
               onClick={() => submit(chip)}
               className="rounded-full border border-[#e6e8ee] bg-white px-3 py-1.5 text-[13px] text-[#3c4254] hover:border-[#c9c6f5]"
@@ -350,6 +363,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             <p data-testid="ask-working" className="mt-4 text-[15px] font-medium text-[#1c2230]">
               {catalogSettled ? workingLine(rows.length) : "Loading your estate"}
             </p>
+            <AskLiveSteps steps={liveNow.steps} text={liveNow.text} />
           </div>
         ) : (
           <div className="px-5 py-5">
@@ -369,8 +383,8 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             </p>
             {answer.evidence && answer.evidence.length > 0 && (
               <ul className="mt-3 list-disc space-y-1 pl-5 text-[14px] text-[#3c4254]">
-                {answer.evidence.map((item) => (
-                  <li key={item.text}>
+                {answer.evidence.map((item, index) => (
+                  <li key={`${index}-${item.text}`}>
                     <LinkedNames text={item.text} nodes={impact.nodes} onOpen={setPreviewId} />
                   </li>
                 ))}
@@ -408,7 +422,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                       const section = item.section && item.section !== list[index - 1]?.section ? item.section : "";
                       const count = section ? list.filter((row) => row.section === item.section).length : 0;
                       return (
-                        <Fragment key={item.recordId}>
+                        <Fragment key={`${index}-${item.recordId}`}>
                           {section && (
                             <tr className="bg-[#fafafb]">
                               <td colSpan={6} className="px-2 py-2 text-[12px] font-semibold text-[#3c4254]">
@@ -515,7 +529,7 @@ function ClarifyChoices({
         const label = item.displayName || item.row.name;
         const next = followUps[index] || label;
         return (
-          <span key={item.recordId}>
+          <span key={`${index}-${item.recordId}`}>
             {index > 0 && (index === citations.length - 1 ? " or " : ", ")}
             <button
               type="button"
@@ -807,8 +821,8 @@ function GapsList({ gaps }: { gaps: { text: string; fillHref: string }[] }) {
   return (
     <div className="mt-4 rounded-xl border border-[#fde7b8] bg-[#fff8eb] px-4 py-3 text-[13px] text-[#78350f]">
       <div className="font-semibold text-[#92400e]">Gaps</div>
-      {visible.map((gap) => (
-        <p key={gap.text} className="mt-1">
+      {visible.map((gap, index) => (
+        <p key={`${index}-${gap.text}`} className="mt-1">
           {gap.text}{" "}
           <Link href={gap.fillHref} className="font-medium text-[#5b4ce6]">Fill in</Link>
         </p>

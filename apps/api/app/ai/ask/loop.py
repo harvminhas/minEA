@@ -212,7 +212,7 @@ async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str
 
 
 async def run_ask(
-    db: AsyncSession, ctx: TenancyContext, question: str, *, clock=time.monotonic
+    db: AsyncSession | None, ctx: TenancyContext, question: str, *, clock=time.monotonic, graph=None
 ) -> AsyncIterator[dict]:
     """The Ask engine as a stream of events: {"event": "step"|"final", "data": {...}}.
 
@@ -233,7 +233,10 @@ async def run_ask(
         return
 
     started = clock()
-    graph = await load_graph(db, ctx.workspace.id, ctx.org_id)
+    # The stream endpoint loads the graph before its response starts (the request's DB session is
+    # closed by the time a streaming body runs), so it can pass it in.
+    if graph is None:
+        graph = await load_graph(db, ctx.workspace.id, ctx.org_id)
     yield {"event": "step", "data": estate_step(graph)}
     bag = ToolBag(graph=graph, seen_ids=set(), numbers=set())
     tools_used: list[str] = []

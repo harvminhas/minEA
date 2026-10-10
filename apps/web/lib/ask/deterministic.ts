@@ -192,7 +192,9 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
       field: item.field,
       suggestedValue: item.suggested_value,
     })),
-    gaps: payload.gaps.map((gap) => {
+    // The model can list the same gap twice (seen live: the same "no annual cost" line, which also
+    // gave React a duplicate key). Show each gap once.
+    gaps: payload.gaps.filter((gap, index, all) => all.findIndex((other) => other.message === gap.message) === index).map((gap) => {
       const row = citations.find((item) => item.recordId === gap.record_id)?.row ?? rows.find((item) => item.id === gap.record_id);
       return {
         text: gap.message,

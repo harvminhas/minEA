@@ -25,6 +25,8 @@ export type CatalogRow = {
   ownerPerson: string;
   vendor: string;
   vendorKey: string;
+  /** Every vendor this item names (vendor field + cost lines), lower-cased: see vendorKeysFor. */
+  vendorKeys?: string[];
   annualCostLabel: string;
   annualCostNumber: number | null;
   renewalLabel: string;
@@ -119,6 +121,31 @@ function str(props: Props, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
+/**
+ * The ONE vendor definition, shared with the API's Ask lookups (app/ai/ask/graph.py _vendor_names):
+ * a vendor is a distinct name (case-insensitive) in an item's vendor field or on one of its cost
+ * lines (not internal estimates), ignoring hosting words like "saas" or "on_premise".
+ */
+export function vendorKeysFor(props: Record<string, unknown>): string[] {
+  const keys: string[] = [];
+  const add = (raw: unknown) => {
+    const text = typeof raw === "string" ? raw.trim() : "";
+    if (!text || HOSTING_NOT_VENDOR.has(text)) return;
+    const key = text.toLowerCase();
+    if (!keys.includes(key)) keys.push(key);
+  };
+  add(props.vendor);
+  const lines = props.cost_lines;
+  if (Array.isArray(lines)) {
+    for (const line of lines) {
+      if (line && typeof line === "object" && (line as Record<string, unknown>).type !== "internal_estimate") {
+        add((line as Record<string, unknown>).vendor);
+      }
+    }
+  }
+  return keys;
+}
+
 export function rowFromObject(object: MinEAObject): CatalogRow | null {
   const props = (object.properties ?? {}) as Props;
   let kind: CatalogKind | null = null;
@@ -203,6 +230,7 @@ export function rowFromObject(object: MinEAObject): CatalogRow | null {
     ownerPerson,
     vendor,
     vendorKey: vendor.toLowerCase(),
+    vendorKeys: vendorKeysFor(props),
     annualCostLabel,
     annualCostNumber: numeric,
     renewalLabel,
@@ -224,7 +252,8 @@ export function rowFromObject(object: MinEAObject): CatalogRow | null {
 export function catalogStats(rows: CatalogRow[]) {
   const tracked = rows;
   const spend = tracked.reduce((sum, row) => sum + (row.annualCostNumber ?? 0), 0);
-  const vendors = new Set(tracked.map((row) => row.vendorKey).filter(Boolean));
+  // Same definition as the Ask vendor lookup: see vendorKeysFor.
+  const vendors = new Set(tracked.flatMap((row) => row.vendorKeys ?? [row.vendorKey]).filter(Boolean));
   const cells = tracked.length * 6;
   const missing = tracked.reduce((sum, row) => sum + row.missingCount, 0);
   const filled = cells - missing;

@@ -79,3 +79,12 @@ test("Load sample company fills the box and shows the matches (saves nothing)", 
   assert.doesNotMatch(body, /Api\.|fetch\(/);
   assert.equal((src.match(/onClick=\{loadSample\}/g) ?? []).length, 2);
 });
+
+test("step 2: the model's repeated gap is shown once (it caused a duplicate React key)", async () => {
+  const { answerFromModel } = await import("./deterministic.ts");
+  const payload = { source: "llm", answer_text: "x", citations: [], gaps: [{ record_id: "7", message: "BarTender has no annual cost." }, { record_id: "7", message: "BarTender has no annual cost." }], follow_ups: [], tools_used: [] };
+  const answer = answerFromModel(payload as never, [], "/b", "q");
+  assert.equal(answer.gaps.length, 1);
+  const src = readFileSync(new URL("../../components/mvp/AskScreen.tsx", import.meta.url), "utf8");
+  assert.match(src, /key=\{`\$\{index\}-\$\{gap\.text\}`\}/);
+});

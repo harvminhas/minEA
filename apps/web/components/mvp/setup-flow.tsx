@@ -26,7 +26,7 @@ import { modelPath } from "@/lib/mvp-paths";
 import { SETUP_MIN, setupMeter, setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
-import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
+import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
 
 type Draft = MatchItem & {
   key: string;
@@ -172,6 +172,9 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
   };
 
   const openReadyMap = () => {
+    // Setup just saved records: refetch the catalogue in the background so every screen (the Ask
+    // header counts included) reads the server's copy straight away. Cached rows stay meanwhile.
+    if (orgSlug && workspaceSlug) void queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
     router.push(`${basePath}/views?tab=impact&ready=1`);
   };
 
