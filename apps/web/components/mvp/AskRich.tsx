@@ -4,6 +4,20 @@ import Link from "next/link";
 import type { AskChart, AskTable } from "@/lib/ask/rich";
 
 /** Table built from lookup results; each row opens its record page. */
+/** Covers a cell with a link to the row's record (behind the cell's own content). */
+function CellLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      data-testid="ask-rich-cell-link"
+      aria-label={`Open ${label}`}
+      tabIndex={-1}
+      onClick={(event) => event.stopPropagation()}
+      className="absolute inset-0"
+    />
+  );
+}
+
 export function AskRichTable({
   table,
   hrefFor,
@@ -38,8 +52,15 @@ export function AskRichTable({
               <td className="px-2 py-2.5 font-medium text-[#1c2230]">
                 {href ? <Link href={href} onClick={(event) => event.stopPropagation()} className="text-[#5b4ce6] hover:underline">{row.label}</Link> : row.label}
               </td>
-              <td className={`px-2 py-2.5 ${row.value.startsWith("No ") ? "text-[#8b90a0]" : "text-[#1c2230]"}`}>{row.value}</td>
-              <td data-testid="ask-rich-detail" className="px-2 py-2.5 text-[#6b7289]">
+              <td className={`relative px-2 py-2.5 ${row.value.startsWith("No ") ? "text-[#8b90a0]" : "text-[#1c2230]"}`}>
+                {href && <CellLink href={href} label={row.label} />}
+                <span className="relative">{row.value}</span>
+              </td>
+              <td data-testid="ask-rich-detail" className="relative px-2 py-2.5 text-[#6b7289]">
+                {/* A real link under the whole cell: empty space opens the row's record even if the row
+                    handler never fires; the app links sit above it and open their own records. */}
+                {href && <CellLink href={href} label={row.label} />}
+                <span className="relative">
                 {row.items?.length && itemHref
                   ? row.items.map((item, itemIndex) => {
                       const link = itemHref(item.id);
@@ -58,6 +79,7 @@ export function AskRichTable({
                       );
                     })
                   : row.detail}
+                </span>
               </td>
             </tr>
           );

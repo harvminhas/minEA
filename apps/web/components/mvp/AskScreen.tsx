@@ -20,7 +20,8 @@ import { REVEAL_MS, latestOnly, revealText, revealTokens } from "@/lib/ask/revea
 import { askQueryFn, askQueryKey } from "@/lib/ask/remote";
 import { addTurn, clearThread, contextFor, earlierTurns, readThread, turnFromAnswer, writeThread, type Thread, type ThreadTurn } from "@/lib/ask/thread";
 import { AskBarChart, AskRichTable } from "@/components/mvp/AskRich";
-import { followUpsFor, pickAnswer, shouldAskModel, workingLine } from "@/lib/ask/route";
+import { followUpsFor, localOnly, pickAnswer, shouldAskModel, workingLine } from "@/lib/ask/route";
+import { followUpScope } from "@/lib/ask/followup";
 import { AskLiveSteps, AskSteps } from "@/components/mvp/AskSteps";
 import type { AskStep } from "@/lib/api-client";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
@@ -124,7 +125,14 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     setAddReceipt(undone);
   };
 
-  const local = useMemo(
+  // The conversation in this tab (step 4). A ref feeds the query so the thread changing never re-keys it.
+  const [thread, setThread] = useState<Thread>({ turns: [] });
+  const threadRef = useRef<Thread>(thread);
+  threadRef.current = thread;
+  useEffect(() => {
+    if (orgSlug && workspaceSlug) setThread(readThread(window.sessionStorage, orgSlug, workspaceSlug));
+  }, [orgSlug, workspaceSlug]);
+  const unscopedLocal = useMemo(
     () =>
       answerFromRecords({
         question,
@@ -137,6 +145,28 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
       }),
     [question, rows, impact.nodes, impact.edges, impact.isLoading, impactQuery, basePath, focusId, catalog.data]
   );
+
+  // A follow-up that refers back ("which of those…") to the previous turn's items: when the browser
+  // answers it, work it out over just those items (vendor rows = their apps) and say so.
+  const scope = useMemo(
+    () => (mode === "answer" ? followUpScope(question, earlierTurns(thread, question).at(-1)) : null),
+    [mode, question, thread]
+  );
+  const scopedLocal = useMemo(() => {
+    if (!scope) return null;
+    const scopedRows = rows.filter((row) => scope.ids.has(row.id));
+    const scoped = answerFromRecords({
+      question,
+      rows: scopedRows,
+      graph: { nodes: impact.nodes, edges: impact.edges },
+      basePath,
+      loading: impactQuery && impact.isLoading,
+      focusId,
+      landscape: catalog.data ? { objects: catalog.data.objects, relationships: catalog.data.relationships } : undefined,
+    });
+    return scopedRows.length && localOnly(scoped, question) ? { ...scoped, scopeNote: scope.note } : null;
+  }, [scope, rows, question, impact.nodes, impact.edges, impact.isLoading, impactQuery, basePath, focusId, catalog.data]);
+  const local = scopedLocal ?? unscopedLocal;
 
   // Decide local-or-model BEFORE calling: questions the browser always answers itself never
   // reach Gemini (they used to be asked and the answer thrown away).
@@ -154,13 +184,6 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   // Live working for the question being streamed (flag ask.stream.v1). Keyed by question so a
   // late event from an earlier question never shows under a new one.
   const [live, setLive] = useState<{ question: string; steps: AskStep[]; text: string }>({ question: "", steps: [], text: "" });
-  // The conversation in this tab (step 4). A ref feeds the query so the thread changing never re-keys it.
-  const [thread, setThread] = useState<Thread>({ turns: [] });
-  const threadRef = useRef<Thread>(thread);
-  threadRef.current = thread;
-  useEffect(() => {
-    if (orgSlug && workspaceSlug) setThread(readThread(window.sessionStorage, orgSlug, workspaceSlug));
-  }, [orgSlug, workspaceSlug]);
   const remote = useQuery({
     queryKey: askQueryKey(orgSlug, workspaceSlug, question),
     enabled: askModel,
@@ -490,6 +513,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 />
               ) : (
                 <span data-testid="ask-answer-text" data-revealing={revealing ? "1" : "0"}>
+                  {answer.scopeNote && (
+                    <span data-testid="ask-scope-note" className="mb-2 block text-[12px] font-medium text-[#5b4ce6]">
+                      {answer.scopeNote}
+                    </span>
+                  )}
                   <SummaryAndRest text={shownText} nodes={impact.nodes} onOpen={setPreviewId} />
                 </span>
               )}

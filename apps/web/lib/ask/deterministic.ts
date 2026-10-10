@@ -88,6 +88,8 @@ export type AskAnswer = {
   caption: { generatedAt: string; recordCount: number; gapCount: number; extra?: string };
   /** Step 3: the short line on top (server answers send it; others use the first sentence). */
   summary?: string;
+  /** Set when a follow-up was worked out over the previous answer's items. */
+  scopeNote?: string;
   /** Step 3: a table from lookup results / catalogue rows; replaces the citations table when present. */
   table?: AskTable;
   chart?: AskChart;

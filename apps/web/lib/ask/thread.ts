@@ -8,7 +8,8 @@ import { splitSummary } from "@/lib/ask/rich";
 import { sameQuestion } from "@/lib/ask/route";
 
 export type ThreadItem = { id: string; name: string };
-export type ThreadTurn = { question: string; summary: string; items: ThreadItem[]; at: number };
+/** scopeLabel: what the items were, for a follow-up's note ("6 vendors"). Vendor rows store their apps. */
+export type ThreadTurn = { question: string; summary: string; items: ThreadItem[]; at: number; scopeLabel?: string };
 export type Thread = { turns: ThreadTurn[] };
 export type AskContextTurn = { question: string; summary: string; item_ids: string[] };
 
@@ -83,7 +84,18 @@ export function turnFromAnswer(question: string, answer: AskAnswer, now = Date.n
   const add = (id: string | null | undefined, name: string) => {
     if (id && !items.some((item) => item.id === id)) items.push({ id, name });
   };
-  for (const row of answer.table?.rows ?? []) add(row.recordId, row.label);
+  for (const row of answer.table?.rows ?? []) {
+    if (row.items?.length) for (const item of row.items) add(item.id, item.name);
+    else add(row.recordId, row.label);
+  }
   for (const citation of answer.citations) add(citation.recordId, citation.displayName || citation.row.name);
-  return { question, summary: plain(answer.summary || splitSummary(answer.answerText).summary).slice(0, 600), items: items.slice(0, 12), at: now };
+  const rowCount = answer.table?.rows.length ?? 0;
+  const scopeLabel = answer.table?.kind === "vendors" && rowCount ? `${rowCount} ${rowCount === 1 ? "vendor" : "vendors"}` : undefined;
+  return {
+    question,
+    summary: plain(answer.summary || splitSummary(answer.answerText).summary).slice(0, 600),
+    items: items.slice(0, 40),
+    at: now,
+    ...(scopeLabel ? { scopeLabel } : {}),
+  };
 }
