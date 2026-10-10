@@ -152,10 +152,12 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
     if criticality:
         rows = [rec for rec in rows if (rec.criticality or "").lower() == criticality]
     within = filters.get("renewal_within_days")
+    with_renewal_date: int | None = None
     if isinstance(within, int):
         end = date.today() + timedelta(days=within)
         bag.note_number(within)
         kept = []
+        with_renewal_date = 0
         for rec in rows:
             if not rec.renewal or len(rec.renewal) < 10:
                 continue
@@ -163,9 +165,11 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
                 renews = date.fromisoformat(rec.renewal[:10])
             except ValueError:
                 continue
+            with_renewal_date += 1
             if date.today() <= renews <= end:
                 kept.append(rec)
         rows = kept
+        bag.note_number(with_renewal_date)
     rank = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
     rows.sort(key=lambda rec: (-rank.get(rec.criticality or "", 0), rec.name))
     for rec in rows:
@@ -219,6 +223,7 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
         "annual_cost": int(total) if metric == "sum_annual_cost" else None,
         "groups": groups,
         "records": [rec.summary() for rec in rows[:50]],
+        **({"with_renewal_date": with_renewal_date} if with_renewal_date is not None else {}),
     }
 
 

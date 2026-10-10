@@ -1,5 +1,5 @@
 import type { MinEAObject, Relationship } from "@minea/types";
-import type { AskModelPayload } from "@/lib/api-client";
+import type { AskModelPayload, AskStep } from "@/lib/api-client";
 import {
   choiceLabel,
   classifyIntent,
@@ -84,6 +84,8 @@ export type AskAnswer = {
   /** Blank cells for this field use the amber Add. Other blanks stay a grey dash. */
   focusBlank?: keyof CatalogMissing;
   caption: { generatedAt: string; recordCount: number; gapCount: number; extra?: string };
+  /** Model answers: the server's working steps (lookups and checks), shown under the answer. */
+  steps?: AskStep[];
   /** A report that holds the full answer, shown under it. */
   link?: { href: string; label: string };
   loading?: boolean;
@@ -204,6 +206,7 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
       gapCount: payload.gaps.length,
       extra: "checked against the lookup results",
     },
+    ...(payload.steps?.length ? { steps: payload.steps } : {}),
   };
 }
 

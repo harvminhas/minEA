@@ -15,7 +15,8 @@ import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
 import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
-import { isAiDataQuestion } from "@/lib/ask/answerStrategies";
+import { pickAnswer, shouldAskModel, workingLine } from "@/lib/ask/route";
+import { AskSteps } from "@/components/mvp/AskSteps";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { AddSaved } from "@/components/add/AddCards";
 import { AddFlow } from "@/components/add/AddFlow";
@@ -33,12 +34,6 @@ import { aiHomeCard, type AiHomeCard } from "@/lib/ai/home-card";
 import { relationshipVerb } from "@/lib/relationship-display";
 import type { ImpactEdge, ImpactNode } from "@/lib/impact/relationship-impact";
 import type { RelationshipType } from "@minea/types";
-
-const THINKING_STEPS = [
-  "Reading your question",
-  "Looking up applications, capabilities, and infrastructure",
-  "Checking the answer against those results",
-];
 
 export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const params = useSearchParams();
@@ -109,17 +104,6 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     setAddReceipt(undone);
   };
 
-  const remote = useQuery({
-    queryKey: ["ask-model", orgSlug, workspaceSlug, question],
-    enabled: mode === "answer" && question.length > 0 && !showingAdd && !ambiguous && Boolean(orgSlug && workspaceSlug),
-    retry: false,
-    queryFn: async () => {
-      const token = await getToken();
-      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
-      return aiApi.ask(orgSlug, workspaceSlug, question, token);
-    },
-  });
-
   const local = useMemo(
     () =>
       answerFromRecords({
@@ -134,30 +118,42 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     [question, rows, impact.nodes, impact.edges, impact.isLoading, impactQuery, basePath, focusId, catalog.data]
   );
 
-  const thinking = mode === "answer" && question.length > 0 && remote.isPending && !showingAdd && !ambiguous;
-  const [thinkStep, setThinkStep] = useState(0);
+  // Decide local-or-model BEFORE calling: questions the browser always answers itself never
+  // reach Gemini (they used to be asked and the answer thrown away).
+  const catalogSettled = catalog.isSuccess || catalog.isError;
+  const askModel = shouldAskModel({
+    mode,
+    question,
+    showingAdd,
+    ambiguous,
+    hasWorkspace: Boolean(orgSlug && workspaceSlug),
+    catalogSettled,
+    local,
+  });
+  const remote = useQuery({
+    queryKey: ["ask-model", orgSlug, workspaceSlug, question],
+    enabled: askModel,
+    retry: false,
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
+      return aiApi.ask(orgSlug, workspaceSlug, question, token);
+    },
+  });
+
+
+  // A disabled query stays "pending" in react-query v5, so only a model we actually asked counts.
+  const thinking =
+    mode === "answer" && question.length > 0 && !showingAdd && !ambiguous && (!catalogSettled || (askModel && remote.isPending));
   useEffect(() => {
     setDraft(question);
   }, [question]);
-  useEffect(() => {
-    if (!thinking) {
-      setThinkStep(0);
-      return;
-    }
-    const timer = window.setInterval(() => setThinkStep((step) => (step + 1) % THINKING_STEPS.length), 1400);
-    return () => window.clearInterval(timer);
-  }, [thinking]);
 
   const answer = useMemo(() => {
     if (mode !== "answer" || !question) return local;
-    const fromModel = remote.data ? answerFromModel(remote.data, rows, basePath, question) : null;
-    // Customer / financial / personal data: the F1 rule (each app's Holds data) answers, not the model's reading of it.
-    if (local.handler === "ai" && isAiDataQuestion(question)) return local;
-    if (local.handler === "gaps" || local.handler === "impact" || local.handler === "importance" || local.handler === "cost" || local.handler === "ownership" || local.handler === "clarify" || local.handler === "aging" || local.handler === "sign_in") return local;
-    if (!fromModel || fromModel.handler === "unsupported") return local;
-    if (local.handler === "vendors" && fromModel.citations.length === 0) return local;
-    return fromModel;
-  }, [mode, question, remote.data, local, rows, basePath]);
+    const fromModel = askModel && remote.data ? answerFromModel(remote.data, rows, basePath, question) : null;
+    return pickAnswer(local, fromModel, question);
+  }, [mode, question, askModel, remote.data, local, rows, basePath]);
 
   const orgName = useAppStore((state) => state.activeOrg?.name) || "Your estate";
   const setup = useWorkspaceSetup();
@@ -345,14 +341,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             <div className="h-1.5 overflow-hidden rounded-full bg-[#ece9ff]">
               <div className="diagram-saving-bar-indeterminate h-full w-2/5 rounded-full bg-[#5b4ce6]" />
             </div>
-            <p className="mt-4 text-[15px] font-medium text-[#1c2230]">{THINKING_STEPS[thinkStep]}</p>
-            <ol className="mt-3 space-y-1.5 text-[13px] text-[#6b7289]">
-              {THINKING_STEPS.map((step, index) => (
-                <li key={step} className={index === thinkStep ? "font-medium text-[#3f35b5]" : index < thinkStep ? "text-[#1c2230]" : ""}>
-                  {index < thinkStep ? "Done" : index === thinkStep ? "Now" : "Next"} · {step}
-                </li>
-              ))}
-            </ol>
+            <p data-testid="ask-working" className="mt-4 text-[15px] font-medium text-[#1c2230]">
+              {catalogSettled ? workingLine(rows.length) : "Loading your estate"}
+            </p>
           </div>
         ) : (
           <div className="px-5 py-5">
@@ -452,6 +443,8 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             )}
 
             {answer.gaps.length > 0 && <GapsList key={question} gaps={answer.gaps} />}
+
+            {answer.steps && answer.steps.length > 0 && <AskSteps steps={answer.steps} />}
 
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#eef0f4] pt-4">
               <button type="button" onClick={() => { saveAsk(question, answer.answerText); setNote("Saved to Reports › Saved from Ask"); }} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">

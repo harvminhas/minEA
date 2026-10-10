@@ -1103,6 +1103,17 @@ export type AskModelPayload = {
   follow_ups: string[];
   tools_used: string[];
   unsupported?: boolean;
+  /** What the server actually did, built from the lookup results (newer APIs only). */
+  steps?: AskStep[];
+};
+
+/** One working step of an Ask answer, e.g. "6 Applications renew in the next 90 days, $210,000 a year". */
+export type AskStep = {
+  id: string;
+  status: "running" | "done" | "error";
+  label: string;
+  counts?: Record<string, number>;
+  tool?: string;
 };
 
 export const aiApi = {

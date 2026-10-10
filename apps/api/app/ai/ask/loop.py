@@ -7,6 +7,7 @@ import json
 import re
 import time
 from pathlib import Path
+from collections.abc import AsyncIterator
 from typing import Any
 
 from google.genai import types
@@ -14,12 +15,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.ask.ai_landscape import is_ai_question
 from app.ai.ask.graph import load_graph
+from app.ai.ask.steps import checking_step, estate_step, tool_step
 from app.ai.ask.tools import ToolBag, run_tool, tool_specs
 from app.ai.gemini_client import build_gemini_tools, get_client, is_configured, model_name
 from app.services.tenancy import TenancyContext
 
 MAX_ROUNDS = 4
 MAX_TOOL_CALLS = 6
+# Time budget. The web proxy (apps/web/app/api/v1/[...path]/route.ts) cuts requests at 30 s, so
+# the whole answer, including loading the graph, must end well before that: a slow model gives a
+# fallback (the screen answers locally) instead of a proxy timeout.
+TOTAL_BUDGET_SECONDS = 22.0
+CALL_TIMEOUT_SECONDS = 12.0
+MIN_CALL_WINDOW_SECONDS = 4.0  # don't start a model call with less time than this left
 WORDS = {
     "one": "1",
     "two": "2",
@@ -190,17 +198,43 @@ def _evidence_ids(evidence: list) -> list[str]:
 
 
 async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str) -> dict:
+    """JSON contract of POST /ai/ask: the final answer, plus `steps` (what the server did)."""
+    steps: list[dict] = []
+    final: dict | None = None
+    async for event in run_ask(db, ctx, question):
+        if event["event"] == "step":
+            steps.append(event["data"])
+        elif event["event"] == "final":
+            final = event["data"]
+    result = final or _fallback("model_error", [])
+    result["steps"] = steps
+    return result
+
+
+async def run_ask(
+    db: AsyncSession, ctx: TenancyContext, question: str, *, clock=time.monotonic
+) -> AsyncIterator[dict]:
+    """The Ask engine as a stream of events: {"event": "step"|"final", "data": {...}}.
+
+    Exactly one "final" event ends the stream. Its data is the same dict POST /ai/ask has
+    always returned (source "llm" or "fallback"). The event stream endpoint will reuse this.
+    """
     question = question.strip()[:500]
     if not question:
-        return _fallback("empty", [])
+        yield {"event": "final", "data": _fallback("empty", [])}
+        return
     # Chat stays on the business plan. Ask uses the configured model on any plan
     # and falls back to the fixed handlers when the model is missing or fails.
     if not is_configured():
-        return _fallback("model_unavailable", [])
+        yield {"event": "final", "data": _fallback("model_unavailable", [])}
+        return
     if not ctx.workspace:
-        return _fallback("no_workspace", [])
+        yield {"event": "final", "data": _fallback("no_workspace", [])}
+        return
 
+    started = clock()
     graph = await load_graph(db, ctx.workspace.id, ctx.org_id)
+    yield {"event": "step", "data": estate_step(graph)}
     bag = ToolBag(graph=graph, seen_ids=set(), numbers=set())
     tools_used: list[str] = []
     ai_question = is_ai_question(question)
@@ -212,20 +246,21 @@ async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str
         max_output_tokens=900,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
-    started = time.monotonic()
     corrected = False
 
     try:
         for _round in range(MAX_ROUNDS):
-            if time.monotonic() - started > 40:
-                return _fallback("timeout", tools_used)
+            remaining = TOTAL_BUDGET_SECONDS - (clock() - started)
+            if remaining < MIN_CALL_WINDOW_SECONDS:
+                yield {"event": "final", "data": _fallback("timeout", tools_used)}
+                return
             response = await asyncio.wait_for(
                 get_client().aio.models.generate_content(
                     model=model_name(),
                     contents=contents,
                     config=config,
                 ),
-                timeout=18,
+                timeout=min(CALL_TIMEOUT_SECONDS, remaining),
             )
             calls = _calls(response)
             if not calls:
@@ -233,6 +268,7 @@ async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str
                 problem = "not_json" if not parsed else _validate(parsed, bag, question)
                 if problem and not corrected:
                     corrected = True
+                    yield {"event": "step", "data": checking_step(problem)}
                     contents.append(
                         types.Content(role="model", parts=[types.Part.from_text(text=_text(response) or "{}")])
                     )
@@ -251,24 +287,31 @@ async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str
                     )
                     continue
                 if problem or not parsed:
-                    return _fallback(problem or "not_json", tools_used)
-                return _present(parsed, bag, tools_used, ai_question)
+                    yield {"event": "final", "data": _fallback(problem or "not_json", tools_used)}
+                    return
+                yield {"event": "step", "data": checking_step(None)}
+                yield {"event": "final", "data": _present(parsed, bag, tools_used, ai_question)}
+                return
             if response.candidates and response.candidates[0].content:
                 contents.append(response.candidates[0].content)
             parts = []
             for name, args in calls:
                 if len(tools_used) >= MAX_TOOL_CALLS:
-                    return _fallback("too_many_lookups", tools_used)
+                    yield {"event": "final", "data": _fallback("too_many_lookups", tools_used)}
+                    return
                 tools_used.append(name)
                 raw = run_tool(bag, name, args) if ai_question or name != "ai_landscape" else NOT_AI
                 result = json.loads(json.dumps(raw, default=str))
+                yield {"event": "step", "data": tool_step(len(tools_used), name, args, result)}
                 parts.append(types.Part.from_function_response(name=name, response={"result": result}))
             contents.append(types.Content(role="user", parts=parts))
     except TimeoutError:
-        return _fallback("timeout", tools_used)
+        yield {"event": "final", "data": _fallback("timeout", tools_used)}
+        return
     except Exception:
-        return _fallback("model_error", tools_used)
-    return _fallback("round_budget", tools_used)
+        yield {"event": "final", "data": _fallback("model_error", tools_used)}
+        return
+    yield {"event": "final", "data": _fallback("round_budget", tools_used)}
 
 
 def _present(answer: dict, bag: ToolBag, tools_used: list[str], ai_question: bool = True) -> dict:
