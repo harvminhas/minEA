@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import logging
 
-import resend
-
 from app.config import settings
+from app.services.email_sender import format_from_address, send_email
 from app.services.email_verification_token import build_verification_url
 
 logger = logging.getLogger(__name__)
@@ -16,7 +15,7 @@ def _verification_email_html(verify_url: str) -> str:
     <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; color: #111827;">
       <h1 style="font-size: 20px; margin-bottom: 8px;">Verify your email</h1>
       <p style="font-size: 14px; line-height: 1.5; color: #4b5563;">
-        Confirm your email address to unlock invites and other sensitive actions in minEA.
+        Confirm your email address to unlock invites and other sensitive actions in BuboMap.
       </p>
       <p style="margin: 24px 0;">
         <a href="{verify_url}"
@@ -31,6 +30,14 @@ def _verification_email_html(verify_url: str) -> str:
       </p>
     </div>
     """
+
+
+def _verification_email_text(verify_url: str) -> str:
+    return (
+        "Verify your email\n\n"
+        "Confirm your email address to unlock invites and other sensitive actions in BuboMap.\n\n"
+        f"Open this link to verify: {verify_url}\n"
+    )
 
 
 def send_verification_email(
@@ -60,15 +67,12 @@ def send_verification_email(
             None,
         )
 
-    resend.api_key = settings.resend_api_key
     try:
-        resend.Emails.send(
-            {
-                "from": _format_from_address(settings.email_from),
-                "to": [email],
-                "subject": "Verify your minEA email",
-                "html": _verification_email_html(link),
-            }
+        send_email(
+            to=[email],
+            subject="Verify your email",
+            html_body=_verification_email_html(link),
+            text_body=_verification_email_text(link),
         )
     except Exception:
         logger.exception("Resend verification email failed for %s", email)
@@ -90,8 +94,5 @@ def send_verification_email(
     return True, message, None
 
 
-def _format_from_address(raw: str) -> str:
-    value = raw.strip()
-    if "<" in value and ">" in value:
-        return value
-    return f"minEA <{value}>"
+def _format_from_address(raw: str) -> str:  # kept for older imports
+    return format_from_address(raw)

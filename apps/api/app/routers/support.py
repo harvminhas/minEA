@@ -17,6 +17,7 @@ from app.schemas.support import (
     SupportRequestRead,
 )
 from app.services import support_alerts
+from app.services.email_sender import submitter_for
 from app.services.stripe_billing import retrieve_checkout_session, stripe_configured
 from app.services.tenancy import TenancyContext, get_org_context
 
@@ -57,16 +58,15 @@ async def submit_support_request(
     await db.refresh(req)
     background.add_task(
         support_alerts.send_owner_email,
-        f"BuboMap help request: {TOPIC_LABELS[req.topic]} ({req.org_slug})",
+        f"Help request: {TOPIC_LABELS[req.topic]} ({req.org_slug})",
         [
-            ("Organisation", req.org_slug or "-"),
-            ("From", req.user_email),
             ("Topic", TOPIC_LABELS[req.topic]),
             ("Checkout session", req.checkout_session_id or "-"),
             ("Sent from", req.source or "-"),
             ("Message", req.message),
         ],
         reply_to=req.user_email,
+        submitter=submitter_for(ctx.user, ctx.org, ctx.org_role, req.created_at),
     )
     return req
 
@@ -118,8 +118,9 @@ async def report_checkout_pending(
 
     if await support_alerts.record_once(db, "checkout_stuck", f"checkout_stuck:{session_id}", org_slug=org.slug):
         support_alerts.send_owner_email(
-            f"BuboMap alert: paid checkout not applied after 5 minutes ({org.slug})",
+            f"Alert: paid checkout not applied after 5 minutes ({org.slug})",
             support_alerts.checkout_stuck_rows(org.slug, session_id, ctx.user.email, waited),
             reply_to=ctx.user.email,
+            submitter=submitter_for(ctx.user, org, ctx.org_role),
         )
     return CheckoutPendingResponse(status="alerted")

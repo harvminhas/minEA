@@ -18,6 +18,7 @@ from app.routers import webhooks
 from app.schemas.support import CheckoutPendingRequest, SupportRequestCreate
 from app.services import stripe_billing as sb
 from app.services import support_alerts as sa
+from app.services import email_sender as es
 from tests.test_stripe_billing import _SignedReq, _signed, event, make_org, run
 
 API = Path(__file__).resolve().parents[1]
@@ -53,7 +54,7 @@ def mail(monkeypatch):
     monkeypatch.setattr(settings, "resend_api_key", "re_test")
     monkeypatch.setattr(settings, "business_request_notify_email", "biz@example.com")
     monkeypatch.setattr(settings, "support_notify_email", "")
-    monkeypatch.setattr(sa.resend.Emails, "send", lambda p: sent.append(p))
+    monkeypatch.setattr(es.resend.Emails, "send", lambda p: sent.append(p))
     return sent
 
 

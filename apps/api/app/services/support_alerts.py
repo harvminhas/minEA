@@ -10,19 +10,17 @@ Every function here is best effort: an alert problem must never break the reques
 """
 from __future__ import annotations
 
-import html
 import logging
 import time
 from datetime import datetime
 
-import resend
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.contact import BillingAlert
-from app.services.verification_email import _format_from_address
+from app.services.email_sender import Submitter, render_owner_email, send_email
 
 logger = logging.getLogger(__name__)
 
@@ -34,27 +32,23 @@ def support_notify_address() -> str:
     return (settings.support_notify_email or "").strip() or (settings.business_request_notify_email or "").strip()
 
 
-def send_owner_email(subject: str, rows: list[tuple[str, str]], *, reply_to: str | None = None) -> bool:
+def send_owner_email(
+    subject: str,
+    rows: list[tuple[str, str]],
+    *,
+    reply_to: str | None = None,
+    submitter: Submitter | None = None,
+) -> bool:
+    """Email the owner. The subject gets the 'BuboMap - ' prefix in email_sender; the body opens
+    with who submitted it (server-side identity), then rows. Best effort: never raises."""
     to = support_notify_address()
     if not to or not (settings.resend_api_key or "").strip():
         logger.info("Owner email not sent (not configured): %s", subject)
         return False
-    table = "".join(
-        f"<tr><td style='padding:4px 12px 4px 0;color:#6b7280;vertical-align:top'>{html.escape(k)}</td>"
-        f"<td style='padding:4px 0;white-space:pre-wrap'>{html.escape(v)}</td></tr>"
-        for k, v in rows
-    )
-    payload = {
-        "from": _format_from_address(settings.email_from),
-        "to": [to],
-        "subject": subject,
-        "html": f"<div style='font-family:system-ui,sans-serif'><h2>{html.escape(subject)}</h2><table>{table}</table></div>",
-    }
-    if reply_to:
-        payload["reply_to"] = reply_to
-    resend.api_key = settings.resend_api_key
+    who = submitter or Submitter(signed_in=False, system="BuboMap (automatic alert)")
+    html_body, text_body = render_owner_email(subject, who, rows)
     try:
-        resend.Emails.send(payload)
+        send_email(to=[to], subject=subject, html_body=html_body, text_body=text_body, reply_to=reply_to)
     except Exception:
         logger.exception("Owner email failed: %s", subject)
         return False
@@ -109,7 +103,7 @@ async def alert_webhook_failure(
             "retryable": "Stripe webhook will be retried",
         }
         return send_owner_email(
-            f"BuboMap alert: {titles.get(kind, 'Stripe webhook problem')}",
+            f"Alert: {titles.get(kind, 'Stripe webhook problem')}",
             [
                 ("What happened", titles.get(kind, kind)),
                 ("Error type", error_type),
@@ -118,6 +112,7 @@ async def alert_webhook_failure(
                 ("Next step", "Check the API logs and Stripe Dashboard > Developers > Webhooks. "
                  "Further alerts of this kind are paused for 10 minutes."),
             ],
+            submitter=Submitter(signed_in=False, system="Stripe webhook (automatic alert, no user)"),
         )
     except Exception:
         logger.exception("Could not record or send the webhook alert (%s)", kind)
@@ -126,8 +121,6 @@ async def alert_webhook_failure(
 
 def checkout_stuck_rows(org_slug: str, session_id: str, user_email: str, waited_seconds: int) -> list[tuple[str, str]]:
     return [
-        ("Organisation", org_slug),
-        ("User", user_email),
         ("Checkout session", session_id),
         ("Waiting", f"about {max(1, waited_seconds // 60)} minutes"),
         ("Next step", "Find the session in Stripe, check the webhook delivery, and set the plan if needed."),

@@ -76,9 +76,12 @@ export function BusinessGetStartedForm({ theme = "light", orgSlug, source, onDon
     if (Object.keys(found).length > 0) return;
     setSubmitting(true);
     try {
+      // Signed in: send the session token so the owner email shows the verified account
+      // (the API ignores a missing or bad token; signed-out visitors still submit).
+      const token = auth?.user ? await auth.getToken().catch(() => null) : null;
       const res = await fetch(apiV1Url(BUSINESS_REQUEST_ENDPOINT), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(businessRequestBody(input)),
       });
       if (!res.ok) throw new Error("Something went wrong. Please try again.");

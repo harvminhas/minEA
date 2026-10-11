@@ -39,4 +39,4 @@ async def confirm_email_verification(db: AsyncSession, token: str) -> str:
             user.email_verified_at = utc_now()
             await db.commit()
 
-    return "Email verified. You can return to minEA and continue."
+    return "Email verified. You can return to BuboMap and continue."

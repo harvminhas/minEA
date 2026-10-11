@@ -97,3 +97,10 @@ test("Get started link for in-app prompts", () => {
   assert.equal(businessGetStartedHref(), BUSINESS_GET_STARTED_PATH);
   assert.equal(businessGetStartedHref({ org: "acme", from: "invite" }), "/business/get-started?org=acme&from=invite");
 });
+
+test("signed-in Business form sends the session token (owner email shows the verified account)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../../components/billing/BusinessGetStartedForm.tsx", import.meta.url), "utf8");
+  assert.match(src, /const token = auth\?\.user \? await auth\.getToken\(\)\.catch\(\(\) => null\) : null;/);
+  assert.match(src, /Authorization: `Bearer \$\{token\}`/);
+});

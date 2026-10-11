@@ -16,6 +16,7 @@ from app.models.contact import BusinessPlanRequest
 from app.routers import contact as contact_router
 from app.schemas.contact import BusinessPlanRequestCreate
 from app.services import business_request_email as bre
+from app.services import email_sender as es
 
 API = Path(__file__).resolve().parents[1]
 MIGRATION = API / "migrations" / "046_business_plan_requests.sql"
@@ -85,9 +86,10 @@ def test_endpoint_stores_cleaned_request_and_queues_email():
 def test_route_is_public_post():
     routes = [r for r in app.routes if getattr(r, "path", "") == "/api/v1/contact/business"]
     assert len(routes) == 1 and "POST" in routes[0].methods
-    # No auth dependency: signed-out visitors can submit.
+    # Auth is optional only: signed-out visitors can submit.
     names = {d.call.__name__ for d in routes[0].dependant.dependencies}
-    assert not any("auth" in n for n in names)
+    assert "get_auth_context" not in names and "get_org_context" not in names
+    assert "get_optional_auth_context" in names
 
 
 def _req():
@@ -100,7 +102,7 @@ def _req():
 def test_email_skipped_without_resend_key(monkeypatch):
     monkeypatch.setattr(settings, "resend_api_key", "")
     called = []
-    monkeypatch.setattr(bre.resend.Emails, "send", lambda p: called.append(p))
+    monkeypatch.setattr(es.resend.Emails, "send", lambda p: called.append(p))
     assert bre.send_business_request_email(_req()) is False
     assert called == []
 
@@ -109,7 +111,7 @@ def test_email_sent_with_existing_resend_sender(monkeypatch):
     monkeypatch.setattr(settings, "resend_api_key", "re_test")
     monkeypatch.setattr(settings, "business_request_notify_email", "team@example.com")
     sent = []
-    monkeypatch.setattr(bre.resend.Emails, "send", lambda p: sent.append(p))
+    monkeypatch.setattr(es.resend.Emails, "send", lambda p: sent.append(p))
     assert bre.send_business_request_email(_req()) is True
     (payload,) = sent
     assert payload["to"] == ["team@example.com"]
@@ -124,7 +126,7 @@ def test_email_failure_never_raises(monkeypatch):
     def boom(_):
         raise RuntimeError("down")
 
-    monkeypatch.setattr(bre.resend.Emails, "send", boom)
+    monkeypatch.setattr(es.resend.Emails, "send", boom)
     assert bre.send_business_request_email(_req()) is False
 
 

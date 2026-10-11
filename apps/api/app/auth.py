@@ -184,3 +184,15 @@ async def get_auth_context(
         raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {e}")
+
+
+async def get_optional_auth_context(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> AuthContext | None:
+    """Public routes: the verified caller if a valid bearer token was sent, else None."""
+    if not credentials:
+        return None
+    try:
+        return await get_auth_context(credentials)
+    except HTTPException:
+        return None
