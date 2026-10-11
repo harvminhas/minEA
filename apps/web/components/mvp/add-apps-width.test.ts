@@ -7,7 +7,8 @@ const model = readFileSync(new URL("./ModelScreen.tsx", import.meta.url), "utf8"
 
 test("Model empty state widens its card to max-w-3xl when the add-apps wizard is open", () => {
   assert.match(model, /\$\{addApps \? "max-w-3xl" : "max-w-md"\}/);
-  assert.match(model, /overflow-y-auto px-3 pb-6 pt-16/);
+  // No scroll/clip container around it (that clipped the wizard; see model-empty-state.test.ts).
+  assert.doesNotMatch(model, /overflow-y-auto px-3 pb-6 pt-16/);
 });
 
 test("step indicator stays on one row and scrolls horizontally when narrow", () => {

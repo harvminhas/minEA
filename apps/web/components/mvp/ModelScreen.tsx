@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Info, LayoutGrid, Plus, Table2 } from "lucide-react";
@@ -491,6 +491,17 @@ function Overview({
   failed: boolean;
 }) {
   const [addApps, setAddApps] = useState(false);
+  const exampleCard = useRef<HTMLDivElement>(null);
+  // Opening the wizard: bring it into view and put the cursor in the paste box.
+  useEffect(() => {
+    if (!addApps) return;
+    const frame = window.requestAnimationFrame(() => {
+      const box = exampleCard.current?.querySelector("textarea");
+      box?.focus({ preventScroll: true });
+      exampleCard.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [addApps]);
   const platforms = rows.filter((row) => row.kind === "platform").length;
   const servers = rows.filter((row) => row.kind === "runtime").length;
   const show = !pending && !failed && !example;
@@ -511,11 +522,17 @@ function Overview({
       ];
   return (
     <div className="relative px-8 py-8">
-      <div className={example ? "pointer-events-none opacity-40" : ""}>
+      {example && (
+        <p data-testid="sample-banner" className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#fde68a] bg-[#fffbeb] px-3 py-1 text-[12px] font-medium text-[#92400e]">
+          <span className="rounded-full bg-[#f59e0b] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">Sample company</span>
+          Sample data: not your apps
+        </p>
+      )}
+      <div className={example ? "pointer-events-none select-none opacity-40" : ""} aria-hidden={example || undefined}>
         <h1 className="text-[28px] font-semibold text-[#1c2230]">Model overview</h1>
         <p className="mt-1 text-[14px] text-[#6b7289]">
           {example
-            ? "13 applications, 6 platforms, 11 servers."
+            ? "Sample company: 13 applications, 6 platforms, 11 servers."
             : failed
               ? "The model didn't load. Refresh the page to try again."
               : pending
@@ -541,13 +558,22 @@ function Overview({
         )}
       </div>
       {example && (
-        <div className="absolute inset-0 flex items-start justify-center overflow-y-auto px-3 pb-6 pt-16">
-          <div data-testid="example-card" className={`w-full ${addApps ? "max-w-3xl" : "max-w-md"} rounded-2xl border border-[#e6e8ee] bg-white px-4 py-5 text-center shadow-lg sm:px-6`}>
+        // In normal flow (pulled up over the dimmed sample tiles), not an absolute full-size
+        // overlay: that box was only as tall as the tiles and clipped the opened wizard.
+        <div className="relative z-10 -mt-24 flex justify-center px-3 pb-6">
+          <div ref={exampleCard} data-testid="example-card" className={`w-full ${addApps ? "max-w-3xl" : "max-w-md"} rounded-2xl border border-[#e6e8ee] bg-white px-4 py-5 text-center shadow-lg sm:px-6`}>
             <p className="flex items-center justify-center gap-2 text-[15px] font-semibold text-[#1c2230]"><Info size={16} className="text-[#5b4ce6]" /> Example data</p>
             <p className="mt-2 text-[13px] font-semibold leading-5 text-[#1c2230]">{gap}</p>
             <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">You have {appsSoFar} app{appsSoFar === 1 ? "" : "s"} so far. Until then this is a sample company; nothing here is saved to your workspace.</p>
-            <button type="button" onClick={() => setAddApps(true)} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Add apps here</button>
-            {addApps && <div className="mt-4 text-left"><FirstRunAsk inline /></div>}
+            <button
+              type="button"
+              aria-expanded={addApps}
+              onClick={() => setAddApps((open) => !open)}
+              className={addApps ? "mt-4 inline-flex rounded-lg border border-[#e6e8ee] px-4 py-2 text-[13px] font-medium text-[#4b5163]" : "mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white"}
+            >
+              {addApps ? "Close" : "Add apps here"}
+            </button>
+            {addApps && <div data-testid="example-wizard" className="mt-4 text-left"><FirstRunAsk inline /></div>}
           </div>
         </div>
       )}
