@@ -12,7 +12,8 @@ import { useAppStore } from "@/lib/store";
 import { orgsApi, workspacesApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { GlobalRefetchIndicator } from "@/components/ui/GlobalRefetchIndicator";
-import { isEstateViewsPath, isViewsAreaPath, isViewsModePath, viewIdFromPathname } from "@/lib/views";
+import { isViewsAreaPath, viewIdFromPathname } from "@/lib/views";
+import { orgShellFor } from "@/lib/app-shell";
 import { MvpFrame } from "@/components/mvp/MvpFrame";
 import { OrgLoadError } from "@/components/org/OrgNotices";
 import { orgLoadErrorMessage } from "@/lib/org-access";
@@ -102,11 +103,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
 
   const sidebarW = sidebarExpanded ? "ml-[200px]" : "ml-[52px]";
   const bgClass = "bg-gray-50";
-  const mvpShell =
-    pathname.includes("/workspaces/") &&
-    !isEmbed &&
-    viewMode !== "split" &&
-    (!isViewsModePath(pathname) || isEstateViewsPath(pathname));
+  const shell = orgShellFor(pathname, viewMode);
 
   return (
     <RequireAuth>
@@ -114,7 +111,9 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
       <div className={`h-screen overflow-hidden ${bgClass}`}>
         <TopNav />
         <div className="flex h-full pt-14">
-          {mvpShell ? (
+          {shell === "org" ? (
+            <main data-shell="org" className="flex-1 overflow-y-auto">{content}</main>
+          ) : shell === "mvp" ? (
             <MvpFrame>{content}</MvpFrame>
           ) : (
             <>
