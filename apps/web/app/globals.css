@@ -103,6 +103,58 @@
 @keyframes bm-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.12); } }
 @keyframes bm-shimmer { 0% { transform: translateX(-110%); } 100% { transform: translateX(260%); } }
 
+/* ── Loading-screen impact diagram (components/ui/ImpactLoop.tsx), one 2.4 s loop per key ── */
+.bm-impact svg { overflow: visible; }
+.bm-impact-node rect { fill: #ffffff; stroke: #ddd8fb; stroke-width: 1.2; }
+.bm-impact-node text { fill: #4b5563; font-size: 9.5px; font-weight: 600; letter-spacing: -0.01em; }
+.bm-impact-col { fill: #a5a0d6; font-size: 8px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
+.bm-impact-edge { fill: none; stroke: #e4e1f7; stroke-width: 1.4; }
+.bm-impact-flow { fill: none; stroke: #ef4444; stroke-width: 1.8; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; }
+.bm-impact-flow-1 { animation: bm-imp-flow-1 2.4s linear both; }
+.bm-impact-flow-2 { animation: bm-imp-flow-2 2.4s linear both; }
+.bm-impact-src rect { animation: bm-imp-src 2.4s ease-in-out both; }
+.bm-impact-src text { animation: bm-imp-src-text 2.4s ease-in-out both; }
+.bm-impact-hit-1 rect { animation: bm-imp-hit-1 2.4s ease-in-out both; }
+.bm-impact-hit-2 rect { animation: bm-imp-hit-2 2.4s ease-in-out both; }
+.bm-impact-ring { fill: none; stroke: #ef4444; stroke-width: 1.5; opacity: 0; transform-box: fill-box; transform-origin: center; animation: bm-imp-ring 2.4s ease-out both; }
+.bm-impact-down { opacity: 0; animation: bm-imp-down 2.4s ease-in-out both; }
+.bm-impact-down rect { fill: #ef4444; }
+.bm-impact-down text { fill: #ffffff; font-size: 7.5px; font-weight: 700; letter-spacing: 0.04em; }
+.bm-impact-caption { animation: bm-imp-caption 2.4s ease-in-out both; }
+
+@keyframes bm-imp-src {
+  0%, 10% { fill: #ffffff; stroke: #ddd8fb; }
+  16%, 78% { fill: #fee2e2; stroke: #ef4444; }
+  96%, 100% { fill: #ffffff; stroke: #ddd8fb; }
+}
+@keyframes bm-imp-src-text { 0%, 10% { fill: #4b5563; } 16%, 78% { fill: #b91c1c; } 96%, 100% { fill: #4b5563; } }
+@keyframes bm-imp-ring { 0%, 14% { opacity: 0; transform: scale(1); } 18% { opacity: 0.7; } 42%, 100% { opacity: 0; transform: scale(1.25); } }
+@keyframes bm-imp-down { 0%, 12% { opacity: 0; } 18%, 78% { opacity: 1; } 94%, 100% { opacity: 0; } }
+@keyframes bm-imp-flow-1 { 0%, 18% { stroke-dashoffset: 100; opacity: 1; } 38%, 80% { stroke-dashoffset: 0; opacity: 1; } 96%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+@keyframes bm-imp-flow-2 { 0%, 44% { stroke-dashoffset: 100; opacity: 1; } 62%, 80% { stroke-dashoffset: 0; opacity: 1; } 96%, 100% { stroke-dashoffset: 0; opacity: 0; } }
+@keyframes bm-imp-hit-1 {
+  0%, 34% { fill: #ffffff; stroke: #ddd8fb; }
+  40% { fill: #fef3c7; stroke: #f59e0b; }
+  52%, 80% { fill: #fee2e2; stroke: #ef4444; }
+  96%, 100% { fill: #ffffff; stroke: #ddd8fb; }
+}
+@keyframes bm-imp-hit-2 {
+  0%, 58% { fill: #ffffff; stroke: #ddd8fb; }
+  64% { fill: #fef3c7; stroke: #f59e0b; }
+  74%, 82% { fill: #fee2e2; stroke: #ef4444; }
+  96%, 100% { fill: #ffffff; stroke: #ddd8fb; }
+}
+@keyframes bm-imp-caption { 0% { opacity: 0; transform: translateY(3px); } 10%, 86% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  /* One static "impact" frame. */
+  .bm-impact * { animation: none !important; }
+  .bm-impact .is-hit rect { fill: #fee2e2; stroke: #ef4444; }
+  .bm-impact .bm-impact-src text { fill: #b91c1c; }
+  .bm-impact .bm-impact-flow { stroke-dashoffset: 0; }
+  .bm-impact .bm-impact-down { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bm-owl-glow, .bm-owl-blink, .bm-shimmer { animation: none; }
   .bm-loader-content, .bm-status-in, .bm-status-out { animation-duration: 1ms; }

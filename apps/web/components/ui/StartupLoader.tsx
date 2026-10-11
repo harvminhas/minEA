@@ -3,10 +3,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { BuboMapMark } from "@/components/brand/BuboMapLogo";
+import { ImpactLoop } from "@/components/ui/ImpactLoop";
 import { cn } from "@/lib/utils";
 
 /**
- * App loading screen: owl + wordmark on a soft brand gradient, one calm status line that
+ * App loading screen: small owl + wordmark, an animated "what if X is down" impact diagram
+ * (ImpactLoop) on a soft brand gradient, one calm status line that
  * crossfades through the real boot steps, and an indeterminate shimmer bar (no fake percentage).
  *
  * - Nothing but the background shows for the first ~300 ms (CSS delay), so fast loads don't flash.
@@ -114,11 +116,17 @@ export function StartupLoader({
       aria-label={label}
     >
       <div className="bm-loader-content flex flex-col items-center text-center">
-        <div className="relative">
-          <span aria-hidden className="bm-owl-glow absolute -inset-6 rounded-full" />
-          <BuboMapMark size={76} blink className="relative drop-shadow-[0_10px_24px_rgba(91,76,230,0.25)]" />
+        <div className="flex items-center gap-2.5">
+          <span className="relative">
+            <span aria-hidden className="bm-owl-glow absolute -inset-3 rounded-full" />
+            <BuboMapMark size={34} blink className="relative" />
+          </span>
+          <span className="text-lg font-bold tracking-tight text-gray-900">BuboMap</span>
         </div>
-        <p className="mt-5 text-xl font-bold tracking-tight text-gray-900">BuboMap</p>
+
+        <div className="mt-6 rounded-2xl border border-violet-100 bg-white/70 px-5 pb-3 pt-4 shadow-[0_12px_40px_-12px_rgba(91,76,230,0.25)] backdrop-blur-sm">
+          <ImpactLoop />
+        </div>
 
         <div className="relative mt-6 h-5 w-72 text-sm font-medium text-gray-600" data-testid="startup-status">
           {shown.previous && (
