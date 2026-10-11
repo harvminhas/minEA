@@ -469,58 +469,60 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
               {foundLine}
             </p>
           </div>
-          <div className="mt-3 overflow-hidden">
-            <table className="w-full table-fixed text-left text-[13px]">
-              <thead className="text-[12px] text-[#8b90a0]">
-                <tr>
-                  <th className="w-[18%] px-2 py-1 font-medium">You typed</th>
-                  <th className="w-[22%] px-2 py-1 font-medium">We think it&apos;s</th>
-                  <th className="px-2 py-1 font-medium">Details</th>
-                  <th className="w-[14%] px-2 py-1 font-medium">Typical cost</th>
-                  <th className="w-[12%] px-2 py-1 font-medium" />
-                </tr>
-              </thead>
-              <tbody>
+          {/* Results: a grid with fixed-width cost/status columns (no overlap, badges never clipped);
+              below sm each item stacks as a card. */}
+          <div data-testid="setup-results" className="mt-3 text-[13px]">
+            <div className={`hidden px-2 py-1 text-[12px] font-medium text-[#8b90a0] sm:grid ${RESULT_COLS}`}>
+              <span>You typed</span>
+              <span>We think it&apos;s</span>
+              <span>Details</span>
+              <span className="text-right">Typical cost</span>
+              <span className="sr-only">Status</span>
+            </div>
+            <ul className="space-y-2 sm:space-y-0">
                 {drafts.map((item) => {
                   const badge = reviewBadge(item);
                   const cost = item.yearly ? `$${Number(item.yearly).toLocaleString("en-US")}` : "—";
+                  const typed = `“${item.input}”`;
+                  const think = thinkName(item);
                   return (
-                    <tr key={item.key} className="border-t border-[#eef0f4] align-top">
-                      <td className="px-2 py-2 text-[#4b5163]">“{item.input}”</td>
-                      <td className="px-2 py-2 font-medium text-[#1c2230]">{thinkName(item)}</td>
-                      <td className="px-2 py-2 text-[#4b5163]">
-                        {item.tool?.kind === "server" && <span>Not an app: we&apos;ll ask what runs on it in the next step.</span>}
-                        {item.tool?.kind !== "server" && item.status === "matched" && <span>{[item.tool?.category, item.tool?.vendor].filter(Boolean).join(" · ")}</span>}
-                        {item.status === "custom" && (
-                          <label className="flex items-center gap-2 text-[12px]">
-                            <input type="checkbox" checked={item.customBuilt} onChange={(event) => patch(item.key, { customBuilt: event.target.checked })} />
-                            We built it ourselves
-                          </label>
-                        )}
-                        {item.status === "pick" && (
-                          <div className="flex flex-wrap gap-1.5">
-                            {item.options.map((tool) => (
-                              <PickChip key={tool.name} tool={tool} onPick={() => patch(item.key, { status: "matched", tool, yearly: tool.typicalAnnual ? String(tool.typicalAnnual) : "", typical: tool.typicalAnnual != null })} />
-                            ))}
-                            <button type="button" className="rounded-full border border-[#e6e8ee] px-2 py-0.5 text-[12px]" onClick={() => patch(item.key, { status: "custom", tool: null, customBuilt: true, yearly: "", typical: false })}>Other</button>
-                          </div>
-                        )}
-                        {item.status === "weak" && item.tool && (
-                          <span>
-                            Is it <strong>{item.tool.name}</strong> ({item.tool.name === "BarTender" ? "Seagull Scientific" : item.tool.vendor})?{" "}
-                            <button type="button" className="font-medium text-[#3f35b5]" onClick={() => patch(item.key, { status: "matched" })}>Yes</button>
-                            {" · "}
-                            <button type="button" className="text-[#6b7289]" onClick={() => patch(item.key, { status: "custom", tool: null, customBuilt: true, yearly: "", typical: false })}>No, keep my name</button>
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-2 py-2 text-[#4b5163]">{cost}</td>
-                      <td className="px-2 py-2"><span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.className}`}>{badge.label}</span></td>
-                    </tr>
+                    <li key={item.key} className={`grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 rounded-xl border border-[#eef0f4] p-3 sm:items-start sm:rounded-none sm:border-x-0 sm:border-b-0 sm:px-2 sm:py-2 ${RESULT_COLS}`}>
+                      <span title={typed} className="col-span-2 min-w-0 truncate text-[12px] text-[#6b7289] sm:col-span-1 sm:text-[13px] sm:text-[#4b5163]">{typed}</span>
+                      <span title={think} className="min-w-0 truncate font-medium text-[#1c2230]">{think}</span>
+                      <span className="col-start-2 row-start-2 justify-self-end sm:col-start-auto sm:row-start-auto sm:order-last">
+                        <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.className}`}>{badge.label}</span>
+                      </span>
+                      <div className="col-span-2 min-w-0 text-[#4b5163] sm:col-span-1">
+                            {item.tool?.kind === "server" && <span>Not an app: we&apos;ll ask what runs on it in the next step.</span>}
+                            {item.tool?.kind !== "server" && item.status === "matched" && <span>{[item.tool?.category, item.tool?.vendor].filter(Boolean).join(" · ")}</span>}
+                            {item.status === "custom" && (
+                              <label className="inline-flex items-center gap-2 whitespace-nowrap text-[12px]">
+                                <input type="checkbox" checked={item.customBuilt} onChange={(event) => patch(item.key, { customBuilt: event.target.checked })} />
+                                We built it ourselves
+                              </label>
+                            )}
+                            {item.status === "pick" && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {item.options.map((tool) => (
+                                  <PickChip key={tool.name} tool={tool} onPick={() => patch(item.key, { status: "matched", tool, yearly: tool.typicalAnnual ? String(tool.typicalAnnual) : "", typical: tool.typicalAnnual != null })} />
+                                ))}
+                                <button type="button" className="rounded-full border border-[#e6e8ee] px-2 py-0.5 text-[12px]" onClick={() => patch(item.key, { status: "custom", tool: null, customBuilt: true, yearly: "", typical: false })}>Other</button>
+                              </div>
+                            )}
+                            {item.status === "weak" && item.tool && (
+                              <span>
+                                Is it <strong>{item.tool.name}</strong> ({item.tool.name === "BarTender" ? "Seagull Scientific" : item.tool.vendor})?{" "}
+                                <button type="button" className="font-medium text-[#3f35b5]" onClick={() => patch(item.key, { status: "matched" })}>Yes</button>
+                                {" · "}
+                                <button type="button" className="text-[#6b7289]" onClick={() => patch(item.key, { status: "custom", tool: null, customBuilt: true, yearly: "", typical: false })}>No, keep my name</button>
+                              </span>
+                            )}
+                      </div>
+                      <span className="col-span-2 whitespace-nowrap text-[12px] text-[#4b5163] sm:col-span-1 sm:text-right sm:text-[13px]"><span className="text-[#8b90a0] sm:hidden">Typical cost </span>{cost}</span>
+                    </li>
                   );
                 })}
-              </tbody>
-            </table>
+            </ul>
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="rounded-full bg-[#f4f3ff] px-3 py-1 text-[12px] text-[#3c4254]">
@@ -741,15 +743,17 @@ function reviewBadge(item: Draft): { label: string; className: string } {
   return { label: "Check", className: "bg-[#fef3c7] text-[#b45309]" };
 }
 
+const RESULT_COLS = "sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.6fr)_5.5rem_4.75rem]";
+
 function Stepper({ step }: { step: number }) {
   const labels = ["What you use", "AI turned on? (optional)", "Where each one lives", "Owners & renewals (optional)"];
   return (
-    <ol className="mb-4 flex flex-wrap items-center gap-x-2 text-[13px]">
+    <ol data-testid="setup-stepper" className="-mx-1 mb-4 flex items-center gap-x-2 overflow-x-auto whitespace-nowrap px-1 pb-1 text-[12px] sm:text-[13px] [scrollbar-width:none]">
       {labels.map((label, index) => {
         const n = index + 1;
         const done = step > n;
         return (
-          <li key={label} className={step === n ? "font-semibold text-[#1c2230]" : "text-[#6b7289]"}>
+          <li key={label} aria-current={step === n ? "step" : undefined} className={"shrink-0 " + (step === n ? "font-semibold text-[#1c2230]" : "text-[#6b7289]")}>
             {index > 0 && <span className="mr-2 text-[#c5c8d4]">—</span>}
             {done ? <span className="text-[#047857]">✓</span> : n} {label}
           </li>

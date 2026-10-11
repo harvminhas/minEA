@@ -541,8 +541,8 @@ function Overview({
         )}
       </div>
       {example && (
-        <div className="absolute inset-0 flex items-start justify-center pt-16">
-          <div className="max-w-md rounded-2xl border border-[#e6e8ee] bg-white px-6 py-5 text-center shadow-lg">
+        <div className="absolute inset-0 flex items-start justify-center overflow-y-auto px-3 pb-6 pt-16">
+          <div data-testid="example-card" className={`w-full ${addApps ? "max-w-3xl" : "max-w-md"} rounded-2xl border border-[#e6e8ee] bg-white px-4 py-5 text-center shadow-lg sm:px-6`}>
             <p className="flex items-center justify-center gap-2 text-[15px] font-semibold text-[#1c2230]"><Info size={16} className="text-[#5b4ce6]" /> Example data</p>
             <p className="mt-2 text-[13px] font-semibold leading-5 text-[#1c2230]">{gap}</p>
             <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">You have {appsSoFar} app{appsSoFar === 1 ? "" : "s"} so far. Until then this is a sample company; nothing here is saved to your workspace.</p>
