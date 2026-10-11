@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { billingApi, orgsApi, workspacesApi } from "@/lib/api-client";
 import { primaryViewPath } from "@/lib/tenancy";
 import { usePermissions } from "@/lib/use-permissions";
+import { settingsRedirectFor } from "@/lib/settings-guard";
 import { usePlanFeatures } from "@/lib/use-plan-features";
 import {
   inviteUpgradeMessage,
@@ -212,14 +213,12 @@ export default function OrgSettingsPage() {
   // Billing tab: owner (as before) plus org admins. The API enforces owner/admin + verified email.
   const canSeeBilling = canManageBilling || isOrgAdmin;
 
-  // Non-admin members have no actions here — send them straight to their workspace
+  // Non-admin members have no actions here — send them straight to their workspace. Decided
+  // from this page's org (with its role), never the store, which the layout fills in later.
   useEffect(() => {
-    if (!org || !workspaces) return;
-    if (!canManageOrg && workspaces.length > 0) {
-      const ws = workspaces.find((w) => w.slug === "default") ?? workspaces[0]!;
-      router.replace(primaryViewPath(orgSlug, ws.slug));
-    }
-  }, [org, workspaces, orgSlug, router, canManageOrg]);
+    const next = settingsRedirectFor(orgSlug, org, workspaces);
+    if (next) router.replace(next);
+  }, [org, workspaces, orgSlug, router]);
 
   const inviteMutation = useMutation({
     mutationFn: async () => {
