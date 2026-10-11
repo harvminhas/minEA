@@ -138,6 +138,7 @@ export const APPLICATION_HOSTING_OPTIONS = [
   { value: "on_premise", label: "On-premises" },
   { value: "hybrid", label: "Hybrid" },
   { value: "saas", label: "SaaS" },
+  { value: "desktop", label: "On people's computers" },
 ] as const;
 
 export const OBJECT_FORM_FLOW_DIRECTION = [

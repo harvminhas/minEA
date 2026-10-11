@@ -487,7 +487,7 @@ function Overview({
   example: boolean;
   gap: string;
   appsSoFar: number;
-  setupProgress: { apps: number; hostingLinks: number };
+  setupProgress: { apps: number; located: number };
   stats: ReturnType<typeof catalogStats>;
   rows: CatalogRow[];
   basePath: string;

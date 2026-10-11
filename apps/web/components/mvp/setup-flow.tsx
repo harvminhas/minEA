@@ -24,6 +24,8 @@ import { SETUP_SCREENS, aiStepPatch, aiStepRows, replaceTypicalLine, setupCreate
 import type { AiFeatureAudience } from "@minea/types";
 import { modelPath } from "@/lib/mvp-paths";
 import { SETUP_MIN, setupMeter, setupState } from "@/lib/setup/setupMin";
+import { LocationChips } from "@/components/hosting/LocationChips";
+import type { LocationChoice } from "@/lib/setup/hosting-choice";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
 import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
@@ -106,13 +108,19 @@ function toDrafts(items: MatchItem[]): Draft[] {
   });
 }
 
+function wizardChoice(choice: HostingChoice): LocationChoice {
+  return choice === "saas" || choice === "own" || choice === "desktop" ? choice : choice === "paas" || choice === "self_hosted" ? "saas" : "unknown";
+}
+
 /** Saved apps with no host yet, plus saved servers keyed like planHosting keys them. */
 export function whereStepSeed(
-  objects: { id: string; name: string; type: string }[],
+  objects: { id: string; name: string; type: string; properties?: unknown }[],
   relationships: { type: string; from_object_id: string }[],
 ): { drafts: { id: string; name: string }[]; serverIds: Record<string, string> } {
-  const hosted = new Set(relationships.filter((rel) => rel.type === "runs_on" || rel.type === "built_on").map((rel) => rel.from_object_id));
-  const drafts = objects.filter((object) => object.type === "application" && !hosted.has(object.id)).map(({ id, name }) => ({ id, name }));
+  // Apps with no known location yet (no host link, not Cloud, not people's computers).
+  const drafts = objects
+    .filter((object) => object.type === "application" && setupState([object], relationships).located === 0)
+    .map(({ id, name }) => ({ id, name }));
   const serverIds = Object.fromEntries(objects.filter((object) => object.type === "model").map((object) => [normalizeTerm(object.name), object.id]));
   return { drafts, serverIds };
 }
@@ -160,7 +168,16 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   );
   const catalogState = setupState(catalog.data?.objects ?? [], catalog.data?.relationships ?? []);
   const unsavedApps = apps.filter((app) => !app.objectId).length;
-  const meter = setupMeter(catalogState.apps + unsavedApps, catalogState.hostingLinks + planned.links.length);
+  // Apps given a known location on this screen (Cloud, a picked server, people's computers) and not
+  // already counted from the catalogue.
+  const newlyLocated = apps.filter((app) => {
+    const known = app.choice === "saas" || app.choice === "desktop" || (app.choice === "own" && app.serverName.trim() !== "");
+    if (!known) return false;
+    const saved = app.objectId ? catalog.data?.objects.find((object) => object.id === app.objectId) : undefined;
+    return !saved || setupState([saved], catalog.data?.relationships ?? []).located === 0;
+  }).length;
+  const catalogServerKeys = new Set(Object.keys(whereStepSeed(catalog.data?.objects ?? [], []).serverIds));
+  const meter = setupMeter(catalogState.apps + unsavedApps, catalogState.located + newlyLocated);
 
   // startAt="where": the apps are already saved and only a server link is missing, so open
   // "Where each one lives" with the saved apps that have no host yet, and the saved servers
@@ -299,8 +316,10 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
 
   const linkServers = async () => {
     const token = await auth();
-    const ids = { ...serverIds };
-    const existing = new Set(Object.keys(serverIds));
+    // Reuse the org's servers by name (case-insensitive): never create a duplicate.
+    const catalogServers = whereStepSeed(catalog.data?.objects ?? [], []).serverIds;
+    const ids = { ...catalogServers, ...serverIds };
+    const existing = new Set(Object.keys(ids));
     for (const server of planned.servers) {
       if (ids[server.key]) continue;
       const saved = await objectsApi.create(orgSlug!, workspaceSlug!, {
@@ -346,7 +365,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     }
     for (const app of apps) {
       if (!app.objectId) continue;
-      const hosting_model = app.choice === "saas" ? "saas" : app.choice === "own" ? "on_premise" : "";
+      const hosting_model = app.choice === "saas" ? "saas" : app.choice === "own" ? "on_premise" : app.choice === "desktop" ? "desktop" : "";
       if (!hosting_model) continue;
       const saved = await objectsApi.update(orgSlug!, workspaceSlug!, app.objectId, { properties: { hosting_model } }, token);
       remember(saved);
@@ -559,7 +578,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="rounded-full bg-[#f4f3ff] px-3 py-1 text-[12px] text-[#3c4254]">
-              ✓ {catalogState.apps + unsavedApps} apps ({SETUP_MIN.apps} needed) · {catalogState.hostingLinks + planned.links.length} of {SETUP_MIN.hostingLinks} app linked to a server · Your map needs both.
+              ✓ {catalogState.apps + unsavedApps} apps ({SETUP_MIN.apps} needed) · {Math.min(catalogState.located + newlyLocated, SETUP_MIN.located)} of {SETUP_MIN.located} app with a known location · Your map needs both.
             </p>
             <div className="flex gap-2">
               <button type="button" onClick={() => void run(skip)} className="rounded-lg px-3 py-1.5 text-[13px] text-[#6b7289]">Skip for now</button>
@@ -653,42 +672,26 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
         <>
           <Stepper step={3} />
           <h2 className="text-[18px] font-semibold text-[#1c2230]">Where does each one live?</h2>
-          <p className="mt-1 text-[13px] text-[#6b7289]">{meter}. Aim for {SETUP_MIN.apps} apps and {SETUP_MIN.hostingLinks} link to a server.</p>
+          <p className="mt-1 text-[13px] text-[#6b7289]">{meter}. Aim for {SETUP_MIN.apps} apps, and say where at least {SETUP_MIN.located} runs.</p>
           <ul className="mt-3 space-y-3">
             {apps.map((app) => (
               <li key={app.key} className="rounded-xl border border-[#e6e8ee] px-3 py-2">
                 <div className="text-[13px] font-medium text-[#1c2230]">{displayName(app)}</div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {(["saas", "own", "unknown"] as const).map((choice) => (
-                    <button
-                      key={choice}
-                      type="button"
-                      data-where-own={choice === "own" ? "" : undefined}
-                      onClick={() => patch(app.key, { choice, serverName: choice === "own" ? app.serverName || serverOptions[0]?.name || "" : "" })}
-                      className={`rounded-full border px-2 py-0.5 text-[12px] ${app.choice === choice ? "border-[#5b4ce6] bg-[#ece9ff]" : "border-[#e6e8ee]"}`}
-                    >
-                      {choice === "saas" ? "SaaS (cloud)" : choice === "own" ? "Our server" : "Don't know"}
-                    </button>
-                  ))}
-                </div>
-                {app.choice === "own" && (
-                  <input
-                    value={app.serverName}
-                    onChange={(event) => patch(app.key, { serverName: event.target.value })}
-                    list="setup-servers"
-                    placeholder="Server name"
-                    className="mt-2 h-8 w-full rounded-lg border border-[#e6e8ee] px-2 text-[13px]"
+                <div className="mt-2">
+                  <LocationChips
+                    value={wizardChoice(app.choice)}
+                    serverName={app.choice === "own" ? app.serverName || undefined : undefined}
+                    servers={serverOptions}
+                    onChoose={(choice) => patch(app.key, { choice, serverName: choice === "own" ? app.serverName : "" })}
+                    onPickServer={(name) => patch(app.key, { choice: "own", serverName: name })}
                   />
-                )}
+                </div>
               </li>
             ))}
           </ul>
-          <datalist id="setup-servers">
-            {serverOptions.map((server) => <option key={server.key} value={server.name} />)}
-          </datalist>
           {planned.servers.length > 0 && (
             <div className="mt-3 space-y-2">
-              {planned.servers.filter((server) => !serverIds[server.key] || startAt !== "where").map((server) => (
+              {planned.servers.filter((server) => !catalogServerKeys.has(server.key)).map((server) => (
                 <label key={server.key} className="block text-[13px] text-[#4b5163]">
                   Where is {server.name}?
                   <input

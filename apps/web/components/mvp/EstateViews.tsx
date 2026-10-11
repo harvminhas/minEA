@@ -14,6 +14,8 @@ import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { AddFlow } from "@/components/add/AddFlow";
 import { SampleCompanyBadge, SetupProgressCard } from "@/components/mvp/SetupProgressCard";
+import { AppLocationEditor } from "@/components/hosting/AppLocationEditor";
+import { setupState } from "@/lib/setup/setupMin";
 import { addAnywhereEnabled } from "@/lib/flags";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { connectionPhrase, impactOf, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
@@ -425,7 +427,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
   const liveRisk = opening.rows.find((row) => row.id === opening.selectedId) ?? opening.rows.find((row) => row.kind === "runtime");
   const stripName = liveRisk?.name ?? selectedName;
   const readyServers = opening.rows.filter((row) => row.kind === "runtime").length;
-  const readyLinks = opening.counts.hostingLinks;
+  const readyLinks = opening.counts.located;
   return (
     <div className="relative">
       {opening.example && <SampleCompanyBadge className="relative z-10 mb-3" />}
@@ -596,7 +598,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
         </div>
       </div>
       {opening.example && (
-        <div className="absolute inset-0 flex items-start justify-center px-3 pt-24">
+        <div className="absolute inset-0 flex items-start justify-center px-0 pt-24 sm:px-3">
           {opening.blocked ? (
             <SetupProgressCard
               state={setup.state}
@@ -1045,6 +1047,12 @@ function HostingView() {
     return !located && !nested;
   });
   const platforms = rows.filter((row) => row.kind === "platform");
+  const appRows = rows.filter((row) => row.object.type === "application");
+  const relationshipsAll = catalog.data?.relationships ?? [];
+  // Same rule as the setup card: an app's location is known if it runs on / is built on something,
+  // or is Cloud (SaaS) or on people's computers.
+  const unplaced = appRows.filter((row) => setupState([row.object], relationshipsAll).located === 0);
+  const onDesktops = appRows.filter((row) => (row.object.properties as Record<string, unknown> | undefined)?.hosting_model === "desktop");
   const placed = rows.filter((row) => row.kind === "runtime" && impact.relationships.some((rel) => rel.type === "located_at" && rel.from_object_id === row.id)).length;
 
   return (
@@ -1055,7 +1063,7 @@ function HostingView() {
         {homeless.length > 0 && <span className="ml-3 font-semibold text-[#b45309]">{homeless.length} app{homeless.length === 1 ? "" : "s"} with no home</span>}
         <span className="ml-3 text-[#8b90a0]">Drag an app into a box to say it runs there.</span>
       </p>
-      <div className="flex items-start gap-5">
+      <div className="flex flex-col items-stretch gap-5 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1 space-y-4">
           <div className="grid gap-3 lg:grid-cols-2">
             {locations.map((location) => (
@@ -1078,9 +1086,30 @@ function HostingView() {
               ))}
             </div>
           </section>
+          <section data-testid="desktop-apps" className="rounded-xl border border-[#e6e8ee] bg-white p-4">
+            <h2 className="mb-2 text-[14px] font-semibold text-[#1c2230]">On people&apos;s computers <span className="text-[12px] font-normal text-[#8b90a0]">Installed desktop software</span></h2>
+            <div className="flex flex-wrap gap-1">
+              {onDesktops.map((row) => <span key={row.id} className="rounded-full bg-[#f3eaff] px-2 py-0.5 text-[11px] text-[#5b4ce6]">{row.name}</span>)}
+              {onDesktops.length === 0 && <span className="text-[11px] text-[#c5c8d4]">None yet</span>}
+            </div>
+          </section>
+          {unplaced.length > 0 && (
+            <section data-testid="where-each-runs" className="rounded-xl border border-[#e6e8ee] bg-white p-4">
+              <h2 className="text-[14px] font-semibold text-[#1c2230]">Where does each one run?</h2>
+              <p className="mb-3 text-[12px] text-[#8b90a0]">Cloud, one of your servers, or people&apos;s computers.</p>
+              <ul className="space-y-3">
+                {unplaced.map((row) => (
+                  <li key={row.id} className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-3">
+                    <span className="w-40 shrink-0 truncate pt-1 text-[13px] font-medium text-[#1c2230]" title={row.name}>{row.name}</span>
+                    <AppLocationEditor app={row.object} compact />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {error && <p className="text-[12px] text-[#b42318]">{error}</p>}
         </div>
-        <aside className="w-[300px] shrink-0 rounded-xl border border-[#e6e8ee] bg-white p-4">
+        <aside className="w-full shrink-0 rounded-xl lg:w-[300px] border border-[#e6e8ee] bg-white p-4">
           <p className="mb-3 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">✓ TO DO FOR THIS VIEW {(homeless.length ? 1 : 0) + (noLocation.length ? 1 : 0)}</p>
           {homeless.length > 0 && (
             <div className="mb-4">

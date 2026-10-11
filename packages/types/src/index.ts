@@ -294,7 +294,7 @@ export interface ApplicationProperties {
   governance_status?: SystemGovernanceStatus;
   /** How this system entered the repository — provenance metadata, not tech debt. */
   discovery?: string;
-  hosting_model?: "cloud" | "on_premise" | "hybrid" | "saas";
+  hosting_model?: "cloud" | "on_premise" | "hybrid" | "saas" | "desktop";
   annual_cost?: number;
   /** Contract end or renewal date (YYYY-MM-DD or a short note). */
   contract_renewal?: string;

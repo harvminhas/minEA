@@ -18,7 +18,7 @@ export function SetupProgressCard({
   addLabel = "Add apps here",
   action,
 }: {
-  state: Pick<SetupState, "apps" | "hostingLinks">;
+  state: Pick<SetupState, "apps" | "located">;
   gap?: string;
   /** Sample wording, shown only in the "Example data" state. */
   sampleText: string;
@@ -64,7 +64,7 @@ export function SetupProgressCard({
             onClick={() => setOpen((value) => !value)}
             className={open ? "mt-4 inline-flex rounded-lg border border-[#e6e8ee] px-4 py-2 text-[13px] font-medium text-[#4b5163]" : "mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white"}
           >
-            {open ? "Close" : onlyLink ? "Link an app to its server" : addLabel}
+            {open ? "Close" : onlyLink ? "Say where an app runs" : addLabel}
           </button>
           {open && (
             <div data-testid="example-wizard" className="mt-4 text-left">

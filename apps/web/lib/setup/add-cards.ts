@@ -91,8 +91,9 @@ export function hostingChoices(kind: string): { choice: HostingChoice; label: st
     ];
   }
   return [
-    { choice: "saas", label: "SaaS" },
+    { choice: "saas", label: "Cloud (SaaS)" },
     { choice: "own", label: "Our server" },
+    { choice: "desktop", label: "On people's computers" },
     { choice: "unknown", label: "Don't know" },
   ];
 }

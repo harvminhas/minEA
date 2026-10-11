@@ -8,6 +8,7 @@ const APPLICATION_HOSTING_LABEL: Record<string, string> = {
   on_premise: "On premise",
   hybrid: "Hybrid",
   saas: "SaaS",
+  desktop: "On people's computers",
 };
 
 const PROPERTY_LABELS: Record<string, string> = {

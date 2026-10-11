@@ -121,7 +121,7 @@ export function hostingMap(rows: CatalogRow[], edges: HomeEdge[]) {
       (edge) => edge.fromId === app.id && (edge.type === "runs_on" || edge.type === "built_on"),
     );
     const hosting = String((app.object.properties as Record<string, unknown> | undefined)?.hosting_model ?? "").toLowerCase();
-    if (linked.length === 0 && hosting !== "saas" && hosting !== "cloud") unlinked += 1;
+    if (linked.length === 0 && hosting !== "saas" && hosting !== "cloud" && hosting !== "desktop") unlinked += 1;
     for (const edge of linked) hosts.add(edge.toId);
   }
   return { hosts: hosts.size, unlinked };

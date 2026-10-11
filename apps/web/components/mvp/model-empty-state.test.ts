@@ -13,7 +13,7 @@ test("example card is in normal flow: never an absolute inset-0 overlay that cli
 
 test("Add apps here toggles to Close and focuses the paste box on open", () => {
   assert.match(card, /onClick=\{\(\) => setOpen\(\(value\) => !value\)\}/);
-  assert.match(card, /\{open \? "Close" : onlyLink \? "Link an app to its server" : addLabel\}/);
+  assert.match(card, /\{open \? "Close" : onlyLink \? "Say where an app runs" : addLabel\}/);
   assert.match(card, /aria-expanded=\{open\}/);
   assert.match(card, /querySelector\("textarea"\) \?\? card\.current\?\.querySelector<HTMLElement>\("\[data-where-own\]"\)\)\?\.focus\(/);
 });

@@ -4,22 +4,22 @@ import test from "node:test";
 import { setupCardHeader } from "./setupMin.ts";
 
 test("Example data only while the wizard is closed and there are 0 real apps", () => {
-  assert.deepEqual(setupCardHeader({ apps: 0, hostingLinks: 0 }, false), { mode: "example" });
-  assert.equal(setupCardHeader({ apps: 0, hostingLinks: 0 }, true).mode, "progress");
-  assert.equal(setupCardHeader({ apps: 1, hostingLinks: 0 }, false).mode, "progress");
+  assert.deepEqual(setupCardHeader({ apps: 0, located: 0 }, false), { mode: "example" });
+  assert.equal(setupCardHeader({ apps: 0, located: 0 }, true).mode, "progress");
+  assert.equal(setupCardHeader({ apps: 1, located: 0 }, false).mode, "progress");
 });
 
 test("progress header: counts, bar percent and the 'saved' line", () => {
-  const h = setupCardHeader({ apps: 4, hostingLinks: 0 }, true);
+  const h = setupCardHeader({ apps: 4, located: 0 }, true);
   assert.equal(h.mode, "progress");
   if (h.mode !== "progress") return;
   assert.equal(h.title, "Setting up your map");
-  assert.equal(h.progressLine, "4 of 5 apps · 0 of 1 linked to a server");
+  assert.equal(h.progressLine, "4 of 5 apps · 0 of 1 with a known location");
   assert.equal(h.percent, 40);
   assert.equal(h.onlyLink, false);
-  assert.equal(h.savedLine, "Your entries are saved to your workspace. Reports unlock at 5 apps and 1 server link.");
+  assert.equal(h.savedLine, "Your entries are saved to your workspace. Reports unlock at 5 apps and 1 app with a known location.");
   assert.doesNotMatch(h.savedLine, /sample|nothing here is saved/i);
-  const full = setupCardHeader({ apps: 9, hostingLinks: 3 }, false);
+  const full = setupCardHeader({ apps: 9, located: 3 }, false);
   assert.equal(full.mode === "progress" && full.percent, 100);
 });
 
@@ -35,15 +35,15 @@ test("Model, Reports and Views all use the shared card (no copies of the old sam
 });
 
 test("apps met, link missing: clamped count, 'Last step' copy, bar at 50% (never past 100)", () => {
-  const h = setupCardHeader({ apps: 6, hostingLinks: 0 }, false);
+  const h = setupCardHeader({ apps: 6, located: 0 }, false);
   assert.equal(h.mode, "progress");
   if (h.mode !== "progress") return;
   assert.equal(h.onlyLink, true);
   assert.equal(h.title, "Last step: tell us where one app runs");
-  assert.equal(h.progressLine, "6 apps ✓ · 0 of 1 linked to a server");
+  assert.equal(h.progressLine, "6 apps ✓ · 0 of 1 with a known location");
   assert.doesNotMatch(h.progressLine, /6 of 5/);
   assert.equal(h.percent, 50);
-  const over = setupCardHeader({ apps: 40, hostingLinks: 7 }, true);
+  const over = setupCardHeader({ apps: 40, located: 7 }, true);
   assert.ok(over.mode === "progress" && over.percent === 100 && !over.onlyLink);
 });
 

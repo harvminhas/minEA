@@ -28,6 +28,7 @@ import { ObjectRelationshipsTab } from "@/components/objects/ObjectRelationships
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
 import { toast } from "@/hooks/use-toast";
 import { HostLink } from "@/components/mvp/HostLink";
+import { AppLocationEditor } from "@/components/hosting/AppLocationEditor";
 import { InlineField, RecordFields, toFieldEdges } from "@/components/mvp/InfraEditors";
 import { askPath } from "@/lib/mvp-paths";
 import { Pill } from "@/components/mvp/pills";
@@ -134,6 +135,7 @@ export function ModelDetailPanel({
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {tab === "details" && (
           <div className="space-y-6">
+            {row.object.type === "application" && <AppLocationEditor app={row.object} />}
             <HostLink row={row} onAddHost={() => setOpenField("runs_on")} />
             {row.object.type === "model" && (
               <a href={askPath(basePath, `What breaks if ${row.name} goes down?`)} className="block rounded-lg bg-[#f4f3ff] px-3 py-2 text-[13px] font-medium text-[#3f35b5]">

@@ -393,6 +393,8 @@ function createProperties(row: PlanInput): Record<string, unknown> {
     properties.hosting_model = "saas";
   } else if (row.kind === "app" && row.choice === "own") {
     properties.hosting_model = "on_premise";
+  } else if (row.kind === "app" && row.choice === "desktop") {
+    properties.hosting_model = "desktop";
   }
   if (tool && Number.isFinite(yearly) && yearly > 0) properties.cost_lines = [typicalLine(yearly, tool.vendor)];
   if (row.renewal) properties.contract_renewal = row.renewal;
