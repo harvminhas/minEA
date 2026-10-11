@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const src = readFileSync(new URL("./ModelScreen.tsx", import.meta.url), "utf8");
+const card = readFileSync(new URL("./SetupProgressCard.tsx", import.meta.url), "utf8");
 const overview = src.slice(src.indexOf("function Overview("), src.indexOf("function ConnectionsList"));
 
 test("example card is in normal flow: never an absolute inset-0 overlay that clips the opened wizard", () => {
@@ -11,14 +12,14 @@ test("example card is in normal flow: never an absolute inset-0 overlay that cli
 });
 
 test("Add apps here toggles to Close and focuses the paste box on open", () => {
-  assert.match(overview, /onClick=\{\(\) => setAddApps\(\(open\) => !open\)\}/);
-  assert.match(overview, /\{addApps \? "Close" : "Add apps here"\}/);
-  assert.match(overview, /aria-expanded=\{addApps\}/);
-  assert.match(overview, /querySelector\("textarea"\)[\s\S]*focus\(/);
+  assert.match(card, /onClick=\{\(\) => setOpen\(\(value\) => !value\)\}/);
+  assert.match(card, /\{open \? "Close" : addLabel\}/);
+  assert.match(card, /aria-expanded=\{open\}/);
+  assert.match(card, /querySelector\("textarea"\)\?\.focus\(/);
 });
 
 test("one example card only, and the sample stats are labelled as sample data", () => {
-  assert.equal((src.match(/data-testid="example-card"/g) ?? []).length, 1);
+  assert.equal((src.match(/<SetupProgressCard/g) ?? []).length, 1);
   assert.match(overview, /Sample company<\/span>\s*Sample data: not your apps/);
   assert.match(overview, /"Sample company: 13 applications, 6 platforms, 11 servers\."/);
 });

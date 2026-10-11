@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Info, LayoutGrid, Plus, Table2 } from "lucide-react";
+import { LayoutGrid, Plus, Table2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { modelItemId, modelItemPath, modelPath, type ModelSection } from "@/lib/mvp-paths";
@@ -25,6 +25,7 @@ import { ObjectForm } from "@/components/objects/ObjectForm";
 import { AddFlow } from "@/components/add/AddFlow";
 import { APP_OR_PLATFORM, applicationAddHint, nextPreset } from "@/lib/setup/type-guidance";
 import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
+import { SetupProgressCard } from "@/components/mvp/SetupProgressCard";
 import { addAnywhereEnabled } from "@/lib/flags";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import Link from "next/link";
@@ -137,6 +138,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
             example={setup.enabled && !setup.state.met}
             gap={setup.gap}
             appsSoFar={setup.state.apps}
+            setupProgress={setup.state}
             stats={stats}
             rows={rows}
             basePath={basePath}
@@ -475,6 +477,7 @@ function Overview({
   example,
   gap,
   appsSoFar,
+  setupProgress,
   stats,
   rows,
   basePath,
@@ -484,24 +487,13 @@ function Overview({
   example: boolean;
   gap: string;
   appsSoFar: number;
+  setupProgress: { apps: number; hostingLinks: number };
   stats: ReturnType<typeof catalogStats>;
   rows: CatalogRow[];
   basePath: string;
   pending: boolean;
   failed: boolean;
 }) {
-  const [addApps, setAddApps] = useState(false);
-  const exampleCard = useRef<HTMLDivElement>(null);
-  // Opening the wizard: bring it into view and put the cursor in the paste box.
-  useEffect(() => {
-    if (!addApps) return;
-    const frame = window.requestAnimationFrame(() => {
-      const box = exampleCard.current?.querySelector("textarea");
-      box?.focus({ preventScroll: true });
-      exampleCard.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [addApps]);
   const platforms = rows.filter((row) => row.kind === "platform").length;
   const servers = rows.filter((row) => row.kind === "runtime").length;
   const show = !pending && !failed && !example;
@@ -561,20 +553,11 @@ function Overview({
         // In normal flow (pulled up over the dimmed sample tiles), not an absolute full-size
         // overlay: that box was only as tall as the tiles and clipped the opened wizard.
         <div className="relative z-10 -mt-24 flex justify-center px-3 pb-6">
-          <div ref={exampleCard} data-testid="example-card" className={`w-full ${addApps ? "max-w-3xl" : "max-w-md"} rounded-2xl border border-[#e6e8ee] bg-white px-4 py-5 text-center shadow-lg sm:px-6`}>
-            <p className="flex items-center justify-center gap-2 text-[15px] font-semibold text-[#1c2230]"><Info size={16} className="text-[#5b4ce6]" /> Example data</p>
-            <p className="mt-2 text-[13px] font-semibold leading-5 text-[#1c2230]">{gap}</p>
-            <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">You have {appsSoFar} app{appsSoFar === 1 ? "" : "s"} so far. Until then this is a sample company; nothing here is saved to your workspace.</p>
-            <button
-              type="button"
-              aria-expanded={addApps}
-              onClick={() => setAddApps((open) => !open)}
-              className={addApps ? "mt-4 inline-flex rounded-lg border border-[#e6e8ee] px-4 py-2 text-[13px] font-medium text-[#4b5163]" : "mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white"}
-            >
-              {addApps ? "Close" : "Add apps here"}
-            </button>
-            {addApps && <div data-testid="example-wizard" className="mt-4 text-left"><FirstRunAsk inline /></div>}
-          </div>
+          <SetupProgressCard
+            state={setupProgress}
+            gap={gap}
+            sampleText={`You have ${appsSoFar} app${appsSoFar === 1 ? "" : "s"} so far. Until then this is a sample company; nothing here is saved to your workspace.`}
+          />
         </div>
       )}
     </div>

@@ -3,11 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Info } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, reportPath } from "@/lib/mvp-paths";
 import { catalogStats, moneyLabel } from "@/lib/model-catalog";
-import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
+import { SetupProgressCard } from "@/components/mvp/SetupProgressCard";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
@@ -23,7 +22,6 @@ export function ReportsScreen() {
   const impact = useImpactGraph();
   const rows = catalog.data?.rows ?? [];
   const [saved, setSaved] = useState<{ q: string; prose: string; at: string }[]>([]);
-  const [addApps, setAddApps] = useState(false);
   const setup = useWorkspaceSetup();
   const blocked = setup.enabled && Boolean(catalog.data) && !setup.state.met;
   const [setupLatched, setSetupLatched] = useState(false);
@@ -101,14 +99,13 @@ export function ReportsScreen() {
       </div>
         </div>
         {(blocked || setupLatched) && (
-          <div className="absolute inset-0 flex items-start justify-center pt-16">
-            <div className="max-w-md rounded-2xl border border-[#e6e8ee] bg-white px-6 py-5 text-center shadow-lg">
-              <p className="flex items-center justify-center gap-2 text-[15px] font-semibold text-[#1c2230]"><Info size={16} className="text-[#5b4ce6]" /> Example data</p>
-              <p className="mt-2 text-[13px] font-semibold leading-5 text-[#1c2230]">{setup.gap}</p>
-              <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">You have {setup.state.apps} app{setup.state.apps === 1 ? "" : "s"} so far. Until then this is a sample company; nothing here is saved to your workspace.</p>
-              <button type="button" onClick={() => setAddApps(true)} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">+ Add apps here</button>
-              {addApps && <div className="mt-4 text-left"><FirstRunAsk inline /></div>}
-            </div>
+          <div className="absolute inset-0 flex items-start justify-center px-3 pt-16">
+            <SetupProgressCard
+              state={setup.state}
+              gap={setup.gap}
+              addLabel="+ Add apps here"
+              sampleText={`You have ${setup.state.apps} app${setup.state.apps === 1 ? "" : "s"} so far. Until then this is a sample company; nothing here is saved to your workspace.`}
+            />
           </div>
         )}
       </div>

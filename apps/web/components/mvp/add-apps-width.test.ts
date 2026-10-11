@@ -6,7 +6,9 @@ const setup = readFileSync(new URL("./setup-flow.tsx", import.meta.url), "utf8")
 const model = readFileSync(new URL("./ModelScreen.tsx", import.meta.url), "utf8");
 
 test("Model empty state widens its card to max-w-3xl when the add-apps wizard is open", () => {
-  assert.match(model, /\$\{addApps \? "max-w-3xl" : "max-w-md"\}/);
+  const card = readFileSync(new URL("./SetupProgressCard.tsx", import.meta.url), "utf8");
+  assert.match(card, /\$\{open \? "max-w-3xl" : "max-w-md"\}/);
+  assert.match(model, /<SetupProgressCard/);
   // No scroll/clip container around it (that clipped the wizard; see model-empty-state.test.ts).
   assert.doesNotMatch(model, /overflow-y-auto px-3 pb-6 pt-16/);
 });

@@ -13,7 +13,7 @@ import { askPath, modelItemPath, modelPath } from "@/lib/mvp-paths";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { AddFlow } from "@/components/add/AddFlow";
-import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
+import { SetupProgressCard } from "@/components/mvp/SetupProgressCard";
 import { addAnywhereEnabled } from "@/lib/flags";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { connectionPhrase, impactOf, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
@@ -275,7 +275,6 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
   const queryClient = useQueryClient();
   const params = useSearchParams();
   const [picker, setPicker] = useState<"app" | "calls" | "capability" | "server" | null>(null);
-  const [addApps, setAddApps] = useState(false);
   const [serverAdd, setServerAdd] = useState(false);
   const [readyOpen, setReadyOpen] = useState(() => params.get("ready") === "1");
   const anywhere = addAnywhereEnabled();
@@ -596,23 +595,20 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
         </div>
       </div>
       {opening.example && (
-        <div className="absolute inset-0 flex items-start justify-center pt-24">
-          <div className="max-w-md rounded-2xl border border-[#e6e8ee] bg-white px-6 py-5 text-center shadow-lg">
-            {opening.blocked ? (
-              <>
-                <p className="text-[15px] font-semibold text-[#1c2230]">Example data</p>
-                <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">{opening.gap}</p>
-                <button type="button" onClick={() => setAddApps(true)} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Add apps here</button>
-                {addApps && <div className="mt-4 text-left"><FirstRunAsk inline /></div>}
-              </>
-            ) : (
-              <>
-                <p className="text-[15px] font-semibold text-[#1c2230]">Example data</p>
-                <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">Link your first app to a server to see yours. Until then this is a sample estate; nothing here is saved to your workspace.</p>
-                <Link href={`${basePath}/views?tab=hosting`} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Open Hosting & location</Link>
-              </>
-            )}
-          </div>
+        <div className="absolute inset-0 flex items-start justify-center px-3 pt-24">
+          {opening.blocked ? (
+            <SetupProgressCard
+              state={setup.state}
+              gap={opening.gap}
+              sampleText="Until then this is a sample estate; nothing here is saved to your workspace."
+            />
+          ) : (
+            <SetupProgressCard
+              state={setup.state}
+              sampleText="Link your first app to a server to see yours. Until then this is a sample estate; nothing here is saved to your workspace."
+              action={<Link href={`${basePath}/views?tab=hosting`} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Open Hosting & location</Link>}
+            />
+          )}
         </div>
       )}
     </div>

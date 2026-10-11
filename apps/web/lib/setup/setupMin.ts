@@ -64,3 +64,26 @@ export function setupMeter(apps: number, linked: number): string {
   const linkLabel = linked === 1 ? "1 app linked to a server" : `${linked} apps linked to a server`;
   return `${appLabel} · ${linkLabel}`;
 }
+
+export type SetupCardHeader =
+  | { mode: "example" }
+  | { mode: "progress"; title: string; progressLine: string; percent: number; savedLine: string };
+
+/**
+ * Header for the setup card over sample screens. "Example data" + sample wording only while the
+ * wizard is closed AND there are no real apps; otherwise it's the person's own progress, saved.
+ */
+export function setupCardHeader(state: Pick<SetupState, "apps" | "hostingLinks">, wizardOpen: boolean): SetupCardHeader {
+  if (!wizardOpen && state.apps < 1) return { mode: "example" };
+  const apps = Math.min(state.apps, SETUP_MIN.apps);
+  const links = Math.min(state.hostingLinks, SETUP_MIN.hostingLinks);
+  const appWord = SETUP_MIN.apps === 1 ? "app" : "apps";
+  const done = apps + links;
+  return {
+    mode: "progress",
+    title: "Setting up your map",
+    progressLine: `${state.apps} of ${SETUP_MIN.apps} ${appWord} · ${state.hostingLinks} of ${SETUP_MIN.hostingLinks} linked to a server`,
+    percent: Math.round((done / (SETUP_MIN.apps + SETUP_MIN.hostingLinks)) * 100),
+    savedLine: `Your entries are saved to your workspace. Reports unlock at ${SETUP_MIN.apps} apps and ${SETUP_MIN.hostingLinks} server link.`,
+  };
+}
