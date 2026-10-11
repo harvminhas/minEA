@@ -1,3 +1,4 @@
+import type { SupportRequestBody } from "@/lib/support";
 import type {
   MinEAObject,
   ObjectCreate,
@@ -212,10 +213,27 @@ export const billingApi = {
       body: JSON.stringify(body),
       token,
     }),
+  /** Tell the API a paid checkout still isn't on the org (it alerts the owner after 5 min). */
+  reportCheckoutPending: (orgSlug: string, sessionId: string, token: string) =>
+    apiFetch<{ status: "active" | "waiting" | "alerted" }>(`/orgs/${orgSlug}/billing/checkout-pending`, {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId }),
+      token,
+    }),
   /** Stripe Customer Portal session (payment method, invoices, plan switch, cancel). */
   openPortal: (orgSlug: string, token: string) =>
     apiFetch<PortalResponse>(`/orgs/${orgSlug}/billing/portal`, {
       method: "POST",
+      token,
+    }),
+};
+
+export const supportApi = {
+  /** In-app Help form. The API takes the org slug and email from the session. */
+  submit: (orgSlug: string, body: SupportRequestBody, token: string) =>
+    apiFetch<{ id: string; created_at: string }>(`/orgs/${orgSlug}/support`, {
+      method: "POST",
+      body: JSON.stringify(body),
       token,
     }),
 };

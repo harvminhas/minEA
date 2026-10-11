@@ -256,3 +256,29 @@ test("grandfathered Team card still shows its own yearly price, without a toggle
   assert.match(html, /or \$4,490\/yr/);
   assert.doesNotMatch(html, /aria-label="Billing period"/);
 });
+
+// ── checkout safety net ──────────────────────────────────────────────────────
+
+test("checkout success, still setting up: calm notice with Get help, no green notice", () => {
+  const html = render("free", status({ paid_plans_available: true, checkout_allowed: true }), {
+    orgSlug: "acme",
+    checkoutReturn: "success",
+    checkoutPhase: "still_setting_up",
+    checkoutSessionId: "cs_test_abcdef",
+  });
+  assert.match(html, /data-testid="checkout-still-setting-up"/);
+  assert.match(html, /Payment received, still setting up your plan/);
+  assert.match(html, /Stripe has emailed you a receipt/);
+  assert.match(html, /data-testid="checkout-get-help"[^>]*>.*Get help/);
+  assert.doesNotMatch(html, /data-testid="checkout-return"/);
+});
+
+test("checkout success while confirming keeps today's notice; active says the plan is active", () => {
+  const s = status();
+  assert.match(render("free", s, { orgSlug: "acme", checkoutReturn: "success", checkoutPhase: "confirming" }), /Your plan updates in a few seconds/);
+  assert.match(render("free", s, { orgSlug: "acme", checkoutReturn: "success", checkoutPhase: "active" }), /your plan is active/);
+});
+
+test("billing centre has a Help link", () => {
+  assert.match(render("free", status(), { orgSlug: "acme" }), /data-testid="billing-help"[^>]*>Help</);
+});

@@ -59,6 +59,7 @@ MIGRATION_FILES = [
     "044_membership_setup.sql",
     "045_relationship_ends_unique.sql",
     "046_business_plan_requests.sql",
+    "047_support_requests.sql",
 ]
 
 

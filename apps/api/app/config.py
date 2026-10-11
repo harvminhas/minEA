@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     # Where Business "Get started" requests are emailed (via Resend, when RESEND_API_KEY is set).
     # Empty = store only. Requests are always stored in business_plan_requests.
     business_request_notify_email: str = "hello@bubomap.com"
+    # Help form requests and billing alerts (webhook failures, stuck checkouts). Empty = use
+    # BUSINESS_REQUEST_NOTIFY_EMAIL.
+    support_notify_email: str = ""
 
     # Web app URL (verification links, invites)
     web_app_url: str = "http://localhost:3001"

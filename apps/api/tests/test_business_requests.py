@@ -139,11 +139,11 @@ def test_migration_is_purely_additive():
     assert all(s.startswith("CREATE INDEX IF NOT EXISTS") for s in statements[1:])
 
 
-def test_migration_is_registered_last():
+def test_migration_is_registered_after_045():
     src = (API / "scripts" / "migrate.py").read_text()
     block = src.split("MIGRATION_FILES = [", 1)[1].split("]", 1)[0]
     files = re.findall(r'"(\d{3}_[a-z0-9_]+\.sql)"', block)
-    assert files[-1] == "046_business_plan_requests.sql"
+    assert files.index("046_business_plan_requests.sql") == files.index("045_relationship_ends_unique.sql") + 1
     assert files.count("046_business_plan_requests.sql") == 1
 
 

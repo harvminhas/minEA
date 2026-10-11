@@ -14,6 +14,8 @@ import {
 } from "@/lib/plan-features";
 import { PlanSection } from "@/components/billing/PlanSection";
 import { BillingCentre } from "@/components/billing/BillingCentre";
+import { useCheckoutWatch } from "@/lib/billing/use-checkout-watch";
+import { parseCheckoutSessionId } from "@/lib/support";
 import { businessGetStartedHref } from "@/lib/billing/business-request";
 import { BillingPreviewSwitch } from "@/components/billing/BillingPreviewSwitch";
 import { LicencesPanel } from "@/components/billing/LicencesPanel";
@@ -66,6 +68,7 @@ export default function OrgSettingsPage() {
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
   const [checkoutReturn, setCheckoutReturn] = useState<CheckoutReturn | null>(null);
   const [portalReturn, setPortalReturn] = useState(false);
+  const [checkoutSessionId, setCheckoutSessionId] = useState<string | null>(null);
 
   const emailVerified = user ? !user.requiresEmailVerification : false;
 
@@ -91,6 +94,7 @@ export default function OrgSettingsPage() {
     const portal = parsePortalReturn(searchParams.get("portal"));
     if (!checkout && !portal) return;
     if (checkout) setCheckoutReturn(checkout);
+    if (checkout === "success") setCheckoutSessionId(parseCheckoutSessionId(searchParams.get("session_id")));
     if (portal) setPortalReturn(true);
     const refresh = () => {
       void queryClient.invalidateQueries({ queryKey: ["org", orgSlug] });
@@ -172,6 +176,21 @@ export default function OrgSettingsPage() {
   const preview = parsePreviewPlan(searchParams.get("preview"), billingPreviewEnabled());
   // From billing status only; null while it loads (never guessed from org.plan).
   const realPlan = planFromStatus(billingStatus);
+  // Back from a successful Checkout: poll until the subscription shows; after 60 s show
+  // "still setting up" with Get help, and report the session so the owner hears after 5 min.
+  const checkoutPhase = useCheckoutWatch({
+    active: checkoutReturn === "success",
+    planActive: !!billingStatus?.has_subscription,
+    refresh: () => {
+      void queryClient.invalidateQueries({ queryKey: ["org", orgSlug] });
+      void queryClient.invalidateQueries({ queryKey: ["billing-status", orgSlug] });
+    },
+    reportPending: async () => {
+      if (!checkoutSessionId) return;
+      const token = await getToken();
+      if (token) await billingApi.reportCheckoutPending(orgSlug, checkoutSessionId, token);
+    },
+  });
   const displayPlan = planFromStatus(billingStatus, preview);
   const roster = useLicenceRoster(
     orgSlug,
@@ -521,6 +540,8 @@ export default function OrgSettingsPage() {
           statusError={billingStatusError && !billingStatus}
           onRetryStatus={() => void refetchBillingStatus()}
           checkoutReturn={checkoutReturn}
+          checkoutPhase={checkoutPhase}
+          checkoutSessionId={checkoutSessionId}
           portalReturn={portalReturn}
           onCheckout={startCheckout}
           onOpenPortal={openBillingPortal}

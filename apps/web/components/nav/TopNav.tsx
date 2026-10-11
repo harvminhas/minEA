@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
+import { SupportDialog } from "@/components/support/SupportDialog";
 import { ChevronDown, Bell, HelpCircle, LogOut, Settings, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -28,6 +29,7 @@ export function TopNav() {
   const [wsOpen, setWsOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const wsRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
@@ -293,6 +295,8 @@ export function TopNav() {
         <button
           type="button"
           title="Help"
+          aria-label="Help"
+          onClick={() => orgSlug && setHelpOpen(true)}
           className="p-2 text-white/40 hover:text-white/80 hover:bg-white/10 rounded-md transition-colors"
         >
           <HelpCircle size={16} />
@@ -328,6 +332,20 @@ export function TopNav() {
                   Org settings
                 </Link>
               )}
+              {orgSlug && (
+                <button
+                  type="button"
+                  data-testid="user-menu-help"
+                  onClick={() => {
+                    setUserOpen(false);
+                    setHelpOpen(true);
+                  }}
+                  className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  <HelpCircle size={13} />
+                  Help
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => signOut().then(() => { window.location.href = "/"; })}
@@ -340,6 +358,10 @@ export function TopNav() {
           )}
         </div>
       </div>
+
+      {helpOpen && orgSlug && (
+        <SupportDialog orgSlug={orgSlug} source="menu" onClose={() => setHelpOpen(false)} />
+      )}
 
       {workspaceSlug && (
         <ArchitectureInsightsPanel

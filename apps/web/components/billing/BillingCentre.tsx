@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Check, CreditCard, Eye, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, CreditCard, Eye, HelpCircle, Loader2 } from "lucide-react";
 import type { BillingStatus } from "@minea/types";
 import {
   BUSINESS_DETAILS,
@@ -39,6 +39,14 @@ import {
   type CheckoutReturn,
 } from "@/lib/billing/checkout";
 import { BusinessGetStartedDialog } from "./BusinessGetStartedDialog";
+import { SupportDialog } from "@/components/support/SupportDialog";
+import {
+  CHECKOUT_ACTIVE_NOTICE,
+  STILL_SETTING_UP_BODY,
+  STILL_SETTING_UP_MESSAGE,
+  STILL_SETTING_UP_TITLE,
+  type CheckoutPhase,
+} from "@/lib/support";
 import { CheckoutComingSoonDialog } from "./CheckoutComingSoonDialog";
 import { OnboardingCard } from "./OnboardingCard";
 
@@ -56,6 +64,10 @@ interface Props {
   onRetryStatus?: () => void;
   /** ?checkout=success|cancelled after returning from Stripe Checkout. */
   checkoutReturn?: CheckoutReturn | null;
+  /** Where the return from Checkout stands (see useCheckoutWatch). */
+  checkoutPhase?: CheckoutPhase | null;
+  /** Stripe Checkout session id from the success URL, attached to a help request. */
+  checkoutSessionId?: string | null;
   /** ?portal=return after returning from the Customer Portal. */
   portalReturn?: boolean;
   /** Starts Stripe Checkout and redirects. Only called when the API says checkout is available. */
@@ -125,6 +137,8 @@ function LoadedBillingCentre({
   billingStatus,
   licences,
   checkoutReturn,
+  checkoutPhase,
+  checkoutSessionId,
   portalReturn,
   onCheckout,
   onOpenPortal,
@@ -133,6 +147,8 @@ function LoadedBillingCentre({
   const interval: BillingInterval = "monthly";
   const [checkoutPack, setCheckoutPack] = useState<PackId | null>(null);
   const [businessOpen, setBusinessOpen] = useState(false);
+  const [help, setHelp] = useState<null | "billing" | "checkout">(null);
+  const stillSettingUp = checkoutReturn === "success" && checkoutPhase === "still_setting_up" && !previewing;
   const [busy, setBusy] = useState<PackId | "portal" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const current = entitlementsFor(displayPlan);
@@ -179,7 +195,28 @@ function LoadedBillingCentre({
     <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6" data-testid="billing-centre">
       <h2 className="font-semibold text-gray-900 mb-4">Plan &amp; billing</h2>
 
-      {checkoutReturn && !previewing && (
+      {stillSettingUp && (
+        <div
+          role="status"
+          data-testid="checkout-still-setting-up"
+          className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <p className="font-semibold">{STILL_SETTING_UP_TITLE}</p>
+          <p className="mt-1">{STILL_SETTING_UP_BODY}</p>
+          {orgSlug && (
+            <button
+              type="button"
+              data-testid="checkout-get-help"
+              onClick={() => setHelp("checkout")}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-amber-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-800"
+            >
+              <HelpCircle size={14} /> Get help
+            </button>
+          )}
+        </div>
+      )}
+
+      {checkoutReturn && !previewing && !stillSettingUp && (
         <p
           data-testid="checkout-return"
           className={`mb-4 rounded-md border px-3 py-2 text-sm ${
@@ -188,7 +225,9 @@ function LoadedBillingCentre({
               : "border-gray-200 bg-gray-50 text-gray-700"
           }`}
         >
-          {checkoutReturnNotice(checkoutReturn)}
+          {checkoutReturn === "success" && checkoutPhase === "active"
+            ? CHECKOUT_ACTIVE_NOTICE
+            : checkoutReturnNotice(checkoutReturn)}
         </p>
       )}
 
@@ -396,7 +435,31 @@ function LoadedBillingCentre({
         <p>{VIEWERS_NOTE} Business starts from 5 licences, billed by invoice or card.</p>
         <p>Free: 1 editor, 25 apps &amp; platforms, 25 AI answers a month.</p>
         <p>{PRICE_NOTE}</p>
+        {orgSlug && (
+          <p>
+            Questions about your plan or a payment?{" "}
+            <button
+              type="button"
+              data-testid="billing-help"
+              onClick={() => setHelp("billing")}
+              className="font-medium text-indigo-600 hover:text-indigo-700"
+            >
+              Help
+            </button>
+          </p>
+        )}
       </div>
+
+      {help && orgSlug && (
+        <SupportDialog
+          orgSlug={orgSlug}
+          initialTopic="billing"
+          initialMessage={help === "checkout" ? STILL_SETTING_UP_MESSAGE : ""}
+          checkoutSessionId={help === "checkout" ? checkoutSessionId : null}
+          source={help === "checkout" ? "checkout" : "billing"}
+          onClose={() => setHelp(null)}
+        />
+      )}
 
       {businessOpen && (
         <BusinessGetStartedDialog orgSlug={orgSlug} source="billing" onClose={() => setBusinessOpen(false)} />

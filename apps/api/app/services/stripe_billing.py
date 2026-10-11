@@ -508,6 +508,11 @@ async def create_solo_checkout_session(
 # ── webhook ──────────────────────────────────────────────────────────────────
 
 
+def retrieve_checkout_session(session_id: str) -> dict:
+    """Read a Checkout Session (status, created, metadata.org_id) for the stuck-checkout check."""
+    return _plain(_stripe().checkout.Session.retrieve(session_id))
+
+
 def verify_webhook(payload: bytes, signature: str, secret: str) -> dict:
     """Check the Stripe-Signature header and return the event as a plain dict."""
     import stripe

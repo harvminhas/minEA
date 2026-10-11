@@ -38,3 +38,31 @@ class BusinessPlanRequest(Base):
     org_slug: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SupportRequest(Base):
+    """In-app Help form (migrations/047_support_requests.sql)."""
+
+    __tablename__ = "support_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_slug: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_email: Mapped[str] = mapped_column(Text, nullable=False)
+    topic: Mapped[str] = mapped_column(Text, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    checkout_session_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BillingAlert(Base):
+    """Owner alerts already sent, deduplicated by dedupe_key (migrations/047_support_requests.sql)."""
+
+    __tablename__ = "billing_alerts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    dedupe_key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    org_slug: Mapped[str | None] = mapped_column(Text, nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
