@@ -178,7 +178,7 @@ export function TopNav() {
         onClick={() => setViewMode("repository")}
         className="flex-shrink-0 mr-1"
       >
-        <BuboMapWordmark size="sm" beta theme="dark" />
+        <BuboMapWordmark size="sm" theme="dark" />
       </Link>
 
       {/* Org / Workspace breadcrumb */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
@@ -10,6 +10,7 @@ import {
   STARTUP_AUTH_STEPS,
   STARTUP_HOME_STEPS,
   STARTUP_SHELL_STEPS,
+  LOADER_FADE_MS,
   StartupLoader,
 } from "@/components/ui/StartupLoader";
 
@@ -131,10 +132,28 @@ export function AppBootGate({ children }: { children: React.ReactNode }) {
     setBootPending(bootActive);
   }, [bootActive]);
 
+  // Keep the loader mounted briefly after boot so it fades out into the app.
+  const [leaving, setLeaving] = useState(false);
+  const [shown, setShown] = useState(bootActive);
+  useEffect(() => {
+    if (bootActive) {
+      setShown(true);
+      setLeaving(false);
+      return;
+    }
+    if (!shown) return;
+    setLeaving(true);
+    const id = window.setTimeout(() => {
+      setShown(false);
+      setLeaving(false);
+    }, LOADER_FADE_MS);
+    return () => window.clearTimeout(id);
+  }, [bootActive, shown]);
+
   return (
     <>
-      {bootActive && (
-        <StartupLoader stepIndex={stepIndex} steps={steps} overlay />
+      {(bootActive || shown) && (
+        <StartupLoader stepIndex={stepIndex} steps={steps} overlay leaving={leaving && !bootActive} />
       )}
       {children}
     </>

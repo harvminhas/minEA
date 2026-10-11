@@ -72,9 +72,41 @@
   }
 
   body.app-boot-pending {
-    background-color: #f9fafb;
+    background-color: #f5f3ff; /* violet-50, matches the loading screen */
     overflow: hidden;
   }
+}
+
+/* ── App loading screen (components/ui/StartupLoader.tsx) ─────────────────── */
+.bm-loader {
+  background:
+    radial-gradient(60rem 40rem at 50% 38%, rgba(91, 76, 230, 0.13), transparent 60%),
+    radial-gradient(40rem 30rem at 80% 90%, rgba(180, 83, 9, 0.06), transparent 60%),
+    linear-gradient(180deg, #f5f3ff 0%, #ffffff 55%, #eef2ff 100%);
+  transition: opacity 300ms ease;
+}
+.bm-loader-leaving { opacity: 0; pointer-events: none; }
+/* Fast loads: only the background shows for the first 300 ms. */
+.bm-loader-content { animation: bm-fade-in 450ms ease-out 300ms both; }
+.bm-owl-glow {
+  background: radial-gradient(circle, rgba(91, 76, 230, 0.28) 0%, rgba(91, 76, 230, 0) 70%);
+  animation: bm-breathe 3.2s ease-in-out infinite;
+}
+.bm-owl-blink { transform-box: fill-box; transform-origin: center; animation: bm-blink 5s ease-in-out infinite 1.2s; }
+.bm-shimmer { animation: bm-shimmer 1.4s ease-in-out infinite; }
+.bm-status-in { animation: bm-fade-in 300ms ease-out both; }
+.bm-status-out { animation: bm-fade-out 300ms ease-out both; }
+
+@keyframes bm-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes bm-fade-out { from { opacity: 1; } to { opacity: 0; transform: translateY(-4px); } }
+@keyframes bm-breathe { 0%, 100% { opacity: 0.55; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.06); } }
+@keyframes bm-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.12); } }
+@keyframes bm-shimmer { 0% { transform: translateX(-110%); } 100% { transform: translateX(260%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .bm-owl-glow, .bm-owl-blink, .bm-shimmer { animation: none; }
+  .bm-loader-content, .bm-status-in, .bm-status-out { animation-duration: 1ms; }
+  .bm-loader { transition: none; }
 }
 
 /* Sidebar dark background */

@@ -20,7 +20,7 @@ export function ShareTopNav({ preview }: { preview: SharePreview }) {
   return (
     <header className="h-12 bg-[#0f172a] border-b border-white/10 flex items-center px-4 gap-3 flex-shrink-0">
       <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
-        <BuboMapWordmark size="sm" beta theme="dark" />
+        <BuboMapWordmark size="sm" theme="dark" />
         <span className="text-violet-300/90 text-xs font-medium tracking-wide">shared view</span>
       </Link>
 

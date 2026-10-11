@@ -18,7 +18,7 @@ export function HomeNav() {
     <header className={`nav${scrolled ? " scrolled" : ""}`} id="nav">
       <div className="wrap">
         <a className="brand" href="#top" aria-label="BuboMap home">
-          <BuboMapWordmark size="md" beta theme="dark" />
+          <BuboMapWordmark size="md" theme="dark" />
         </a>
         <nav className="navlinks" aria-label="Page">
           <a href="#top">Ask</a>

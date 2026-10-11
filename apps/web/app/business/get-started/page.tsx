@@ -18,7 +18,7 @@ export default async function BusinessGetStartedPage({ searchParams }: Props) {
     <div className="min-h-screen bg-[#0f172a] text-white flex flex-col">
       <header className="flex items-center justify-between px-8 py-5">
         <Link href="/" className="hover:opacity-90 transition-opacity">
-          <BuboMapWordmark size="md" beta theme="dark" />
+          <BuboMapWordmark size="md" theme="dark" />
         </Link>
         <Link href="/#pricing" className="text-sm text-white/70 hover:text-white transition-colors">
           Pricing
