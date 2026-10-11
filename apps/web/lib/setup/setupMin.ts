@@ -67,23 +67,41 @@ export function setupMeter(apps: number, linked: number): string {
 
 export type SetupCardHeader =
   | { mode: "example" }
-  | { mode: "progress"; title: string; progressLine: string; percent: number; savedLine: string };
+  | {
+      mode: "progress";
+      /** Apps are met; only the server link is missing. The CTA becomes "Link an app to its server". */
+      onlyLink: boolean;
+      title: string;
+      progressLine: string;
+      percent: number;
+      savedLine: string;
+    };
 
 /**
  * Header for the setup card over sample screens. "Example data" + sample wording only while the
  * wizard is closed AND there are no real apps; otherwise it's the person's own progress, saved.
+ * Counts are clamped ("6 apps ✓", never "6 of 5"); the bar weighs both requirements equally and
+ * never passes 100%.
  */
 export function setupCardHeader(state: Pick<SetupState, "apps" | "hostingLinks">, wizardOpen: boolean): SetupCardHeader {
   if (!wizardOpen && state.apps < 1) return { mode: "example" };
-  const apps = Math.min(state.apps, SETUP_MIN.apps);
-  const links = Math.min(state.hostingLinks, SETUP_MIN.hostingLinks);
-  const appWord = SETUP_MIN.apps === 1 ? "app" : "apps";
-  const done = apps + links;
+  const appsMet = state.apps >= SETUP_MIN.apps;
+  const linksMet = state.hostingLinks >= SETUP_MIN.hostingLinks;
+  const appsPart = appsMet ? `${state.apps} apps ✓` : `${state.apps} of ${SETUP_MIN.apps} apps`;
+  const linkPart = linksMet
+    ? `${state.hostingLinks} linked to a server ✓`
+    : `${state.hostingLinks} of ${SETUP_MIN.hostingLinks} linked to a server`;
+  const share = (have: number, need: number) => Math.min(1, Math.max(0, have) / need);
+  const percent = Math.round(((share(state.apps, SETUP_MIN.apps) + share(state.hostingLinks, SETUP_MIN.hostingLinks)) / 2) * 100);
+  const onlyLink = appsMet && !linksMet;
   return {
     mode: "progress",
-    title: "Setting up your map",
-    progressLine: `${state.apps} of ${SETUP_MIN.apps} ${appWord} · ${state.hostingLinks} of ${SETUP_MIN.hostingLinks} linked to a server`,
-    percent: Math.round((done / (SETUP_MIN.apps + SETUP_MIN.hostingLinks)) * 100),
-    savedLine: `Your entries are saved to your workspace. Reports unlock at ${SETUP_MIN.apps} apps and ${SETUP_MIN.hostingLinks} server link.`,
+    onlyLink,
+    title: onlyLink ? "Last step: tell us where one app runs" : "Setting up your map",
+    progressLine: `${appsPart} · ${linkPart}`,
+    percent,
+    savedLine: onlyLink
+      ? "Your entries are saved to your workspace. Pick “Our server” for one app and name the server; reports unlock right after."
+      : `Your entries are saved to your workspace. Reports unlock at ${SETUP_MIN.apps} apps and ${SETUP_MIN.hostingLinks} server link.`,
   };
 }

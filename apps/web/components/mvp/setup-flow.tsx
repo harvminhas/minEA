@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -106,12 +106,23 @@ function toDrafts(items: MatchItem[]): Draft[] {
   });
 }
 
+/** Saved apps with no host yet, plus saved servers keyed like planHosting keys them. */
+export function whereStepSeed(
+  objects: { id: string; name: string; type: string }[],
+  relationships: { type: string; from_object_id: string }[],
+): { drafts: { id: string; name: string }[]; serverIds: Record<string, string> } {
+  const hosted = new Set(relationships.filter((rel) => rel.type === "runs_on" || rel.type === "built_on").map((rel) => rel.from_object_id));
+  const drafts = objects.filter((object) => object.type === "application" && !hosted.has(object.id)).map(({ id, name }) => ({ id, name }));
+  const serverIds = Object.fromEntries(objects.filter((object) => object.type === "model").map((object) => [normalizeTerm(object.name), object.id]));
+  return { drafts, serverIds };
+}
+
 /** Dev only (see AskScreen): the preview never writes the workspace's setup state. */
 function setupPreview(): boolean {
   return process.env.NODE_ENV !== "production" && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("setup") === "preview";
 }
 
-export function SetupFlow({ inline = false }: { inline?: boolean }) {
+export function SetupFlow({ inline = false, startAt }: { inline?: boolean; startAt?: "where" }) {
   const router = useRouter();
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
   const { getToken, user } = useAuth();
@@ -150,6 +161,25 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
   const catalogState = setupState(catalog.data?.objects ?? [], catalog.data?.relationships ?? []);
   const unsavedApps = apps.filter((app) => !app.objectId).length;
   const meter = setupMeter(catalogState.apps + unsavedApps, catalogState.hostingLinks + planned.links.length);
+
+  // startAt="where": the apps are already saved and only a server link is missing, so open
+  // "Where each one lives" with the saved apps that have no host yet, and the saved servers
+  // ready to pick (reused, never duplicated).
+  const [seeded, setSeeded] = useState(false);
+  useEffect(() => {
+    if (startAt !== "where" || seeded || !catalog.data) return;
+    const seed = whereStepSeed(catalog.data.objects, catalog.data.relationships);
+    setDrafts(seed.drafts.map((item) => ({ ...toDrafts([{ input: item.name, status: "custom", tool: null, options: [], customBuilt: false }])[0], objectId: item.id, choice: "unknown" })));
+    setServerIds(seed.serverIds);
+    setStep(3);
+    setSeeded(true);
+  }, [startAt, seeded, catalog.data]);
+  const rootRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!seeded) return;
+    const frame = window.requestAnimationFrame(() => rootRef.current?.querySelector<HTMLElement>("[data-where-own]")?.focus({ preventScroll: true }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [seeded]);
 
   const patch = (key: string, change: Partial<Draft>) => {
     setDrafts((current) => current.map((item) => (item.key === key ? { ...item, ...change } : item)));
@@ -270,6 +300,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
   const linkServers = async () => {
     const token = await auth();
     const ids = { ...serverIds };
+    const existing = new Set(Object.keys(serverIds));
     for (const server of planned.servers) {
       if (ids[server.key]) continue;
       const saved = await objectsApi.create(orgSlug!, workspaceSlug!, {
@@ -283,7 +314,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
     const located = new Set<string>();
     for (const server of planned.servers) {
       const serverId = ids[server.key];
-      if (!server.where || !serverId || located.has(server.key)) continue;
+      if (!server.where || !serverId || located.has(server.key) || existing.has(server.key)) continue;
       const place = await objectsApi.create(orgSlug!, workspaceSlug!, {
         type: "location",
         name: server.where,
@@ -321,6 +352,8 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
       remember(saved);
     }
     setServerIds(ids);
+    // Reconcile with the server so every screen (and the setup card) sees the new link now.
+    if (orgSlug && workspaceSlug) void queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
     setStep(4);
   };
 
@@ -370,7 +403,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
   ].filter(Boolean).join(" · ");
 
   return (
-    <section className={inline ? "rounded-2xl border border-[#e6e8ee] bg-white p-4" : "mt-8 w-full"}>
+    <section ref={rootRef} className={inline ? "rounded-2xl border border-[#e6e8ee] bg-white p-4" : "mt-8 w-full"}>
       {step === 0 && !inline && (
         <div>
           <p className="text-center">
@@ -630,6 +663,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
                     <button
                       key={choice}
                       type="button"
+                      data-where-own={choice === "own" ? "" : undefined}
                       onClick={() => patch(app.key, { choice, serverName: choice === "own" ? app.serverName || serverOptions[0]?.name || "" : "" })}
                       className={`rounded-full border px-2 py-0.5 text-[12px] ${app.choice === choice ? "border-[#5b4ce6] bg-[#ece9ff]" : "border-[#e6e8ee]"}`}
                     >
@@ -654,7 +688,7 @@ export function SetupFlow({ inline = false }: { inline?: boolean }) {
           </datalist>
           {planned.servers.length > 0 && (
             <div className="mt-3 space-y-2">
-              {planned.servers.map((server) => (
+              {planned.servers.filter((server) => !serverIds[server.key] || startAt !== "where").map((server) => (
                 <label key={server.key} className="block text-[13px] text-[#4b5163]">
                   Where is {server.name}?
                   <input

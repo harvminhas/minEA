@@ -13,13 +13,14 @@ test("example card is in normal flow: never an absolute inset-0 overlay that cli
 
 test("Add apps here toggles to Close and focuses the paste box on open", () => {
   assert.match(card, /onClick=\{\(\) => setOpen\(\(value\) => !value\)\}/);
-  assert.match(card, /\{open \? "Close" : addLabel\}/);
+  assert.match(card, /\{open \? "Close" : onlyLink \? "Link an app to its server" : addLabel\}/);
   assert.match(card, /aria-expanded=\{open\}/);
-  assert.match(card, /querySelector\("textarea"\)\?\.focus\(/);
+  assert.match(card, /querySelector\("textarea"\) \?\? card\.current\?\.querySelector<HTMLElement>\("\[data-where-own\]"\)\)\?\.focus\(/);
 });
 
 test("one example card only, and the sample stats are labelled as sample data", () => {
   assert.equal((src.match(/<SetupProgressCard/g) ?? []).length, 1);
-  assert.match(overview, /Sample company<\/span>\s*Sample data: not your apps/);
+  assert.match(overview, /<SampleCompanyBadge/);
+  assert.match(card, /Sample company<\/span>\s*Sample data: not your apps/);
   assert.match(overview, /"Sample company: 13 applications, 6 platforms, 11 servers\."/);
 });

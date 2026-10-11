@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, reportPath } from "@/lib/mvp-paths";
 import { catalogStats, moneyLabel } from "@/lib/model-catalog";
-import { SetupProgressCard } from "@/components/mvp/SetupProgressCard";
+import { SampleCompanyBadge, SetupProgressCard } from "@/components/mvp/SetupProgressCard";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
@@ -24,10 +24,6 @@ export function ReportsScreen() {
   const [saved, setSaved] = useState<{ q: string; prose: string; at: string }[]>([]);
   const setup = useWorkspaceSetup();
   const blocked = setup.enabled && Boolean(catalog.data) && !setup.state.met;
-  const [setupLatched, setSetupLatched] = useState(false);
-  useEffect(() => {
-    if (blocked) setSetupLatched(true);
-  }, [blocked]);
 
   useEffect(() => {
     try {
@@ -81,8 +77,9 @@ export function ReportsScreen() {
           Ask a new question
         </Link>
       </div>
+      {blocked && <SampleCompanyBadge className="mb-3" />}
       <div className="relative">
-        <div className={blocked ? "pointer-events-none opacity-40" : ""}>
+        <div className={blocked ? "pointer-events-none select-none opacity-40" : ""} aria-hidden={blocked || undefined}>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {shown.map((card) => {
           const stat = statFor(card.id);
@@ -98,7 +95,7 @@ export function ReportsScreen() {
         })}
       </div>
         </div>
-        {(blocked || setupLatched) && (
+        {blocked && (
           <div className="absolute inset-0 flex items-start justify-center px-3 pt-16">
             <SetupProgressCard
               state={setup.state}

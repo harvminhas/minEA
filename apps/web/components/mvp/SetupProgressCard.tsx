@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Info } from "lucide-react";
 import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
+import { SetupFlow } from "@/components/mvp/setup-flow";
 import { setupCardHeader, type SetupState } from "@/lib/setup/setupMin";
 
 /**
@@ -30,12 +31,13 @@ export function SetupProgressCard({
   useEffect(() => {
     if (!open) return;
     const frame = window.requestAnimationFrame(() => {
-      card.current?.querySelector("textarea")?.focus({ preventScroll: true });
+      (card.current?.querySelector("textarea") ?? card.current?.querySelector<HTMLElement>("[data-where-own]"))?.focus({ preventScroll: true });
       card.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [open]);
   const header = setupCardHeader(state, open);
+  const onlyLink = header.mode === "progress" && header.onlyLink;
   return (
     <div ref={card} data-testid="example-card" className={`w-full ${open ? "max-w-3xl" : "max-w-md"} rounded-2xl border border-[#e6e8ee] bg-white px-4 py-5 text-center shadow-lg sm:px-6`}>
       {header.mode === "example" ? (
@@ -62,11 +64,26 @@ export function SetupProgressCard({
             onClick={() => setOpen((value) => !value)}
             className={open ? "mt-4 inline-flex rounded-lg border border-[#e6e8ee] px-4 py-2 text-[13px] font-medium text-[#4b5163]" : "mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white"}
           >
-            {open ? "Close" : addLabel}
+            {open ? "Close" : onlyLink ? "Link an app to its server" : addLabel}
           </button>
-          {open && <div data-testid="example-wizard" className="mt-4 text-left"><FirstRunAsk inline /></div>}
+          {open && (
+            <div data-testid="example-wizard" className="mt-4 text-left">
+              {/* Apps are met: go straight to "Where each one lives" with the saved apps. */}
+              {onlyLink ? <SetupFlow inline startAt="where" /> : <FirstRunAsk inline />}
+            </div>
+          )}
         </>
       )}
     </div>
+  );
+}
+
+/** Label for sample content behind the setup card (same on Model, Reports and Views). */
+export function SampleCompanyBadge({ className = "" }: { className?: string }) {
+  return (
+    <p data-testid="sample-banner" className={`inline-flex items-center gap-2 rounded-full border border-[#fde68a] bg-[#fffbeb] px-3 py-1 text-[12px] font-medium text-[#92400e] ${className}`}>
+      <span className="rounded-full bg-[#f59e0b] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">Sample company</span>
+      Sample data: not your apps
+    </p>
   );
 }

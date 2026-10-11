@@ -25,7 +25,7 @@ import { ObjectForm } from "@/components/objects/ObjectForm";
 import { AddFlow } from "@/components/add/AddFlow";
 import { APP_OR_PLATFORM, applicationAddHint, nextPreset } from "@/lib/setup/type-guidance";
 import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
-import { SetupProgressCard } from "@/components/mvp/SetupProgressCard";
+import { SampleCompanyBadge, SetupProgressCard } from "@/components/mvp/SetupProgressCard";
 import { addAnywhereEnabled } from "@/lib/flags";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import Link from "next/link";
@@ -515,10 +515,7 @@ function Overview({
   return (
     <div className="relative px-8 py-8">
       {example && (
-        <p data-testid="sample-banner" className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#fde68a] bg-[#fffbeb] px-3 py-1 text-[12px] font-medium text-[#92400e]">
-          <span className="rounded-full bg-[#f59e0b] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">Sample company</span>
-          Sample data: not your apps
-        </p>
+        <SampleCompanyBadge className="mb-4" />
       )}
       <div className={example ? "pointer-events-none select-none opacity-40" : ""} aria-hidden={example || undefined}>
         <h1 className="text-[28px] font-semibold text-[#1c2230]">Model overview</h1>

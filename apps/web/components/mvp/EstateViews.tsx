@@ -13,7 +13,7 @@ import { askPath, modelItemPath, modelPath } from "@/lib/mvp-paths";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { AddFlow } from "@/components/add/AddFlow";
-import { SetupProgressCard } from "@/components/mvp/SetupProgressCard";
+import { SampleCompanyBadge, SetupProgressCard } from "@/components/mvp/SetupProgressCard";
 import { addAnywhereEnabled } from "@/lib/flags";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { connectionPhrase, impactOf, type ImpactHit, type ImpactNode } from "@/lib/impact/relationship-impact";
@@ -428,6 +428,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
   const readyLinks = opening.counts.hostingLinks;
   return (
     <div className="relative">
+      {opening.example && <SampleCompanyBadge className="relative z-10 mb-3" />}
       {readyOpen && params.get("ready") === "1" && (setup.state.met || !opening.example) && (
         <div className="relative z-10 mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#a7f3d0] bg-[#ecfdf3] px-4 py-3">
           <p className="text-[14px] text-[#1c2230]">
