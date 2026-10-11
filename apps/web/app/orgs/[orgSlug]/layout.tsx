@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useParams, usePathname, useRouter } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery } from "@tanstack/react-query";
@@ -14,10 +14,11 @@ import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { GlobalRefetchIndicator } from "@/components/ui/GlobalRefetchIndicator";
 import { isEstateViewsPath, isViewsAreaPath, isViewsModePath, viewIdFromPathname } from "@/lib/views";
 import { MvpFrame } from "@/components/mvp/MvpFrame";
+import { OrgLoadError } from "@/components/org/OrgNotices";
+import { orgLoadErrorMessage } from "@/lib/org-access";
 
 export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
-  const router = useRouter();
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const pathname = usePathname();
   const {
@@ -33,7 +34,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const isEmbed = pathname.includes("/embed/");
   const isOrgOnlyRoute = !!orgSlug && !pathname.includes("/workspaces/");
 
-  const { data: org, isError, isFetched } = useQuery({
+  const { data: org, isError, isFetched, error: orgLoadError, refetch: refetchOrg, isFetching: orgFetching } = useQuery({
     queryKey: ["org", orgSlug],
     queryFn: async () => {
       const token = await getToken();
@@ -64,12 +65,14 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
     setActiveWorkspace(defaultWs);
   }, [isOrgOnlyRoute, activeWorkspace?.slug, workspaces, setActiveWorkspace]);
 
-  useEffect(() => {
-    if (isFetched && isError) {
-      setActiveOrg(null);
-      router.replace("/home");
-    }
-  }, [isFetched, isError, router, setActiveOrg]);
+  // A failed org fetch shows an error with retry in place of the page. It used to go to /home,
+  // which then opened orgs[0]'s Ask: a silent jump to another org.
+  const orgLoadFailed = isFetched && isError && !org;
+  const content = orgLoadFailed ? (
+    <OrgLoadError message={orgLoadErrorMessage(orgLoadError)} onRetry={() => void refetchOrg()} retrying={orgFetching} />
+  ) : (
+    children
+  );
 
   // Keep top-nav mode aligned when landing on a views URL (e.g. restore last location).
   useEffect(() => {
@@ -92,7 +95,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
   if (isEmbed) {
     return (
       <RequireAuth>
-        <div className="min-h-screen bg-gray-50">{children}</div>
+        <div className="min-h-screen bg-gray-50">{content}</div>
       </RequireAuth>
     );
   }
@@ -112,16 +115,16 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
         <TopNav />
         <div className="flex h-full pt-14">
           {mvpShell ? (
-            <MvpFrame>{children}</MvpFrame>
+            <MvpFrame>{content}</MvpFrame>
           ) : (
             <>
               <AppSidebar />
               {viewMode === "split" ? (
                 <div className={`flex flex-1 ${sidebarW} overflow-hidden`}>
-                  <ResizableSplitLayout>{children}</ResizableSplitLayout>
+                  <ResizableSplitLayout>{content}</ResizableSplitLayout>
                 </div>
               ) : (
-                <main className={`flex-1 ${sidebarW} overflow-y-auto`}>{children}</main>
+                <main className={`flex-1 ${sidebarW} overflow-y-auto`}>{content}</main>
               )}
             </>
           )}

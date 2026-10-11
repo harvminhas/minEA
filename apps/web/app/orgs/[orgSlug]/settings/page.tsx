@@ -6,7 +6,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { billingApi, orgsApi, workspacesApi } from "@/lib/api-client";
 import { primaryViewPath } from "@/lib/tenancy";
 import { usePermissions } from "@/lib/use-permissions";
-import { settingsRedirectFor } from "@/lib/settings-guard";
+import { firstWorkspace, notAdminOf, orgLoadErrorMessage, otherAdminOrgs } from "@/lib/org-access";
+import { NotOrgAdmin, OrgLoadError } from "@/components/org/OrgNotices";
 import { usePlanFeatures } from "@/lib/use-plan-features";
 import {
   inviteUpgradeMessage,
@@ -120,12 +121,30 @@ export default function OrgSettingsPage() {
     window.location.assign(portal_url);
   }
 
-  const { data: org } = useQuery({
+  const {
+    data: org,
+    isError: orgError,
+    error: orgLoadError,
+    refetch: refetchOrg,
+    isFetching: orgFetching,
+  } = useQuery({
     queryKey: ["org", orgSlug],
     queryFn: async () => {
       const token = await getToken();
-      return orgsApi.get(orgSlug, token!);
+      if (!token) throw new Error("Not signed in");
+      return orgsApi.get(orgSlug, token);
     },
+  });
+
+  // Every org this user belongs to (with role), for the not-admin message.
+  const { data: myOrgs } = useQuery({
+    queryKey: ["orgs"],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      return orgsApi.list(token);
+    },
+    enabled: notAdminOf(org),
   });
 
   const { data: members } = useQuery({
@@ -213,12 +232,6 @@ export default function OrgSettingsPage() {
   // Billing tab: owner (as before) plus org admins. The API enforces owner/admin + verified email.
   const canSeeBilling = canManageBilling || isOrgAdmin;
 
-  // Non-admin members have no actions here — send them straight to their workspace. Decided
-  // from this page's org (with its role), never the store, which the layout fills in later.
-  useEffect(() => {
-    const next = settingsRedirectFor(orgSlug, org, workspaces);
-    if (next) router.replace(next);
-  }, [org, workspaces, orgSlug, router]);
 
   const inviteMutation = useMutation({
     mutationFn: async () => {
@@ -288,6 +301,25 @@ export default function OrgSettingsPage() {
     } finally {
       setVerifyLoading(false);
     }
+  }
+
+  if (!org && orgError) {
+    return (
+      <OrgLoadError message={orgLoadErrorMessage(orgLoadError)} onRetry={() => void refetchOrg()} retrying={orgFetching} />
+    );
+  }
+
+  // Members and viewers: explain, don't redirect (the API refuses their admin calls anyway).
+  if (org && notAdminOf(org)) {
+    const ws = firstWorkspace(workspaces);
+    return (
+      <NotOrgAdmin
+        orgName={org.name}
+        role={org.role}
+        askHref={ws ? primaryViewPath(orgSlug, ws.slug) : null}
+        adminOrgs={otherAdminOrgs(myOrgs, orgSlug)}
+      />
+    );
   }
 
   return (

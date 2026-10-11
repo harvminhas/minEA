@@ -11,7 +11,9 @@ import { useAppStore } from "@/lib/store";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, modelPath, reportsPath } from "@/lib/mvp-paths";
 import { ASK_BAR_ID, askShortcut, stripSplitUrl } from "@/components/nav/ask-shortcut";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { OrgSwitcherMenu } from "@/components/nav/OrgSwitcherMenu";
+import { activeTopNavTab, orgSettingsLabel, roleLabel } from "@/lib/org-access";
 import { billingApi, orgsApi, workspacesApi } from "@/lib/api-client";
 import { usePermissions } from "@/lib/use-permissions";
 import { workspaceCreateBlockedMessage } from "@/lib/plan-features";
@@ -122,6 +124,41 @@ export function TopNav() {
     enabled: !!orgSlug && canCreateWorkspace,
   });
 
+  // Every org the user belongs to (with role) and, while the switcher is open, each one's workspaces.
+  const { data: myOrgs } = useQuery({
+    queryKey: ["orgs"],
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      return orgsApi.list(token);
+    },
+    enabled: !!orgSlug,
+  });
+  const otherOrgSlugs = (myOrgs ?? []).map((o) => o.slug).filter((slug) => slug !== orgSlug);
+  const otherWorkspaces = useQueries({
+    queries: otherOrgSlugs.map((slug) => ({
+      queryKey: ["workspaces", slug],
+      queryFn: async () => {
+        const token = await getToken();
+        if (!token) throw new Error("Not signed in");
+        return workspacesApi.list(slug, token);
+      },
+      enabled: wsOpen,
+    })),
+  });
+  const workspacesByOrg: Record<string, { slug: string; name: string }[] | undefined> = { [orgSlug]: workspaces };
+  otherOrgSlugs.forEach((slug, i) => {
+    workspacesByOrg[slug] = otherWorkspaces[i]?.data;
+  });
+  const switcherOrgs =
+    myOrgs && myOrgs.length > 0
+      ? myOrgs
+      : org
+        ? [org]
+        : [];
+  const currentRole = org?.role ?? activeOrg?.role;
+  const activeTab = activeTopNavTab(pathname);
+
   const canCreateOwnWorkspace =
     canCreateWorkspace && (billingStatus?.can_create_own_workspace ?? true);
 
@@ -152,9 +189,16 @@ export function TopNav() {
             onClick={() => setWsOpen((o) => !o)}
             className="flex items-center gap-1 rounded-md px-3 py-1.5 text-sm hover:bg-white/10 transition-colors"
           >
-            <span className="text-white/50 font-medium">{orgName}</span>
-            <span className="text-white/25 mx-0.5">/</span>
-            <span className="text-white font-semibold">{wsName ?? "—"}</span>
+            <span data-testid="switcher-org-name" className="text-white/85 font-semibold">{orgName}</span>
+            {currentRole && (
+              <span className="rounded-full bg-white/10 px-1.5 py-px text-[10px] font-medium text-white/60">{roleLabel(currentRole)}</span>
+            )}
+            {wsName && (
+              <>
+                <span className="text-white/30 mx-0.5">/</span>
+                <span className="text-white/75 font-medium">{wsName}</span>
+              </>
+            )}
             <ChevronDown
               size={13}
               className={cn("text-white/40 ml-1 transition-transform", wsOpen && "rotate-180")}
@@ -162,37 +206,24 @@ export function TopNav() {
           </button>
 
           {wsOpen && (
-            <div className="absolute left-0 top-full mt-1.5 min-w-[200px] bg-[#1e293b] border border-white/10 rounded-lg shadow-2xl z-50 py-1.5 overflow-hidden">
+            <div className="absolute left-0 top-full mt-1.5 min-w-[260px] max-h-[70vh] overflow-y-auto bg-[#1e293b] border border-white/10 rounded-lg shadow-2xl z-50 py-1.5 overflow-hidden">
               <p className="px-3 pb-1 pt-0.5 text-[10px] text-white/30 uppercase tracking-wider font-medium">
-                {orgName}
+                Your organisations
               </p>
-              {workspacesLoading && (
+              {workspacesLoading && !workspaces ? (
                 <p className="px-3 py-2 text-xs text-white/40">Loading workspaces…</p>
-              )}
-              {(workspaces ?? []).map((ws) => (
-                <button
-                  key={ws.id}
-                  type="button"
-                  onClick={() => {
-                    router.push(askPath(`/orgs/${orgSlug}/workspaces/${ws.slug}`));
+              ) : (
+                <OrgSwitcherMenu
+                  orgs={switcherOrgs}
+                  workspacesByOrg={workspacesByOrg}
+                  currentOrgSlug={orgSlug}
+                  currentWorkspaceSlug={workspaceSlug}
+                  onNavigate={(href) => {
+                    router.push(href);
                     setWsOpen(false);
                   }}
-                  className={cn(
-                    "flex items-center gap-2.5 w-full text-left px-3 py-2 text-sm transition-colors",
-                    ws.slug === workspaceSlug
-                      ? "bg-indigo-600/20 text-white"
-                      : "text-white/60 hover:text-white hover:bg-white/5"
-                  )}
-                >
-                  <span className="h-5 w-5 rounded bg-indigo-600 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
-                    {ws.name.charAt(0).toUpperCase()}
-                  </span>
-                  <span className="truncate">{ws.name}</span>
-                  {ws.slug === workspaceSlug && (
-                    <span className="ml-auto text-indigo-400 text-xs">✓</span>
-                  )}
-                </button>
-              ))}
+                />
+              )}
               {canCreateWorkspace && (
                 <>
                   {(workspaces ?? []).length > 0 && (
@@ -244,17 +275,8 @@ export function TopNav() {
               { id: "reports", label: "Reports", href: reportsPath(basePath) },
             ] as const
           ).map((tab) => {
-            const inModel =
-              !pathname.includes("/ask") &&
-              !pathname.includes("/reports") &&
-              (!pathname.includes("/views") || pathname.includes("/views/processes"));
-            const selected = tab.id === "views"
-              ? pathname.includes("/views") && !pathname.includes("/views/processes")
-              : tab.id === "ask"
-                ? pathname.includes("/ask")
-                : tab.id === "reports"
-                  ? pathname.includes("/reports")
-                  : inModel;
+            // Org-level pages (Org settings) highlight no tab.
+            const selected = activeTab === tab.id;
             return (
               <Link
                 key={tab.id}
@@ -313,7 +335,7 @@ export function TopNav() {
           </button>
 
           {userOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-[200px] bg-[#1e293b] border border-white/10 rounded-lg shadow-2xl z-50 py-1.5 overflow-hidden">
+            <div className="absolute right-0 top-full mt-1.5 w-[240px] bg-[#1e293b] border border-white/10 rounded-lg shadow-2xl z-50 py-1.5 overflow-hidden">
               {user && (
                 <div className="px-3 py-2 border-b border-white/10 mb-1">
                   <p className="text-xs font-medium text-white/80 truncate">
@@ -328,8 +350,8 @@ export function TopNav() {
                   onClick={() => setUserOpen(false)}
                   className="flex items-center gap-2 px-3 py-2 text-sm text-white/60 hover:text-white hover:bg-white/5 transition-colors"
                 >
-                  <Settings size={13} />
-                  Org settings
+                  <Settings size={13} className="flex-shrink-0" />
+                  <span className="truncate" data-testid="user-menu-org-settings">{orgSettingsLabel(orgName)}</span>
                 </Link>
               )}
               {orgSlug && (
