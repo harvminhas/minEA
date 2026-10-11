@@ -24,6 +24,7 @@ import { relationshipsForIds, sameNamePartyIds } from "@/lib/relationships-for-o
 import { formatRelationshipTriple } from "@/lib/relationship-display";
 import { suppliedByVendorClear } from "@/lib/fields/shared-links";
 import { planTypeSwitch, readableTypeConflict, type TypeSwitchPlan } from "@/lib/type-switch";
+import { isAiObjectType } from "@/lib/diagram-node-styles";
 import { ObjectRelationshipsTab } from "@/components/objects/ObjectRelationshipsTab";
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
 import { toast } from "@/hooks/use-toast";
@@ -420,32 +421,37 @@ function Relationships({ row, canEdit }: { row: CatalogRow; canEdit: boolean }) 
     }
   };
 
-  let lists = null;
-  if (row.kind === "application") {
-    const nameById = { ...relatedNameOverrides, [row.id]: row.name };
-    const flows = objects.filter((item) => item.type === "integration_flow");
-    lists = (
-      <div>
-        <h3 className="mb-2 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">RELATIONSHIP MAP</h3>
-        <SystemDiagramPreview
+  // Every record gets the graphical map (both directions), not only applications: AI agents and
+  // models, servers, platforms, locations and vendors all used to show the list alone.
+  const nameById = { ...relatedNameOverrides, [row.id]: row.name };
+  const flows = objects.filter((item) => item.type === "integration_flow");
+  const ai = isAiObjectType(row.object.type);
+  const map = (
+    <div data-testid="relationship-map">
+      <h3 className="mb-2 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">RELATIONSHIP MAP</h3>
+      <SystemDiagramPreview
+        system={row.object}
+        relationships={rels}
+        nameById={nameById}
+        flows={flows}
+        accentColor={ai ? "#7c3aed" : undefined}
+        emptyHint={ai ? "No links yet. Connect the apps this agent reads, writes or hands off to, and the models it uses." : undefined}
+        onExpand={() => setExpanded(true)}
+      />
+      {expanded && (
+        <SystemDiagramModal
           system={row.object}
           relationships={rels}
-          nameById={nameById}
           flows={flows}
-          onExpand={() => setExpanded(true)}
+          accentColor={ai ? "#7c3aed" : undefined}
+          onClose={() => setExpanded(false)}
+          onAddConnection={canEdit ? () => { setExpanded(false); open(); } : undefined}
         />
-        {expanded && (
-          <SystemDiagramModal
-            system={row.object}
-            relationships={rels}
-            flows={flows}
-            onClose={() => setExpanded(false)}
-            onAddConnection={canEdit ? () => { setExpanded(false); open(); } : undefined}
-          />
-        )}
-      </div>
-    );
-  } else if (row.object.type === "model") {
+      )}
+    </div>
+  );
+  let lists = null;
+  if (row.object.type === "model") {
     const linked = rels.filter(
       (rel) =>
         rel.to_object_id === row.id &&
@@ -492,6 +498,7 @@ function Relationships({ row, canEdit }: { row: CatalogRow; canEdit: boolean }) 
 
   return (
     <div className="space-y-6">
+      {map}
       {lists}
       <ObjectRelationshipsTab
         objectId={row.id}

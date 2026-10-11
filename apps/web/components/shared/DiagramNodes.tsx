@@ -12,6 +12,7 @@ import {
   Plug,
   Puzzle,
   Server,
+  Sparkles,
   Target,
   User,
   Zap,
@@ -81,6 +82,9 @@ export function DiagramTypeIcon({
       return <Layers size={size} className="text-indigo-600" />;
     case "component":
       return <Box size={size} className="text-violet-600" />;
+    case "agent":
+    case "ai_model":
+      return <Sparkles size={size} className="text-violet-600" data-ai-icon="" />;
     case "data_object":
     case "data_store":
     case "data_domain":

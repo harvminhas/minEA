@@ -85,6 +85,15 @@ export function diagramNodeAccent(type: ObjectType): DiagramNodeAccent {
         handle: "#64748b",
         bar: "#64748b",
       };
+    case "agent":
+    case "ai_model":
+      return {
+        border: "border-violet-400",
+        bg: "bg-violet-100",
+        text: "text-violet-800",
+        handle: "#7c3aed",
+        bar: "#7c3aed",
+      };
     case "capability":
       return {
         border: "border-blue-300",
@@ -104,7 +113,13 @@ export function diagramNodeAccent(type: ObjectType): DiagramNodeAccent {
   }
 }
 
+export function isAiObjectType(type: string): boolean {
+  return type === "agent" || type === "ai_model";
+}
+
 export function diagramTypeLabel(type: ObjectType): string {
+  if (type === "agent") return "AI agent";
+  if (type === "ai_model") return "AI model";
   return OBJECT_TYPE_LABELS[type] ?? type.replace(/_/g, " ");
 }
 

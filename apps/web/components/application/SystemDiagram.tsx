@@ -20,12 +20,13 @@ import {
   Database,
   Layers,
   Plus,
+  Sparkles,
   X,
 } from "lucide-react";
 import { DiagramSavingBar } from "@/components/shared/DiagramSavingBar";
 import { DiagramFlowNode, DiagramLinkedObjectNode } from "@/components/shared/DiagramNodes";
 import { EntityFlowCanvas, type NodeLayout } from "@/components/shared/EntityFlowCanvas";
-import { flowDiagramNodeMeta } from "@/lib/diagram-node-styles";
+import { diagramTypeLabel, flowDiagramNodeMeta } from "@/lib/diagram-node-styles";
 import { APPLICATION_LAYER_COLOR } from "@/lib/component-utils";
 import {
   extractSystemDiagramFlows,
@@ -73,9 +74,10 @@ function SystemCenterNode({
   data: { system: MinEAObject; subtitle: string; accentColor: string };
   compact?: boolean;
 }) {
-  const CenterIcon = data.system.type === "data_object" ? Database : Layers;
+  const ai = data.system.type === "agent" || data.system.type === "ai_model";
+  const CenterIcon = ai ? Sparkles : data.system.type === "data_object" ? Database : Layers;
   const centerIconClass =
-    data.system.type === "data_object" ? "text-violet-600 bg-violet-50" : "text-indigo-600 bg-indigo-50";
+    ai ? "text-violet-700 bg-violet-100" : data.system.type === "data_object" ? "text-violet-600 bg-violet-50" : "text-indigo-600 bg-indigo-50";
 
   if (compact) {
     return (
@@ -233,7 +235,9 @@ export function buildSystemGraph(
 
   const props = (system.properties ?? {}) as ApplicationProperties;
   const subtitle =
-    system.type === "data_object"
+    system.type === "agent" || system.type === "ai_model"
+      ? diagramTypeLabel(system.type)
+      : system.type === "data_object"
       ? (OBJECT_TYPE_LABELS[system.type] ?? "Data entity")
       : (props.platform?.platform_name ?? (OBJECT_TYPE_LABELS[system.type] ?? "System"));
 

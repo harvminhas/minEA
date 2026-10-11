@@ -147,6 +147,9 @@ export const SYSTEM_DIAGRAM_OBJECT_TYPES = new Set<ObjectType>([
   "event",
   "capability",
   "external_party",
+  // AI agents and models link to apps (reads/writes/escalates_to) and to each other (uses_model).
+  "agent",
+  "ai_model",
 ]);
 
 export function extractSystemDiagramLinks(
