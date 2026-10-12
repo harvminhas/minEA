@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { AI_FEATURE_CATALOG, AI_JOBS, type AiCatalogEntry, type AiFeature, type AiFeatureStatus, type MinEAObject, type YesNoUnknown } from "@minea/types";
+import { AI_JOBS, type AiCatalogEntry, type AiFeature, type AiFeatureStatus, type MinEAObject, type YesNoUnknown } from "@minea/types";
 import { useAuth } from "@/lib/auth-context";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { useFeatureSave } from "@/lib/ai/use-feature-save";
 import type { FieldEdge } from "@/lib/fields/save";
-import { catalogEntriesFor, catalogEntry } from "@/lib/ai/catalog";
+import { catalogEntry } from "@/lib/ai/catalog";
+import { FEATURE_PICKER_HELPER, customOptionLabel, featurePicker } from "@/lib/ai/feature-picker";
 import {
   customFeatureAdd,
   agentsTouching,
@@ -398,13 +399,19 @@ function AddFeaturePopover({
   onCancel: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const taken = new Set(stored.map((item) => item.key));
-  const forHost = new Set(catalogEntriesFor(host).map((entry) => entry.key));
-  const term = query.trim().toLowerCase();
-  const options = AI_FEATURE_CATALOG.filter((entry) => !taken.has(entry.key))
-    .filter((entry) => !term || `${entry.name} ${entry.vendor}`.toLowerCase().includes(term))
-    .sort((left, right) => Number(forHost.has(right.key)) - Number(forHost.has(left.key)))
-    .slice(0, 8);
+  const view = featurePicker(host, stored, query);
+  const enter = () => {
+    if (view.custom) onCustom(view.custom);
+    else {
+      const first = view.own[0] ?? view.others[0];
+      if (first && query.trim()) onPick(first);
+    }
+  };
+  const row = (entry: AiCatalogEntry) => (
+    <button key={entry.key} type="button" data-testid="ai-feature-option" onClick={() => onPick(entry)} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-[#fafafb]">
+      {entry.name} <span className="text-[12px] text-[#8b90a0]">· {entry.vendor}</span>
+    </button>
+  );
   return (
     <div className="relative">
       <button type="button" aria-label="Close" className="fixed inset-0 z-10 cursor-default" onClick={onCancel} />
@@ -420,16 +427,21 @@ function AddFeaturePopover({
           value={query}
           placeholder="Search, e.g. Copilot"
           onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            enter();
+          }}
           className="mb-1 h-8 w-full rounded-md border border-[#e6e8ee] px-2 text-[13px]"
         />
-        {options.map((entry) => (
-          <button key={entry.key} type="button" onClick={() => onPick(entry)} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-[#fafafb]">
-            {entry.name} <span className="text-[12px] text-[#8b90a0]">· {entry.vendor}</span>
-          </button>
-        ))}
-        {query.trim() && (
-          <button type="button" onClick={() => onCustom(query)} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] font-medium text-[#5b4ce6] hover:bg-[#fafafb]">
-            + Add “{query.trim()}” as your own
+        {view.helper && <p data-testid="ai-feature-helper" className="px-2 py-1.5 text-[12px] text-[#6b7289]">{FEATURE_PICKER_HELPER}</p>}
+        {view.ownHeading && <p className="px-2 pt-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8b90a0]">{view.ownHeading}</p>}
+        {view.own.map(row)}
+        {view.ownHeading && view.others.length > 0 && <p className="px-2 pt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8b90a0]">Other AI features</p>}
+        {view.others.map(row)}
+        {view.custom && (
+          <button type="button" data-testid="ai-feature-custom" onClick={() => onCustom(view.custom!)} className="block w-full rounded-md px-2 py-1.5 text-left text-[13px] font-medium text-[#5b4ce6] hover:bg-[#fafafb]">
+            {customOptionLabel(view.custom)}
           </button>
         )}
       </div>
