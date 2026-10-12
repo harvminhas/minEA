@@ -19,6 +19,7 @@ import { QuickCost } from "@/components/mvp/CostSection";
 import { AddChip, Pill } from "@/components/mvp/pills";
 import { AppPlatformHelp } from "@/components/mvp/AppPlatformHelp";
 import { ModelDetailPanel } from "@/components/mvp/ModelDetailPanel";
+import { CapabilitiesSection } from "@/components/mvp/CapabilitiesSection";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { ObjectForm } from "@/components/objects/ObjectForm";
@@ -31,6 +32,7 @@ import { addAnywhereEnabled } from "@/lib/flags";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import Link from "next/link";
 import { aiColumnLabel } from "@/lib/ai/features";
+import { ANY_CAPABILITY, appCapabilityIndex, capabilityFilterOptions, matchesCapabilityFilter } from "@/lib/capabilities";
 
 const SECTION_TITLE: Record<ModelSection, string> = {
   overview: "Overview",
@@ -79,6 +81,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const [lifecycle, setLifecycle] = useState("Any lifecycle");
   const [criticality, setCriticality] = useState("Any criticality");
   const [missingOnly, setMissingOnly] = useState(false);
+  const [capFilter, setCapFilter] = useState(ANY_CAPABILITY);
   const [view, setView] = useState<"table" | "cards">("table");
   const [creating, setCreating] = useState<"runtime" | "platform" | "application" | null>(null);
   const [appAdd, setAppAdd] = useState(false);
@@ -100,6 +103,11 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
 
   const types = ["All", ...Array.from(new Set(source.map((row) => row.typeLabel)))];
 
+  const appCaps = useMemo(
+    () => appCapabilityIndex(catalog.data?.objects ?? [], catalog.data?.relationships ?? []),
+    [catalog.data?.objects, catalog.data?.relationships]
+  );
+  const capOptions = capabilityFilterOptions(catalog.data?.objects ?? []);
   const aiLabels = new Map(source.map((row) => [row.id, aiColumnLabel(row.object)]));
   const aiColumn = [...aiLabels.values()].some(Boolean);
   const filtered = source.filter((row) => {
@@ -109,6 +117,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
     if (lifecycle !== "Any lifecycle" && row.lifecycleLabel !== lifecycle) return false;
     if (criticality !== "Any criticality" && row.criticalityLabel !== criticality) return false;
     if (missingOnly && row.missingCount === 0) return false;
+    if (section === "applications" && !matchesCapabilityFilter(appCaps.get(row.id) ?? [], capFilter)) return false;
     return true;
   });
 
@@ -178,7 +187,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
         {section === "locations" && <LocationsTable anywhere={anywhere} selectedId={selectedId} />}
         {section === "agents" && <AiTable type="agent" selectedId={selectedId} />}
         {section === "ai-models" && <AiTable type="ai_model" selectedId={selectedId} />}
-        {section === "capabilities" && <CapabilitiesTable selectedId={selectedId} />}
+        {section === "capabilities" && <CapabilitiesSection selectedId={selectedId} />}
         {section === "connections" && <ConnectionsList items={connections} basePath={basePath} />}
         {section === "vendors" && <VendorsTable vendors={vendors} anywhere={anywhere} selectedId={selectedId} />}
         {section === "owners" && <OwnersTable rows={rows} basePath={basePath} />}
@@ -347,6 +356,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
               />
               <Select value={lifecycle} onChange={setLifecycle} options={["Any lifecycle", "Planned", "Pilot", "Active", "Retiring", "End of life"]} />
               <Select value={criticality} onChange={setCriticality} options={["Any criticality", "Critical", "High", "Medium", "Low"]} />
+              {section === "applications" && <Select value={capFilter} onChange={setCapFilter} options={capOptions} />}
               <div className="ml-auto flex rounded-lg border border-[#e6e8ee] p-0.5">
                 <button type="button" onClick={() => setView("table")} className={cn("rounded-md px-2 py-1", view === "table" && "bg-[#f3f4f8]")} title="Table">
                   <Table2 size={14} />
@@ -386,7 +396,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                 <table className="w-full min-w-[920px] border-collapse text-left">
                   <thead>
                     <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
-                      {["Name", "Type · Hosting model", "Owner", "Vendor", "Annual cost", "Renewal", "Lifecycle", "Criticality", ...(aiColumn ? ["AI"] : [])].map((heading) => (
+                      {["Name", "Type · Hosting model", ...(section === "applications" ? ["Capabilities"] : []), "Owner", "Vendor", "Annual cost", "Renewal", "Lifecycle", "Criticality", ...(aiColumn ? ["AI"] : [])].map((heading) => (
                         <th key={heading} className="h-11 px-2 font-medium">{heading}</th>
                       ))}
                     </tr>
@@ -406,6 +416,11 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                           <div className="text-[#1c2230]">{row.typeLabel}</div>
                           {row.subtitle && <div className="text-[12px] text-[#8b90a0]">{row.subtitle}</div>}
                         </td>
+                        {section === "applications" && (
+                          <td className="px-2 py-3 text-[12px] text-[#4b5163]" data-testid="app-capabilities">
+                            {(appCaps.get(row.id) ?? []).join(", ") || <span className="text-[#b0b4c0]">—</span>}
+                          </td>
+                        )}
                         <td className="px-2 py-3">
                           {row.missing.owner ? (
                             <AddChip label="Add" onClick={() => open(row)} />
@@ -758,149 +773,3 @@ function OwnersTable({ rows, basePath }: { rows: CatalogRow[]; basePath: string 
   );
 }
 
-function CapabilitiesTable({ selectedId }: { selectedId?: string }) {
-  const router = useRouter();
-  const { basePath, orgSlug, workspaceSlug } = useTenancy();
-  const { getToken } = useAuth();
-  const queryClient = useQueryClient();
-  const catalog = useModelCatalog();
-  const capabilities = (catalog.data?.objects ?? []).filter((object) => object.type === "capability");
-  const domains = (catalog.data?.objects ?? []).filter((object) => object.type === "business_domain");
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [domainId, setDomainId] = useState("");
-  const [newDomain, setNewDomain] = useState(false);
-  const [domainName, setDomainName] = useState("");
-  const [error, setError] = useState("");
-  const createDomain = useMutation({
-    mutationFn: async () => {
-      const trimmed = domainName.trim();
-      if (!trimmed) throw new Error("Type a domain name first");
-      const token = await getToken();
-      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
-      return objectsApi.create(orgSlug, workspaceSlug, { type: "business_domain", name: trimmed, properties: {} }, token);
-    },
-    onSuccess: (created) => {
-      setDomainName("");
-      setNewDomain(false);
-      setDomainId(created.id);
-      setError("");
-      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: created });
-    },
-    onError: (err: Error) => setError(err.message),
-  });
-  const create = useMutation({
-    mutationFn: async () => {
-      const trimmed = name.trim();
-      if (!trimmed) throw new Error("Type a name first");
-      if (!domainId) throw new Error("Choose a domain");
-      const token = await getToken();
-      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
-      return objectsApi.create(orgSlug, workspaceSlug, {
-        type: "capability",
-        name: trimmed,
-        properties: { domain_id: domainId },
-      }, token);
-    },
-    onSuccess: (created) => {
-      setName("");
-      setError("");
-      setAdding(false);
-      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: created });
-    },
-    onError: (err: Error) => setError(err.message),
-  });
-  return (
-    <div className="px-6 py-5">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">WHAT THE BUSINESS DOES</p>
-          <h1 className="text-[22px] font-semibold text-[#1c2230]">
-            Capabilities <span className="text-[14px] font-normal text-[#8b90a0]">{capabilities.length}</span>
-          </h1>
-        </div>
-        <button type="button" onClick={() => setAdding((value) => !value)} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">
-          + Add
-        </button>
-      </div>
-      {adding && (
-        <form
-          className="mb-4 flex flex-wrap items-center gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            create.mutate();
-          }}
-        >
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Capability name"
-            className="h-8 w-[220px] rounded-lg border border-[#e6e8ee] px-2 text-[13px]"
-          />
-          <select
-            value={domainId}
-            onChange={(event) => setDomainId(event.target.value)}
-            className="h-8 rounded-lg border border-[#e6e8ee] px-2 text-[13px]"
-            aria-label="Domain"
-          >
-            <option value="">Domain</option>
-            {domains.map((domain) => (
-              <option key={domain.id} value={domain.id}>{domain.name}</option>
-            ))}
-          </select>
-          <button type="button" className="text-[13px] font-medium text-[#5b4ce6]" onClick={() => setNewDomain((value) => !value)}>
-            + New domain
-          </button>
-          {newDomain && (
-            <>
-              <input
-                value={domainName}
-                onChange={(event) => setDomainName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter") return;
-                  event.preventDefault();
-                  createDomain.mutate();
-                }}
-                placeholder="Domain name"
-                className="h-8 w-[180px] rounded-lg border border-[#e6e8ee] px-2 text-[13px]"
-              />
-              <button type="button" className="h-8 rounded-lg border border-[#e6e8ee] px-2 text-[13px]" onClick={() => createDomain.mutate()}>
-                {createDomain.isPending ? "Adding…" : "Add domain"}
-              </button>
-            </>
-          )}
-          <button type="submit" className="h-8 rounded-lg bg-[#5b4ce6] px-3 text-[13px] font-semibold text-white">
-            {create.isPending ? "Adding…" : "Add"}
-          </button>
-          {error && <p className="w-full text-[12px] text-[#b42318]">{error}</p>}
-        </form>
-      )}
-      <table className="w-full border-collapse text-left text-[13px]">
-        <thead>
-          <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
-            <th className="h-11 px-2 font-medium">Name</th>
-            <th className="h-11 px-2 font-medium">Owner</th>
-          </tr>
-        </thead>
-        <tbody>
-          {capabilities.map((capability) => (
-            <tr
-              key={capability.id}
-              onClick={() => router.push(modelItemPath(basePath, "capabilities", capability.id))}
-              className={cn(
-                "cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]",
-                selectedId === capability.id && "bg-[#f6f5ff]"
-              )}
-            >
-              <td className="px-2 py-3 font-medium text-[#1c2230]">{capability.name}</td>
-              <td className="px-2 py-3">
-                {capability.owner_team_name || capability.point_of_contact_name || capability.owner || "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {capabilities.length === 0 && <p className="py-8 text-[13px] text-[#8b90a0]">No capabilities yet.</p>}
-    </div>
-  );
-}

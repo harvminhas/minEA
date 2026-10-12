@@ -23,6 +23,7 @@ ALLOWED_TRIPLES: set[tuple[str, str, str]] = {
     ("hosts", "tool", "api"),
     ("carries", "tool", "integration_flow"),
     # Cross-layer: Business ← Application
+    ("supported_by", "capability", "cloud_service"),
     ("supported_by", "capability", "application"),
     ("supported_by", "capability", "solution"),
     ("supported_by", "capability", "technical_capability"),

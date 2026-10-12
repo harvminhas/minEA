@@ -21,6 +21,7 @@ import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { actsAsFlag, actsAsLabel, readActsAs } from "@/lib/ai/acts-as";
 import { holdsDataLabel, readHoldsData, suggestedHoldsData, toggleHoldsData } from "@/lib/ai/sensitive";
 import { emptyTypeHint } from "@/lib/relationship-targets";
+import { domainSuggestions, resolveDomain } from "@/lib/capabilities";
 import { OWN_LOGIN, OWN_LOGIN_LABEL, SIGN_IN_EDGE, isIdentityProvider, orderSignInChoices, signInCounts, signInSuggestion, toggleSignInPick } from "@/lib/sign-in";
 import { infraStatus } from "@/lib/infra/status";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
@@ -207,6 +208,7 @@ function displayValue(def: FieldDef, record: FieldRecord, object: MinEAObject, e
   }
   const value = readField(def, record, edges);
   if (def.key === "acts_as") return actsAsLabel(value);
+  if (def.key === "domain") return typeof value === "string" && value ? names.get(value) ?? "" : "";
   if (def.editor === "owner") {
     const owner = value as OwnershipValue;
     if (!owner.ownerTeamName.trim() && !owner.pointOfContactName.trim()) return "";
@@ -358,7 +360,8 @@ export function InlineField({
 
   const openFromCurrent = () => {
     const current = readField(def, record, edges);
-    setDraft(Array.isArray(current) ? current.join(", ") : current == null ? "" : String(current));
+    if (def.key === "domain") setDraft(typeof current === "string" && current ? lookup.get(current) ?? "" : "");
+    else setDraft(Array.isArray(current) ? current.join(", ") : current == null ? "" : String(current));
     setError("");
     cancelRef.current = false;
     dirtyRef.current = false;
@@ -508,8 +511,29 @@ export function InlineField({
       close();
       return;
     }
+    if (def.key === "domain") {
+      void saveDomain(raw);
+      return;
+    }
     const next = def.editor === "tags" ? raw.split(",").map((item) => item.trim()).filter(Boolean) : raw;
     void persist(next);
+  };
+
+  // Domain: free text with suggestions; an unknown name creates the business_domain it points at.
+  const saveDomain = async (raw: string) => {
+    const resolved = resolveDomain(raw, catalog.data?.objects ?? []);
+    if ("clear" in resolved) return persist("");
+    if ("id" in resolved) return persist(resolved.id);
+    try {
+      const token = await getToken();
+      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
+      const created = await objectsApi.create(orgSlug, workspaceSlug, { type: "business_domain", name: resolved.create, properties: {} }, token);
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: created });
+      lookup.set(created.id, created.name);
+      await persist(created.id);
+    } catch (err) {
+      setError(`Couldn't save: ${err instanceof Error ? err.message : "Could not save"}`);
+    }
   };
 
   const start = () => {
@@ -570,9 +594,21 @@ export function InlineField({
         }}
         onBlur={(event) => commitText(event.currentTarget.value)}
         onKeyDown={onKey}
+        list={def.key === "domain" ? `domain-suggestions-${object.id}` : undefined}
+        placeholder={def.key === "domain" ? "e.g. Sell, Finance" : undefined}
         className="h-8 w-[220px] max-w-full rounded-lg border border-[#e6e8ee] px-2 text-[13px]"
       />
     );
+    if (def.key === "domain") {
+      editor = (
+        <>
+          {editor}
+          <datalist id={`domain-suggestions-${object.id}`}>
+            {domainSuggestions(catalog.data?.objects ?? []).map((name) => <option key={name} value={name} />)}
+          </datalist>
+        </>
+      );
+    }
   } else if (editing && def.editor === "longtext") {
     editor = (
       <textarea

@@ -525,6 +525,15 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
   ],
   capability: [
     peopleName("Capability name"),
+    {
+      key: "supported_by",
+      label: "Supported by",
+      section: "basics",
+      editor: "relation",
+      source: { kind: "rel", edge: "supported_by", dir: "out", target: ["application", "cloud_service", "solution", "technical_capability"], single: false },
+    },
+    // Optional grouping. Typed as text with suggestions; saved as properties.domain_id (a business_domain record).
+    { key: "domain", label: "Domain", section: "basics", editor: "text", source: { kind: "prop", key: "domain_id" } },
     ownerField(),
   ],
   agent: [

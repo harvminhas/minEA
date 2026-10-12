@@ -18,7 +18,7 @@ test("default Architecture shows the three everyday items", () => {
 test("Advanced reveals the rest", () => {
   assert.deepEqual(labels(true), [
     "Capability map", "Roadmap & renewals", "Sensitive data",
-    "Processes", "Products", "Journeys", "Investments", "Capability heatmap", "Data stores", "Data domains",
+    "Processes", "Products", "Journeys", "Investments", "Classic capability map", "Capability heatmap", "Data stores", "Data domains",
   ]);
 });
 

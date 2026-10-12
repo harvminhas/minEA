@@ -897,6 +897,11 @@
   [
     "supported_by",
     "capability",
+    "cloud_service"
+  ],
+  [
+    "supported_by",
+    "capability",
     "solution"
   ],
   [

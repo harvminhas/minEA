@@ -100,10 +100,8 @@ async def _validate_capability(
     merged_props = {**existing_properties, **(body.properties or {})}
     domain_id_raw = merged_props.get("domain_id")
     if not domain_id_raw:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Every capability must belong to a domain (properties.domain_id is required)",
-        )
+        # Domain is an optional grouping (STEP 3); a capability without one is valid.
+        return
 
     try:
         domain_id = UUID(str(domain_id_raw))

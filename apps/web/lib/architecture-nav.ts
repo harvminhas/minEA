@@ -15,13 +15,14 @@ export type HiddenCounts = Partial<Record<HiddenCountKey, number | undefined>>;
 
 export function architectureItems(basePath: string): ArchNavItem[] {
   return [
-    { key: "capabilities", label: "Capability map", href: `${basePath}/model/capabilities`, match: ["/model/capabilities", "/business/capabilities"], advanced: false },
+    { key: "capabilities", label: "Capability map", href: `${basePath}/model/capabilities`, match: ["/model/capabilities"], advanced: false },
     { key: "roadmap", label: "Roadmap & renewals", href: `${basePath}/strategy/roadmaps`, match: ["/strategy/roadmaps"], advanced: false },
     { key: "sensitive-data", label: "Sensitive data", href: `${basePath}/data/data-objects`, match: ["/data/data-objects"], advanced: false },
     { key: "processes", label: "Processes", href: `${basePath}/views/processes`, match: ["/views/processes"], advanced: true, countKey: "processes" },
     { key: "products", label: "Products", href: `${basePath}/strategy/products`, match: ["/strategy/products", "/views/products"], advanced: true, countKey: "products" },
     { key: "journeys", label: "Journeys", href: `${basePath}/views/journeys`, match: ["/views/journeys"], advanced: true, countKey: "journeys" },
     { key: "investments", label: "Investments", href: `${basePath}/views/investments`, match: ["/views/investments"], advanced: true },
+    { key: "classic-map", label: "Classic capability map", href: `${basePath}/business/capabilities`, match: ["/business/capabilities"], advanced: true },
     { key: "heatmap", label: "Capability heatmap", href: `${basePath}/views/capability-heatmap`, match: ["/views/capability-heatmap"], advanced: true },
     { key: "data-stores", label: "Data stores", href: `${basePath}/data/data-stores`, match: ["/data/data-stores"], advanced: true, countKey: "dataStores" },
     { key: "data-domains", label: "Data domains", href: `${basePath}/data/data-domains`, match: ["/data/data-domains"], advanced: true, countKey: "dataDomains" },
