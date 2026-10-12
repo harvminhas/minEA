@@ -2,7 +2,9 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { BackToViews } from "@/components/views/BackToViews";
+import { cameFromViews } from "@/lib/views-hub/routes";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, modelItemPath, reportsPath, sectionForKind } from "@/lib/mvp-paths";
 import { readRuntimeInfra } from "@/lib/infra/read";
@@ -326,14 +328,19 @@ function Shell({
   children: React.ReactNode;
   onExport?: () => void;
 }) {
+  const fromViews = cameFromViews(useSearchParams());
   return (
     <div className="px-8 py-6">
       <div className="mb-4 flex items-center justify-between">
-        <div className="text-[13px] text-[#6b7289]">
-          <Link href={reportsPath(basePath)} className="hover:text-[#1c2230]">Reports</Link>
-          <span> / </span>
-          <span className="text-[#1c2230]">{title}</span>
-        </div>
+        {fromViews ? (
+          <BackToViews className="" />
+        ) : (
+          <div className="text-[13px] text-[#6b7289]">
+            <Link href={reportsPath(basePath)} className="hover:text-[#1c2230]">Reports</Link>
+            <span> / </span>
+            <span className="text-[#1c2230]">{title}</span>
+          </div>
+        )}
         {onExport && (
           <button type="button" onClick={onExport} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">
             Export

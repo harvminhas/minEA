@@ -1,5 +1,6 @@
 "use client";
 
+import { BackToViews } from "@/components/views/BackToViews";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -80,6 +81,7 @@ export function EstateViews() {
   return (
     <div className="px-8 py-6">
       <style>{viewsMotionCss}</style>
+      <BackToViews />
       <div className="mb-4 flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="shrink-0 text-[11px] font-semibold tracking-[0.16em] text-[#8b90a0]">VIEWS</span>
@@ -113,7 +115,6 @@ export function EstateViews() {
             );
           })}
         </div>
-        <Link href={`${basePath}/views/foundations`} className="mb-2 text-[12px] text-[#8b90a0]">Estate map <span className="rounded bg-[#f3f4f8] px-1.5 py-0.5">optional</span></Link>
       </div>
       {tab === "flow" && <DataFlowView />}
       {tab === "hosting" && <HostingView />}

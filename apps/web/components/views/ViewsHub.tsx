@@ -7,6 +7,7 @@ import { useTenancy } from "@/lib/tenancy";
 import { modelPath, reportPath, viewsImpactPath, type ModelSection } from "@/lib/mvp-paths";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
+import { withFromViews } from "@/lib/views-hub/routes";
 import { attentionCount, viewsHub, type HubCard, type HubTone } from "@/lib/views-hub/hub";
 
 const ACCENT: Record<HubTone, string> = {
@@ -48,7 +49,7 @@ export function ViewsHub() {
 
   const hrefOf = (card: HubCard) => {
     const open = card.open;
-    if (open.kind === "report") return reportPath(basePath, open.reportId);
+    if (open.kind === "report") return withFromViews(reportPath(basePath, open.reportId));
     if (open.kind === "model") return modelPath(basePath, open.section as ModelSection);
     return viewsImpactPath(basePath, open.sel);
   };

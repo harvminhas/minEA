@@ -2,6 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { BackToViews } from "@/components/views/BackToViews";
+import { cameFromViews } from "@/lib/views-hub/routes";
 import { ACTS_AS_LABEL, AI_JOBS, type AiFeatureStatus, type MinEAObject } from "@minea/types";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
@@ -50,6 +53,7 @@ function yesNoTone(value: string) {
 
 export function AiLandscapeReport() {
   const { basePath } = useTenancy();
+  const fromViews = cameFromViews(useSearchParams());
   const catalog = useModelCatalog();
   const objects = catalog.data?.objects;
   const relationships = catalog.data?.relationships;
@@ -105,9 +109,13 @@ export function AiLandscapeReport() {
 
   const header = (
     <>
-      <div className="mb-4 text-[13px] text-[#6b7289]">
-        <Link href={reportsPath(basePath)} className="hover:text-[#1c2230]">← Reports</Link>
-      </div>
+      {fromViews ? (
+        <BackToViews />
+      ) : (
+        <div className="mb-4 text-[13px] text-[#6b7289]">
+          <Link href={reportsPath(basePath)} className="hover:text-[#1c2230]">← Reports</Link>
+        </div>
+      )}
       <h1 className="text-[22px] font-semibold text-[#1c2230]">AI landscape</h1>
       <p className="mb-4 text-[14px] text-[#6b7289]">Where does AI touch the business, and what can it see or change?</p>
     </>
