@@ -60,6 +60,7 @@ MIGRATION_FILES = [
     "045_relationship_ends_unique.sql",
     "046_business_plan_requests.sql",
     "047_support_requests.sql",
+    "048_workspace_settings.sql",
 ]
 
 
