@@ -188,9 +188,9 @@ export function isViewsModePath(pathname: string): boolean {
   return isViewsAreaPath(pathname) && !/\/views\/processes(\/|$)/.test(pathname);
 }
 
-/** The question views (impact, data flow, hosting) use the workspace shell, not the old views sidebar. */
+/** The Views hub (/views) and the impact view (/views/impact) use the workspace shell, not the old views sidebar. */
 export function isEstateViewsPath(pathname: string): boolean {
-  return /\/workspaces\/[^/]+\/views\/?$/.test(pathname);
+  return /\/workspaces\/[^/]+\/views(\/impact)?\/?$/.test(pathname);
 }
 
 /** Resolve a view id from a workspace pathname, if the URL is a view route. */

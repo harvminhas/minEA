@@ -10,6 +10,15 @@ export function reportsPath(basePath: string): string {
   return `${basePath}/reports`;
 }
 
+/** The impact view (moved from /views, which is now the hub). */
+export function viewsImpactPath(basePath: string, sel?: string, tab?: string): string {
+  const params = new URLSearchParams();
+  if (tab && tab !== "impact") params.set("tab", tab);
+  if (sel) params.set("sel", sel);
+  const query = params.toString();
+  return `${basePath}/views/impact${query ? `?${query}` : ""}`;
+}
+
 export function reportPath(basePath: string, reportId: string): string {
   return `${basePath}/reports/${reportId}`;
 }

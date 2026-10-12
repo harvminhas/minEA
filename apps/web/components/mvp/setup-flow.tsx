@@ -222,7 +222,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     // Setup just saved records: refetch the catalogue in the background so every screen (the Ask
     // header counts included) reads the server's copy straight away. Cached rows stay meanwhile.
     if (orgSlug && workspaceSlug) void queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
-    router.push(`${basePath}/views?tab=impact&ready=1`);
+    router.push(`${basePath}/views/impact?ready=1`);
   };
 
   // Screens: 0 paste, 1 matched, 2 AI turned on?, 3 where, 4 owners. The stored setupStep keeps its old

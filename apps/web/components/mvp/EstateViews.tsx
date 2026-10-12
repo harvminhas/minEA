@@ -99,7 +99,7 @@ export function EstateViews() {
             return (
               <Link
                 key={id}
-                href={`${basePath}/views?tab=${id}${sel ? `&sel=${sel}` : ""}`}
+                href={`${basePath}/views/impact?tab=${id}${sel ? `&sel=${sel}` : ""}`}
                 className={cn("-mb-px flex items-center pb-2.5", tab === id ? "border-b-2 border-[#5b4ce6] font-semibold text-[#1c2230]" : "text-[#6b7280]")}
               >
                 {label}
@@ -152,7 +152,7 @@ function ViewTitle({ tab, opening }: { tab: string; opening: OpeningModel }) {
       <select
         aria-label="What goes down"
         value={opening.selectedId}
-        onChange={(event) => router.replace(`${basePath}/views?tab=impact&sel=${event.target.value}`)}
+        onChange={(event) => router.replace(`${basePath}/views/impact?tab=impact&sel=${event.target.value}`)}
         className="h-10 max-w-[280px] rounded-lg border border-[#e6e8ee] bg-white px-3 text-[16px] font-semibold text-[#1c2230] shadow-sm"
       >
         {!opening.selectedId && <option value="">Choose…</option>}
@@ -416,7 +416,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
     },
   });
 
-  const select = (id: string) => router.replace(`${basePath}/views?tab=impact&sel=${id}`);
+  const select = (id: string) => router.replace(`${basePath}/views/impact?tab=impact&sel=${id}`);
   const stopAdd = selected?.kind === "platform" ? "+ Add an app" : "+ Something else runs on it";
 
   if (!opening.ready && !opening.example) {
@@ -609,7 +609,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
             <SetupProgressCard
               state={setup.state}
               sampleText="Link your first app to a server to see yours. Until then this is a sample estate; nothing here is saved to your workspace."
-              action={<Link href={`${basePath}/views?tab=hosting`} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Open Hosting & location</Link>}
+              action={<Link href={`${basePath}/views/impact?tab=hosting`} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Open Hosting & location</Link>}
             />
           )}
         </div>
