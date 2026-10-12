@@ -1,5 +1,5 @@
 import { TOOL_CATALOG } from "@/lib/catalog/tools-catalog";
-import { buildBatch, dedupeKey, planInputs, prepareRows, type EstateItem } from "@/lib/setup/add-plan";
+import { dedupeKey } from "@/lib/setup/add-plan";
 
 export const ADD_BOX_LABEL = "Add applications: type the names, separated by commas or new lines";
 export const ADD_BOX_BUTTON = "Add apps";
@@ -33,10 +33,23 @@ export function canSubmitAdd(text: string, saved: boolean): boolean {
   return text.trim().length > 0 && !saved;
 }
 
-/** A chip saves exactly its own product, never the typed box. Null when it is already in the estate. */
-export function quickAddBatch(name: string, estate: EstateItem[]) {
-  const rows = prepareRows(name, "app", estate).slice(0, 1);
-  if (rows.length === 0 || rows.some((row) => row.existing)) return null;
-  const batch = buildBatch(planInputs(rows), estate);
-  return batch.creates.length > 0 ? batch : null;
+function namesInText(text: string): Set<string> {
+  return new Set(text.split(/[,\n]/).map(dedupeKey).filter(Boolean));
+}
+
+/** True when the typed text already names this product (by name or a catalog alias). */
+export function textHasName(text: string, name: string): boolean {
+  const typed = namesInText(text);
+  const tool = TOOL_CATALOG.find((entry) => entry.name === name);
+  return [name, ...(tool?.aliases ?? [])].map(dedupeKey).some((key) => typed.has(key));
+}
+
+/** A chip types its name: appended after a separator, never overwriting, skipped if already there. */
+export function appendChipName(text: string, name: string): string {
+  if (textHasName(text, name)) return text;
+  if (!text.trim()) return name;
+  if (/[\n]\s*$/.test(text)) return `${text.replace(/\s*$/, "")}\n${name}`;
+  if (/,\s*$/.test(text)) return `${text.replace(/\s*$/, "")} ${name}`;
+  const lines = text.includes("\n") && !text.includes(",");
+  return `${text.replace(/\s+$/, "")}${lines ? "\n" : ", "}${name}`;
 }

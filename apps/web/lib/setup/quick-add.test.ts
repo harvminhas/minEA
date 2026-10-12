@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { ADD_BOX_BUTTON, ADD_BOX_LABEL, canSubmitAdd, isSubmitKey, quickAddSuggestions } from "./quick-add.ts";
+import { ADD_BOX_BUTTON, ADD_BOX_LABEL, appendChipName, canSubmitAdd, textHasName, isSubmitKey, quickAddSuggestions } from "./quick-add.ts";
 import { TOOL_CATALOG } from "../catalog/tools-catalog.ts";
 import { prepareRows, type EstateItem } from "./add-plan.ts";
 
@@ -59,14 +59,26 @@ test("everyday apps come before niche ones", () => {
   assert.equal(quickAddSuggestions("app", ["Slack", "Zoom"], 1)[0], "Google Workspace");
 });
 
-test("a chip saves only its own product, deduped, and never the typed box", async () => {
-  const { quickAddBatch } = await import("./quick-add.ts");
-  const batch = quickAddBatch("Google Workspace", [item("Slack")]);
-  assert.deepEqual(batch?.creates.map((c) => c.name), ["Google Workspace"]);
-  assert.equal(batch?.updates.length, 0);
-  assert.equal(quickAddBatch("Slack", [item("Slack")]), null, "already there: nothing saved");
+test("a chip appends like typing: separator, no overwrite, no repeat", () => {
+  assert.equal(appendChipName("", "Slack"), "Slack");
+  assert.equal(appendChipName("Trello", "Google Workspace"), "Trello, Google Workspace");
+  assert.equal(appendChipName("Trello, ", "Slack"), "Trello, Slack");
+  assert.equal(appendChipName("Trello\nAsana", "Slack"), "Trello\nAsana\nSlack");
+  assert.equal(appendChipName("Trello\n", "Slack"), "Trello\nSlack");
+  assert.equal(appendChipName("Trello, slack", "Slack"), "Trello, slack", "already typed: unchanged");
+  assert.equal(appendChipName("zoom", "Zoom Workplace"), "zoom", "an alias counts");
+  assert.equal(textHasName("Trello, Google Workspace", "Google Workspace"), true);
+  assert.equal(textHasName("Trello", "Google Workspace"), false);
+});
+
+test("the chip only types; it never saves", () => {
   const screen = src("components/mvp/ModelScreen.tsx");
-  const chip = screen.slice(screen.indexOf('data-testid="quick-add-chip"'), screen.indexOf("</button>", screen.indexOf('data-testid="quick-add-chip"')));
-  assert.match(chip, /quickAdd\(name\)/);
-  for (const banned of ["setAddText", "setAddSubmit", "setAddSaved", "setAddKindLocked"]) assert.ok(!chip.includes(banned), `chip must not call ${banned}`);
+  const at = screen.indexOf('data-testid="quick-add-chip"');
+  const chip = screen.slice(at, screen.indexOf("</button>", at));
+  assert.match(chip, /setAddText\(\(text\) => appendChipName\(text, name\)\)/);
+  assert.match(chip, /addBoxRef\.current\?\.focus\(\)/);
+  for (const banned of ["setAddSubmit", "quickAdd(", "addApi", ".save("]) assert.ok(!chip.includes(banned), `chip must not ${banned}`);
+  assert.match(screen, /filter\(\(name\) => !textHasName\(addText, name\)\)/, "chips hide while named in the text");
+  assert.ok(!screen.includes("quick-add-note"));
+  assert.ok(!src("components/add/AddCards.tsx").includes("useQuickAdd"));
 });

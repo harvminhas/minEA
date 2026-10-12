@@ -33,7 +33,6 @@ import { buildBatch, catalogLists, planInputs, prepareRows, todoLines, type AddR
 import { choiceForTool } from "@/lib/setup/match-tools";
 import { setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
-import { quickAddBatch } from "@/lib/setup/quick-add";
 import { useTenancy } from "@/lib/tenancy";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 
@@ -327,30 +326,6 @@ export function AddResult({
       )}
     </section>
   );
-}
-
-/** Quick-add chips: save one catalog product directly, without touching the add box or its preview. */
-export function useQuickAdd() {
-  const { orgSlug, workspaceSlug } = useTenancy();
-  const { getToken } = useAuth();
-  const catalog = useModelCatalog();
-  const queryClient = useQueryClient();
-  const { objects } = catalogLists(catalog.data);
-  const estate = useMemo(() => estateItems(objects), [objects]);
-  return async (name: string): Promise<string[]> => {
-    if (!orgSlug || !workspaceSlug) return [];
-    const batch = quickAddBatch(name, estate);
-    if (!batch) return [];
-    const token = await getToken();
-    if (!token) throw new Error("Not signed in");
-    const saved = await addApi.save(orgSlug, workspaceSlug, {
-      creates: batch.creates.map((item) => ({ key: item.key, type: item.type, name: item.name, properties: item.properties, owner: item.owner, owner_team_name: item.ownerTeam, point_of_contact_name: item.ownerName })),
-      updates: [],
-      relationships: [],
-    }, token);
-    for (const object of saved.objects) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object });
-    return saved.objects.map((object) => object.name);
-  };
 }
 
 export function AskAdd({

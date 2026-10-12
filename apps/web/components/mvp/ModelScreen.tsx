@@ -23,9 +23,8 @@ import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformP
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { AddFlow } from "@/components/add/AddFlow";
-import { useQuickAdd } from "@/components/add/AddCards";
 import { APP_OR_PLATFORM, applicationAddHint, nextPreset } from "@/lib/setup/type-guidance";
-import { ADD_BOX_BUTTON, ADD_BOX_LABEL, canSubmitAdd, isSubmitKey, quickAddSuggestions } from "@/lib/setup/quick-add";
+import { ADD_BOX_BUTTON, ADD_BOX_LABEL, appendChipName, canSubmitAdd, textHasName, isSubmitKey, quickAddSuggestions } from "@/lib/setup/quick-add";
 import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
 import { SampleCompanyBadge, SetupProgressCard } from "@/components/mvp/SetupProgressCard";
 import { addAnywhereEnabled } from "@/lib/flags";
@@ -89,9 +88,6 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const [addSaved, setAddSaved] = useState(false);
   const [addSubmit, setAddSubmit] = useState(0);
   const [addPulse, setAddPulse] = useState(0);
-  const [chipBusy, setChipBusy] = useState<string[]>([]);
-  const [chipNote, setChipNote] = useState("");
-  const quickAdd = useQuickAdd();
   const addBoxRef = useRef<HTMLTextAreaElement>(null);
   const addKind = addKindLocked ? addKindChoice : nextPreset("app", addText, false) === "platform" ? "platform" : "app";
   const anywhere = addAnywhereEnabled();
@@ -120,7 +116,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const trackedCost = filtered.reduce((sum, row) => sum + (row.annualCostNumber ?? 0), 0);
 
   const appNames = useMemo(() => (catalog.data?.objects ?? []).map((object) => object.name), [catalog.data?.objects]);
-  const suggestions = useMemo(() => quickAddSuggestions("app", appNames, 5), [appNames]);
+  const suggestions = useMemo(() => quickAddSuggestions("app", appNames, 5).filter((name) => !textHasName(addText, name)), [appNames, addText]);
   const submitAdd = (text = addText) => {
     if (!canSubmitAdd(text, addSaved && text === addText)) return;
     setAddSaved(false);
@@ -292,15 +288,11 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                       key={name}
                       type="button"
                       data-testid="quick-add-chip"
-                      disabled={chipBusy.includes(name)}
                       onClick={() => {
-                        // Saves only this product; the typed text, its preview and Add apps stay as they are.
-                        setChipBusy((busy) => [...busy, name]);
-                        setChipNote("");
-                        quickAdd(name)
-                          .then((added) => setChipNote(added.length ? `Added ${added.join(", ")}.` : `${name} is already in your map.`))
-                          .catch((err: unknown) => setChipNote(err instanceof Error ? err.message : "Could not add"))
-                          .finally(() => setChipBusy((busy) => busy.filter((item) => item !== name)));
+                        // A chip types its name into the box; nothing saves until Add apps.
+                        setAddText((text) => appendChipName(text, name));
+                        setAddSaved(false);
+                        addBoxRef.current?.focus();
                       }}
                       className="rounded-full border border-[#e6e8ee] px-2.5 py-0.5 text-[12px] text-[#3f35b5] hover:border-[#5b4ce6] hover:bg-[#f4f2ff]"
                     >
@@ -312,7 +304,6 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                     Add one with full details
                   </button>
                 </div>
-                {chipNote && <p data-testid="quick-add-note" className="mb-2 text-[12px] text-[#067647]">{chipNote}</p>}
                 <p className="mb-1 text-[12px] leading-5 text-[#6b7289]">{APP_OR_PLATFORM}</p>
                 {applicationAddHint(addText, addKind, addKindLocked) && (
                   <p className="mb-3 text-[12px] text-[#4b5163]">
