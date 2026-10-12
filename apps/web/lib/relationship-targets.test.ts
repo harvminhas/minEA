@@ -47,7 +47,7 @@ const EXPECTED: Record<string, string[]> = {
   api: ["Applications", "Flows", "Integration infra"],
   event: ["Applications", "Flows", "Integration infra", "Data entities"],
   external_party: ["Applications", "AI models", "Platforms & cloud", "Servers & devices", "Vendors & contracts"],
-  agent: ["Applications", "AI agents", "AI models", "Platforms & cloud", "Integration infra", "Capabilities", "Data stores"],
+  agent: ["Applications", "AI agents", "AI models", "Platforms & cloud", "Integration infra", "Capabilities", "Data stores", "Data entities"],
   ai_model: ["AI agents", "Platforms & cloud", "Vendors & contracts"],
 };
 

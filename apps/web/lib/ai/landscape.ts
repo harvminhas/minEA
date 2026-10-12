@@ -4,7 +4,7 @@ import { dollarsFromCents, lineAnnualCents, readCostLines } from "@/lib/cost/mat
 import { normalizeTerm } from "@/lib/setup/match-tools";
 import { isAiFeatureHost } from "./catalog";
 import { readFeatures } from "./features";
-import { sensitiveKinds as recordKinds, type SensitiveKind } from "./sensitive";
+import { DATA_OBJECT_LINKS, dataObjectKind, isSensitiveKindSet, sensitiveKinds as recordKinds, type SensitiveKind } from "./sensitive";
 
 /** Pure §6 rules for the AI landscape report. No fetching, no dates beyond what is passed in. */
 
@@ -129,10 +129,11 @@ export function flagGroupTitle(group: readonly LandscapeFlag[]): string {
   return group[0].id === "F6" ? "Doing the same job" : group[0].title;
 }
 
-const KIND_ORDER: SensitiveKind[] = ["customer", "financial", "employee"];
+const KIND_ORDER: SensitiveKind[] = ["customer", "financial", "employee", "health", "payment_card"];
+const KIND_TEXT: Record<SensitiveKind, string> = { customer: "customer", financial: "financial", employee: "employee", health: "health", payment_card: "payment card" };
 
 function kindsText(kinds: Set<SensitiveKind>): string {
-  return KIND_ORDER.filter((kind) => kinds.has(kind)).join(" and ");
+  return KIND_ORDER.filter((kind) => kinds.has(kind)).map((kind) => KIND_TEXT[kind]).join(" and ");
 }
 
 function str(value: unknown): string {
@@ -166,7 +167,12 @@ export function sensitiveKinds(
   objects: readonly LandscapeObject[],
   relationships: readonly LandscapeEdge[]
 ): { kinds: Set<SensitiveKind>; from: LandscapeObject[] } {
-  if (record.type !== "data_store" || Array.isArray(record.properties?.holds_data)) return { kinds: recordKinds(record), from: [] };
+  if (record.type !== "data_store" || Array.isArray(record.properties?.holds_data)) {
+    // Its own answer, plus any sensitive data entity linked behind it (Sensitive data page).
+    const kinds = recordKinds(record);
+    for (const kind of linkedDataKinds(record.id, objects, relationships)) kinds.add(kind);
+    return { kinds, from: [] };
+  }
   const graph = graphOf(objects, relationships);
   const kinds = new Set<SensitiveKind>();
   const from: LandscapeObject[] = [];
@@ -183,7 +189,20 @@ export function sensitiveKinds(
 }
 
 function isSensitive(kinds: Set<SensitiveKind>): boolean {
-  return kinds.has("customer") || kinds.has("financial");
+  return isSensitiveKindSet(kinds);
+}
+
+/** Kinds of the data entities a record owns / creates / reads / writes. */
+export function linkedDataKinds(recordId: string, objects: readonly LandscapeObject[], relationships: readonly LandscapeEdge[]): Set<SensitiveKind> {
+  const kinds = new Set<SensitiveKind>();
+  const byId = new Map(objects.map((object) => [object.id, object]));
+  for (const edge of relationships) {
+    if (edge.from_object_id !== recordId || !DATA_OBJECT_LINKS.has(edge.type)) continue;
+    const target = byId.get(edge.to_object_id);
+    const kind = target ? dataObjectKind(target) : null;
+    if (kind) kinds.add(kind);
+  }
+  return kinds;
 }
 
 function hostAddOn(feature: AiFeature, host: LandscapeObject): number {

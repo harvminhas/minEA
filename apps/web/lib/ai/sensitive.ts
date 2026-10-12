@@ -1,6 +1,31 @@
 import type { HoldsData } from "@minea/types";
 
-export type SensitiveKind = Exclude<HoldsData, "none">;
+export type HoldsKind = Exclude<HoldsData, "none">;
+export type SensitiveKind = HoldsKind | "health" | "payment_card";
+
+/** Built-in data types on the Sensitive data page; data_object.properties.sensitive_kind holds one (or "custom"). */
+export const DATA_KINDS: { kind: SensitiveKind; label: string; holds: boolean }[] = [
+  { kind: "customer", label: "Customer", holds: true },
+  { kind: "employee", label: "Employee", holds: true },
+  { kind: "financial", label: "Financial", holds: true },
+  { kind: "health", label: "Health", holds: false },
+  { kind: "payment_card", label: "Payment card", holds: false },
+];
+const DATA_KIND_SET = new Set<string>(DATA_KINDS.map((item) => item.kind));
+
+/** Data entities that sit behind an app: owns / creates / reads / writes, app → data_object. */
+export const DATA_OBJECT_LINKS = new Set(["owns", "creates", "reads", "writes"]);
+
+/** Customer, financial, health and payment card data raise F1; employee data alone doesn't. */
+export function isSensitiveKindSet(kinds: ReadonlySet<SensitiveKind>): boolean {
+  return kinds.has("customer") || kinds.has("financial") || kinds.has("health") || kinds.has("payment_card");
+}
+
+export function dataObjectKind(record: { type: string; properties?: Record<string, unknown> | null }): SensitiveKind | null {
+  if (record.type !== "data_object") return null;
+  const kind = record.properties?.sensitive_kind;
+  return typeof kind === "string" && DATA_KIND_SET.has(kind) ? (kind as SensitiveKind) : null;
+}
 
 const ORDER: HoldsData[] = ["customer", "financial", "employee", "none"];
 
@@ -11,7 +36,7 @@ export const HOLDS_DATA_LABEL: Record<HoldsData, string> = {
   none: "None",
 };
 
-const CATEGORY_DEFAULTS: Record<string, SensitiveKind[]> = {
+const CATEGORY_DEFAULTS: Record<string, HoldsKind[]> = {
   crm: ["customer"],
   cx: ["customer"],
   commerce: ["customer"],
@@ -20,7 +45,7 @@ const CATEGORY_DEFAULTS: Record<string, SensitiveKind[]> = {
   hr: ["employee"],
 };
 
-const PLATFORM_DEFAULTS: Record<string, SensitiveKind[]> = {
+const PLATFORM_DEFAULTS: Record<string, HoldsKind[]> = {
   crm: ["customer"],
   erp: ["customer", "financial"],
 };
@@ -43,7 +68,7 @@ export function toggleHoldsData(current: HoldsData[], kind: HoldsData): HoldsDat
 }
 
 /** §6.2 defaults from the application category or platform type (shown as "suggested"). */
-export function suggestedHoldsData(record: SensitiveHost): SensitiveKind[] {
+export function suggestedHoldsData(record: SensitiveHost): HoldsKind[] {
   const props = record.properties ?? {};
   if (record.type === "cloud_service") {
     const platformType = typeof props.platform_type === "string" ? props.platform_type : "";
@@ -55,16 +80,17 @@ export function suggestedHoldsData(record: SensitiveHost): SensitiveKind[] {
 
 /** §6.2 steps 1-2 for one record (the data_store hop arrives with the report in Step E). */
 export function sensitiveKinds(record: SensitiveHost): Set<SensitiveKind> {
+  const own = dataObjectKind(record);
+  if (record.type === "data_object") return new Set(own ? [own] : []);
   const stored = record.properties?.holds_data;
   if (Array.isArray(stored)) {
-    return new Set(readHoldsData(stored).filter((kind): kind is SensitiveKind => kind !== "none"));
+    return new Set(readHoldsData(stored).filter((kind): kind is HoldsKind => kind !== "none"));
   }
   return new Set(suggestedHoldsData(record));
 }
 
 export function isCustomerOrFinancial(record: SensitiveHost): boolean {
-  const kinds = sensitiveKinds(record);
-  return kinds.has("customer") || kinds.has("financial");
+  return isSensitiveKindSet(sensitiveKinds(record));
 }
 
 export function holdsDataLabel(kinds: readonly HoldsData[]): string {

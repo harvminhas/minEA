@@ -12,6 +12,7 @@ import { ObjectDetail } from "@/components/objects/ObjectDetail";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { CapabilityMapPage } from "@/components/capability-map/CapabilityMapPage";
 import { DataLayerList } from "@/components/data/DataLayerList";
+import { SensitiveDataRoute } from "@/components/data/SensitiveDataPage";
 import { FlowList } from "@/components/integration/FlowList";
 import { ApiList } from "@/components/integration/ApiList";
 import { EventList } from "@/components/integration/EventList";
@@ -70,6 +71,7 @@ export default function ObjectListPage({ params }: { params: Promise<{ layer: st
     layer === "data" &&
     (typePath === "data-objects" || typePath === "data-stores" || typePath === "data-domains")
   ) {
+    if (typePath === "data-objects") return <SensitiveDataRoute fallback={<DataLayerList typePath={typePath} />} />;
     return <DataLayerList typePath={typePath} />;
   }
 

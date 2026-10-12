@@ -177,7 +177,7 @@ export const AGENT_AUTONOMY_OPTIONS = [
   { value: "act_autonomously", label: "Acts on its own" },
 ] as const;
 
-const AGENT_DATA_TARGETS = ["application", "solution", "technical_capability", "cloud_service", "data_store"];
+export const AGENT_DATA_TARGETS = ["application", "solution", "technical_capability", "cloud_service", "data_store", "data_object"];
 
 const CRITICALITY = PLATFORM_CRITICALITY.map((item) => ({
   value: item.value,

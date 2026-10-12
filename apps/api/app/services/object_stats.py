@@ -35,6 +35,13 @@ TECH_DEBT_HOST_TYPES = (
 )
 
 
+def merge_owner_names(managed_by: dict, owns: dict) -> dict:
+    """"Owned by" on the card matches the drawer: an owns link wins, managed_by is the fallback."""
+    merged = dict(managed_by)
+    merged.update(owns)
+    return merged
+
+
 async def enrich_open_tech_debt_counts(
     db: AsyncSession, objects: list[MinEAObject]
 ) -> dict[uuid.UUID, dict]:
@@ -499,8 +506,7 @@ async def enrich_data_objects(
         entity_kind="application",
     )
     owns_names = await _entity_owner_names_from_owns(db, workspace_id, org_id, entity_ids)
-    for entity_id, name in owns_names.items():
-        sor_names.setdefault(entity_id, name)
+    sor_names = merge_owner_names(sor_names, owns_names)
     cap_counts = await _count_data_links(
         db,
         workspace_id,

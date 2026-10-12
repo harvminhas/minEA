@@ -2,7 +2,7 @@ import type { AiCatalogEntry, AiFeature, AiFeatureStatus } from "@minea/types";
 import { lineAnnualCents, readCostLines, type CostLine } from "@/lib/cost/math";
 import { normalizeTerm } from "@/lib/setup/match-tools";
 import { catalogEntriesFor, catalogEntry } from "./catalog";
-import { isCustomerOrFinancial } from "./sensitive";
+import { isSensitiveKindSet, sensitiveKinds, type SensitiveKind } from "./sensitive";
 
 type FeatureHost = { type: string; name: string; status?: string | null; properties?: Record<string, unknown> | null };
 export type FeaturePatch = { properties: { ai_features: AiFeature[]; cost_lines?: CostLine[] } };
@@ -185,10 +185,12 @@ export function customFeatureAdd(name: string, user: string, now: string = new D
 export type FeatureFlag = { id: "F1" | "F2"; severity: "high" | "check"; title: string };
 
 /** F1 / F2 from §6.3 for one feature on its host (the full flag list is Step E). */
-export function featureFlags(feature: AiFeature, host: FeatureHost): FeatureFlag[] {
+export function featureFlags(feature: AiFeature, host: FeatureHost, linkedKinds: Iterable<SensitiveKind> = []): FeatureFlag[] {
   if (feature.status !== "on" && feature.status !== "piloting") return [];
   const flags: FeatureFlag[] = [];
-  if (isCustomerOrFinancial(host)) {
+  const kinds = sensitiveKinds(host);
+  for (const kind of linkedKinds) kinds.add(kind);
+  if (isSensitiveKindSet(kinds)) {
     if (feature.sees_company_data === "yes") flags.push({ id: "F1", severity: "high", title: "Can see customer or financial data" });
     if (feature.sees_company_data === "unknown") flags.push({ id: "F1", severity: "check", title: "Check: can it see customer or financial data?" });
   }

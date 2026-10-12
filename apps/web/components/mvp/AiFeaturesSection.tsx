@@ -7,6 +7,8 @@ import { useModelCatalog } from "@/lib/use-model-catalog";
 import { useFeatureSave } from "@/lib/ai/use-feature-save";
 import type { FieldEdge } from "@/lib/fields/save";
 import { catalogEntry } from "@/lib/ai/catalog";
+import { linkedDataKinds } from "@/lib/ai/landscape";
+import type { SensitiveKind } from "@/lib/ai/sensitive";
 import { FEATURE_PICKER_HELPER, customOptionLabel, featurePicker } from "@/lib/ai/feature-picker";
 import {
   customFeatureAdd,
@@ -88,6 +90,7 @@ export function AiFeaturesSection({
   const suggestions = suggestedFeatures(live);
   const agents = agentsTouching(live.id, edges, names);
   const summary = aiColumnLabel(live);
+  const linkedKinds = [...linkedDataKinds(live.id, catalog.data?.objects ?? [], catalog.data?.relationships ?? [])];
   const change = (key: string, changes: FeatureChanges) => void save((current) => updateFeature(current, key, changes, person));
 
   return (
@@ -134,6 +137,7 @@ export function AiFeaturesSection({
             key={feature.key}
             feature={feature}
             host={live}
+            linkedKinds={linkedKinds}
             readOnly={readOnly}
             onChange={(changes) => change(feature.key, changes)}
             onSeats={(seats, priceCents) => void save((current) => setFeatureSeats(current, feature.key, seats, priceCents, actor))}
@@ -211,6 +215,7 @@ function Choice({
 function FeatureCard({
   feature,
   host,
+  linkedKinds,
   readOnly,
   onChange,
   onSeats,
@@ -218,6 +223,7 @@ function FeatureCard({
 }: {
   feature: AiFeature;
   host: MinEAObject;
+  linkedKinds: SensitiveKind[];
   readOnly: boolean;
   onChange: (changes: FeatureChanges) => void;
   onSeats: (seats: number, priceCents: number) => void;
@@ -232,7 +238,7 @@ function FeatureCard({
   const [seatError, setSeatError] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(false);
   const cost = featureCostLabel(feature, host.properties);
-  const flags = featureFlags(feature, host);
+  const flags = featureFlags(feature, host, linkedKinds);
   const canSeat = !readOnly && entry?.pricing.model !== "included" && entry?.pricing.model !== "usage";
 
   const openSeats = () => {

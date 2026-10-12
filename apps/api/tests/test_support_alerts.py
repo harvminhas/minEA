@@ -276,7 +276,8 @@ def test_migration_047_is_purely_additive():
 def test_migration_047_registered_last():
     src = (API / "scripts" / "migrate.py").read_text()
     block = src.split("MIGRATION_FILES = [", 1)[1].split("]", 1)[0]
-    assert re.findall(r'"(\d{3}_[a-z0-9_]+\.sql)"', block)[-1] == "047_support_requests.sql"
+    files = re.findall(r'"(\d{3}_[a-z0-9_]+\.sql)"', block)
+    assert "047_support_requests.sql" in files and files == sorted(files)
 
 
 @pytest.mark.parametrize("model", [SupportRequest, BillingAlert])

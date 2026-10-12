@@ -537,6 +537,11 @@
   [
     "reads",
     "agent",
+    "data_object"
+  ],
+  [
+    "reads",
+    "agent",
     "data_store"
   ],
   [
@@ -963,6 +968,11 @@
     "writes",
     "agent",
     "cloud_service"
+  ],
+  [
+    "writes",
+    "agent",
+    "data_object"
   ],
   [
     "writes",

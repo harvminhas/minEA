@@ -316,3 +316,11 @@ def test_a_bare_model_question_never_reaches_ai_landscape(monkeypatch, question)
     assert "ai_landscape" not in fake.tool_names and "search_records" in fake.tool_names
     assert fake.seen_tool_result["error"] == "not_an_ai_question"
     assert result["intent"] == ""
+
+
+def test_sensitive_data_fixture_f1_matches_typescript():
+    """Apps linked to a Health / Payment card data entity, and agents reading one, raise F1 (same fixture as TS)."""
+    fixture = json.loads((Path(__file__).resolve().parents[3] / "packages/types/src/fixtures/sensitive-data.fixture.json").read_text())
+    result = ai_landscape(fixture["objects"], fixture["relationships"])
+    got = [{"itemIds": flag["itemIds"], "why": flag["why"]} for flag in result["flags"] if flag["id"] == "F1"]
+    assert sorted(got, key=lambda f: f["itemIds"]) == sorted(fixture["expected_f1"], key=lambda f: f["itemIds"])

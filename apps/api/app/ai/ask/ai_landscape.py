@@ -35,7 +35,10 @@ ACTIVE_FEATURE = {"on", "piloting"}
 ACTIVE_AGENT = {"active", "under_evaluation"}
 FEEDS = {"sends_data_to", "writes", "owns"}
 HOLDS_ORDER = ["customer", "financial", "employee", "none"]
-KIND_ORDER = ["customer", "financial", "employee"]
+KIND_ORDER = ["customer", "financial", "employee", "health", "payment_card"]
+KIND_TEXT = {"payment_card": "payment card"}
+DATA_KINDS = set(KIND_ORDER)
+DATA_OBJECT_LINKS = {"owns", "creates", "reads", "writes"}
 CATEGORY_DEFAULTS = {
     "crm": ["customer"],
     "cx": ["customer"],
@@ -89,8 +92,30 @@ def read_holds_data(value: object) -> list[str]:
     return real or picked
 
 
+def data_object_kind(record: dict) -> str | None:
+    if record.get("type") != "data_object":
+        return None
+    kind = _props(record).get("sensitive_kind")
+    return kind if isinstance(kind, str) and kind in DATA_KINDS else None
+
+
+def linked_data_kinds(record_id: str, by_id: dict[str, dict], edges: list[dict]) -> set[str]:
+    kinds: set[str] = set()
+    for edge in edges:
+        if edge["from_object_id"] != record_id or edge["type"] not in DATA_OBJECT_LINKS:
+            continue
+        target = by_id.get(edge["to_object_id"])
+        kind = data_object_kind(target) if target else None
+        if kind:
+            kinds.add(kind)
+    return kinds
+
+
 def record_kinds(record: dict) -> set[str]:
     props = _props(record)
+    if record.get("type") == "data_object":
+        own = data_object_kind(record)
+        return {own} if own else set()
     stored = props.get("holds_data")
     if isinstance(stored, list):
         return {kind for kind in read_holds_data(stored) if kind != "none"}
@@ -104,7 +129,7 @@ def record_kinds(record: dict) -> set[str]:
 def sensitive_kinds(record: dict, by_id: dict[str, dict], edges: list[dict]) -> tuple[set[str], list[dict]]:
     """§6.2: holds_data or the default; a data_store without holds_data inherits from what feeds it, one hop."""
     if record.get("type") != "data_store" or isinstance(_props(record).get("holds_data"), list):
-        return record_kinds(record), []
+        return record_kinds(record) | linked_data_kinds(record["id"], by_id, edges), []
     kinds: set[str] = set()
     sources: list[dict] = []
     for edge in edges:
@@ -122,11 +147,11 @@ def sensitive_kinds(record: dict, by_id: dict[str, dict], edges: list[dict]) -> 
 
 
 def _sensitive(kinds: set[str]) -> bool:
-    return "customer" in kinds or "financial" in kinds
+    return bool(kinds & {"customer", "financial", "health", "payment_card"})
 
 
 def _kinds_text(kinds: set[str]) -> str:
-    return " and ".join(kind for kind in KIND_ORDER if kind in kinds)
+    return " and ".join(KIND_TEXT.get(kind, kind) for kind in KIND_ORDER if kind in kinds)
 
 
 def is_feature_host(obj: dict) -> bool:

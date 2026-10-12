@@ -1,0 +1,102 @@
+{
+  "objects": [
+    {
+      "id": "app-clinic",
+      "type": "application",
+      "name": "Clinic notes",
+      "status": "active",
+      "properties": {
+        "holds_data": [
+          "none"
+        ],
+        "ai_features": [
+          {
+            "key": "clinic-ai",
+            "name": "Clinic summariser",
+            "status": "on",
+            "sees_company_data": "yes",
+            "vendor_trains": "no",
+            "source": "user"
+          }
+        ]
+      }
+    },
+    {
+      "id": "app-wiki",
+      "type": "application",
+      "name": "Wiki",
+      "status": "active",
+      "properties": {
+        "holds_data": [
+          "none"
+        ],
+        "ai_features": [
+          {
+            "key": "wiki-ai",
+            "name": "Wiki answers",
+            "status": "on",
+            "sees_company_data": "yes",
+            "vendor_trains": "no",
+            "source": "user"
+          }
+        ]
+      }
+    },
+    {
+      "id": "do-health",
+      "type": "data_object",
+      "name": "Health",
+      "status": "active",
+      "properties": {
+        "sensitive_kind": "health"
+      }
+    },
+    {
+      "id": "do-cards",
+      "type": "data_object",
+      "name": "Payment card",
+      "status": "active",
+      "properties": {
+        "sensitive_kind": "payment_card"
+      }
+    },
+    {
+      "id": "agent-pay",
+      "type": "agent",
+      "name": "Refund bot",
+      "status": "active",
+      "properties": {
+        "owner": "Ops",
+        "access_mode": "service_account"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "id": "r1",
+      "type": "owns",
+      "from_object_id": "app-clinic",
+      "to_object_id": "do-health"
+    },
+    {
+      "id": "r2",
+      "type": "reads",
+      "from_object_id": "agent-pay",
+      "to_object_id": "do-cards"
+    }
+  ],
+  "expected_f1": [
+    {
+      "itemIds": [
+        "app-clinic:clinic-ai"
+      ],
+      "why": "Clinic notes holds health data and this feature can see it."
+    },
+    {
+      "itemIds": [
+        "agent-pay"
+      ],
+      "why": "It reads Payment card, which holds payment card data."
+    }
+  ]
+}

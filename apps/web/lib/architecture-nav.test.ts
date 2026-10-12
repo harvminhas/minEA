@@ -42,7 +42,7 @@ test("hidden routes still work by direct URL and stay highlighted", () => {
 
 test("pages are renamed and fintech examples are gone", () => {
   assert.match(src("components/strategy/RoadmapList.tsx"), /Roadmap &amp; renewals/);
-  assert.match(src("components/data/DataLayerList.tsx"), /title: "Sensitive data"/);
+  assert.match(src("components/data/SensitiveDataPage.tsx"), />Sensitive data</);
   const files = [
     "lib/views.ts", "components/views/ProcessBuilder.tsx", "components/views/ProductForm.tsx", "components/views/StageDetailPanel.tsx",
     "components/views/JourneyBuilder.tsx", "components/views/JourneyEdgeAnnotationPopover.tsx", "components/views/EdgeAnnotationPopover.tsx",
