@@ -333,9 +333,12 @@ export function AskAdd({
   kind = "app",
   onSaved,
   onClose,
+  submitSignal = 0,
 }: {
   initialText: string;
   kind?: "app" | "platform";
+  /** Bump to save the current rows through the same path as the cards' Add button. */
+  submitSignal?: number;
   onSaved?: (receipt: AddReceipt) => void;
   onClose?: () => void;
 }) {
@@ -345,6 +348,7 @@ export function AskAdd({
   const setup = useWorkspaceSetup();
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<AddRow[]>([]);
+  const [rowsFor, setRowsFor] = useState<string | null>(null);
   const [phase, setPhase] = useState<AddPhase>("idle");
   const [error, setError] = useState("");
   const [reduced, setReduced] = useState(false);
@@ -381,6 +385,7 @@ export function AskAdd({
     // Wait for the catalog so rows match existing records instead of all looking new.
     if (!loaded || edited.current || phase !== "idle") return;
     setRows(prepareRows(initialText, kind, estate));
+    setRowsFor(initialText);
   }, [loaded, initialText, estate, phase, kind]);
 
   useEffect(() => {
@@ -444,6 +449,21 @@ export function AskAdd({
       setPhase("error");
     }
   };
+
+  const submitSeen = useRef(submitSignal);
+  const submitPending = useRef(false);
+  useEffect(() => {
+    if (submitSeen.current !== submitSignal) {
+      submitSeen.current = submitSignal;
+      submitPending.current = true;
+    }
+    if (!submitPending.current || !loaded || phase !== "idle") return;
+    if (textRef.current !== initialText || rowsFor !== initialText) return;
+    const ready = rows.length > 0 && rows.some((row) => !row.existing);
+    submitPending.current = false;
+    if (ready) void save();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitSignal, rows, rowsFor, loaded, phase, initialText]);
 
   const undo = async () => {
     if (!snapshot || !orgSlug || !workspaceSlug || Date.now() > snapshot.undoUntil) return;
