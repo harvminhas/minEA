@@ -183,9 +183,16 @@ export function isViewsAreaPath(pathname: string): boolean {
   return /\/views(\/|$)/.test(pathname);
 }
 
-/** Views tab routes. Processes stays with Model, not this nav. */
+/** Views pages that render in the Model layout and sidebar, not the old Views shell. */
+export const MODEL_LAYOUT_VIEWS = ["processes", "investments", "capability-heatmap"] as const;
+const MODEL_LAYOUT_VIEW_RE = new RegExp(`/views/(${MODEL_LAYOUT_VIEWS.join("|")})(/|$)`);
+export function isModelLayoutViewPath(pathname: string): boolean {
+  return MODEL_LAYOUT_VIEW_RE.test(pathname);
+}
+
+/** Views tab routes. Processes, Investments and the heatmap stay with Model, not this nav. */
 export function isViewsModePath(pathname: string): boolean {
-  return isViewsAreaPath(pathname) && !/\/views\/processes(\/|$)/.test(pathname);
+  return isViewsAreaPath(pathname) && !isModelLayoutViewPath(pathname);
 }
 
 /** The Views hub (/views) and the impact view (/views/impact) use the workspace shell, not the old views sidebar. */

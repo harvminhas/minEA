@@ -63,6 +63,8 @@ test("top nav: org settings highlights no tab; workspace pages keep theirs", () 
   assert.equal(activeTopNavTab("/orgs/acme/workspaces/main/reports"), "reports");
   assert.equal(activeTopNavTab("/orgs/acme/workspaces/main/views"), "views");
   assert.equal(activeTopNavTab("/orgs/acme/workspaces/main/views/processes"), "model");
+  assert.equal(activeTopNavTab("/orgs/acme/workspaces/main/views/investments"), "model");
+  assert.equal(activeTopNavTab("/orgs/acme/workspaces/main/views/capability-heatmap"), "model");
   assert.equal(activeTopNavTab("/orgs/acme/workspaces/main/model/overview"), "model");
 });
 

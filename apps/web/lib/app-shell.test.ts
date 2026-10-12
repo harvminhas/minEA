@@ -22,3 +22,10 @@ test("the old view pages keep the Views sidebar on purpose", () => {
   assert.equal(orgShellFor(`${ws}/views/tech-stack`, "views"), "legacy");
   assert.equal(orgShellFor(`${ws}/embed/x`, "views"), "embed");
 });
+
+test("Processes, Investments and the Capability heatmap use the Model layout and sidebar", () => {
+  for (const page of ["processes", "investments", "capability-heatmap"]) {
+    assert.equal(orgShellFor(`${ws}/views/${page}`, "views"), "mvp", page);
+  }
+  assert.equal(orgShellFor(`${ws}/views/journeys`, "views"), "legacy");
+});

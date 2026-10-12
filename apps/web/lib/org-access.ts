@@ -2,7 +2,7 @@
  * Which org am I in, and what can I do there? Pure helpers for the org switcher, the avatar
  * menu and the Org settings page. The API still enforces every permission server-side.
  */
-import { primaryViewPath } from "@/lib/views";
+import { isModelLayoutViewPath, primaryViewPath } from "@/lib/views";
 
 export type RoleName = "owner" | "admin" | "member" | "viewer";
 
@@ -77,6 +77,6 @@ export function activeTopNavTab(pathname: string): TopNavTab | null {
   if (/\/workspaces\/[^/]+\/settings(\/|$)/.test(pathname)) return null;
   if (pathname.includes("/ask")) return "ask";
   if (pathname.includes("/reports")) return "reports";
-  if (pathname.includes("/views") && !pathname.includes("/views/processes")) return "views";
+  if (pathname.includes("/views") && !isModelLayoutViewPath(pathname)) return "views";
   return "model";
 }

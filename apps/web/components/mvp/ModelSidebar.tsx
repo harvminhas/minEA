@@ -202,8 +202,6 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
 
   const hidden: HiddenCounts = {
     processes: extra("views/processes"),
-    products: extra("strategy/products"),
-    journeys: extra("views/journeys"),
     dataStores: countTypes(["data_store"]),
     dataDomains: countTypes(["data_domain"]),
   };
@@ -213,8 +211,6 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
     roadmap: countTypes(["roadmap_item"]),
     "sensitive-data": countTypes(["data_object"]),
     processes: hidden.processes,
-    products: hidden.products,
-    journeys: hidden.journeys,
     "data-stores": hidden.dataStores,
     "data-domains": hidden.dataDomains,
   };

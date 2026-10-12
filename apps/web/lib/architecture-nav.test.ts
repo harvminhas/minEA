@@ -18,23 +18,35 @@ test("default Architecture shows the three everyday items", () => {
 test("Advanced reveals the rest", () => {
   assert.deepEqual(labels(true), [
     "Capability map", "Roadmap & renewals", "Sensitive data",
-    "Processes", "Products", "Journeys", "Investments", "Classic capability map", "Capability heatmap", "Data stores", "Data domains",
+    "Processes", "Investments", "Classic capability map", "Data stores", "Data domains",
   ]);
 });
 
 test("existing records in hidden types turn Advanced on; an explicit choice wins", () => {
   assert.equal(hasAdvancedRecords({}), false);
-  assert.equal(hasAdvancedRecords({ processes: 0, products: undefined }), false);
-  assert.equal(advancedEnabled(null, { journeys: 2 }), true);
+  assert.equal(hasAdvancedRecords({ processes: 0, dataStores: undefined }), false);
+  assert.equal(advancedEnabled(null, { processes: 2 }), true);
   assert.equal(advancedEnabled(undefined, { dataStores: 1 }), true);
   assert.equal(advancedEnabled(undefined, {}), false);
-  assert.equal(advancedEnabled(false, { products: 4 }), false, "turned off on purpose stays off");
+  assert.equal(advancedEnabled(false, { dataDomains: 4 }), false, "turned off on purpose stays off");
   assert.equal(advancedEnabled(true, {}), true);
 });
 
+test("Products, Journeys and the heatmap are never listed, even with Advanced on or on their page", () => {
+  for (const path of ["", `${B}/views/journeys`, `${B}/strategy/products`, `${B}/views/capability-heatmap`]) {
+    for (const advanced of [false, true]) {
+      const shown = labels(advanced, path);
+      for (const gone of ["Products", "Journeys", "Capability heatmap"]) assert.ok(!shown.includes(gone), `${gone} @ ${path}`);
+    }
+  }
+  const keys = architectureItems(B).map((item) => item.countKey).filter(Boolean);
+  assert.deepEqual(keys, ["processes", "dataStores", "dataDomains"], "products/journeys no longer turn Advanced on");
+  assert.doesNotMatch(src("components/mvp/ModelSidebar.tsx"), /strategy\/products|views\/journeys/);
+});
+
 test("hidden routes still work by direct URL and stay highlighted", () => {
-  assert.ok(labels(false, `${B}/views/journeys`).includes("Journeys"));
-  assert.ok(!labels(false, `${B}/views/journeys`).includes("Processes"));
+  assert.ok(labels(false, `${B}/views/investments`).includes("Investments"));
+  assert.ok(!labels(false, `${B}/views/investments`).includes("Processes"));
   for (const page of ["views/processes", "views/journeys", "views/investments", "views/capability-heatmap", "views/products", "strategy/products"]) {
     readFileSync(new URL(`../app/orgs/[orgSlug]/workspaces/[workspaceSlug]/${page}/page.tsx`, import.meta.url));
   }
