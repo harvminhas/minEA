@@ -98,7 +98,7 @@ export function StageDetailPanel({ stage, capabilities, onSave, onRequestDelete,
             value={draft.name}
             onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))}
             className={formFieldClass}
-            placeholder="e.g. KYC verification"
+            placeholder="e.g. Send the invoice"
             autoFocus
           />
         </div>

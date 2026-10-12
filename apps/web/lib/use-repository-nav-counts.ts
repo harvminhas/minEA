@@ -5,6 +5,7 @@ import type { ObjectType } from "@minea/types";
 import { useQuery } from "@tanstack/react-query";
 import {
   capabilityMapApi,
+  journeysApi,
   objectsApi,
   peopleApi,
   processesApi,
@@ -194,13 +195,14 @@ export function useModelNavExtras(orgSlug: string, workspaceSlug: string) {
     queryFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not authenticated");
-      const [roles, teams, contacts, products, processes, capability] = await Promise.all([
+      const [roles, teams, contacts, products, processes, capability, journeys] = await Promise.all([
         peopleApi.listRoles(orgSlug, workspaceSlug, token),
         peopleApi.listTeams(orgSlug, workspaceSlug, token),
         peopleApi.listContacts(orgSlug, workspaceSlug, token),
         productsApi.list(orgSlug, workspaceSlug, token),
         processesApi.list(orgSlug, workspaceSlug, token),
         capabilityMapApi.getStatus(orgSlug, workspaceSlug, token),
+        journeysApi.list(orgSlug, workspaceSlug, token).catch(() => ({ total: 0 })),
       ]);
       return {
         "people/roles": roles.total,
@@ -208,6 +210,7 @@ export function useModelNavExtras(orgSlug: string, workspaceSlug: string) {
         "people/contacts": contacts.total,
         "strategy/products": products.total,
         "views/processes": processes.total,
+        "views/journeys": journeys.total,
         "business/capabilities": capability.domain_count + capability.capability_count,
       } as Record<string, number>;
     },

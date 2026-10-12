@@ -454,7 +454,7 @@ export function JourneyBuilder({ initialValues, onClose }: Props) {
                 value={customerSegment}
                 onChange={(e) => setCustomerSegment(e.target.value)}
                 readOnly={isReadOnly}
-                placeholder="Segment: SMB merchants"
+                placeholder="Segment: repeat customers"
                 className="text-xs border border-gray-200 rounded-full px-3 py-1 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-auto min-w-[180px]"
               />
               <span className="text-xs border border-gray-200 rounded-full px-3 py-1 text-gray-500 capitalize">

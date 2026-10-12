@@ -311,6 +311,15 @@ export const setupApi = {
     }),
 };
 
+export type WorkspaceSettings = { architectureAdvanced?: boolean | null; stored: boolean };
+
+export const workspaceSettingsApi = {
+  get: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<WorkspaceSettings>(`${wsBase(orgSlug, workspaceSlug)}/settings`, { token }),
+  save: (orgSlug: string, workspaceSlug: string, body: { architectureAdvanced?: boolean | null }, token: string) =>
+    apiFetch<WorkspaceSettings>(`${wsBase(orgSlug, workspaceSlug)}/settings`, { method: "PATCH", token, body: JSON.stringify(body) }),
+};
+
 export const addApi = {
   save: (
     orgSlug: string,

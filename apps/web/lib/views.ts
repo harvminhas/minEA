@@ -42,7 +42,7 @@ export const PRODUCTS_VIEW: ViewConfig = {
   anchorQuestion: "Show me our products and what they depend on.",
   emptyTitle: "No products yet",
   emptyDescription:
-    "A product is something your business offers — like Payments or Merchant onboarding. Map each product to the business capabilities it delivers; systems and processes are inferred from there.",
+    "A product is something your business offers — like Installation services, Online store or Annual maintenance plans. Map each product to the business capabilities it delivers; systems and processes are inferred from there.",
   emptyCta: "Add your first product",
 };
 
@@ -59,7 +59,7 @@ export const PROCESSES_VIEW: ViewConfig = {
   anchorQuestion: "Show me our end-to-end processes with cycle time per stage.",
   emptyTitle: "No processes yet",
   emptyDescription:
-    "A process is an end-to-end flow with stages — like Merchant onboarding or Dispute resolution. Add stages, link required capabilities, and enter cycle times to spot bottlenecks.",
+    "A process is an end-to-end flow with stages — like Order to cash, Hiring a new employee or Handling a support ticket. Add stages, link required capabilities, and enter cycle times to spot bottlenecks.",
   emptyCta: "Add your first process",
 };
 
@@ -91,7 +91,7 @@ export const VIEWS_V1: ViewConfig[] = [
     anchorQuestion: "Show me the customer's path and where it breaks down.",
     emptyTitle: "No journeys yet",
     emptyDescription:
-      "A journey maps the customer experience step by step — like merchant onboarding or dispute resolution. Link steps to back-end processes and annotate transitions.",
+      "A journey maps the customer experience step by step — like a customer placing a first order or getting a repair booked. Link steps to back-end processes and annotate transitions.",
     emptyCta: "Add your first journey",
   },
   {

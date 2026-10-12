@@ -174,7 +174,7 @@ export function ProductForm({ initialValues, onClose, onSuccess }: Props) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               className={formFieldClass}
-              placeholder="e.g. Payments"
+              placeholder="e.g. Installation services"
               autoFocus
             />
           </div>

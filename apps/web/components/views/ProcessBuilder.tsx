@@ -392,7 +392,7 @@ export function ProcessBuilder({ initialValues, onClose }: Props) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               readOnly={isReadOnly}
-              placeholder="Process name, e.g. Merchant onboarding"
+              placeholder="Process name, e.g. Order to cash"
               className="text-xl font-semibold text-gray-900 w-full border border-transparent hover:border-gray-200 focus:border-indigo-300 rounded-md px-2 -mx-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-gray-300"
             />
             <p className="text-sm text-gray-400 mt-0.5 px-2 -mx-2">

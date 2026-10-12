@@ -311,7 +311,7 @@ export function DomainDetailPanel({ domainId, onClose, onUpdate }: Props) {
               <input
                 value={owningTeam}
                 onChange={(e) => setOwningTeam(e.target.value)}
-                placeholder="Payments team"
+                placeholder="Finance team"
                 disabled={!canEdit}
                 className="w-full rounded-md border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 disabled:bg-gray-50"
               />

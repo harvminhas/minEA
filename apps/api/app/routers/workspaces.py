@@ -34,6 +34,7 @@ from app.services.licences import invite_grants_licence, require_licence
 from app.services.share_access import validate_share_create
 from app.services.roles import ORG_ADMIN_ROLES, effective_workspace_role
 from app.services.tenancy import TenancyContext, get_org_context, get_workspace_context
+from app.services.workspace_settings import read_workspace_settings, write_workspace_settings
 
 router = APIRouter(prefix="/orgs/{org_slug}/workspaces", tags=["workspaces"])
 
@@ -239,6 +240,41 @@ async def write_setup(
         current["mapReadyShownAt"] = body.mapReadyShownAt
     row.setup = current
     return _setup_payload(current)
+
+
+class WorkspaceSettingsRead(BaseModel):
+    architectureAdvanced: bool | None = None
+    # False until migration 048 adds workspaces.settings; the web app then uses its defaults.
+    stored: bool = True
+
+
+class WorkspaceSettingsWrite(BaseModel):
+    architectureAdvanced: bool | None = None
+
+
+@router.get("/{workspace_slug}/settings", response_model=WorkspaceSettingsRead)
+async def read_settings(
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspaceSettingsRead:
+    await ctx.require_read(db)
+    assert ctx.workspace
+    data, stored = await read_workspace_settings(db, ctx.workspace.id)
+    return WorkspaceSettingsRead(**data, stored=stored)
+
+
+@router.patch("/{workspace_slug}/settings", response_model=WorkspaceSettingsRead)
+async def write_settings(
+    body: WorkspaceSettingsWrite,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspaceSettingsRead:
+    await ctx.require_permission(db, "workspace.settings.edit")
+    assert ctx.workspace
+    data, stored = await write_workspace_settings(db, ctx.workspace.id, body.model_dump(exclude_unset=True))
+    if not stored:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Workspace settings aren't available yet")
+    return WorkspaceSettingsRead(**data, stored=True)
 
 
 @router.get("/{workspace_slug}/copy-preview", response_model=WorkspaceCopyPreview)

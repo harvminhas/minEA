@@ -345,7 +345,7 @@ export function CreateRoadmapPanel({
                     autoFocus
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Migrate auth-service off Java 8"
+                    placeholder="e.g. Replace the AS400 order entry"
                     className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                   />
                 </div>

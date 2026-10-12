@@ -11,6 +11,8 @@ import { useModelNavExtras } from "@/lib/use-repository-nav-counts";
 import { catalogStats } from "@/lib/model-catalog";
 import { AI_GROUP_LABEL, UI_TYPE_LABEL } from "@/lib/relationship-targets";
 import { useModelCatalog } from "@/lib/use-model-catalog";
+import { architectureItems, visibleArchitectureItems, type HiddenCounts } from "@/lib/architecture-nav";
+import { useArchitectureAdvanced } from "@/lib/use-architecture-advanced";
 
 type IconType = typeof LayoutGrid;
 
@@ -72,7 +74,6 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
   const people = extras
     ? (extras["people/teams"] ?? 0) + (extras["people/roles"] ?? 0) + (extras["people/contacts"] ?? 0)
     : undefined;
-  const data = countTypes(["data_object", "data_store", "data_domain"]);
 
   const estate: NavItem[] = [
     {
@@ -199,64 +200,51 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
     },
   ];
 
-  const architecture: NavItem[] = [
-    {
-      label: UI_TYPE_LABEL.capability,
-      href: modelPath(basePath, "capabilities"),
-      count: countTypes(["capability"]),
-      match: ["/model/capabilities", "/business/capabilities"],
-    },
-    {
-      label: "Processes",
-      href: `${basePath}/views/processes`,
-      count: extra("views/processes"),
-      match: ["/views/processes"],
-    },
-    {
-      label: UI_TYPE_LABEL.roadmap_item,
-      href: `${basePath}/strategy/roadmaps`,
-      count: countTypes(["roadmap_item"]),
-      match: ["/strategy/roadmaps"],
-    },
-    {
-      label: "Products",
-      href: `${basePath}/strategy/products`,
-      count: extra("strategy/products"),
-      match: ["/strategy/products"],
-    },
-    {
-      label: "Data",
-      href: `${basePath}/data/data-objects`,
-      count: data,
-      match: ["/data/"],
-      children: [
-        {
-          label: UI_TYPE_LABEL.data_object,
-          href: `${basePath}/data/data-objects`,
-          count: countTypes(["data_object"]),
-          match: ["/data/data-objects"],
-        },
-        {
-          label: UI_TYPE_LABEL.data_store,
-          href: `${basePath}/data/data-stores`,
-          count: countTypes(["data_store"]),
-          match: ["/data/data-stores"],
-        },
-        {
-          label: UI_TYPE_LABEL.data_domain,
-          href: `${basePath}/data/data-domains`,
-          count: countTypes(["data_domain"]),
-          match: ["/data/data-domains"],
-        },
-      ],
-    },
-  ];
+  const hidden: HiddenCounts = {
+    processes: extra("views/processes"),
+    products: extra("strategy/products"),
+    journeys: extra("views/journeys"),
+    dataStores: countTypes(["data_store"]),
+    dataDomains: countTypes(["data_domain"]),
+  };
+  const arch = useArchitectureAdvanced(orgSlug ?? "", workspaceSlug ?? "", hidden);
+  const archCount: Record<string, number | undefined> = {
+    capabilities: countTypes(["capability"]),
+    roadmap: countTypes(["roadmap_item"]),
+    "sensitive-data": countTypes(["data_object"]),
+    processes: hidden.processes,
+    products: hidden.products,
+    journeys: hidden.journeys,
+    "data-stores": hidden.dataStores,
+    "data-domains": hidden.dataDomains,
+  };
+  const architecture: NavItem[] = visibleArchitectureItems(architectureItems(basePath), arch.advanced, pathname).map((item) => ({
+    label: item.label,
+    href: item.href,
+    count: archCount[item.key],
+    match: item.match,
+  }));
 
   return (
     <aside className="flex h-full w-[232px] flex-shrink-0 flex-col border-r border-[#e7e8ee] bg-[#f6f7f9]">
       <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-4">
         <Section label="Your estate" items={estate} pathname={pathname} active={active} subnav={subnav} />
-        <Section label="Architecture" items={architecture} pathname={pathname} active={active} subnav={subnav} />
+        <div>
+          <Section label="Architecture" items={architecture} pathname={pathname} active={active} subnav={subnav} />
+          <label className="mt-1 flex cursor-pointer items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-[12px] text-[#6b7289] hover:bg-[#eceef3]">
+            <span title="Processes, Products, Journeys, Investments, Capability heatmap, Data stores and Data domains">Show advanced</span>
+            <input
+              type="checkbox"
+              role="switch"
+              data-testid="arch-advanced-toggle"
+              aria-label="Show advanced architecture"
+              checked={arch.advanced}
+              onChange={(event) => arch.setAdvanced(event.target.checked)}
+              className="h-3.5 w-3.5 accent-[#5b4ce6]"
+            />
+          </label>
+          {arch.error && <p className="px-2.5 text-[11px] text-[#b42318]">{arch.error}</p>}
+        </div>
       </nav>
       <div className="border-t border-[#e7e8ee] px-4 py-3">
         {catalog.data ? (

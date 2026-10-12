@@ -54,7 +54,7 @@ export function RoadmapList() {
           >
             Strategy Layer
           </span>
-          <h1 className="text-lg font-semibold text-gray-900">Roadmaps</h1>
+          <h1 className="text-lg font-semibold text-gray-900">Roadmap &amp; renewals</h1>
           {data && (
             <span className="text-sm text-gray-400">
               {data.total} {data.total === 1 ? "record" : "records"}

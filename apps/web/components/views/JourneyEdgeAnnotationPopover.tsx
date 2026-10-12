@@ -72,7 +72,7 @@ export function JourneyEdgeAnnotationPopover({
           label="Dependency"
           value={transition.dependency ?? ""}
           onChange={(v) => setField("dependency", v)}
-          placeholder="e.g. requires KYC approval"
+          placeholder="e.g. needs a signed quote"
         />
         <Field
           icon={Signpost}

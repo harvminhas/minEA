@@ -6,11 +6,11 @@ import type { StageTransition } from "@/components/views/ProcessFlowCanvas";
 import { cn } from "@/lib/utils";
 
 export const HANDOFF_TEAMS = [
-  "Compliance team",
-  "Payments team",
-  "Risk team",
+  "Sales team",
+  "Finance team",
   "Operations team",
-  "Engineering team",
+  "Customer service team",
+  "IT team",
 ] as const;
 
 interface Props {

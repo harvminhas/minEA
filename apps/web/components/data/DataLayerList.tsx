@@ -50,7 +50,7 @@ type DataListConfig = {
 const CONFIGS: Record<string, DataListConfig> = {
   "data-objects": {
     objectType: "data_object",
-    title: "Data Entities",
+    title: "Sensitive data",
     titlePlural: "entities",
     createKind: "entity",
     addLabel: "Add entity",

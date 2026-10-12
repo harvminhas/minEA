@@ -233,7 +233,7 @@ export function RoadmapTrackSegmentDrawer({
                   autoFocus
                   value={trackLabel}
                   onChange={(e) => setTrackLabel(e.target.value)}
-                  placeholder='e.g. "Partner Sourcing"'
+                  placeholder='e.g. "Website rebuild"'
                   className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                 />
               </div>
@@ -265,7 +265,7 @@ export function RoadmapTrackSegmentDrawer({
                   autoFocus
                   value={segLabel}
                   onChange={(e) => setSegLabel(e.target.value)}
-                  placeholder='e.g. "RFI"'
+                  placeholder='e.g. "Get quotes"'
                   className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
                 />
               </div>
