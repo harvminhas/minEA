@@ -288,18 +288,21 @@ export function RecordFields({
             def.editor === "costLines" && row ? (
               <CostSection key={def.key} row={row} onSaved={() => undefined} readOnly={!canEdit} />
             ) : def.key === "ai_features" ? (
-              <AiFeaturesSection key={def.key} object={object} edges={edges} names={names} readOnly={!canEdit} />
+              <div key={def.key} data-field-key={def.key}>
+                <AiFeaturesSection object={object} edges={edges} names={names} readOnly={!canEdit} />
+              </div>
             ) : (
-              <InlineField
-                key={def.key}
-                def={def}
-                object={object}
-                edges={edges}
-                names={names}
-                suggestion={def.key === "vendor" ? row?.suggestion : null}
-                forceOpen={openKey === def.key}
-                onCloseEdit={() => onOpenKey?.(null)}
-              />
+              <div key={def.key} data-field-key={def.key}>
+                <InlineField
+                  def={def}
+                  object={object}
+                  edges={edges}
+                  names={names}
+                  suggestion={def.key === "vendor" ? row?.suggestion : null}
+                  forceOpen={openKey === def.key}
+                  onCloseEdit={() => onOpenKey?.(null)}
+                />
+              </div>
             )
           )}
         </section>

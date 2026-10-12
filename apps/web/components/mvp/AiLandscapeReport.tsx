@@ -10,7 +10,8 @@ import { useModelCatalog } from "@/lib/use-model-catalog";
 import { moneyLabel } from "@/lib/model-catalog";
 import { countLabel } from "@/lib/labels";
 import { AGENT_AUTONOMY_OPTIONS, AGENT_STATUS_OPTIONS } from "@/lib/fields/registry";
-import { agentChain, aiLandscape, flagGroupTitle, type Lane, type LandscapeFlag, type UnreviewedRow } from "@/lib/ai/landscape";
+import { destinationHref, flagDestination, flagRowId, recordIdOf, sortFlagsByCode } from "@/lib/ai/flag-actions";
+import { FLAG_LABELS, agentChain, aiLandscape, flagGroupTitle, type Lane, type LandscapeFlag, type UnreviewedRow } from "@/lib/ai/landscape";
 import { confirmFeature, featureCostLabel } from "@/lib/ai/features";
 import { useFeatureSave } from "@/lib/ai/use-feature-save";
 
@@ -77,14 +78,12 @@ export function AiLandscapeReport() {
 
   const flagsFor = (id: string) => result.flags.filter((flag) => flag.itemIds.includes(id));
   const flagCell = (id: string) => {
-    const flags = flagsFor(id);
+    const flags = sortFlagsByCode(flagsFor(id));
     if (!flags.length) return <span className="text-[#8b90a0]">—</span>;
     return (
       <span className="flex flex-wrap gap-1">
         {flags.map((flag, index) => (
-          <span key={`${flag.id}-${index}`} title={flag.why} className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${flag.severity === "high" ? "bg-[#fef2f2] text-[#b42318]" : "bg-[#fff7ed] text-[#b45309]"}`}>
-            {flag.id}
-          </span>
+          <FlagChip key={`${flag.id}-${index}`} flag={flag} onClick={() => jumpToFlag(flag)} />
         ))}
       </span>
     );
@@ -150,15 +149,15 @@ export function AiLandscapeReport() {
     <div className="px-8 py-6">
       {header}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <Kpi label="Places AI touches" value={String(result.places)} detail={`${countLabel(result.features.length, "feature", "features")} · ${countLabel(activeAgents.length, "agent", "agents")} · ${result.platforms.filter((item) => item.counted).length} platforms & models`} />
-        <Kpi label="Flags" value={String(result.flags.length)} detail={result.flags.length ? `${high} high` : "Nothing to look at"} warn={high > 0} />
-        <Kpi label="AI spend" value={result.spend.total ? `${moneyLabel(result.spend.total)} / yr` : "—"} detail={result.spend.addOns ? `${share}% is per-seat add-ons (${moneyLabel(result.spend.addOns)})` : "No paid add-ons"} />
-        <Kpi label="Not reviewed" value={String(result.unreviewed.length)} detail={result.unreviewed.length ? "AI we think is in your apps" : "All checked"} warn={result.unreviewed.length > 0} />
+        <Kpi href="#ai-features" label="Places AI touches" value={String(result.places)} detail={`${countLabel(result.features.length, "feature", "features")} · ${countLabel(activeAgents.length, "agent", "agents")} · ${result.platforms.filter((item) => item.counted).length} platforms & models`} />
+        <Kpi href={result.flags.length ? "#ai-flags" : undefined} label="Flags" value={String(result.flags.length)} detail={result.flags.length ? `${high} high` : "Nothing to look at"} warn={high > 0} />
+        <Kpi href="#ai-spend" label="AI spend" value={result.spend.total ? `${moneyLabel(result.spend.total)} / yr` : "—"} detail={result.spend.addOns ? `${share}% is per-seat add-ons (${moneyLabel(result.spend.addOns)})` : "No paid add-ons"} />
+        <Kpi href={result.unreviewed.length ? "#ai-unreviewed" : undefined} label="Not reviewed" value={String(result.unreviewed.length)} detail={result.unreviewed.length ? "AI we think is in your apps" : "All checked"} warn={result.unreviewed.length > 0} />
       </div>
 
       <FlagsCard flags={result.flags} nameOf={nameOf} link={link} />
 
-      <h2 className="mt-8 text-[15px] font-semibold text-[#1c2230]">AI features in your tools · {result.features.length}</h2>
+      <h2 id="ai-features" className="mt-8 scroll-mt-4 text-[15px] font-semibold text-[#1c2230]">AI features in your tools · {result.features.length}</h2>
       {result.features.length === 0 ? (
         <p className="mt-2 text-[13px] text-[#8b90a0]">No AI features turned on yet.</p>
       ) : (
@@ -275,13 +274,40 @@ export function AiLandscapeReport() {
         </section>
       )}
 
-      <p className="mt-6 text-[12px] text-[#8b90a0]">
+      <p id="ai-spend" className="mt-6 scroll-mt-4 text-[12px] text-[#8b90a0]">
         Counts AI features that are on or piloting, agents that are live or piloting, and AI platforms and models. Spend is confirmed per-seat add-ons, AI
         platforms and models, and agents&apos; own costs; features not reviewed yet, data platforms and the tools agents run in aren&apos;t counted. Prices
         come from the vendor and may be out of date.
       </p>
     </div>
   );
+}
+
+/** The F-code badge: same colours in the tables and on the Risk flags rows. */
+function FlagChip({ flag, onClick }: { flag: LandscapeFlag; onClick?: () => void }) {
+  const tone = flag.severity === "high" ? "bg-[#fef2f2] text-[#b42318]" : "bg-[#fff7ed] text-[#b45309]";
+  const tip = `${flag.id} · ${FLAG_LABELS[flag.id].title}: ${flag.why}`;
+  const cls = `rounded px-1.5 py-0.5 text-[11px] font-semibold ${tone}`;
+  return onClick ? (
+    <button type="button" title={tip} aria-label={`${flag.id}: ${FLAG_LABELS[flag.id].title}. Show in Risk flags`} data-flag-chip={flag.id} onClick={onClick} className={`${cls} hover:ring-1 hover:ring-current`}>
+      {flag.id}
+    </button>
+  ) : (
+    <span title={tip} className={cls}>{flag.id}</span>
+  );
+}
+
+/** Scroll to a flag's row in Risk flags and highlight it briefly. */
+function jumpToFlag(flag: LandscapeFlag) {
+  const row = document.getElementById(flagRowId(flag));
+  if (!row) return;
+  row.scrollIntoView({ block: "center", behavior: "smooth" });
+  row.dataset.highlighted = "true";
+  row.classList.add("bg-[#f6f5ff]", "ring-2", "ring-[#5b4ce6]/40");
+  window.setTimeout(() => {
+    row.classList.remove("bg-[#f6f5ff]", "ring-2", "ring-[#5b4ce6]/40");
+    delete row.dataset.highlighted;
+  }, 2500);
 }
 
 function FlagsCard({
@@ -293,6 +319,11 @@ function FlagsCard({
   nameOf: (id: string) => { id: string; name: string };
   link: (id: string) => string | null;
 }) {
+  const fixHref = (flag: LandscapeFlag) => {
+    const dest = flagDestination(flag);
+    const path = link(dest.recordId);
+    return path ? destinationHref(path, dest) : null;
+  };
   if (flags.length === 0) {
     return (
       <div className="mt-6 rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] p-4 text-[14px] text-[#15803d]">
@@ -303,34 +334,51 @@ function FlagsCard({
   const groups = new Map<string, LandscapeFlag[]>();
   for (const flag of flags) groups.set(`${flag.id}-${flag.severity}`, [...(groups.get(`${flag.id}-${flag.severity}`) ?? []), flag]);
   return (
-    <section className="mt-6 rounded-xl border border-[#e6e8ee]">
+    <section id="ai-flags" className="mt-6 scroll-mt-4 rounded-xl border border-[#e6e8ee]">
       <h2 className="border-b border-[#eef0f4] px-4 py-3 text-[15px] font-semibold text-[#1c2230]">Risk flags · {flags.length}</h2>
-      {[...groups.values()].map((group) => (
+      {sortFlagsByCode([...groups.values()].map((group) => ({ id: group[0].id, group }))).map(({ group }) => (
         <div key={`${group[0].id}-${group[0].severity}`} className="border-b border-[#f3f4f8] px-4 py-3 last:border-b-0">
           <div className="flex items-center gap-2">
             <SeverityPill severity={group[0].severity} />
-            <span className="text-[14px] font-medium text-[#1c2230]">
-              {group[0].severity === "check" && group[0].id !== "F6" ? `Check: ${group[0].title.toLowerCase()}` : flagGroupTitle(group)}
-            </span>
+            {(() => {
+              const heading = group[0].severity === "check" && group[0].id !== "F6" ? `Check: ${group[0].title.toLowerCase()}` : flagGroupTitle(group);
+              const only = group.length === 1 ? group[0] : null;
+              const href = only ? fixHref(only) : null;
+              return href ? (
+                <Link href={href} className="text-[14px] font-medium text-[#1c2230] hover:underline">{heading}</Link>
+              ) : (
+                <span className="text-[14px] font-medium text-[#1c2230]">{heading}</span>
+              );
+            })()}
             <span className="text-[12px] text-[#8b90a0]">{group.length}</span>
-            <span className="ml-auto text-[12px] text-[#5b4ce6]">{group[0].fix}</span>
           </div>
           <ul className="mt-1.5 space-y-1 text-[13px] text-[#3c4254]">
-            {group.map((flag, index) => (
-              <li key={`${flag.itemIds.join()}-${index}`}>
-                {flag.itemIds.map((id, at) => {
-                  const ref = nameOf(id);
-                  const href = link(ref.id);
-                  return (
-                    <span key={id}>
-                      {at > 0 && ", "}
-                      {href ? <Link href={href} className="font-medium hover:underline">{ref.name}</Link> : <span className="font-medium">{ref.name}</span>}
-                    </span>
-                  );
-                })}
-                <span className="text-[#6b7289]"> · {flag.why}</span>
-              </li>
-            ))}
+            {group.map((flag, index) => {
+              const href = fixHref(flag);
+              return (
+                <li key={`${flag.itemIds.join()}-${index}`} id={flagRowId(flag)} className="-mx-1 flex scroll-mt-4 items-start gap-3 rounded-md px-1 py-0.5 transition">
+                  <FlagChip flag={flag} />
+                  <span className="min-w-0 flex-1">
+                    {flag.itemIds.map((id, at) => {
+                      const ref = nameOf(id);
+                      const recordHref = link(recordIdOf(ref.id));
+                      return (
+                        <span key={id}>
+                          {at > 0 && ", "}
+                          {recordHref ? <Link href={recordHref} className="font-medium hover:underline">{ref.name}</Link> : <span className="font-medium">{ref.name}</span>}
+                        </span>
+                      );
+                    })}
+                    <span className="text-[#6b7289]"> · {flag.why}</span>
+                  </span>
+                  {href ? (
+                    <Link href={href} data-flag-action={flag.id} className="shrink-0 text-[12px] font-medium text-[#5b4ce6] hover:underline">
+                      {flag.fix} →
+                    </Link>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}
@@ -341,7 +389,7 @@ function FlagsCard({
 function UnreviewedBucket({ rows, objects, first }: { rows: UnreviewedRow[]; objects: ReadonlyMap<string, MinEAObject>; first?: boolean }) {
   const hosts = new Set(rows.map((row) => row.hostId)).size;
   return (
-    <section className="mt-8 rounded-xl border border-[#f3e3c0] bg-[#fff8eb] p-4">
+    <section id={first ? undefined : "ai-unreviewed"} className="mt-8 scroll-mt-4 rounded-xl border border-[#f3e3c0] bg-[#fff8eb] p-4">
       <h2 className="text-[15px] font-semibold text-[#1c2230]">
         {first ? `We think AI is on in ${hosts} of your apps. Confirm in a click` : `Not reviewed yet · ${rows.length}`}
       </h2>
@@ -381,13 +429,22 @@ function UnreviewedLine({ row, host }: { row: UnreviewedRow; host: MinEAObject |
   );
 }
 
-function Kpi({ label: title, value, detail, warn }: { label: string; value: string; detail: string; warn?: boolean }) {
-  return (
-    <div className={`rounded-xl border p-3 ${warn ? "border-[#f3e3c0] bg-[#fff8eb]" : "border-[#e6e8ee]"}`}>
+/** Summary card; with href it jumps to the section that explains the number. */
+function Kpi({ label: title, value, detail, warn, href }: { label: string; value: string; detail: string; warn?: boolean; href?: string }) {
+  const body = (
+    <>
       <div className="text-[12px] text-[#6b7289]">{title}</div>
       <div className="mt-1 text-[20px] font-semibold text-[#1c2230]">{value}</div>
       <div className="text-[12px] text-[#8b90a0]">{detail}</div>
-    </div>
+    </>
+  );
+  const tone = `rounded-xl border p-3 ${warn ? "border-[#f3e3c0] bg-[#fff8eb]" : "border-[#e6e8ee]"}`;
+  return href ? (
+    <a href={href} data-kpi={title} className={`${tone} block transition hover:border-[#5b4ce6] focus:outline-none focus:ring-2 focus:ring-[#5b4ce6]/40`}>
+      {body}
+    </a>
+  ) : (
+    <div className={tone}>{body}</div>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQueries } from "@tanstack/react-query";
 import { Link2, Plus, X } from "lucide-react";
@@ -16,6 +16,8 @@ import { alsoInDetailsLabel } from "@/lib/fields/shared-links";
 import { cn } from "@/lib/utils";
 
 interface Props {
+  /** Mark links of this relationship type (deep link from a risk flag). */
+  highlightType?: string;
   objectId: string;
   objectName: string;
   objectType?: ObjectType;
@@ -39,8 +41,15 @@ export function ObjectRelationshipsTab({
   isRemoving,
   hideAdd = false,
   hideRemove = false,
+  highlightType,
 }: Props) {
   const { getToken } = useAuth();
+  const scrolled = useRef(false);
+  const scrollOnce = (node: HTMLDivElement | null) => {
+    if (!node || scrolled.current) return;
+    scrolled.current = true;
+    node.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
   const { orgSlug, workspaceSlug } = useTenancy();
 
   const relatedIds = useMemo(() => {
@@ -115,7 +124,13 @@ export function ObjectRelationshipsTab({
             return (
               <div
                 key={rel.id}
-                className="flex items-center justify-between gap-3 py-2.5 px-3 bg-stone-50 rounded-lg"
+                ref={highlightType && rel.type === highlightType && rel.from_object_id === objectId ? scrollOnce : undefined}
+                data-highlighted={highlightType && rel.type === highlightType ? "true" : undefined}
+                className={
+                  highlightType && rel.type === highlightType
+                    ? "flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg bg-[#f6f5ff] ring-2 ring-[#5b4ce6]/40"
+                    : "flex items-center justify-between gap-3 py-2.5 px-3 bg-stone-50 rounded-lg"
+                }
               >
                 <div className="flex items-start gap-2 min-w-0">
                   <Link2 size={14} className="text-gray-400 flex-shrink-0 mt-0.5" />

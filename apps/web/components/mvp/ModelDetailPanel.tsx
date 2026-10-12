@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2, X } from "lucide-react";
@@ -45,8 +46,35 @@ export function ModelDetailPanel({
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
   const { canEdit, canDelete } = usePermissions();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<ObjectDrawerTabId>("details");
-  const [openField, setOpenField] = useState<string | null>(null);
+  // Deep links (e.g. from AI landscape risk flags): ?focus=<field key> opens that field;
+  // ?tab=relationships&highlight=<relationship type> opens Relationships with those links marked.
+  const params = useSearchParams();
+  const focusParam = params?.get("focus") ?? null;
+  const highlightParam = params?.get("highlight") ?? null;
+  const tabParam = params?.get("tab") === "relationships" ? "relationships" : null;
+  const [tab, setTab] = useState<ObjectDrawerTabId>(tabParam ?? "details");
+  const [openField, setOpenField] = useState<string | null>(focusParam);
+  useEffect(() => {
+    if (tabParam) setTab(tabParam);
+    else if (focusParam) {
+      setTab("details");
+      setOpenField(focusParam);
+    }
+  }, [tabParam, focusParam]);
+  useEffect(() => {
+    if (!focusParam || tab !== "details") return;
+    const timer = window.setTimeout(() => {
+      const target = document.querySelector<HTMLElement>(`[data-field-key="${CSS.escape(focusParam)}"]`);
+      if (!target) return;
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      target.dataset.focused = "true";
+      target.classList.add("rounded-lg", "bg-[#f6f5ff]", "ring-2", "ring-[#5b4ce6]/40", "px-1");
+      window.setTimeout(() => {
+        target.classList.remove("bg-[#f6f5ff]", "ring-2", "ring-[#5b4ce6]/40");
+      }, 4000);
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [focusParam, tab, row.id]);
   const debt = useObjectTechDebtSummary(row.id, tab === "tech_debt");
   const impactGraph = useImpactGraph();
   const catalog = useModelCatalog();
@@ -198,7 +226,7 @@ export function ModelDetailPanel({
             </section>
           </div>
         )}
-        {tab === "relationships" && <Relationships row={row} canEdit={canEdit} />}
+        {tab === "relationships" && <Relationships row={row} canEdit={canEdit} highlight={highlightParam} />}
         {tab === "tech_debt" && (
           <ObjectTechDebtTab
             objectId={row.id}
@@ -374,7 +402,7 @@ function RelList({ title, items, empty }: { title: string; items: { id: string; 
   );
 }
 
-function Relationships({ row, canEdit }: { row: CatalogRow; canEdit: boolean }) {
+function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: boolean; highlight?: string | null }) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
@@ -505,6 +533,7 @@ function Relationships({ row, canEdit }: { row: CatalogRow; canEdit: boolean }) 
         objectName={row.name}
         objectType={row.object.type}
         relationships={rowRelationships}
+        highlightType={highlight ?? undefined}
         relatedNameOverrides={relatedNameOverrides}
         onAdd={canEdit && storedObject ? open : undefined}
         onRemove={canEdit && storedObject ? remove : undefined}

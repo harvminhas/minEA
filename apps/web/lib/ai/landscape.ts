@@ -23,7 +23,16 @@ export type Severity = "high" | "check";
 export type FlagId = "F1" | "F2" | "F3" | "F4" | "F5" | "F6";
 export type Lane = "stop" | "slow" | "risk" | null;
 
-export type LandscapeFlag = { id: FlagId; severity: Severity; itemIds: string[]; title: string; why: string; fix: string };
+export type LandscapeFlag = {
+  id: FlagId;
+  severity: Severity;
+  itemIds: string[];
+  title: string;
+  why: string;
+  fix: string;
+  /** The record the fix happens on when it is not the flagged item (F2 on an agent: its model). */
+  fixOn?: string;
+};
 
 export type FeatureItem = {
   kind: "feature";
@@ -97,7 +106,7 @@ const ACTIVE_FEATURE: ReadonlySet<AiFeatureStatus> = new Set(["on", "piloting"])
 const ACTIVE_AGENT = new Set(["active", "under_evaluation"]);
 const FEEDS = new Set(["sends_data_to", "writes", "owns"]);
 
-const TITLES: Record<FlagId, { title: string; fix: string }> = {
+export const FLAG_LABELS: Record<FlagId, { title: string; fix: string }> = {
   F1: { title: "Can see customer or financial data", fix: "See what each can see" },
   F2: { title: "Vendor may train on your data", fix: "Get training terms" },
   F3: { title: "Agent has no owner", fix: "Set an owner" },
@@ -330,8 +339,8 @@ export function riskFlags(
 ): LandscapeFlag[] {
   const graph = graphOf(objects, relationships);
   const flags: LandscapeFlag[] = [];
-  const push = (id: FlagId, severity: Severity, itemIds: string[], why: string, title?: string) =>
-    flags.push({ id, severity, itemIds, why, ...TITLES[id], ...(title ? { title } : {}) });
+  const push = (id: FlagId, severity: Severity, itemIds: string[], why: string, title?: string, fixOn?: string) =>
+    flags.push({ id, severity, itemIds, why, ...FLAG_LABELS[id], ...(title ? { title } : {}), ...(fixOn ? { fixOn } : {}) });
 
   for (const item of features) {
     const host = graph.byId.get(item.hostId);
@@ -360,8 +369,8 @@ export function riskFlags(
     }
     for (const model of agent.models) {
       const trains = str(graph.byId.get(model.id)?.properties?.vendor_trains) || "unknown";
-      if (trains === "yes") push("F2", "high", [agent.id], `${model.name}'s vendor may train on what this agent sends it.`);
-      else if (trains === "unknown") push("F2", "check", [agent.id], `We don't know if ${model.name}'s vendor trains on your data.`);
+      if (trains === "yes") push("F2", "high", [agent.id], `${model.name}'s vendor may train on what this agent sends it.`, undefined, model.id);
+      else if (trains === "unknown") push("F2", "check", [agent.id], `We don't know if ${model.name}'s vendor trains on your data.`, undefined, model.id);
     }
     if (!agent.owner) push("F3", "high", [agent.id], "Nobody is named as its owner.");
     if (agent.writes.length) {
