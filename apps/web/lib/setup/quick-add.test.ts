@@ -58,3 +58,15 @@ test("everyday apps come before niche ones", () => {
   assert.deepEqual(quickAddSuggestions("app", [], 3), ["Slack", "Zoom Workplace", "Google Workspace"]);
   assert.equal(quickAddSuggestions("app", ["Slack", "Zoom"], 1)[0], "Google Workspace");
 });
+
+test("a chip saves only its own product, deduped, and never the typed box", async () => {
+  const { quickAddBatch } = await import("./quick-add.ts");
+  const batch = quickAddBatch("Google Workspace", [item("Slack")]);
+  assert.deepEqual(batch?.creates.map((c) => c.name), ["Google Workspace"]);
+  assert.equal(batch?.updates.length, 0);
+  assert.equal(quickAddBatch("Slack", [item("Slack")]), null, "already there: nothing saved");
+  const screen = src("components/mvp/ModelScreen.tsx");
+  const chip = screen.slice(screen.indexOf('data-testid="quick-add-chip"'), screen.indexOf("</button>", screen.indexOf('data-testid="quick-add-chip"')));
+  assert.match(chip, /quickAdd\(name\)/);
+  for (const banned of ["setAddText", "setAddSubmit", "setAddSaved", "setAddKindLocked"]) assert.ok(!chip.includes(banned), `chip must not call ${banned}`);
+});
