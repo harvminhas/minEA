@@ -18,3 +18,8 @@ export function withFromViews(href: string): string {
 export function cameFromViews(params: { get(name: string): string | null } | null): boolean {
   return params?.get("from") === "views";
 }
+
+/** Reports opened from the hub drop the Reports sidebar and read full width (capped). */
+export function showReportsSidebar(pathname: string, params: { get(name: string): string | null } | null): boolean {
+  return /\/reports(\/|$)/.test(pathname) && !cameFromViews(params);
+}

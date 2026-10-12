@@ -31,3 +31,15 @@ test("reports show Back to Views only when opened from the hub, else the Reports
     assert.match(text, /href=\{reportsPath\(basePath\)\}/, file);
   }
 });
+
+test("reports from the hub hide the Reports sidebar; direct reports keep it", async () => {
+  const { showReportsSidebar } = await import("./routes.ts");
+  const path = "/orgs/o/workspaces/w/reports/single-points";
+  assert.equal(showReportsSidebar(path, new URLSearchParams("from=views")), false);
+  assert.equal(showReportsSidebar(path, new URLSearchParams("")), true);
+  assert.equal(showReportsSidebar("/orgs/o/workspaces/w/reports", null), true);
+  assert.equal(showReportsSidebar("/orgs/o/workspaces/w/ask", new URLSearchParams("from=views")), false);
+  const frame = src("components/mvp/MvpFrame.tsx");
+  assert.match(frame, /\{!fromViews && <ReportsSidebar \/>\}/);
+  assert.match(frame, /max-w-\[1180px\]/);
+});
