@@ -24,10 +24,11 @@ import {
 import { EditCapabilityDialog } from "@/components/capability-map/EditCapabilityDialog";
 import { AddDomainPickerDialog } from "@/components/capability-map/AddDomainPickerDialog";
 import { domainIcon, domainIconStyle } from "@/lib/capability-map-icons";
-import { objectListPath } from "@/lib/tenancy";
 import { useTenancy } from "@/lib/tenancy";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { cn } from "@/lib/utils";
+import { catalogQueryKey } from "@/lib/use-model-catalog";
+import { domainDetailPath, isNoDomain } from "@/lib/capability-map-paths";
 import { ConfirmDeleteDialog } from "@/components/ui/ConfirmDeleteDialog";
 import { HoverActionMenu } from "@/components/ui/HoverActionMenu";
 import {
@@ -39,6 +40,10 @@ import { usePermissions } from "@/lib/use-permissions";
 interface Props {
   map: CapabilityMap;
   onRefresh: () => void;
+  /** Inside the merged Capability map page: the page owns the title and + Add. */
+  embedded?: boolean;
+  /** Clicking a capability opens its record panel. */
+  onOpenCapability?: (id: string) => void;
 }
 
 const FILTER_OPTIONS: { id: CapabilityMapFilter; label: string }[] = [
@@ -62,7 +67,7 @@ function formatStatsLine(stats: ReturnType<typeof capabilityMapStats>): string {
   return parts.join(" · ");
 }
 
-export function CapabilityMapView({ map, onRefresh }: Props) {
+export function CapabilityMapView({ map, onRefresh, embedded = false, onOpenCapability }: Props) {
   const { getToken } = useAuth();
   const { canCreate, canEdit, canDelete } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
@@ -84,6 +89,10 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
     domainName: string;
   } | null>(null);
 
+  // Embedded next to the record panel, size cards to the container rather than the viewport.
+  const gridClass = embedded
+    ? "grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5"
+    : "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5";
   const stats = useMemo(() => capabilityMapStats(map.domains), [map.domains]);
   const { populated, empty } = useMemo(
     () => filterCapabilityMapDomains(map.domains, filter),
@@ -97,6 +106,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
     queryClient.invalidateQueries({ queryKey: ["capability-library-domains", orgSlug, workspaceSlug] });
     queryClient.invalidateQueries({ queryKey: ["capability-heatmap", orgSlug, workspaceSlug] });
     queryClient.invalidateQueries({ queryKey: ["metric-drawer"] });
+    queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
     void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);
     if (capPickerDomain) {
       queryClient.invalidateQueries({
@@ -269,8 +279,9 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
   const domainCardProps = (domain: CapabilityMapDomain) => ({
     domain,
     readOnly: !canEdit,
-    onAddCapability: canEdit ? () => setCapPickerDomain(domain) : undefined,
-    onEditCapability: canEdit
+    onOpenCapability,
+    onAddCapability: canEdit && !isNoDomain(domain.id) ? () => setCapPickerDomain(domain) : undefined,
+    onEditCapability: canEdit && !isNoDomain(domain.id)
       ? (capability: CapabilityMapCapability) =>
           setEditCapability({
             capability,
@@ -278,7 +289,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
             domainName: domain.name,
           })
       : undefined,
-    onDeleteDomain: canDelete ? () => setDeleteDomain(domain) : undefined,
+    onDeleteDomain: canDelete && !isNoDomain(domain.id) ? () => setDeleteDomain(domain) : undefined,
     onDeleteCapability: canDelete
       ? (capability: CapabilityMapCapability) =>
           setDeleteCapability({
@@ -292,27 +303,31 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
   return (
     <>
       <div className="flex flex-col h-full">
-        <div className="px-8 py-5 border-b border-gray-100 bg-white">
+        <div className={cn("bg-white", embedded ? "pb-4" : "px-8 py-5 border-b border-gray-100")}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Capability map</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Level 1 domains and level 2 capabilities. Duplicate names across domains when needed.
-              </p>
+              {!embedded && <h1 className="text-2xl font-bold text-gray-900">Capability map</h1>}
+              {!embedded && (
+                <p className="text-sm text-gray-500 mt-1">
+                  Level 1 domains and level 2 capabilities. Duplicate names across domains when needed.
+                </p>
+              )}
               {map.domains.length > 0 && (
                 <p className="text-xs text-gray-400 mt-1">{formatStatsLine(stats)}</p>
               )}
             </div>
             {canCreate && (
               <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowCapabilityWizard(true)}
-                  className="inline-flex items-center gap-1.5 bg-gray-900 hover:bg-gray-800 text-white rounded-md px-3 py-1.5 text-sm font-medium"
-                >
-                  <Plus size={14} />
-                  Add capability
-                </button>
+                {!embedded && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCapabilityWizard(true)}
+                    className="inline-flex items-center gap-1.5 bg-gray-900 hover:bg-gray-800 text-white rounded-md px-3 py-1.5 text-sm font-medium"
+                  >
+                    <Plus size={14} />
+                    Add capability
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowDomainPicker(true)}
@@ -346,7 +361,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className={cn("flex-1", embedded ? "" : "overflow-y-auto p-8")}>
           {map.domains.length === 0 ? (
             <div className="text-center py-16 max-w-md mx-auto">
               <p className="text-gray-500 text-sm mb-4">
@@ -376,7 +391,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
           ) : (
             <div className="space-y-8">
               {populated.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                <div className={gridClass}>
                   {populated.map((domain) => (
                     <DomainCard key={domain.id} {...domainCardProps(domain)} />
                   ))}
@@ -401,7 +416,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
                       Hide
                     </button>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  <div className={gridClass}>
                     {empty.map((domain) => (
                       <EmptyDomainCard key={domain.id} {...domainCardProps(domain)} />
                     ))}
@@ -410,7 +425,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
               )}
 
               {filter === "no_capabilities" && empty.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                <div className={gridClass}>
                   {empty.map((domain) => (
                     <EmptyDomainCard key={domain.id} {...domainCardProps(domain)} />
                   ))}
@@ -513,6 +528,7 @@ export function CapabilityMapView({ map, onRefresh }: Props) {
 function DomainCard({
   domain,
   readOnly = false,
+  onOpenCapability,
   onAddCapability,
   onEditCapability,
   onDeleteDomain,
@@ -520,6 +536,7 @@ function DomainCard({
 }: {
   domain: CapabilityMapDomain;
   readOnly?: boolean;
+  onOpenCapability?: (id: string) => void;
   onAddCapability?: () => void;
   onEditCapability?: (capability: CapabilityMapCapability) => void;
   onDeleteDomain?: () => void;
@@ -528,7 +545,7 @@ function DomainCard({
   const { orgSlug, workspaceSlug } = useTenancy();
   const Icon = domainIcon(domain.icon);
   const iconStyle = domainIconStyle(domain.id);
-  const detailPath = `${objectListPath(orgSlug, workspaceSlug, "business", "capabilities")}/domains/${domain.id}`;
+  const detailPath = domainDetailPath(orgSlug, workspaceSlug, domain.id);
   const coverageCounts = useMemo(
     () => domainCardCoverageCounts(domain.capabilities),
     [domain.capabilities]
@@ -544,7 +561,7 @@ function DomainCard({
       )}
     >
       <div className="flex items-start gap-3 mb-3">
-        <Link href={detailPath} className="flex items-start gap-3 min-w-0 flex-1 group">
+        <MaybeLink href={detailPath} className="flex items-start gap-3 min-w-0 flex-1 group">
           <div
             className={cn(
               "h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors",
@@ -558,9 +575,9 @@ function DomainCard({
             <h3 className="font-semibold text-gray-900 text-base group-hover:text-indigo-700">
               {domain.name}
             </h3>
-            <p className="text-xs text-gray-400 mt-0.5">Domain · Level 1</p>
+            <p className="text-xs text-gray-400 mt-0.5">{detailPath ? "Domain · Level 1" : "Not grouped yet · set a Domain on each"}</p>
           </div>
-        </Link>
+        </MaybeLink>
         {!readOnly && onAddCapability && onDeleteDomain && (
           <HoverActionMenu
             className="group-hover:opacity-100"
@@ -594,6 +611,7 @@ function DomainCard({
             key={cap.id}
             capability={cap}
             readOnly={readOnly}
+            onOpen={onOpenCapability ? () => onOpenCapability(cap.id) : undefined}
             onEdit={onEditCapability ? () => onEditCapability(cap) : undefined}
             onDelete={onDeleteCapability ? () => onDeleteCapability(cap) : undefined}
           />
@@ -628,12 +646,12 @@ function EmptyDomainCard({
   const { orgSlug, workspaceSlug } = useTenancy();
   const Icon = domainIcon(domain.icon);
   const iconStyle = domainIconStyle(domain.id);
-  const detailPath = `${objectListPath(orgSlug, workspaceSlug, "business", "capabilities")}/domains/${domain.id}`;
+  const detailPath = domainDetailPath(orgSlug, workspaceSlug, domain.id);
 
   return (
     <div className="group/card rounded-xl border border-gray-200 bg-white p-4 flex flex-col">
       <div className="flex items-start gap-3">
-        <Link href={detailPath} className="flex items-start gap-3 min-w-0 flex-1 group">
+        <MaybeLink href={detailPath} className="flex items-start gap-3 min-w-0 flex-1 group">
           <div
             className={cn(
               "h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0",
@@ -648,7 +666,7 @@ function EmptyDomainCard({
               {domain.name}
             </h3>
           </div>
-        </Link>
+        </MaybeLink>
         {!readOnly && onDeleteDomain && (
           <HoverActionMenu
             buttonClassName="opacity-0 group-hover/card:opacity-100"
@@ -681,14 +699,20 @@ function EmptyDomainCard({
   );
 }
 
+function MaybeLink({ href, className, children }: { href: string | null; className: string; children: React.ReactNode }) {
+  return href ? <Link href={href} className={className}>{children}</Link> : <div className={className}>{children}</div>;
+}
+
 function CapabilityL2Row({
   capability,
   readOnly = false,
+  onOpen,
   onEdit,
   onDelete,
 }: {
   capability: CapabilityMapCapability;
   readOnly?: boolean;
+  onOpen?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
 }) {
@@ -700,7 +724,18 @@ function CapabilityL2Row({
       <div className="min-w-0 flex flex-1 items-start gap-2.5">
         <span className={cn("mt-1.5 h-2 w-2 rounded-full flex-shrink-0", coverage.dot)} aria-hidden />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-gray-900 leading-snug">{capability.name}</p>
+          {onOpen ? (
+            <button
+              type="button"
+              onClick={onOpen}
+              data-testid="map-capability"
+              className="text-left text-sm font-semibold text-gray-900 leading-snug hover:text-indigo-700"
+            >
+              {capability.name}
+            </button>
+          ) : (
+            <p className="text-sm font-semibold text-gray-900 leading-snug">{capability.name}</p>
+          )}
           <p
             className={cn(
               "flex items-center gap-1 text-[11px] leading-tight mt-0.5",

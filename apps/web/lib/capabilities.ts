@@ -208,3 +208,10 @@ export function matchesCapabilityFilter(names: readonly string[], filter: string
   if (filter === NO_CAPABILITY) return names.length === 0;
   return names.includes(filter);
 }
+
+// ─── One Capability map page: Map (default) | List ────────────────────────────
+
+export type CapabilityView = "map" | "list";
+export function capabilityViewFrom(search: string): CapabilityView {
+  return new URLSearchParams(search).get("view") === "list" ? "list" : "map";
+}

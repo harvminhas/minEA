@@ -12,6 +12,7 @@ import { DomainMappingTab } from "@/components/capability-map/DomainMappingTab";
 import { DomainProcessesTab } from "@/components/capability-map/DomainProcessesTab";
 import { DomainProductsTab } from "@/components/capability-map/DomainProductsTab";
 import { DomainHistoryTab } from "@/components/capability-map/DomainHistoryTab";
+import { capabilityMapPath } from "@/lib/capability-map-paths";
 import { DomainOverviewTab } from "@/components/capability-map/DomainOverviewTab";
 import { EditCapabilityDialog } from "@/components/capability-map/EditCapabilityDialog";
 import { domainIcon } from "@/lib/capability-map-icons";
@@ -63,7 +64,7 @@ export function DomainDetailPage({ domainId }: Props) {
     };
   }, [domain]);
 
-  const capabilitiesPath = objectListPath(orgSlug, workspaceSlug, "business", "capabilities");
+  const capabilitiesPath = capabilityMapPath(orgSlug, workspaceSlug);
   const DomainIcon = domainIcon(domain?.icon);
 
   if (isLoading || !queryEnabled) {

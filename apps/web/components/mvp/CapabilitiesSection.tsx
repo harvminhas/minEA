@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CapabilityTemplateDetail, CapabilityTemplateSummary } from "@minea/types";
@@ -11,6 +11,8 @@ import { modelItemPath } from "@/lib/mvp-paths";
 import { addApi, capabilityMapApi, objectsApi } from "@/lib/api-client";
 import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
 import { usePermissions } from "@/lib/use-permissions";
+import { CapabilityMapPage } from "@/components/capability-map/CapabilityMapPage";
+import { capabilityViewFrom, type CapabilityView } from "@/lib/capabilities";
 import {
   NO_DOMAIN,
   capabilityRows,
@@ -40,6 +42,13 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
   const gaps = rows.filter((row) => row.gap).length;
   const [mode, setMode] = useState<"none" | "add" | "template" | "draft">("none");
   const [gapsOnly, setGapsOnly] = useState(false);
+  const [view, setView] = useState<CapabilityView>("map");
+  useEffect(() => setView(capabilityViewFrom(window.location.search)), []);
+  const openCapability = (id: string) => router.push(modelItemPath(basePath, "capabilities", id));
+  const refreshMap = () => {
+    void queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
+    void queryClient.invalidateQueries({ queryKey: ["capability-map-status", orgSlug, workspaceSlug] });
+  };
   const [error, setError] = useState("");
 
   const token = async () => {
@@ -59,6 +68,7 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
     setError("");
     try {
       await work();
+      refreshMap();
       setMode("none");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save");
@@ -75,9 +85,26 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
         <div>
           <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">WHAT THE BUSINESS DOES</p>
           <h1 className="text-[22px] font-semibold text-[#1c2230]">
-            Capabilities <span className="text-[14px] font-normal text-[#8b90a0]">{rows.length}</span>
+            Capability map <span className="text-[14px] font-normal text-[#8b90a0]">{rows.length}</span>
           </h1>
         </div>
+        {!empty && (
+          <div className="ml-auto mr-2 flex rounded-lg border border-[#e6e8ee] p-0.5 text-[12px]" role="tablist" aria-label="Capability view">
+            {(["map", "list"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                role="tab"
+                aria-selected={view === item}
+                data-testid={`capability-view-${item}`}
+                onClick={() => setView(item)}
+                className={cn("rounded-md px-2.5 py-1", view === item ? "bg-[#ece9ff] font-semibold text-[#3f35b5]" : "text-[#4b5163]")}
+              >
+                {item === "map" ? "Map" : "List"}
+              </button>
+            ))}
+          </div>
+        )}
         {canCreate && !empty && (
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setMode(mode === "draft" ? "none" : "draft")} className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px] font-medium text-[#3f35b5]">
@@ -163,7 +190,13 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
         />
       )}
 
-      {rows.length > 0 && (
+      {rows.length > 0 && view === "map" && (
+        <div data-testid="capability-map-view">
+          <CapabilityMapPage embedded onOpenCapability={openCapability} />
+        </div>
+      )}
+
+      {rows.length > 0 && view === "list" && (
         <>
           <div className="mb-2 flex items-center gap-3 text-[12px]">
             {gaps > 0 ? (
@@ -199,7 +232,7 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
                 {group.rows.map((row) => (
                   <tr
                     key={row.id}
-                    onClick={() => router.push(modelItemPath(basePath, "capabilities", row.id))}
+                    onClick={() => openCapability(row.id)}
                     className={cn("cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]", selectedId === row.id && "bg-[#f6f5ff]")}
                   >
                     <td className="px-2 py-3 font-medium text-[#1c2230]">{row.name}</td>

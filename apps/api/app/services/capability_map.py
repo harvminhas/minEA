@@ -98,18 +98,16 @@ async def enrich_map_capability_rollups(
     """Per L2 capability id: owner, object_status, system_count, product_count, coverage_status."""
     from collections import defaultdict
 
+    known = {str(domain.id) for domain in domains}
     caps_by_domain: dict[str, list[MinEAObject]] = defaultdict(list)
     for cap in capabilities:
-        domain_id = str((cap.properties or {}).get("domain_id", ""))
-        if domain_id:
-            caps_by_domain[domain_id].append(cap)
+        domain_id = str((cap.properties or {}).get("domain_id") or "")
+        caps_by_domain[domain_id if domain_id in known else NO_DOMAIN_ID].append(cap)
 
     system_counts: dict[str, int] = defaultdict(int)
     product_counts: dict[str, int] = defaultdict(int)
 
-    for domain in domains:
-        domain_id = str(domain.id)
-        domain_caps = caps_by_domain.get(domain_id, [])
+    for domain_id, domain_caps in caps_by_domain.items():
         if not domain_caps:
             continue
 
@@ -138,7 +136,7 @@ async def enrich_map_capability_rollups(
                 Relationship.org_id == org_id,
                 Relationship.type == "supported_by",
                 Relationship.from_object_id.in_(from_ids),
-                Relationship.to_type == "application",
+                Relationship.to_type.in_(("application", "cloud_service")),
             )
         )
 
@@ -240,6 +238,27 @@ async def load_capability_map(
     return domains, capabilities
 
 
+NO_DOMAIN_ID = "no-domain"
+NO_DOMAIN_NAME = "No domain"
+
+
+def plan_template_merge(
+    template: dict, existing_domains: list[tuple[str, str]], existing_caps: dict[str, set[str]]
+) -> list[tuple[str | None, dict, list[str]]]:
+    """Pure: per template domain → (existing domain id or None to create, domain def, capability names to add).
+
+    Domains match by name (case-insensitive); capabilities already in that domain are skipped.
+    """
+    by_name = {name.strip().lower(): did for did, name in existing_domains}
+    plan: list[tuple[str | None, dict, list[str]]] = []
+    for domain_def in template["domains"]:
+        did = by_name.get(domain_def["name"].strip().lower())
+        have = existing_caps.get(did, set()) if did else set()
+        caps = [c for c in domain_def["capabilities"] if c.strip().lower() not in have]
+        plan.append((did, domain_def, caps))
+    return plan
+
+
 async def adopt_template(
     db: AsyncSession,
     workspace_id: UUID,
@@ -247,36 +266,45 @@ async def adopt_template(
     user_id: UUID | None,
     template_id: str,
 ) -> tuple[list[MinEAObject], list[MinEAObject]]:
-    if await map_is_initialized(db, workspace_id, org_id):
-        raise ValueError("Capability map is already initialized")
-
+    """Adds a template's domains and capabilities, merging into domains that already exist (by name)."""
     template = get_template(template_id)
     if not template:
         raise ValueError(f"Unknown template: {template_id}")
 
+    domains, capabilities = await load_capability_map(db, workspace_id, org_id)
+    existing_caps: dict[str, set[str]] = {}
+    for cap in capabilities:
+        did = str((cap.properties or {}).get("domain_id") or "")
+        if did:
+            existing_caps.setdefault(did, set()).add(cap.name.strip().lower())
+    plan = plan_template_merge(template, [(str(d.id), d.name) for d in domains], existing_caps)
+
     created_domains: list[MinEAObject] = []
     created_capabilities: list[MinEAObject] = []
-
-    for domain_index, domain_def in enumerate(template["domains"]):
-        domain = MinEAObject(
-            workspace_id=workspace_id,
-            org_id=org_id,
-            type="business_domain",
-            name=domain_def["name"],
-            status="active",
-            tags=[],
-            properties={
-                "order_index": domain_index,
-                "icon": domain_def["icon"],
-                "source_template_id": template_id,
-            },
-            created_by=user_id,
-        )
-        db.add(domain)
-        await db.flush()
-        created_domains.append(domain)
-
-        for cap_index, cap_name in enumerate(domain_def["capabilities"]):
+    next_index = len(domains)
+    for domain_id, domain_def, cap_names in plan:
+        if domain_id is None:
+            domain = MinEAObject(
+                workspace_id=workspace_id,
+                org_id=org_id,
+                type="business_domain",
+                name=domain_def["name"],
+                status="active",
+                tags=[],
+                properties={
+                    "order_index": next_index,
+                    "icon": domain_def["icon"],
+                    "source_template_id": template_id,
+                },
+                created_by=user_id,
+            )
+            next_index += 1
+            db.add(domain)
+            await db.flush()
+            created_domains.append(domain)
+            domain_id = str(domain.id)
+        start = len(existing_caps.get(domain_id, set()))
+        for cap_index, cap_name in enumerate(cap_names):
             capability = MinEAObject(
                 workspace_id=workspace_id,
                 org_id=org_id,
@@ -284,10 +312,7 @@ async def adopt_template(
                 name=cap_name,
                 status="active",
                 tags=[],
-                properties={
-                    "domain_id": str(domain.id),
-                    "order_index": cap_index,
-                },
+                properties={"domain_id": domain_id, "order_index": start + cap_index},
                 created_by=user_id,
             )
             db.add(capability)

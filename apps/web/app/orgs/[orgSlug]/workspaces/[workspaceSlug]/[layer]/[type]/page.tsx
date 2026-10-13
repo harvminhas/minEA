@@ -10,7 +10,7 @@ import { objectsApi } from "@/lib/api-client";
 import { ObjectCard } from "@/components/objects/ObjectCard";
 import { ObjectDetail } from "@/components/objects/ObjectDetail";
 import { ObjectForm } from "@/components/objects/ObjectForm";
-import { CapabilityMapPage } from "@/components/capability-map/CapabilityMapPage";
+import { CapabilityMapRedirect } from "@/components/capability-map/CapabilityMapRedirect";
 import { DataLayerList } from "@/components/data/DataLayerList";
 import { SensitiveDataRoute } from "@/components/data/SensitiveDataPage";
 import { FlowList } from "@/components/integration/FlowList";
@@ -60,11 +60,8 @@ export default function ObjectListPage({ params }: { params: Promise<{ layer: st
   const { layer, type: typePath } = use(params);
 
   if (layer === "business" && typePath === "capabilities") {
-    return (
-      <div className="flex flex-col h-full">
-        <CapabilityMapPage />
-      </div>
-    );
+    // Merged into the one Capability map page.
+    return <CapabilityMapRedirect />;
   }
 
   if (

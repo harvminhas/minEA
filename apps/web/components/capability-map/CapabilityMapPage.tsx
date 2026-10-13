@@ -10,7 +10,7 @@ import { CapabilityMapView } from "@/components/capability-map/CapabilityMapView
 import { RefreshingOverlay } from "@/components/ui/RefreshingOverlay";
 import { useQueryRefreshing } from "@/lib/use-query-refreshing";
 
-export function CapabilityMapPage() {
+export function CapabilityMapPage({ embedded = false, onOpenCapability }: { embedded?: boolean; onOpenCapability?: (id: string) => void } = {}) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
@@ -46,7 +46,7 @@ export function CapabilityMapPage() {
 
   return (
     <RefreshingOverlay active={isRefreshing} className="h-full">
-      <CapabilityMapView map={mapQuery.data!} onRefresh={refresh} />
+      <CapabilityMapView map={mapQuery.data!} onRefresh={refresh} embedded={embedded} onOpenCapability={onOpenCapability} />
     </RefreshingOverlay>
   );
 }

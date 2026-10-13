@@ -27,6 +27,8 @@ from app.schemas.capability_map import (
 from app.services.capability_heatmap import build_capability_heatmap
 from app.services.capability_map import (
     add_domain_mapping_system,
+    NO_DOMAIN_ID,
+    NO_DOMAIN_NAME,
     adopt_template,
     capability_picker_suggestions,
     create_domain_mapping_system,
@@ -56,10 +58,12 @@ def _map_to_read(
 ) -> CapabilityMapRead:
     rollups = rollups or {}
     caps_by_domain: dict[str, list[CapabilityMapCapability]] = {}
+    known = {str(domain.id) for domain in domains}
     for cap in capabilities:
-        domain_id = str(cap.properties.get("domain_id", ""))
-        if not domain_id:
-            continue
+        domain_id = str(cap.properties.get("domain_id") or "")
+        if domain_id not in known:
+            # No (or a dangling) domain: shown on the map in a "No domain" card.
+            domain_id = NO_DOMAIN_ID
         cid = str(cap.id)
         extra = rollups.get(cid, {})
         caps_by_domain.setdefault(domain_id, []).append(
@@ -95,7 +99,19 @@ def _map_to_read(
             )
         )
 
-    return CapabilityMapRead(initialized=len(domains) > 0, domains=domain_reads)
+    if caps_by_domain.get(NO_DOMAIN_ID):
+        domain_reads.append(
+            CapabilityMapDomain(
+                id=NO_DOMAIN_ID,
+                name=NO_DOMAIN_NAME,
+                icon=None,
+                order_index=None,
+                source_template_id=None,
+                capabilities=sorted(caps_by_domain[NO_DOMAIN_ID], key=lambda c: c.name),
+            )
+        )
+
+    return CapabilityMapRead(initialized=len(domains) > 0 or bool(capabilities), domains=domain_reads)
 
 
 @router.get("/status", response_model=CapabilityMapStatus)
