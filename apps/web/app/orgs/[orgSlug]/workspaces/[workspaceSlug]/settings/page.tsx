@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ROLE_DEFINITIONS } from "@minea/types";
 import { workspacesApi } from "@/lib/api-client";
 import { usePermissions } from "@/lib/use-permissions";
+import { hasPermission } from "@/lib/permissions";
 import { primaryViewPath } from "@/lib/tenancy";
 import { billingUiEnabled } from "@/lib/billing/flags";
 import { billingErrorMessage } from "@/lib/billing/checkout";
@@ -19,7 +20,13 @@ export default function WorkspaceSettingsPage() {
   const { orgSlug, workspaceSlug } = useParams<{ orgSlug: string; workspaceSlug: string }>();
   const { getToken, user } = useAuth();
   const queryClient = useQueryClient();
-  const { canManageWorkspace, canInviteWorkspaceMembers, effectiveRole } = usePermissions();
+  const { canManageWorkspace, canInviteWorkspaceMembers, effectiveRole, orgRole } = usePermissions();
+  // workspace.delete: org owners/admins, and admins of this workspace (same rule as the API).
+  const canDeleteWorkspace = hasPermission("workspace.delete", { orgRole, workspaceRole: effectiveRole });
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [generalMsg, setGeneralMsg] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const emailVerified = user ? !user.requiresEmailVerification : false;
   const router = useRouter();
   const [memberError, setMemberError] = useState<string | null>(null);
@@ -129,6 +136,31 @@ export default function WorkspaceSettingsPage() {
     onSuccess: () => refreshPeople(),
   });
 
+  const renameMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const token = await getToken();
+      return workspacesApi.update(orgSlug, workspaceSlug, { name }, token!);
+    },
+    onSuccess: (ws) => {
+      setNameDraft(null);
+      setGeneralMsg("Saved");
+      queryClient.setQueryData(["workspace", orgSlug, workspaceSlug], ws);
+      void queryClient.invalidateQueries({ queryKey: ["workspaces", orgSlug] });
+    },
+    onError: (err: Error) => setGeneralMsg(billingErrorMessage(err)),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken();
+      return workspacesApi.delete(orgSlug, workspaceSlug, token!);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["workspaces", orgSlug] });
+      router.replace(`/orgs/${orgSlug}`);
+    },
+    onError: (err: Error) => setDeleteError(billingErrorMessage(err)),
+  });
+
   const admins = countAdmins(members);
   const scope: MembersScope = {
     actionsFor: (m, isSelf) =>
@@ -191,6 +223,32 @@ export default function WorkspaceSettingsPage() {
           </p>
         )}
       </div>
+
+      <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6" data-testid="ws-general">
+        <h2 className="font-semibold text-gray-900 mb-3">General</h2>
+        <label className="block text-sm text-gray-700 mb-1" htmlFor="ws-name">Workspace name</label>
+        <div className="flex gap-2">
+          <input
+            id="ws-name"
+            value={nameDraft ?? workspace?.name ?? ""}
+            onChange={(e) => {
+              setNameDraft(e.target.value);
+              setGeneralMsg(null);
+            }}
+            className="flex-1 border border-gray-200 rounded-md px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            data-testid="ws-rename-save"
+            disabled={!nameDraft?.trim() || nameDraft.trim() === workspace?.name || renameMutation.isPending}
+            onClick={() => nameDraft && renameMutation.mutate(nameDraft.trim())}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+          >
+            {renameMutation.isPending ? "Saving…" : "Save"}
+          </button>
+        </div>
+        {generalMsg && <p className={`text-xs mt-2 ${generalMsg === "Saved" ? "text-emerald-600" : "text-red-600"}`}>{generalMsg === "Saved" ? "✓ Saved" : generalMsg}</p>}
+      </section>
 
       <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <h2 className="font-semibold text-gray-900 mb-3">Workspace roles</h2>
@@ -277,6 +335,33 @@ export default function WorkspaceSettingsPage() {
           )}
         </div>
       </section>
+      {canDeleteWorkspace && (
+        <section className="bg-white rounded-lg border border-red-100 p-6 mt-6" data-testid="ws-danger-zone">
+          <h2 className="font-semibold text-red-900 mb-2">Danger zone</h2>
+          <p className="text-sm text-gray-600 mb-3">
+            Deleting {workspace?.name ?? "this workspace"} removes it and everything in it for everyone. This can&apos;t be undone.
+            Type the workspace name to confirm.
+          </p>
+          <div className="flex gap-2">
+            <input
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder={workspace?.name ?? ""}
+              className="flex-1 border border-gray-200 rounded-md px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              data-testid="ws-delete"
+              disabled={!workspace || deleteConfirm !== workspace.name || deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate()}
+              className="bg-red-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete workspace"}
+            </button>
+          </div>
+          {deleteError && <p className="text-sm text-red-600 mt-2">{deleteError}</p>}
+        </section>
+      )}
     </div>
   );
 }

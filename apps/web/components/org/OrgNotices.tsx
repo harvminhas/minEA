@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft, Lock, RefreshCw } from "lucide-react";
 import { roleLabel } from "@/lib/org-access";
+import { workspaceSettingsPath } from "@/lib/workspace-admin";
 
 /** Org settings opened by a member or viewer: explain instead of redirecting. */
 export function NotOrgAdmin({
@@ -10,11 +11,16 @@ export function NotOrgAdmin({
   role,
   askHref,
   adminOrgs,
+  orgSlug,
+  adminWorkspaces = [],
 }: {
   orgName: string;
   role: string;
   askHref: string | null;
   adminOrgs: { slug: string; name: string; role: string }[];
+  orgSlug?: string;
+  /** Workspaces in this org the user admins (workspace.settings.edit): linked to their settings. */
+  adminWorkspaces?: { slug: string; name: string }[];
 }) {
   return (
     <div className="p-8 max-w-xl mx-auto" data-testid="not-org-admin">
@@ -46,6 +52,21 @@ export function NotOrgAdmin({
           >
             <ArrowLeft size={14} /> Back to {orgName}
           </Link>
+        )}
+        {orgSlug && adminWorkspaces.length > 0 && (
+          <div className="mt-6 border-t border-gray-100 pt-4" data-testid="not-org-admin-workspaces">
+            <p className="text-sm font-medium text-gray-700">Workspaces you admin in {orgName}</p>
+            <ul className="mt-2 space-y-1.5">
+              {adminWorkspaces.map((w) => (
+                <li key={w.slug} className="flex items-center justify-between gap-3 text-sm">
+                  <Link href={workspaceSettingsPath(orgSlug, w.slug)} className="font-medium text-indigo-600 hover:underline">
+                    Workspace settings · {w.name}
+                  </Link>
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">Admin</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {adminOrgs.length > 0 && (
           <div className="mt-6 border-t border-gray-100 pt-4" data-testid="not-org-admin-other-orgs">

@@ -385,6 +385,10 @@ export const workspacesApi = {
     ),
   context: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<object>(`${wsBase(orgSlug, workspaceSlug)}/context`, { token }),
+  update: (orgSlug: string, workspaceSlug: string, body: { name?: string }, token: string) =>
+    apiFetch<Workspace>(`/orgs/${orgSlug}/workspaces/${workspaceSlug}`, { method: "PUT", body: JSON.stringify(body), token }),
+  delete: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<void>(`/orgs/${orgSlug}/workspaces/${workspaceSlug}`, { method: "DELETE", token }),
   listMembers: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<WorkspaceMember[]>(`${wsBase(orgSlug, workspaceSlug)}/members`, { token }),
   listInvites: (orgSlug: string, workspaceSlug: string, token: string) =>

@@ -33,6 +33,8 @@ import {
   type RepositoryNavItem,
 } from "@/lib/repository-nav";
 import { useRepositoryNavCounts } from "@/lib/use-repository-nav-counts";
+import { usePermissions } from "@/lib/use-permissions";
+import { sidebarSettingsLink } from "@/lib/workspace-admin";
 // ─── Icons assigned to each repository layer ─────────────────────────────
 
 const LAYER_ICONS: Record<string, LucideIcon> = {
@@ -536,7 +538,9 @@ export function AppSidebar() {
   const isViews = viewMode !== "split" && (viewMode === "views" || isViewsModePath(pathname));
   const sidebarModeLabel = isViews ? "Views" : "Repository";
 
-  const settingsHref = orgSlug ? `/orgs/${orgSlug}/settings` : "/home";
+  const { canManageOrg, canManageWorkspace } = usePermissions();
+  const settingsLink = sidebarSettingsLink({ orgSlug, workspaceSlug, canManageOrg, canManageWorkspace });
+  const settingsHref = settingsLink.href;
   const isOnSettings = pathname.endsWith("/settings");
 
   const toggleBtn = (
@@ -630,7 +634,7 @@ export function AppSidebar() {
             )}
           >
             <Settings size={14} />
-            Org settings
+            {settingsLink.label}
           </Link>
         </div>
       )}

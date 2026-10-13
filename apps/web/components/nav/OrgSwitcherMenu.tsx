@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, Plus } from "lucide-react";
+import { Check, Plus, Settings } from "lucide-react";
 import type { OrgRole } from "@minea/types";
 import { hasPermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { askPath } from "@/lib/mvp-paths";
 import { orgLandingPath, roleLabel } from "@/lib/org-access";
+import { canEditWorkspaceSettings, workspaceSettingsPath, WORKSPACE_SETTINGS_LABEL } from "@/lib/workspace-admin";
 
 export interface SwitcherOrg {
   slug: string;
@@ -35,7 +36,7 @@ export function OrgSwitcherMenu({
   orgs: SwitcherOrg[];
   /** Plan limit for the current org (from billing status): replaces "+ New workspace" with the reason. */
   workspaceBlocked?: { message: string; planHref: string } | null;
-  workspacesByOrg: Record<string, { slug: string; name: string }[] | undefined>;
+  workspacesByOrg: Record<string, { slug: string; name: string; role?: string | null }[] | undefined>;
   currentOrgSlug: string;
   currentWorkspaceSlug: string;
   onNavigate: (href: string) => void;
@@ -74,8 +75,8 @@ export function OrgSwitcherMenu({
             {workspaces?.map((ws) => {
               const here = current && ws.slug === currentWorkspaceSlug;
               return (
+                <div key={ws.slug} className="group relative flex items-center">
                 <button
-                  key={ws.slug}
                   type="button"
                   aria-current={here ? "page" : undefined}
                   onClick={() => onNavigate(askPath(`/orgs/${org.slug}/workspaces/${ws.slug}`))}
@@ -89,7 +90,21 @@ export function OrgSwitcherMenu({
                   </span>
                   <span className="truncate">{ws.name}</span>
                   {here && <Check size={13} className="ml-auto text-indigo-400" />}
+                  {canEditWorkspaceSettings(org.role, ws.role) && <span className="w-6 flex-shrink-0" />}
                 </button>
+                {canEditWorkspaceSettings(org.role, ws.role) && (
+                  <button
+                    type="button"
+                    data-testid="switcher-ws-settings"
+                    title={`${WORKSPACE_SETTINGS_LABEL} · ${ws.name}`}
+                    aria-label={`${WORKSPACE_SETTINGS_LABEL} · ${ws.name}`}
+                    onClick={() => onNavigate(workspaceSettingsPath(org.slug, ws.slug))}
+                    className="absolute right-2 rounded p-1 text-white/35 hover:bg-white/10 hover:text-white"
+                  >
+                    <Settings size={12} />
+                  </button>
+                )}
+                </div>
               );
             })}
             {canCreateWorkspaceIn(org.role) ? (

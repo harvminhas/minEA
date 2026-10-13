@@ -3,6 +3,7 @@
 import { MEMBERSHIP_QUERY } from "@/lib/membership-freshness";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { workspaceSettingsPath, WORKSPACE_SETTINGS_LABEL } from "@/lib/workspace-admin";
 import { useRouter, usePathname } from "next/navigation";
 import { SupportDialog } from "@/components/support/SupportDialog";
 import { ChevronDown, Bell, HelpCircle, LogOut, Settings } from "lucide-react";
@@ -37,7 +38,7 @@ export function TopNav() {
   const userRef = useRef<HTMLDivElement>(null);
 
   const insights = useArchitectureInsights(orgSlug ?? "", workspaceSlug ?? "");
-  const { canCreateWorkspace } = usePermissions();
+  const { canCreateWorkspace, canManageWorkspace } = usePermissions();
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -328,6 +329,18 @@ export function TopNav() {
                 >
                   <Settings size={13} className="flex-shrink-0" />
                   <span className="truncate" data-testid="user-menu-org-settings">{orgSettingsLabel(orgName)}</span>
+                </Link>
+              )}
+              {orgSlug && activeWorkspace?.slug && canManageWorkspace && (
+                <Link
+                  href={workspaceSettingsPath(orgSlug, activeWorkspace.slug)}
+                  onClick={() => setUserOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  <Settings size={13} className="flex-shrink-0" />
+                  <span className="truncate" data-testid="user-menu-ws-settings">
+                    {WORKSPACE_SETTINGS_LABEL} · {activeWorkspace.name}
+                  </span>
                 </Link>
               )}
               {orgSlug && (

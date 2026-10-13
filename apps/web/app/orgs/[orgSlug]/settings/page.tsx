@@ -23,6 +23,7 @@ import { businessGetStartedHref } from "@/lib/billing/business-request";
 import { BillingPreviewSwitch } from "@/components/billing/BillingPreviewSwitch";
 import { LicencesPanel } from "@/components/billing/LicencesPanel";
 import { PendingInviteRow } from "@/components/org/PendingInviteRow";
+import { adminWorkspaces, canEditWorkspaceSettings, workspaceSettingsPath } from "@/lib/workspace-admin";
 import { OrgMembersTable } from "@/components/org/OrgMembersTable";
 import { billingPreviewEnabled, billingUiEnabled } from "@/lib/billing/flags";
 import { ADMIN_TABS, adminTabHref, resolveAdminTab, type AdminTab } from "@/lib/billing/admin-centre";
@@ -390,6 +391,8 @@ export default function OrgSettingsPage() {
         role={org.role}
         askHref={ws ? primaryViewPath(orgSlug, ws.slug) : null}
         adminOrgs={otherAdminOrgs(myOrgs, orgSlug)}
+        orgSlug={orgSlug}
+        adminWorkspaces={adminWorkspaces(workspaces, org.role)}
       />
     );
   }
@@ -465,12 +468,13 @@ export default function OrgSettingsPage() {
                   <span className="font-medium">{ws.name}</span>
                   <span className="text-gray-400 ml-2">/{ws.slug}</span>
                 </Link>
-                {canManageOrg && (
+                {canEditWorkspaceSettings(org?.role, ws.role) && (
                   <Link
-                    href={`/orgs/${orgSlug}/workspaces/${ws.slug}/settings`}
+                    href={workspaceSettingsPath(orgSlug, ws.slug)}
+                    data-testid="org-ws-settings-link"
                     className="text-xs text-indigo-600 hover:text-indigo-700 ml-3 flex-shrink-0"
                   >
-                    Members
+                    Settings &amp; members
                   </Link>
                 )}
               </div>
