@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { LayoutGrid, Plus, Table2 } from "lucide-react";
@@ -24,8 +24,7 @@ import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformP
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { AddFlow } from "@/components/add/AddFlow";
-import { APP_OR_PLATFORM, applicationAddHint, nextPreset } from "@/lib/setup/type-guidance";
-import { ADD_BOX_BUTTON, ADD_BOX_LABEL, appendChipName, canSubmitAdd, textHasName, isSubmitKey, quickAddSuggestions } from "@/lib/setup/quick-add";
+import { AppAddPanel } from "@/components/add/AppAddPanel";
 import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
 import { SampleCompanyBadge, SetupProgressCard } from "@/components/mvp/SetupProgressCard";
 import { addAnywhereEnabled } from "@/lib/flags";
@@ -85,14 +84,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const [view, setView] = useState<"table" | "cards">("table");
   const [creating, setCreating] = useState<"runtime" | "platform" | "application" | null>(null);
   const [appAdd, setAppAdd] = useState(false);
-  const [addText, setAddText] = useState("");
-  const [addKindLocked, setAddKindLocked] = useState(false);
-  const [addKindChoice, setAddKindChoice] = useState<"app" | "platform">("app");
-  const [addSaved, setAddSaved] = useState(false);
-  const [addSubmit, setAddSubmit] = useState(0);
   const [addPulse, setAddPulse] = useState(0);
-  const addBoxRef = useRef<HTMLTextAreaElement>(null);
-  const addKind = addKindLocked ? addKindChoice : nextPreset("app", addText, false) === "platform" ? "platform" : "app";
   const anywhere = addAnywhereEnabled();
 
   const source = rows.filter((row) => {
@@ -124,28 +116,6 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const missingTotal = source.reduce((sum, row) => sum + row.missingCount, 0);
   const trackedCost = filtered.reduce((sum, row) => sum + (row.annualCostNumber ?? 0), 0);
 
-  const appNames = useMemo(() => (catalog.data?.objects ?? []).map((object) => object.name), [catalog.data?.objects]);
-  const suggestions = useMemo(() => quickAddSuggestions("app", appNames, 5).filter((name) => !textHasName(addText, name)), [appNames, addText]);
-  const submitAdd = (text = addText) => {
-    if (!canSubmitAdd(text, addSaved && text === addText)) return;
-    setAddSaved(false);
-    setAddSubmit((n) => n + 1);
-  };
-
-  useEffect(() => {
-    if (!addPulse || !appAdd) return;
-    const box = addBoxRef.current;
-    if (!box) return;
-    box.focus({ preventScroll: true });
-    box.scrollIntoView?.({ block: "center", behavior: "smooth" });
-  }, [addPulse, appAdd]);
-  const [highlight, setHighlight] = useState(false);
-  useEffect(() => {
-    if (!addPulse) return;
-    setHighlight(true);
-    const timer = window.setTimeout(() => setHighlight(false), 1600);
-    return () => window.clearTimeout(timer);
-  }, [addPulse]);
 
   const open = (row: CatalogRow) => router.push(modelItemPath(basePath, section, row.id));
   const close = () => router.push(modelPath(basePath, section));
@@ -226,12 +196,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                         return;
                       }
                       // + Add opens the box (or returns to it) and points at it; Escape or Cancel closes it.
-                      if (!appAdd) {
-                        setAddKindLocked(false);
-                        setAddKindChoice("app");
-                        setAddSaved(false);
-                        setAppAdd(true);
-                      }
+                      setAppAdd(true);
                       setAddPulse((n) => n + 1);
                     }}
                     className="inline-flex items-center gap-1 rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white"
@@ -242,109 +207,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
               </div>
             </div>
             {anywhere && appAdd && section === "applications" && (
-              <div
-                className="mb-4"
-                onKeyDown={(event) => {
-                  if (event.key !== "Escape" || addSaved) return;
-                  event.preventDefault();
-                  setAppAdd(false);
-                  setAddSaved(false);
-                  setAddKindLocked(false);
-                  setAddKindChoice("app");
-                }}
-              >
-                <label htmlFor="model-add-box" className="mb-1.5 block text-[13px] font-semibold text-[#1c2230]">
-                  {ADD_BOX_LABEL}
-                </label>
-                <div className="mb-2 flex items-start gap-2">
-                  <textarea
-                    id="model-add-box"
-                    ref={addBoxRef}
-                    data-testid="model-add-box"
-                    data-highlight={highlight ? "on" : "off"}
-                    value={addText}
-                    onChange={(event) => {
-                      setAddText(event.target.value);
-                      setAddSaved(false);
-                    }}
-                    onKeyDown={(event) => {
-                      if (!isSubmitKey(event)) return;
-                      event.preventDefault();
-                      submitAdd();
-                    }}
-                    rows={2}
-                    placeholder="Slack, Zoom, the server in the back room"
-                    className={cn(
-                      "min-w-0 flex-1 rounded-xl border-2 border-[#c9c3f7] bg-white px-3 py-2 text-[14px] shadow-sm outline-none transition-shadow duration-300 focus:border-[#5b4ce6]",
-                      highlight && "animate-pulse ring-4 ring-[#5b4ce6]/40"
-                    )}
-                  />
-                  <button
-                    type="button"
-                    data-testid="model-add-submit"
-                    disabled={!canSubmitAdd(addText, addSaved)}
-                    onClick={() => submitAdd()}
-                    title="Ctrl+Enter"
-                    className="shrink-0 rounded-xl bg-[#5b4ce6] px-4 py-2 text-[14px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#c9c3f7]"
-                  >
-                    {ADD_BOX_BUTTON}
-                  </button>
-                </div>
-                <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12px] text-[#6b7289]">
-                  {suggestions.length > 0 && <span>Quick add:</span>}
-                  {suggestions.map((name) => (
-                    <button
-                      key={name}
-                      type="button"
-                      data-testid="quick-add-chip"
-                      onClick={() => {
-                        // A chip types its name into the box; nothing saves until Add apps.
-                        setAddText((text) => appendChipName(text, name));
-                        setAddSaved(false);
-                        addBoxRef.current?.focus();
-                      }}
-                      className="rounded-full border border-[#e6e8ee] px-2.5 py-0.5 text-[12px] text-[#3f35b5] hover:border-[#5b4ce6] hover:bg-[#f4f2ff]"
-                    >
-                      + {name}
-                    </button>
-                  ))}
-                  <span className="ml-auto text-[#8b90a0]">Ctrl+Enter to add ·</span>
-                  <button type="button" data-testid="add-full-details" className="font-medium text-[#3f35b5]" onClick={() => setCreating("application")}>
-                    Add one with full details
-                  </button>
-                </div>
-                <p className="mb-1 text-[12px] leading-5 text-[#6b7289]">{APP_OR_PLATFORM}</p>
-                {applicationAddHint(addText, addKind, addKindLocked) && (
-                  <p className="mb-3 text-[12px] text-[#4b5163]">
-                    {applicationAddHint(addText, addKind, addKindLocked)}:{" "}
-                    <button
-                      type="button"
-                      className="font-medium text-[#3f35b5]"
-                      onClick={() => {
-                        setAddKindLocked(true);
-                        setAddKindChoice(addKind === "platform" ? "app" : "platform");
-                      }}
-                    >
-                      change
-                    </button>
-                  </p>
-                )}
-                <AddFlow
-                  origin="model"
-                  kind={addKind}
-                  cards
-                  compact
-                  initialText={addText}
-                  submitSignal={addSubmit}
-                  onSaved={() => setAddSaved(true)}
-                  onClose={() => {
-                    setAppAdd(false);
-                    setAddSaved(false);
-                    setAddKindLocked(false);
-                    setAddKindChoice("app");
-                  }}
-                />
-              </div>
+              <AppAddPanel origin="model" pulse={addPulse} onClose={() => setAppAdd(false)} onFullDetails={() => setCreating("application")} />
             )}
 
             <div className="mb-3 flex flex-wrap items-center gap-2">

@@ -26,12 +26,11 @@ import { AskLiveSteps, AskSteps } from "@/components/mvp/AskSteps";
 import type { AskStep } from "@/lib/api-client";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { AddSaved } from "@/components/add/AddCards";
-import { AddFlow } from "@/components/add/AddFlow";
+import { AppAddPanel } from "@/components/add/AppAddPanel";
 import { FirstRunAsk, SetupCard } from "@/components/mvp/FirstRunAsk";
 import { addAnywhereEnabled, askStreamEnabled } from "@/lib/flags";
 import { addListText, classifyAddIntent, prefixAdd } from "@/lib/setup/add-intent";
 import { undoneSentence, readAddReceipt, writeAddReceipt, type AddReceipt } from "@/lib/setup/add-cards";
-import { askListKind } from "@/lib/setup/type-guidance";
 import { normalizeTerm, TOOL_CATALOG } from "@/lib/setup/match-tools";
 import { Pill } from "@/components/mvp/pills";
 import { countLabel } from "@/lib/labels";
@@ -475,7 +474,8 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
       {visibleReceipt ? (
         <AddSaved added={visibleReceipt.added} kept={visibleReceipt.kept} todos={visibleReceipt.todos} canUndo={visibleReceipt.canUndo && Date.now() < visibleReceipt.undoUntil} motion={false} onUndo={() => void undoAdd()} />
       ) : showingAdd ? (
-        <AddFlow origin="ask" kind={askListKind(addListText(question))} initialText={addListText(question)} onSaved={rememberAdd} onClose={() => setReadAs("ask")} />
+        // Same component as Model > Applications; the names from the question prefill the box.
+        <AppAddPanel origin="ask" boxId="ask-add-box" initialText={addListText(question)} onSaved={rememberAdd} onClose={() => setReadAs("ask")} />
       ) : ambiguous ? (
         <div className="rounded-2xl border border-[#e6e8ee] bg-white px-5 py-4">
           <p className="text-[15px] text-[#1c2230]">Is this a list of things to add, or a question?</p>

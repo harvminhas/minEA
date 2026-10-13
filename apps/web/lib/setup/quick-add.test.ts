@@ -41,14 +41,16 @@ test("the box path doesn't duplicate: repeats collapse, existing records are kep
 test("the Applications add box has a label, an Add apps button, chips, focus + highlight", () => {
   assert.match(ADD_BOX_LABEL, /^Add applications: type the names, separated by commas or new lines/);
   assert.equal(ADD_BOX_BUTTON, "Add apps");
-  const screen = src("components/mvp/ModelScreen.tsx");
-  assert.match(screen, /<label htmlFor="model-add-box"/);
-  assert.match(screen, /disabled=\{!canSubmitAdd\(addText, addSaved\)\}/);
-  assert.match(screen, /box\.focus\(/);
+  // The box lives in the shared AppAddPanel (Model > Applications and Ask both render it).
+  const screen = src("components/add/AppAddPanel.tsx");
+  assert.match(screen, /<label htmlFor=\{boxId\}/);
+  assert.match(screen, /boxId = "model-add-box"/);
+  assert.match(screen, /disabled=\{!canSubmitAdd\(addText, saved\)\}/);
+  assert.match(screen, /boxRef\.current\?\.focus\(/);
   assert.match(screen, /scrollIntoView/);
   assert.match(screen, /ring-4/);
   assert.match(screen, /Add one with full details/);
-  assert.match(screen, /submitSignal=\{addSubmit\}/);
+  assert.match(screen, /submitSignal=\{submit\}/);
   assert.match(screen, /\{APP_OR_PLATFORM\}/, "keeps the Not sure? helper");
   const cards = src("components/add/AddCards.tsx");
   assert.match(cards, /rowsFor !== initialText/, "a submit waits for rows built from the submitted text");
@@ -72,12 +74,12 @@ test("a chip appends like typing: separator, no overwrite, no repeat", () => {
 });
 
 test("the chip only types; it never saves", () => {
-  const screen = src("components/mvp/ModelScreen.tsx");
+  const screen = src("components/add/AppAddPanel.tsx");
   const at = screen.indexOf('data-testid="quick-add-chip"');
   const chip = screen.slice(at, screen.indexOf("</button>", at));
   assert.match(chip, /setAddText\(\(text\) => appendChipName\(text, name\)\)/);
-  assert.match(chip, /addBoxRef\.current\?\.focus\(\)/);
-  for (const banned of ["setAddSubmit", "quickAdd(", "addApi", ".save("]) assert.ok(!chip.includes(banned), `chip must not ${banned}`);
+  assert.match(chip, /boxRef\.current\?\.focus\(\)/);
+  for (const banned of ["setSubmit", "quickAdd(", "addApi", ".save("]) assert.ok(!chip.includes(banned), `chip must not ${banned}`);
   assert.match(screen, /filter\(\(name\) => !textHasName\(addText, name\)\)/, "chips hide while named in the text");
   assert.ok(!screen.includes("quick-add-note"));
   assert.ok(!src("components/add/AddCards.tsx").includes("useQuickAdd"));
