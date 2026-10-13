@@ -255,6 +255,18 @@ export const orgsApi = {
     }),
   revokeInvite: (orgSlug: string, inviteId: string, token: string) =>
     apiFetch<void>(`/orgs/${orgSlug}/invites/${inviteId}`, { method: "DELETE", token }),
+  resendInvite: (orgSlug: string, inviteId: string, token: string) =>
+    apiFetch<InviteCreated>(`/orgs/${orgSlug}/invites/${inviteId}/resend`, { method: "POST", token }),
+  changeMemberRole: (orgSlug: string, userId: string, role: string, token: string) =>
+    apiFetch<OrgMember>(`/orgs/${orgSlug}/members/${userId}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+      token,
+    }),
+  removeMember: (orgSlug: string, userId: string, token: string) =>
+    apiFetch<void>(`/orgs/${orgSlug}/members/${userId}`, { method: "DELETE", token }),
+  leaveOrg: (orgSlug: string, token: string) =>
+    apiFetch<void>(`/orgs/${orgSlug}/leave`, { method: "POST", token }),
   deleteOrg: (orgSlug: string, token: string) =>
     apiFetch<void>(`/orgs/${orgSlug}`, { method: "DELETE", token }),
 };

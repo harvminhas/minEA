@@ -21,6 +21,7 @@ import { parseCheckoutSessionId } from "@/lib/support";
 import { businessGetStartedHref } from "@/lib/billing/business-request";
 import { BillingPreviewSwitch } from "@/components/billing/BillingPreviewSwitch";
 import { LicencesPanel } from "@/components/billing/LicencesPanel";
+import { OrgMembersTable } from "@/components/org/OrgMembersTable";
 import { billingPreviewEnabled, billingUiEnabled } from "@/lib/billing/flags";
 import { ADMIN_TABS, adminTabHref, resolveAdminTab, type AdminTab } from "@/lib/billing/admin-centre";
 import {
@@ -57,6 +58,7 @@ export default function OrgSettingsPage() {
     canDeleteOrg,
     canInviteOrgMembers,
     isOrgAdmin,
+    orgRole,
   } = usePermissions();
   const { plan } = usePlanFeatures();
   const { setActiveOrg, setActiveWorkspace } = useAppStore();
@@ -254,6 +256,58 @@ export default function OrgSettingsPage() {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["invites", orgSlug] }),
   });
+
+  const [memberError, setMemberError] = useState<string | null>(null);
+  const [resentUrl, setResentUrl] = useState<{ id: string; url: string } | null>(null);
+  const refreshPeople = () => {
+    // Seats are counted live from memberships, so refetching members/invites/billing updates them.
+    void queryClient.invalidateQueries({ queryKey: ["members", orgSlug] });
+    void queryClient.invalidateQueries({ queryKey: ["invites", orgSlug] });
+    void queryClient.invalidateQueries({ queryKey: ["billing-status", orgSlug] });
+  };
+  const memberMutation = useMutation({
+    mutationFn: async (
+      action: { kind: "role"; userId: string; role: string } | { kind: "remove"; userId: string } | { kind: "leave" }
+    ) => {
+      const token = await getToken();
+      if (action.kind === "role") return void (await orgsApi.changeMemberRole(orgSlug, action.userId, action.role, token!));
+      if (action.kind === "remove") return orgsApi.removeMember(orgSlug, action.userId, token!);
+      return orgsApi.leaveOrg(orgSlug, token!);
+    },
+    onSuccess: (_d, action) => {
+      setMemberError(null);
+      if (action.kind === "leave") {
+        void queryClient.invalidateQueries({ queryKey: ["orgs"] });
+        router.replace("/");
+        return;
+      }
+      refreshPeople();
+    },
+    onError: (err: Error) => setMemberError(err.message),
+  });
+  const resendMutation = useMutation({
+    mutationFn: async (inviteId: string) => {
+      const token = await getToken();
+      return orgsApi.resendInvite(orgSlug, inviteId, token!);
+    },
+    onSuccess: (data) => {
+      setResentUrl({ id: data.id, url: `${window.location.origin}${data.invite_url}` });
+      refreshPeople();
+    },
+  });
+
+  const membersBlock = (
+    <OrgMembersTable
+      members={members}
+      actorRole={orgRole}
+      actorEmail={user?.email}
+      busy={memberMutation.isPending}
+      error={memberError}
+      onChangeRole={(userId, role) => memberMutation.mutate({ kind: "role", userId, role })}
+      onRemove={(userId) => memberMutation.mutate({ kind: "remove", userId })}
+      onLeave={() => memberMutation.mutate({ kind: "leave" })}
+    />
+  );
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteOrgError, setDeleteOrgError] = useState<string | null>(null);
@@ -472,24 +526,13 @@ export default function OrgSettingsPage() {
               orgSlug={orgSlug}
               pendingInvites={(invites ?? []).filter((i) => i.status === "pending").length}
             />
+            <div className="mt-6">
+              {membersBlock}
+            </div>
           </div>
         ) : (
         <>
-        <h2 className="font-semibold text-gray-900 mb-4">Members</h2>
-        <div className="divide-y divide-gray-100 mb-4">
-          {(members ?? []).map((m) => (
-            <div key={m.user_id} className="py-2 flex justify-between text-sm">
-              <div>
-                <p className="font-medium">{m.full_name ?? m.email}</p>
-                <p className="text-gray-400">{m.email}</p>
-              </div>
-              <span className="text-gray-500 capitalize">{m.role}</span>
-            </div>
-          ))}
-          {!members && (
-            <p className="text-sm text-gray-400 py-2">Loading members…</p>
-          )}
-        </div>
+        {membersBlock}
         </>
         )}
 
@@ -633,18 +676,37 @@ export default function OrgSettingsPage() {
           <h2 className="font-semibold text-gray-900 mb-4">Pending invites</h2>
           <div className="divide-y divide-gray-100">
             {(invites ?? []).filter((i) => i.status === "pending").map((inv) => (
-              <div key={inv.id} className="py-2 flex justify-between items-center text-sm">
+              <div key={inv.id} data-testid="invite-row">
+              <div className="py-2 flex justify-between items-center text-sm">
                 <div>
                   <p className="font-medium">{inv.email}</p>
                   <p className="text-gray-400 capitalize">{inv.role} · expires {new Date(inv.expires_at).toLocaleDateString()}</p>
                 </div>
-                <button
-                  onClick={() => revokeMutation.mutate(inv.id)}
-                  disabled={revokeMutation.isPending}
-                  className="text-red-600 hover:text-red-800 text-xs"
-                >
-                  Revoke
-                </button>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <button
+                    data-testid="invite-resend"
+                    onClick={() => resendMutation.mutate(inv.id)}
+                    disabled={resendMutation.isPending}
+                    className="text-indigo-600 hover:text-indigo-800 text-xs"
+                  >
+                    Resend
+                  </button>
+                  <button
+                    data-testid="invite-revoke"
+                    onClick={() => revokeMutation.mutate(inv.id)}
+                    disabled={revokeMutation.isPending}
+                    className="text-red-600 hover:text-red-800 text-xs"
+                  >
+                    Revoke
+                  </button>
+                </div>
+              </div>
+              {resentUrl?.id === inv.id && (
+                <p className="text-xs text-gray-600 pb-2 break-all" data-testid="invite-resent-link">
+                  New link (the old one no longer works, valid 7 days):{" "}
+                  <a href={resentUrl.url} className="text-indigo-600 underline">{resentUrl.url}</a>
+                </p>
+              )}
               </div>
             ))}
             {(invites ?? []).filter((i) => i.status === "pending").length === 0 && (

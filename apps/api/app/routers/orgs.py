@@ -28,6 +28,7 @@ from app.services.authorization import (
     seed_org_limits,
 )
 from app.services.licences import EDITOR_ORG_ROLES, invite_grants_licence, require_licence
+from app.services.member_guardrails import GuardrailError, check_leave, check_removal, check_role_change
 from app.services.roles import ORG_OWNER
 from app.services.tenancy import TenancyContext, get_org_context, _resolve_user, _set_rls_org
 
@@ -35,7 +36,40 @@ router = APIRouter(prefix="/orgs", tags=["orgs"])
 
 
 class RoleChange(BaseModel):
-    role: str = Field(..., pattern=r"^(admin|member)$")
+    role: str = Field(..., pattern=r"^(owner|admin|member)$")
+
+
+def _guard(fn, **kwargs) -> None:
+    try:
+        fn(**kwargs)
+    except GuardrailError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+
+
+async def _owner_count(db: AsyncSession, org_id: uuid.UUID) -> int:
+    result = await db.execute(
+        select(OrgMembership.user_id).where(OrgMembership.org_id == org_id, OrgMembership.role == ORG_OWNER)
+    )
+    return len(result.all())
+
+
+async def _actor_role(db: AsyncSession, org_id: uuid.UUID, user_id: uuid.UUID) -> str | None:
+    result = await db.execute(
+        select(OrgMembership.role).where(OrgMembership.org_id == org_id, OrgMembership.user_id == user_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _drop_membership(db: AsyncSession, org_id: uuid.UUID, membership: OrgMembership) -> None:
+    """Delete org + workspace memberships only. Never the user or anything they created."""
+    ws_mem_result = await db.execute(
+        select(WorkspaceMembership)
+        .join(Workspace, Workspace.id == WorkspaceMembership.workspace_id)
+        .where(WorkspaceMembership.user_id == membership.user_id, Workspace.org_id == org_id)
+    )
+    for ws_mem in ws_mem_result.scalars().all():
+        await db.delete(ws_mem)
+    await db.delete(membership)
 
 
 def _invite_url(token: str) -> str:
@@ -320,6 +354,49 @@ async def revoke_invite(
     await db.commit()
 
 
+@router.post("/{org_slug}/invites/{invite_id}/resend", response_model=InviteCreated)
+async def resend_invite(
+    invite_id: uuid.UUID,
+    ctx: TenancyContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+) -> InviteCreated:
+    """Issue a fresh link for a pending invite (the old link stops working) and extend it 7 days."""
+    await ctx.require_permission(db, "org.member.invite")
+    result = await db.execute(
+        select(Invite).where(Invite.id == invite_id, Invite.org_id == ctx.org_id, Invite.workspace_id.is_(None))
+    )
+    invite = result.scalar_one_or_none()
+    if not invite:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
+    if invite.status != "pending":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invite is not pending")
+
+    raw_token, token_hash = generate_invite_token()
+    invite.token_hash = token_hash
+    invite.expires_at = utc_now_plus(days=7)
+    await log_audit(
+        db,
+        org_id=ctx.org_id,
+        actor_user_id=ctx.user_id,
+        action="invite.resent",
+        target_type="invite",
+        target_id=invite.id,
+        metadata={"email": invite.email},
+    )
+    await db.commit()
+    await db.refresh(invite)
+    return InviteCreated(
+        id=invite.id,
+        email=invite.email,
+        role=invite.role,
+        workspace_id=invite.workspace_id,
+        status=invite.status,
+        expires_at=invite.expires_at,
+        invite_url=_invite_url(raw_token),
+        token=raw_token,
+    )
+
+
 @router.patch("/{org_slug}/members/{user_id}/role")
 async def change_member_role(
     user_id: uuid.UUID,
@@ -339,8 +416,13 @@ async def change_member_role(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
 
     membership, user = row
-    if membership.role == ORG_OWNER:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Use transfer ownership to change owner")
+    _guard(
+        check_role_change,
+        actor_role=await _actor_role(db, ctx.org_id, ctx.user_id) or "",
+        target_role=membership.role,
+        new_role=body.role,
+        owner_count=await _owner_count(db, ctx.org_id),
+    )
 
     if body.role != membership.role:
         await require_role_capacity(db, ctx.org_id, body.role)
@@ -444,8 +526,13 @@ async def remove_member(
     membership = result.scalar_one_or_none()
     if not membership:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
-    if membership.role == ORG_OWNER:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove org owner")
+    _guard(
+        check_removal,
+        actor_role=await _actor_role(db, ctx.org_id, ctx.user_id) or "",
+        is_self=user_id == ctx.user_id,
+        target_role=membership.role,
+        owner_count=await _owner_count(db, ctx.org_id),
+    )
 
     await log_audit(
         db,
@@ -456,14 +543,32 @@ async def remove_member(
         target_id=user_id,
         metadata={"role": membership.role},
     )
+    # Licence/seat counts are computed live from memberships, so they drop with this delete.
+    await _drop_membership(db, ctx.org_id, membership)
+    await db.commit()
 
-    ws_mem_result = await db.execute(
-        select(WorkspaceMembership)
-        .join(Workspace, Workspace.id == WorkspaceMembership.workspace_id)
-        .where(WorkspaceMembership.user_id == user_id, Workspace.org_id == ctx.org_id)
+
+@router.post("/{org_slug}/leave", status_code=status.HTTP_204_NO_CONTENT)
+async def leave_org(
+    ctx: TenancyContext = Depends(get_org_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Any member can leave; the last owner must hand over ownership first."""
+    result = await db.execute(
+        select(OrgMembership).where(OrgMembership.org_id == ctx.org_id, OrgMembership.user_id == ctx.user_id)
     )
-    for ws_mem in ws_mem_result.scalars().all():
-        await db.delete(ws_mem)
-
-    await db.delete(membership)
+    membership = result.scalar_one_or_none()
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not a member of this org")
+    _guard(check_leave, own_role=membership.role, owner_count=await _owner_count(db, ctx.org_id))
+    await log_audit(
+        db,
+        org_id=ctx.org_id,
+        actor_user_id=ctx.user_id,
+        action="member.left",
+        target_type="user",
+        target_id=ctx.user_id,
+        metadata={"role": membership.role},
+    )
+    await _drop_membership(db, ctx.org_id, membership)
     await db.commit()
