@@ -46,3 +46,30 @@ def check_leave(*, own_role: str, owner_count: int) -> None:
         raise GuardrailError(
             400, "You're the only owner. Make someone else an owner before you leave the org."
         )
+
+
+# --- Workspace members -------------------------------------------------------------------------
+# Who may act is checked by the permission system: org owners/admins are implicit admins of every
+# workspace, and workspace admins hold workspace.member.* for their own workspace. These rules only
+# protect the workspace itself. "Admins" here means explicit workspace admin memberships.
+WORKSPACE_ROLES = ("admin", "member", "viewer")
+LAST_WS_ADMIN = "This is the workspace's last admin. Make someone else an admin first."
+
+
+def check_ws_role_change(*, target_role: str, new_role: str, admin_count: int) -> None:
+    if new_role not in WORKSPACE_ROLES:
+        raise GuardrailError(400, "Role must be admin, member or viewer")
+    if new_role != target_role and target_role == "admin" and admin_count <= 1:
+        raise GuardrailError(400, LAST_WS_ADMIN)
+
+
+def check_ws_removal(*, is_self: bool, target_role: str, admin_count: int) -> None:
+    if is_self:
+        raise GuardrailError(400, "You can't remove yourself. Use Leave workspace instead.")
+    if target_role == "admin" and admin_count <= 1:
+        raise GuardrailError(400, LAST_WS_ADMIN)
+
+
+def check_ws_leave(*, own_role: str, admin_count: int) -> None:
+    if own_role == "admin" and admin_count <= 1:
+        raise GuardrailError(400, LAST_WS_ADMIN)

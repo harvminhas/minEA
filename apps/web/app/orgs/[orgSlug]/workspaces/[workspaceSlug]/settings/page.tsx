@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ROLE_DEFINITIONS } from "@minea/types";
@@ -11,6 +11,8 @@ import { usePermissions } from "@/lib/use-permissions";
 import { primaryViewPath } from "@/lib/tenancy";
 import { billingUiEnabled } from "@/lib/billing/flags";
 import { billingErrorMessage } from "@/lib/billing/checkout";
+import { MembersTable, type MembersScope } from "@/components/org/OrgMembersTable";
+import { countAdmins, workspaceMemberActions, WS_REMOVE_COPY } from "@/lib/member-actions";
 
 export default function WorkspaceSettingsPage() {
   const { orgSlug, workspaceSlug } = useParams<{ orgSlug: string; workspaceSlug: string }>();
@@ -18,6 +20,9 @@ export default function WorkspaceSettingsPage() {
   const queryClient = useQueryClient();
   const { canManageWorkspace, canInviteWorkspaceMembers, effectiveRole } = usePermissions();
   const emailVerified = user ? !user.requiresEmailVerification : false;
+  const router = useRouter();
+  const [memberError, setMemberError] = useState<string | null>(null);
+  const [resentUrl, setResentUrl] = useState<{ id: string; url: string } | null>(null);
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
@@ -79,6 +84,56 @@ export default function WorkspaceSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["workspace-invites", orgSlug, workspaceSlug] }),
   });
 
+  const refreshPeople = () => {
+    // Licence counts are computed from memberships; the Licences roster reads these same queries.
+    void queryClient.invalidateQueries({ queryKey: ["workspace-members", orgSlug, workspaceSlug] });
+    void queryClient.invalidateQueries({ queryKey: ["workspace-invites", orgSlug, workspaceSlug] });
+    void queryClient.invalidateQueries({ queryKey: ["billing-status", orgSlug] });
+  };
+  const memberMutation = useMutation({
+    mutationFn: async (
+      action: { kind: "role"; userId: string; role: string } | { kind: "remove"; userId: string } | { kind: "leave" }
+    ) => {
+      const token = await getToken();
+      if (action.kind === "role")
+        return void (await workspacesApi.changeMemberRole(orgSlug, workspaceSlug, action.userId, action.role, token!));
+      if (action.kind === "remove") return workspacesApi.removeMember(orgSlug, workspaceSlug, action.userId, token!);
+      return workspacesApi.leave(orgSlug, workspaceSlug, token!);
+    },
+    onSuccess: (_d, action) => {
+      setMemberError(null);
+      if (action.kind === "leave") {
+        void queryClient.invalidateQueries({ queryKey: ["workspaces", orgSlug] });
+        router.replace(`/orgs/${orgSlug}`);
+        return;
+      }
+      refreshPeople();
+    },
+    onError: (err: Error) => setMemberError(err.message),
+  });
+  const resendMutation = useMutation({
+    mutationFn: async (inviteId: string) => {
+      const token = await getToken();
+      return workspacesApi.resendInvite(orgSlug, workspaceSlug, inviteId, token!);
+    },
+    onSuccess: (data) => {
+      setResentUrl({ id: data.id, url: `${window.location.origin}${data.invite_url}` });
+      refreshPeople();
+    },
+  });
+
+  const admins = countAdmins(members);
+  const scope: MembersScope = {
+    actionsFor: (m, isSelf) =>
+      workspaceMemberActions({ canManage: canManageWorkspace, isSelf, targetRole: m.role, adminCount: admins }),
+    removeLabel: "Remove",
+    removeTitle: (name) => `Remove ${name} from this workspace?`,
+    removeCopy: WS_REMOVE_COPY,
+    leaveLabel: "Leave workspace",
+    leaveTitle: "Leave this workspace?",
+    leaveCopy: "You lose access to this workspace but stay in the org. Everything you created stays.",
+  };
+
   if (!canManageWorkspace) {
     return (
       <div className="p-8 max-w-3xl mx-auto">
@@ -92,6 +147,21 @@ export default function WorkspaceSettingsPage() {
         >
           ← Back to workspace
         </Link>
+        <div className="mt-6 border-t border-gray-100 pt-4">
+          <button
+            type="button"
+            data-testid="ws-leave-standalone"
+            onClick={() => {
+              if (window.confirm("Leave this workspace? You stay in the org and everything you created stays.")) {
+                memberMutation.mutate({ kind: "leave" });
+              }
+            }}
+            className="text-sm text-gray-600 hover:text-gray-900"
+          >
+            Leave workspace
+          </button>
+          {memberError && <p className="text-sm text-red-600 mt-2">{memberError}</p>}
+        </div>
       </div>
     );
   }
@@ -128,19 +198,16 @@ export default function WorkspaceSettingsPage() {
       </section>
 
       <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <h2 className="font-semibold text-gray-900 mb-4">Members</h2>
-        <div className="divide-y divide-gray-100 mb-4">
-          {(members ?? []).map((m) => (
-            <div key={m.user_id} className="py-2 flex justify-between text-sm">
-              <div>
-                <p className="font-medium">{m.full_name ?? m.email}</p>
-                <p className="text-gray-400">{m.email}</p>
-              </div>
-              <span className="text-gray-500 capitalize">{m.role}</span>
-            </div>
-          ))}
-          {!members && <p className="text-sm text-gray-400 py-2">Loading members…</p>}
-        </div>
+        <MembersTable
+          members={members}
+          actorEmail={user?.email}
+          busy={memberMutation.isPending}
+          error={memberError}
+          scope={scope}
+          onChangeRole={(userId, role) => memberMutation.mutate({ kind: "role", userId, role })}
+          onRemove={(userId) => memberMutation.mutate({ kind: "remove", userId })}
+          onLeave={() => memberMutation.mutate({ kind: "leave" })}
+        />
 
         <div className="border-t border-gray-100 pt-4">
           <h3 className="text-sm font-medium text-gray-700 mb-2">Invite to workspace</h3>
@@ -191,20 +258,39 @@ export default function WorkspaceSettingsPage() {
           {(invites ?? [])
             .filter((i) => i.status === "pending")
             .map((inv) => (
-              <div key={inv.id} className="py-2 flex justify-between items-center text-sm">
+              <div key={inv.id} data-testid="invite-row">
+              <div className="py-2 flex justify-between items-center text-sm">
                 <div>
                   <p className="font-medium">{inv.email}</p>
                   <p className="text-gray-400 capitalize">
                     {inv.role} · expires {new Date(inv.expires_at).toLocaleDateString()}
                   </p>
                 </div>
-                <button
-                  onClick={() => revokeMutation.mutate(inv.id)}
-                  disabled={revokeMutation.isPending}
-                  className="text-red-600 hover:text-red-800 text-xs"
-                >
-                  Revoke
-                </button>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <button
+                    data-testid="invite-resend"
+                    onClick={() => resendMutation.mutate(inv.id)}
+                    disabled={resendMutation.isPending}
+                    className="text-indigo-600 hover:text-indigo-800 text-xs"
+                  >
+                    Resend
+                  </button>
+                  <button
+                    data-testid="invite-revoke"
+                    onClick={() => revokeMutation.mutate(inv.id)}
+                    disabled={revokeMutation.isPending}
+                    className="text-red-600 hover:text-red-800 text-xs"
+                  >
+                    Revoke
+                  </button>
+                </div>
+              </div>
+              {resentUrl?.id === inv.id && (
+                <p className="text-xs text-gray-600 pb-2 break-all" data-testid="invite-resent-link">
+                  New link (the old one no longer works, valid 7 days):{" "}
+                  <a href={resentUrl.url} className="text-indigo-600 underline">{resentUrl.url}</a>
+                </p>
+              )}
               </div>
             ))}
           {(invites ?? []).filter((i) => i.status === "pending").length === 0 && (

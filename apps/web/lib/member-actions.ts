@@ -5,7 +5,7 @@ export type OrgRoleOption = (typeof ORG_ROLE_OPTIONS)[number];
 
 export interface MemberActions {
   /** Roles the actor may pick for this row (includes the current role). Empty = no role control. */
-  roles: OrgRoleOption[];
+  roles: string[];
   canRemove: boolean;
   canLeave: boolean;
   /** Why role/remove is unavailable, shown as a tooltip/hint. */
@@ -43,3 +43,37 @@ export function memberActions(opts: {
 export function countOwners(members: { role: string }[] | undefined): number {
   return (members ?? []).filter((m) => m.role === "owner").length;
 }
+
+// --- Workspace members (mirrors check_ws_* in member_guardrails.py) ---------------------------
+export const WORKSPACE_ROLE_OPTIONS = ["admin", "member", "viewer"] as const;
+export const LAST_WS_ADMIN_REASON = "This is the workspace's last admin. Make someone else an admin first.";
+
+/** canManage = org owner/admin or workspace admin (the API's workspace.member.* permissions). */
+export function workspaceMemberActions(opts: {
+  canManage: boolean;
+  isSelf: boolean;
+  targetRole: string;
+  adminCount: number;
+}): MemberActions {
+  const { canManage, isSelf, targetRole, adminCount } = opts;
+  const lastAdmin = targetRole === "admin" && adminCount <= 1;
+  if (isSelf) {
+    return {
+      // You may change your own role unless you're the last admin.
+      roles: canManage && !lastAdmin ? [...WORKSPACE_ROLE_OPTIONS] : [],
+      canRemove: false,
+      canLeave: !lastAdmin,
+      reason: lastAdmin ? LAST_WS_ADMIN_REASON : null,
+    };
+  }
+  if (!canManage) return { roles: [], canRemove: false, canLeave: false, reason: null };
+  if (lastAdmin) return { roles: [], canRemove: false, canLeave: false, reason: LAST_WS_ADMIN_REASON };
+  return { roles: [...WORKSPACE_ROLE_OPTIONS], canRemove: true, canLeave: false, reason: null };
+}
+
+export function countAdmins(members: { role: string }[] | undefined): number {
+  return (members ?? []).filter((m) => m.role === "admin").length;
+}
+
+export const WS_REMOVE_COPY =
+  "They lose access to this workspace but stay in the org. Everything they created stays, and an editor licence is freed if this was their only editing role.";

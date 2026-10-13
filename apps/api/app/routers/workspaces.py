@@ -3,7 +3,7 @@ from app.utils.time import utc_now, utc_now_plus
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,7 +30,13 @@ from app.services.authorization import (
     require_limit,
     require_role_capacity,
 )
-from app.services.licences import invite_grants_licence, require_licence
+from app.services.licences import EDITOR_WORKSPACE_ROLES, invite_grants_licence, require_licence
+from app.services.member_guardrails import (
+    GuardrailError,
+    check_ws_leave,
+    check_ws_removal,
+    check_ws_role_change,
+)
 from app.services.share_access import validate_share_create
 from app.services.roles import ORG_ADMIN_ROLES, effective_workspace_role
 from app.services.tenancy import TenancyContext, get_org_context, get_workspace_context
@@ -41,6 +47,35 @@ router = APIRouter(prefix="/orgs/{org_slug}/workspaces", tags=["workspaces"])
 
 def _invite_url(token: str) -> str:
     return f"/invites/{token}"
+
+
+class WorkspaceRoleChange(BaseModel):
+    role: str = Field(..., pattern=r"^(admin|member|viewer)$")
+
+
+def _guard(fn, **kwargs) -> None:
+    try:
+        fn(**kwargs)
+    except GuardrailError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+
+
+async def _ws_admin_count(db: AsyncSession, workspace_id: UUID) -> int:
+    result = await db.execute(
+        select(WorkspaceMembership.user_id).where(
+            WorkspaceMembership.workspace_id == workspace_id, WorkspaceMembership.role == "admin"
+        )
+    )
+    return len(result.all())
+
+
+async def _ws_membership(db: AsyncSession, workspace_id: UUID, user_id: UUID) -> WorkspaceMembership | None:
+    result = await db.execute(
+        select(WorkspaceMembership).where(
+            WorkspaceMembership.workspace_id == workspace_id, WorkspaceMembership.user_id == user_id
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 @router.get("", response_model=list[WorkspaceRead])
@@ -517,6 +552,146 @@ async def revoke_workspace_invite(
         target_id=invite.id,
         metadata={"email": invite.email},
     )
+    await db.commit()
+
+
+@router.post("/{workspace_slug}/invites/{invite_id}/resend", response_model=InviteCreated)
+async def resend_workspace_invite(
+    invite_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> InviteCreated:
+    """Fresh link for a pending invite (old link stops working), valid another 7 days."""
+    await ctx.require_permission(db, "workspace.member.invite")
+    assert ctx.workspace
+    result = await db.execute(
+        select(Invite).where(
+            Invite.id == invite_id, Invite.org_id == ctx.org_id, Invite.workspace_id == ctx.workspace.id
+        )
+    )
+    invite = result.scalar_one_or_none()
+    if not invite:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
+    if invite.status != "pending":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invite is not pending")
+    raw_token, token_hash = generate_invite_token()
+    invite.token_hash = token_hash
+    invite.expires_at = utc_now_plus(days=7)
+    await log_audit(
+        db,
+        org_id=ctx.org_id,
+        actor_user_id=ctx.user_id,
+        action="invite.resent",
+        target_type="invite",
+        target_id=invite.id,
+        metadata={"email": invite.email, "workspace_id": str(ctx.workspace.id)},
+    )
+    await db.commit()
+    await db.refresh(invite)
+    return InviteCreated(
+        id=invite.id,
+        email=invite.email,
+        role=invite.role,
+        workspace_id=invite.workspace_id,
+        status=invite.status,
+        expires_at=invite.expires_at,
+        invite_url=_invite_url(raw_token),
+        token=raw_token,
+    )
+
+
+@router.patch("/{workspace_slug}/members/{user_id}/role", response_model=WorkspaceMemberRead)
+async def change_workspace_member_role(
+    user_id: UUID,
+    body: WorkspaceRoleChange,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspaceMemberRead:
+    # Org owners/admins are implicit workspace admins, so this covers them and workspace admins.
+    await ctx.require_permission(db, "workspace.member.invite")
+    assert ctx.workspace
+    membership = await _ws_membership(db, ctx.workspace.id, user_id)
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+    _guard(
+        check_ws_role_change,
+        target_role=membership.role,
+        new_role=body.role,
+        admin_count=await _ws_admin_count(db, ctx.workspace.id),
+    )
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one()
+    if body.role != membership.role:
+        await require_role_capacity(db, ctx.org_id, body.role)
+        if body.role in EDITOR_WORKSPACE_ROLES:
+            await require_licence(db, ctx.org_id, user_id=user_id, email=user.email)
+    old_role = membership.role
+    membership.role = body.role
+    await log_audit(
+        db,
+        org_id=ctx.org_id,
+        actor_user_id=ctx.user_id,
+        action="workspace_member.role_changed",
+        target_type="user",
+        target_id=user_id,
+        metadata={"from": old_role, "to": body.role, "workspace_id": str(ctx.workspace.id)},
+    )
+    await db.commit()
+    return WorkspaceMemberRead(
+        user_id=user.id, email=user.email, full_name=user.full_name, role=membership.role, joined_at=membership.created_at
+    )
+
+
+@router.delete("/{workspace_slug}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_workspace_member(
+    user_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Drops the workspace membership only; the user stays in the org and keeps every record."""
+    await ctx.require_permission(db, "workspace.member.remove")
+    assert ctx.workspace
+    membership = await _ws_membership(db, ctx.workspace.id, user_id)
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+    _guard(
+        check_ws_removal,
+        is_self=user_id == ctx.user_id,
+        target_role=membership.role,
+        admin_count=await _ws_admin_count(db, ctx.workspace.id),
+    )
+    await log_audit(
+        db,
+        org_id=ctx.org_id,
+        actor_user_id=ctx.user_id,
+        action="workspace_member.removed",
+        target_type="user",
+        target_id=user_id,
+        metadata={"role": membership.role, "workspace_id": str(ctx.workspace.id)},
+    )
+    await db.delete(membership)
+    await db.commit()
+
+
+@router.post("/{workspace_slug}/leave", status_code=status.HTTP_204_NO_CONTENT)
+async def leave_workspace(
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    assert ctx.workspace
+    membership = await _ws_membership(db, ctx.workspace.id, ctx.user_id)
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="You're not a member of this workspace")
+    _guard(check_ws_leave, own_role=membership.role, admin_count=await _ws_admin_count(db, ctx.workspace.id))
+    await log_audit(
+        db,
+        org_id=ctx.org_id,
+        actor_user_id=ctx.user_id,
+        action="workspace_member.left",
+        target_type="user",
+        target_id=ctx.user_id,
+        metadata={"role": membership.role, "workspace_id": str(ctx.workspace.id)},
+    )
+    await db.delete(membership)
     await db.commit()
 
 

@@ -389,6 +389,18 @@ export const workspacesApi = {
     apiFetch<WorkspaceMember[]>(`${wsBase(orgSlug, workspaceSlug)}/members`, { token }),
   listInvites: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<Invite[]>(`${wsBase(orgSlug, workspaceSlug)}/invites`, { token }),
+  resendInvite: (orgSlug: string, workspaceSlug: string, inviteId: string, token: string) =>
+    apiFetch<InviteCreated>(`${wsBase(orgSlug, workspaceSlug)}/invites/${inviteId}/resend`, { method: "POST", token }),
+  changeMemberRole: (orgSlug: string, workspaceSlug: string, userId: string, role: string, token: string) =>
+    apiFetch<WorkspaceMember>(`${wsBase(orgSlug, workspaceSlug)}/members/${userId}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+      token,
+    }),
+  removeMember: (orgSlug: string, workspaceSlug: string, userId: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/members/${userId}`, { method: "DELETE", token }),
+  leave: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/leave`, { method: "POST", token }),
   createInvite: (
     orgSlug: string,
     workspaceSlug: string,
