@@ -7,6 +7,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { MinEAObject } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { AppAddPanel } from "@/components/add/AppAddPanel";
+import { draftsFromCards } from "@/lib/setup/card-drafts";
 import { useAppStore } from "@/lib/store";
 import type { CostLine } from "@/lib/cost/math";
 import {
@@ -140,6 +142,9 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   const catalog = useModelCatalog();
   const setup = useWorkspaceSetup();
   const [text, setText] = useState("");
+  const [prefill, setPrefill] = useState("");
+  const [prefillPulse, setPrefillPulse] = useState(0);
+  const [submitSignal, setSubmitSignal] = useState(0);
   const [step, setStep] = useState(0);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [whereByServer, setWhereByServer] = useState<Record<string, string>>({});
@@ -203,19 +208,38 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   };
 
   useEffect(() => {
-    if (step !== 1) return;
+    if (step !== 1 && step !== 0) return;
     const timer = window.setTimeout(() => {
-      setDrafts((current) => mergeDrafts(current, toDrafts(setupMatch(text))));
+      // Tie lines already in the map to their objects so the progress pill doesn't count them twice.
+      setDrafts((current) => draftsFromCards(mergeDrafts(current, toDrafts(setupMatch(text))), catalog.data?.objects ?? []));
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [text, step]);
+  }, [text, step, catalog.data?.objects]);
 
   // Fill the box AND show what it matched, so the click visibly does something even when the box
   // already held the sample. Nothing is saved until the person saves on a later screen.
   const loadSample = () => {
     setText(SAMPLE_COMPANY);
-    setDrafts(toDrafts(setupMatch(SAMPLE_COMPANY)));
+    setPrefill(SAMPLE_COMPANY);
+    setPrefillPulse((n) => n + 1);
     setStep(1);
+  };
+
+  // Drafts for the later steps, built from the box text and the catalogue as the panel left it
+  // (its save writes each object into the cached catalogue). Location comes from the card's
+  // "Where does it live?" pick, saved as hosting_model.
+  const cardDrafts = (createdIds: string[] = []): Draft[] => {
+    const cached = orgSlug && workspaceSlug ? queryClient.getQueryData<{ objects?: MinEAObject[] }>(catalogQueryKey(orgSlug, workspaceSlug)) : undefined;
+    const objects = cached?.objects ?? catalog.data?.objects ?? [];
+    return draftsFromCards(toDrafts(setupMatch(text)), objects, createdIds);
+  };
+
+  // Next: anything new on the cards saves through the panel (onSaved continues); when every card is
+  // already in the map there is nothing to save, so go straight on.
+  const next = () => {
+    const ds = cardDrafts();
+    if (ds.some((draft) => !draft.objectId && setupCreate(draft))) setSubmitSignal((n) => n + 1);
+    else void run(() => createApps(ds));
   };
 
   const openReadyMap = () => {
@@ -246,12 +270,13 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object });
   };
 
-  const createApps = async () => {
+  const createApps = async (source: Draft[] = drafts) => {
+    setDrafts(source);
     const token = await auth();
     const nextIds = { ...serverIds };
     const created: Draft[] = [];
     const stored: Record<string, MinEAObject> = { ...hosts };
-    for (const draft of drafts) {
+    for (const draft of source) {
       if (draft.objectId) {
         const known = catalog.data?.objects.find((object) => object.id === draft.objectId);
         if (known) stored[draft.key] = known;
@@ -412,14 +437,6 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
 
   const appCount = drafts.filter(isApp).length;
   const platformCount = drafts.filter((item) => item.tool?.kind === "platform").length;
-  const serverCount = drafts.filter((item) => item.tool?.kind === "server").length;
-  const checkCount = drafts.filter((item) => item.status === "pick" || item.status === "weak").length;
-  const foundLine = [
-    `${appCount} apps`,
-    platformCount > 0 ? `${platformCount} platform${platformCount === 1 ? "" : "s"}` : "",
-    `${serverCount} server${serverCount === 1 ? "" : "s"}`,
-    `${checkCount} to check`,
-  ].filter(Boolean).join(" · ");
 
   return (
     <section ref={rootRef} className={inline ? "rounded-2xl border border-[#e6e8ee] bg-white p-4" : "mt-8 w-full"}>
@@ -431,32 +448,6 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
           <h1 className="mt-6 text-center text-[36px] font-semibold tracking-tight text-[#1c2230]">What runs your business?</h1>
           <p className="mx-auto mt-3 max-w-xl text-center text-[14px] leading-6 text-[#6b7289]">
             List the software and systems {orgName} uses. We&apos;ll fill in vendors, categories and typical costs, then show you what depends on what.
-          </p>
-          <textarea
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            rows={5}
-            placeholder="e.g. Salesforce, QuickBooks, M365, AS400, Order Entry, …  (one per line or separated by commas)"
-            className="mt-6 w-full rounded-xl border border-[#e6e8ee] px-3 py-2 text-[14px] outline-none focus:border-[#5b4ce6]"
-          />
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <p className="text-[13px] text-[#6b7289]">Apps, websites, servers, anything with a login or a bill. Rough names are fine.</p>
-            <button
-              type="button"
-              disabled={!text.trim()}
-              onClick={() => {
-                setDrafts(toDrafts(setupMatch(text)));
-                setStep(1);
-              }}
-              className="shrink-0 rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50"
-            >
-              Continue →
-            </button>
-          </div>
-          <p className="mt-4 text-center text-[13px]">
-            <button type="button" onClick={loadSample} className="font-medium text-[#5b4ce6]">Load sample company</button>
-            <span className="mx-2 text-[#8b90a0]">·</span>
-            <button type="button" onClick={() => void skip()} className="text-[#6b7289]">Skip for now</button>
           </p>
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
             {[
@@ -476,118 +467,42 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
       {step === 0 && inline && (
         <>
           <h2 className="text-[22px] font-semibold text-[#1c2230]">What runs your business?</h2>
-          <p className="mt-1 text-[13px] text-[#6b7289]">Paste or type apps and servers. Commas or new lines both work.</p>
-          <textarea
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            rows={4}
-            placeholder="Salesforce, QuickBooks, the server in the back room"
-            className="mt-3 w-full rounded-xl border border-[#e6e8ee] px-3 py-2 text-[14px] outline-none focus:border-[#5b4ce6]"
-          />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={!text.trim()}
-              onClick={() => {
-                setDrafts(toDrafts(setupMatch(text)));
-                setStep(1);
-              }}
-              className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50"
-            >
-              Continue
-            </button>
-            <button type="button" onClick={loadSample} className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px]">
-              Load sample company
-            </button>
-            <button type="button" onClick={() => void skip()} className="rounded-lg px-3 py-1.5 text-[13px] text-[#6b7289]">
-              Skip for now
-            </button>
-          </div>
+          <p className="mt-1 text-[13px] text-[#6b7289]">Type apps and servers. The cards fill in as you type.</p>
         </>
       )}
 
-      {step === 1 && (
-        <>
+      {/* "What you use": the same box, chips and live cards as Model > Applications > Add (AppAddPanel),
+          so results show while typing. Next (or the panel's own Add button) saves through the panel,
+          then the later steps open prefilled from what was saved. */}
+      {(step === 0 || step === 1) && (
+        <div data-testid="setup-what" className={step === 0 && !inline ? "mt-6" : "mt-3"}>
           <Stepper step={1} />
-          <textarea
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            rows={3}
-            className="w-full rounded-xl border border-[#e6e8ee] px-3 py-2 text-[14px] outline-none focus:border-[#5b4ce6]"
+          <AppAddPanel
+            origin="setup"
+            boxId="setup-add-box"
+            initialText={prefill}
+            pulse={prefillPulse}
+            submitSignal={submitSignal}
+            onTextChange={(next) => {
+              setText(next);
+              if (next.trim() && step === 0) setStep(1);
+            }}
+            onSaved={(receipt) => void run(() => createApps(cardDrafts(receipt.objectIds)))}
+            onClose={() => setPrefill("")}
           />
-          <div className="mt-4">
-            <h2 className="text-[18px] font-semibold text-[#1c2230]">We found {drafts.length} items</h2>
-            <p className="mt-1 text-[13px] text-[#6b7289]">
-              {foundLine}
-            </p>
-          </div>
-          {/* Results: a grid with fixed-width cost/status columns (no overlap, badges never clipped);
-              below sm each item stacks as a card. */}
-          <div data-testid="setup-results" className="mt-3 text-[13px]">
-            <div className={`hidden px-2 py-1 text-[12px] font-medium text-[#8b90a0] sm:grid ${RESULT_COLS}`}>
-              <span>You typed</span>
-              <span>We think it&apos;s</span>
-              <span>Details</span>
-              <span className="text-right">Typical cost</span>
-              <span className="sr-only">Status</span>
-            </div>
-            <ul className="space-y-2 sm:space-y-0">
-                {drafts.map((item) => {
-                  const badge = reviewBadge(item);
-                  const cost = item.yearly ? `$${Number(item.yearly).toLocaleString("en-US")}` : "—";
-                  const typed = `“${item.input}”`;
-                  const think = thinkName(item);
-                  return (
-                    <li key={item.key} className={`grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 rounded-xl border border-[#eef0f4] p-3 sm:items-start sm:rounded-none sm:border-x-0 sm:border-b-0 sm:px-2 sm:py-2 ${RESULT_COLS}`}>
-                      <span title={typed} className="col-span-2 min-w-0 truncate text-[12px] text-[#6b7289] sm:col-span-1 sm:text-[13px] sm:text-[#4b5163]">{typed}</span>
-                      <span title={think} className="min-w-0 truncate font-medium text-[#1c2230]">{think}</span>
-                      <span className="col-start-2 row-start-2 justify-self-end sm:col-start-auto sm:row-start-auto sm:order-last">
-                        <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.className}`}>{badge.label}</span>
-                      </span>
-                      <div className="col-span-2 min-w-0 text-[#4b5163] sm:col-span-1">
-                            {item.tool?.kind === "server" && <span>Not an app: we&apos;ll ask what runs on it in the next step.</span>}
-                            {item.tool?.kind !== "server" && item.status === "matched" && <span>{[item.tool?.category, item.tool?.vendor].filter(Boolean).join(" · ")}</span>}
-                            {item.status === "custom" && (
-                              <label className="inline-flex items-center gap-2 whitespace-nowrap text-[12px]">
-                                <input type="checkbox" checked={item.customBuilt} onChange={(event) => patch(item.key, { customBuilt: event.target.checked })} />
-                                We built it ourselves
-                              </label>
-                            )}
-                            {item.status === "pick" && (
-                              <div className="flex flex-wrap gap-1.5">
-                                {item.options.map((tool) => (
-                                  <PickChip key={tool.name} tool={tool} onPick={() => patch(item.key, { status: "matched", tool, yearly: tool.typicalAnnual ? String(tool.typicalAnnual) : "", typical: tool.typicalAnnual != null })} />
-                                ))}
-                                <button type="button" className="rounded-full border border-[#e6e8ee] px-2 py-0.5 text-[12px]" onClick={() => patch(item.key, { status: "custom", tool: null, customBuilt: true, yearly: "", typical: false })}>Other</button>
-                              </div>
-                            )}
-                            {item.status === "weak" && item.tool && (
-                              <span>
-                                Is it <strong>{item.tool.name}</strong> ({item.tool.name === "BarTender" ? "Seagull Scientific" : item.tool.vendor})?{" "}
-                                <button type="button" className="font-medium text-[#3f35b5]" onClick={() => patch(item.key, { status: "matched" })}>Yes</button>
-                                {" · "}
-                                <button type="button" className="text-[#6b7289]" onClick={() => patch(item.key, { status: "custom", tool: null, customBuilt: true, yearly: "", typical: false })}>No, keep my name</button>
-                              </span>
-                            )}
-                      </div>
-                      <span className="col-span-2 whitespace-nowrap text-[12px] text-[#4b5163] sm:col-span-1 sm:text-right sm:text-[13px]"><span className="text-[#8b90a0] sm:hidden">Typical cost </span>{cost}</span>
-                    </li>
-                  );
-                })}
-            </ul>
-          </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="rounded-full bg-[#f4f3ff] px-3 py-1 text-[12px] text-[#3c4254]">
               ✓ {catalogState.apps + unsavedApps} apps ({SETUP_MIN.apps} needed) · {Math.min(catalogState.located + newlyLocated, SETUP_MIN.located)} of {SETUP_MIN.located} app with a known location · Your map needs both.
             </p>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={loadSample} className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-[#5b4ce6]">Load sample company</button>
               <button type="button" onClick={() => void run(skip)} className="rounded-lg px-3 py-1.5 text-[13px] text-[#6b7289]">Skip for now</button>
-              <button type="button" disabled={busy} onClick={() => void run(createApps)} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50">
+              <button type="button" disabled={busy || !text.trim()} onClick={next} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50">
                 {busy ? "Saving…" : "Next →"}
               </button>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {step === 2 && (
@@ -764,23 +679,8 @@ function aiOthers(drafts: Draft[], rows: AiStepRow[]): string[] {
   return drafts.filter((draft) => !shown.has(draft.key)).map((draft) => displayName(draft));
 }
 
-function thinkName(item: Draft): string {
-  if (item.tool?.kind === "server") return item.tool.name === "AS400" ? "IBM i server (AS400)" : item.tool.name;
-  if (item.status === "weak" && item.tool) return `${item.tool.name}?`;
-  if (item.status === "matched" && item.tool) return item.tool.name;
-  return item.input;
-}
 
-function reviewBadge(item: Draft): { label: string; className: string } {
-  if (item.tool?.kind === "server") return { label: "Server", className: "bg-[#dbeafe] text-[#1d4ed8]" };
-  if (item.tool?.kind === "platform") return { label: "Platform", className: "bg-[#ede9fe] text-[#6d28d9]" };
-  if (item.status === "matched") return { label: "Matched", className: "bg-[#dcfce7] text-[#166534]" };
-  if (item.status === "custom") return { label: "Custom", className: "bg-[#f3f4f6] text-[#4b5563]" };
-  if (item.status === "pick") return { label: "Pick one", className: "bg-[#fef3c7] text-[#b45309]" };
-  return { label: "Check", className: "bg-[#fef3c7] text-[#b45309]" };
-}
 
-const RESULT_COLS = "sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.6fr)_5.5rem_4.75rem]";
 
 function Stepper({ step }: { step: number }) {
   const labels = ["What you use", "AI turned on? (optional)", "Where each one lives", "Owners & renewals (optional)"];
@@ -800,13 +700,6 @@ function Stepper({ step }: { step: number }) {
   );
 }
 
-function PickChip({ tool, onPick }: { tool: ToolRecord; onPick: () => void }) {
-  return (
-    <button type="button" onClick={onPick} className="rounded-full border border-[#e6e8ee] px-2 py-0.5 text-[12px]">
-      {tool.name}
-    </button>
-  );
-}
 
 function Cell({ value, onChange, type = "text" }: { value: string; onChange: (value: string) => void; type?: string }) {
   return (

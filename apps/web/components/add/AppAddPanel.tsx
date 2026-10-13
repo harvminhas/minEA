@@ -21,8 +21,10 @@ export function AppAddPanel({
   onClose,
   onFullDetails,
   boxId = "model-add-box",
+  submitSignal = 0,
+  onTextChange,
 }: {
-  origin: "model" | "ask";
+  origin: "model" | "ask" | "setup";
   /** Prefill (Ask: the names parsed from the question). */
   initialText?: string;
   /** Bump to focus and briefly highlight the box (the page's "+ Add" button). */
@@ -32,6 +34,10 @@ export function AppAddPanel({
   /** "Add one with full details": opens the full form (hidden when not given). */
   onFullDetails?: () => void;
   boxId?: string;
+  /** Bump to save from outside (the setup wizard's Next): same path as the Add apps button. */
+  submitSignal?: number;
+  /** The box text as the person types (the wizard keeps it for its later steps). */
+  onTextChange?: (text: string) => void;
 }) {
   const catalog = useModelCatalog();
   const [addText, setAddText] = useState(initialText);
@@ -75,6 +81,18 @@ export function AppAddPanel({
     setKindChoice("app");
     onClose();
   };
+  useEffect(() => {
+    onTextChange?.(addText);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addText]);
+  const outerSubmit = useRef(submitSignal);
+  useEffect(() => {
+    if (outerSubmit.current === submitSignal) return;
+    outerSubmit.current = submitSignal;
+    setSaved(false);
+    setSubmit((n) => n + 1);
+  }, [submitSignal]);
+
   const hint = applicationAddHint(addText, kind, kindLocked);
 
   return (
@@ -167,7 +185,8 @@ export function AppAddPanel({
         </p>
       )}
       <AddFlow
-        origin={origin}
+        // The setup wizard shows the same cards as Model > Applications.
+        origin={origin === "setup" ? "model" : origin}
         kind={kind}
         cards
         compact

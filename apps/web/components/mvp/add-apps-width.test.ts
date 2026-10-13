@@ -20,11 +20,7 @@ test("step indicator stays on one row and scrolls horizontally when narrow", () 
   assert.match(stepper, /"shrink-0 "/);
 });
 
-test("results: fixed cost/status columns, truncation with tooltips, unclipped badges, cards on mobile", () => {
-  assert.match(setup, /RESULT_COLS = "sm:grid-cols-\[minmax\(0,1fr\)_minmax\(0,1\.1fr\)_minmax\(0,1\.6fr\)_5\.5rem_4\.75rem\]"/);
-  assert.match(setup, /title=\{typed\} className="[^"]*truncate/);
-  assert.match(setup, /title=\{think\} className="[^"]*truncate/);
-  assert.match(setup, /inline-flex whitespace-nowrap rounded-full[^"]*\$\{badge\.className\}/);
-  assert.match(setup, /rounded-xl border border-\[#eef0f4\] p-3 sm:items-start sm:rounded-none/);
-  assert.doesNotMatch(setup.slice(setup.indexOf("We found {drafts.length}"), setup.indexOf("Skip for now", setup.indexOf("We found {drafts.length}"))), /overflow-hidden|table-fixed/);
+test("results: the wizard shows the shared add cards, not its own results table", () => {
+  assert.match(setup, /<AppAddPanel/);
+  assert.doesNotMatch(setup, /RESULT_COLS|We found \{drafts\.length\}/);
 });

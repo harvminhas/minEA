@@ -79,7 +79,7 @@ test("Load sample company fills the box and shows the matches (saves nothing)", 
   assert.match(body, /setText\(SAMPLE_COMPANY\)/);
   assert.match(body, /setStep\(1\)/);
   assert.doesNotMatch(body, /Api\.|fetch\(/);
-  assert.equal((src.match(/onClick=\{loadSample\}/g) ?? []).length, 2);
+  assert.equal((src.match(/onClick=\{loadSample\}/g) ?? []).length, 1); // one footer link shared by the hero and inline wizard
 });
 
 test("step 2: the model's repeated gap is shown once (it caused a duplicate React key)", async () => {
