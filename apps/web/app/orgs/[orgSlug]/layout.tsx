@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { MEMBERSHIP_QUERY, invalidateMembership } from "@/lib/membership-freshness";
+import { useEffect, useRef } from "react";
 import { useParams, usePathname } from "next/navigation";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/lib/auth-context";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TopNav } from "@/components/nav/TopNav";
 import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { ResizableSplitLayout } from "@/components/sidebar/ResizableSplitLayout";
@@ -37,6 +38,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
 
   const { data: org, isError, isFetched, error: orgLoadError, refetch: refetchOrg, isFetching: orgFetching } = useQuery({
     queryKey: ["org", orgSlug],
+    ...MEMBERSHIP_QUERY,
     queryFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
@@ -59,6 +61,16 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (org) setActiveOrg(org);
   }, [org, setActiveOrg]);
+
+  // Each in-app navigation re-reads this org's role from the API, so a promotion (or demotion)
+  // shows on the next click instead of after sign-out. Skips the first render (the query is
+  // already fetching then).
+  const queryClient = useQueryClient();
+  const lastPath = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastPath.current !== null && lastPath.current !== pathname) void invalidateMembership(queryClient, orgSlug);
+    lastPath.current = pathname;
+  }, [pathname, orgSlug, queryClient]);
 
   useEffect(() => {
     if (!isOrgOnlyRoute || activeWorkspace?.slug || !workspaces?.length) return;

@@ -32,6 +32,11 @@ export function NotOrgAdmin({
               </span>
               . Ask an owner or admin if you need something changed.
             </p>
+            <p className="mt-2 text-xs text-gray-500" data-testid="not-org-admin-ws-hint">
+              Being an admin of a workspace doesn&apos;t make you an org admin; workspace admins manage
+              their workspace from its Workspace settings. If you were just made an org admin, this page
+              updates on its own.
+            </p>
           </div>
         </div>
         {askHref && (

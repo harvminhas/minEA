@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Check, Loader2 } from "lucide-react";
+import { applyOverrides, runRowAction, type Overrides } from "@/lib/row-saving";
 /** Org and workspace members share this shape. */
 export interface MemberRow {
   user_id: string;
@@ -30,8 +32,9 @@ export interface MembersScope {
 interface Props {
   members: MemberRow[] | undefined;
   actorEmail: string | null | undefined;
-  onChangeRole: (userId: string, role: string) => void;
-  onRemove: (userId: string) => void;
+  /** Return the API promise: the row shows Saving…, then Saved, or rolls back with the error. */
+  onChangeRole: (userId: string, role: string) => unknown;
+  onRemove: (userId: string) => unknown;
   onLeave: () => void;
   busy?: boolean;
   error?: string | null;
@@ -57,7 +60,13 @@ export function OrgMembersTable(props: Omit<Props, "scope"> & { actorRole: strin
 /** Shared Members table: role dropdown, Remove with confirm, and Leave on your own row. */
 export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLeave, busy, error, scope }: Props & { scope: MembersScope }) {
   const [confirm, setConfirm] = useState<Pending>(null);
+  const [overrides, setOverrides] = useState<Overrides>({});
   const me = actorEmail?.toLowerCase() ?? "";
+  const rows = applyOverrides(members, (m) => m.user_id, overrides);
+  const changeRole = (m: MemberRow, role: string) =>
+    void runRowAction(m.user_id, { role }, () => onChangeRole(m.user_id, role), setOverrides);
+  const remove = (m: MemberRow) =>
+    void runRowAction(m.user_id, { removing: true }, () => onRemove(m.user_id), setOverrides);
 
   return (
     <div data-testid="org-members-table">
@@ -68,11 +77,16 @@ export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLe
         </p>
       )}
       <div className="divide-y divide-gray-100 mb-4">
-        {(members ?? []).map((m) => {
+        {rows.map((m) => {
           const isSelf = m.email.toLowerCase() === me;
-          const a = scope.actionsFor(m, isSelf);
+          // Rules use the saved role; the row shows the optimistic one.
+          const saved = members?.find((x) => x.user_id === m.user_id) ?? m;
+          const a = scope.actionsFor(saved, isSelf);
+          const o = overrides[m.user_id];
+          const saving = o?.status === "saving";
           return (
-            <div key={m.user_id} className="py-2 flex items-center justify-between gap-3 text-sm" data-testid="member-row">
+            <div key={m.user_id} data-testid="member-row" data-status={o?.status ?? "idle"}>
+            <div className={`py-2 flex items-center justify-between gap-3 text-sm ${o?.removing ? "opacity-50" : ""}`}>
               <div className="min-w-0">
                 <p className="font-medium truncate">
                   {m.full_name ?? m.email}
@@ -86,8 +100,8 @@ export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLe
                     aria-label={`Role for ${m.email}`}
                     data-testid="member-role-select"
                     value={m.role}
-                    disabled={busy}
-                    onChange={(e) => onChangeRole(m.user_id, e.target.value)}
+                    disabled={busy || saving || o?.removing}
+                    onChange={(e) => changeRole(m, e.target.value)}
                     className="border border-gray-300 rounded-md px-2 py-1 text-sm"
                   >
                     {a.roles.map((r) => (
@@ -101,11 +115,12 @@ export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLe
                     {ROLE_LABELS[m.role] ?? m.role}
                   </span>
                 )}
-                {a.canRemove && (
+                <RowStatusBadge status={o?.status} removing={!!o?.removing} />
+                {a.canRemove && !o?.removing && (
                   <button
                     type="button"
                     data-testid="member-remove"
-                    disabled={busy}
+                    disabled={busy || saving}
                     onClick={() => setConfirm({ kind: "remove", member: m })}
                     className="text-red-600 hover:text-red-800 text-xs px-1"
                   >
@@ -125,6 +140,12 @@ export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLe
                   </button>
                 )}
               </div>
+            </div>
+            {o?.status === "error" && (
+              <p className="text-xs text-red-600 pb-2" role="alert" data-testid="member-row-error">
+                {o.error}
+              </p>
+            )}
             </div>
           );
         })}
@@ -154,7 +175,7 @@ export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLe
                 type="button"
                 data-testid="member-confirm-ok"
                 onClick={() => {
-                  if (confirm.kind === "remove") onRemove(confirm.member.user_id);
+                  if (confirm.kind === "remove") remove(confirm.member);
                   else onLeave();
                   setConfirm(null);
                 }}
@@ -168,4 +189,21 @@ export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLe
       )}
     </div>
   );
+}
+
+/** Inline row state: spinner + "Saving…" (or "Removing…"), then a brief "Saved" tick. */
+export function RowStatusBadge({ status, removing }: { status?: string; removing?: boolean }) {
+  if (status === "saving")
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-gray-500" data-testid="row-saving" aria-live="polite">
+        <Loader2 size={12} className="animate-spin" /> {removing ? "Removing…" : "Saving…"}
+      </span>
+    );
+  if (status === "saved")
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-emerald-600" data-testid="row-saved" aria-live="polite">
+        <Check size={12} /> {removing ? "Removed" : "Saved"}
+      </span>
+    );
+  return null;
 }

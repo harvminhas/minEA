@@ -1,5 +1,6 @@
 "use client";
 
+import { MEMBERSHIP_QUERY } from "@/lib/membership-freshness";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -35,6 +36,7 @@ export default function NewWorkspacePage() {
 
   const { data: org } = useQuery({
     queryKey: ["org", orgSlug],
+    ...MEMBERSHIP_QUERY,
     queryFn: async () => {
       const token = await getToken();
       return orgsApi.get(orgSlug, token!);

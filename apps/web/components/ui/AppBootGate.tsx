@@ -1,5 +1,6 @@
 "use client";
 
+import { MEMBERSHIP_QUERY } from "@/lib/membership-freshness";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -56,6 +57,7 @@ export function AppBootGate({ children }: { children: React.ReactNode }) {
 
   const { isFetched: orgFetched } = useQuery({
     queryKey: ["org", orgSlug],
+    ...MEMBERSHIP_QUERY,
     queryFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");

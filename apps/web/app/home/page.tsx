@@ -1,5 +1,6 @@
 "use client";
 
+import { MEMBERSHIP_QUERY } from "@/lib/membership-freshness";
 import { useEffect, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/lib/auth-context";
@@ -28,6 +29,7 @@ export default function HomePage() {
 
   const { data: orgs, isLoading, isError, error } = useQuery({
     queryKey: ["orgs"],
+    ...MEMBERSHIP_QUERY,
     enabled: isLoaded,
     staleTime: 0,
     queryFn: async () => {

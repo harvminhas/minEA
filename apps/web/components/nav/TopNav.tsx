@@ -1,5 +1,6 @@
 "use client";
 
+import { MEMBERSHIP_QUERY } from "@/lib/membership-freshness";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
@@ -99,6 +100,7 @@ export function TopNav() {
 
   const { data: org } = useQuery({
     queryKey: ["org", orgSlug],
+    ...MEMBERSHIP_QUERY,
     queryFn: async () => {
       const token = await getToken();
       return orgsApi.get(orgSlug, token!);
@@ -127,6 +129,7 @@ export function TopNav() {
   // Every org the user belongs to (with role) and, while the switcher is open, each one's workspaces.
   const { data: myOrgs } = useQuery({
     queryKey: ["orgs"],
+    ...MEMBERSHIP_QUERY,
     queryFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");

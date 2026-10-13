@@ -1,5 +1,6 @@
 "use client";
 
+import { MEMBERSHIP_QUERY } from "@/lib/membership-freshness";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -21,6 +22,7 @@ import { parseCheckoutSessionId } from "@/lib/support";
 import { businessGetStartedHref } from "@/lib/billing/business-request";
 import { BillingPreviewSwitch } from "@/components/billing/BillingPreviewSwitch";
 import { LicencesPanel } from "@/components/billing/LicencesPanel";
+import { PendingInviteRow } from "@/components/org/PendingInviteRow";
 import { OrgMembersTable } from "@/components/org/OrgMembersTable";
 import { billingPreviewEnabled, billingUiEnabled } from "@/lib/billing/flags";
 import { ADMIN_TABS, adminTabHref, resolveAdminTab, type AdminTab } from "@/lib/billing/admin-centre";
@@ -131,6 +133,7 @@ export default function OrgSettingsPage() {
     isFetching: orgFetching,
   } = useQuery({
     queryKey: ["org", orgSlug],
+    ...MEMBERSHIP_QUERY,
     queryFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
@@ -141,6 +144,7 @@ export default function OrgSettingsPage() {
   // Every org this user belongs to (with role), for the not-admin message.
   const { data: myOrgs } = useQuery({
     queryKey: ["orgs"],
+    ...MEMBERSHIP_QUERY,
     queryFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
@@ -258,7 +262,6 @@ export default function OrgSettingsPage() {
   });
 
   const [memberError, setMemberError] = useState<string | null>(null);
-  const [resentUrl, setResentUrl] = useState<{ id: string; url: string } | null>(null);
   const refreshPeople = () => {
     // Seats are counted live from memberships, so refetching members/invites/billing updates them.
     void queryClient.invalidateQueries({ queryKey: ["members", orgSlug] });
@@ -276,6 +279,14 @@ export default function OrgSettingsPage() {
     },
     onSuccess: (_d, action) => {
       setMemberError(null);
+      if (action.kind === "role" || action.kind === "remove") {
+        // Show the change at once; the refetch below confirms it.
+        queryClient.setQueryData(["members", orgSlug], (old: { user_id: string; role: string }[] | undefined) =>
+          action.kind === "role"
+            ? old?.map((m) => (m.user_id === action.userId ? { ...m, role: action.role } : m))
+            : old?.filter((m) => m.user_id !== action.userId)
+        );
+      }
       if (action.kind === "leave") {
         void queryClient.invalidateQueries({ queryKey: ["orgs"] });
         router.replace("/");
@@ -283,17 +294,16 @@ export default function OrgSettingsPage() {
       }
       refreshPeople();
     },
-    onError: (err: Error) => setMemberError(err.message),
+    onError: (err: Error, action) => {
+      if (action.kind === "leave") setMemberError(err.message);
+    },
   });
   const resendMutation = useMutation({
     mutationFn: async (inviteId: string) => {
       const token = await getToken();
       return orgsApi.resendInvite(orgSlug, inviteId, token!);
     },
-    onSuccess: (data) => {
-      setResentUrl({ id: data.id, url: `${window.location.origin}${data.invite_url}` });
-      refreshPeople();
-    },
+    onSuccess: () => refreshPeople(),
   });
 
   const membersBlock = (
@@ -301,10 +311,10 @@ export default function OrgSettingsPage() {
       members={members}
       actorRole={orgRole}
       actorEmail={user?.email}
-      busy={memberMutation.isPending}
+      busy={memberMutation.isPending && memberMutation.variables?.kind === "leave"}
       error={memberError}
-      onChangeRole={(userId, role) => memberMutation.mutate({ kind: "role", userId, role })}
-      onRemove={(userId) => memberMutation.mutate({ kind: "remove", userId })}
+      onChangeRole={(userId, role) => memberMutation.mutateAsync({ kind: "role", userId, role })}
+      onRemove={(userId) => memberMutation.mutateAsync({ kind: "remove", userId })}
       onLeave={() => memberMutation.mutate({ kind: "leave" })}
     />
   );
@@ -364,6 +374,14 @@ export default function OrgSettingsPage() {
   }
 
   // Members and viewers: explain, don't redirect (the API refuses their admin calls anyway).
+  // The cached role may predate a promotion: wait for the fresh read before saying "not an admin".
+  if (org && notAdminOf(org) && orgFetching) {
+    return (
+      <div className="p-8 max-w-xl mx-auto text-sm text-gray-500" data-testid="org-access-checking">
+        Checking your access…
+      </div>
+    );
+  }
   if (org && notAdminOf(org)) {
     const ws = firstWorkspace(workspaces);
     return (
@@ -676,38 +694,12 @@ export default function OrgSettingsPage() {
           <h2 className="font-semibold text-gray-900 mb-4">Pending invites</h2>
           <div className="divide-y divide-gray-100">
             {(invites ?? []).filter((i) => i.status === "pending").map((inv) => (
-              <div key={inv.id} data-testid="invite-row">
-              <div className="py-2 flex justify-between items-center text-sm">
-                <div>
-                  <p className="font-medium">{inv.email}</p>
-                  <p className="text-gray-400 capitalize">{inv.role} · expires {new Date(inv.expires_at).toLocaleDateString()}</p>
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <button
-                    data-testid="invite-resend"
-                    onClick={() => resendMutation.mutate(inv.id)}
-                    disabled={resendMutation.isPending}
-                    className="text-indigo-600 hover:text-indigo-800 text-xs"
-                  >
-                    Resend
-                  </button>
-                  <button
-                    data-testid="invite-revoke"
-                    onClick={() => revokeMutation.mutate(inv.id)}
-                    disabled={revokeMutation.isPending}
-                    className="text-red-600 hover:text-red-800 text-xs"
-                  >
-                    Revoke
-                  </button>
-                </div>
-              </div>
-              {resentUrl?.id === inv.id && (
-                <p className="text-xs text-gray-600 pb-2 break-all" data-testid="invite-resent-link">
-                  New link (the old one no longer works, valid 7 days):{" "}
-                  <a href={resentUrl.url} className="text-indigo-600 underline">{resentUrl.url}</a>
-                </p>
-              )}
-              </div>
+              <PendingInviteRow
+                key={inv.id}
+                invite={inv}
+                onResend={async (id) => `${window.location.origin}${(await resendMutation.mutateAsync(id)).invite_url}`}
+                onRevoke={(id) => revokeMutation.mutateAsync(id)}
+              />
             ))}
             {(invites ?? []).filter((i) => i.status === "pending").length === 0 && (
               <p className="text-sm text-gray-400 py-2">No pending invites</p>

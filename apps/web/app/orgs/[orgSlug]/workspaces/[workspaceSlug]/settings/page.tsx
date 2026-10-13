@@ -11,6 +11,7 @@ import { usePermissions } from "@/lib/use-permissions";
 import { primaryViewPath } from "@/lib/tenancy";
 import { billingUiEnabled } from "@/lib/billing/flags";
 import { billingErrorMessage } from "@/lib/billing/checkout";
+import { PendingInviteRow } from "@/components/org/PendingInviteRow";
 import { MembersTable, type MembersScope } from "@/components/org/OrgMembersTable";
 import { countAdmins, workspaceMemberActions, WS_REMOVE_COPY } from "@/lib/member-actions";
 
@@ -22,7 +23,6 @@ export default function WorkspaceSettingsPage() {
   const emailVerified = user ? !user.requiresEmailVerification : false;
   const router = useRouter();
   const [memberError, setMemberError] = useState<string | null>(null);
-  const [resentUrl, setResentUrl] = useState<{ id: string; url: string } | null>(null);
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
@@ -102,6 +102,14 @@ export default function WorkspaceSettingsPage() {
     },
     onSuccess: (_d, action) => {
       setMemberError(null);
+      if (action.kind === "role" || action.kind === "remove") {
+        // Show the change at once; the refetch below confirms it.
+        queryClient.setQueryData(["workspace-members", orgSlug, workspaceSlug], (old: { user_id: string; role: string }[] | undefined) =>
+          action.kind === "role"
+            ? old?.map((m) => (m.user_id === action.userId ? { ...m, role: action.role } : m))
+            : old?.filter((m) => m.user_id !== action.userId)
+        );
+      }
       if (action.kind === "leave") {
         void queryClient.invalidateQueries({ queryKey: ["workspaces", orgSlug] });
         router.replace(`/orgs/${orgSlug}`);
@@ -109,17 +117,16 @@ export default function WorkspaceSettingsPage() {
       }
       refreshPeople();
     },
-    onError: (err: Error) => setMemberError(err.message),
+    onError: (err: Error, action) => {
+      if (action.kind === "leave") setMemberError(err.message);
+    },
   });
   const resendMutation = useMutation({
     mutationFn: async (inviteId: string) => {
       const token = await getToken();
       return workspacesApi.resendInvite(orgSlug, workspaceSlug, inviteId, token!);
     },
-    onSuccess: (data) => {
-      setResentUrl({ id: data.id, url: `${window.location.origin}${data.invite_url}` });
-      refreshPeople();
-    },
+    onSuccess: () => refreshPeople(),
   });
 
   const admins = countAdmins(members);
@@ -201,11 +208,11 @@ export default function WorkspaceSettingsPage() {
         <MembersTable
           members={members}
           actorEmail={user?.email}
-          busy={memberMutation.isPending}
+          busy={memberMutation.isPending && memberMutation.variables?.kind === "leave"}
           error={memberError}
           scope={scope}
-          onChangeRole={(userId, role) => memberMutation.mutate({ kind: "role", userId, role })}
-          onRemove={(userId) => memberMutation.mutate({ kind: "remove", userId })}
+          onChangeRole={(userId, role) => memberMutation.mutateAsync({ kind: "role", userId, role })}
+          onRemove={(userId) => memberMutation.mutateAsync({ kind: "remove", userId })}
           onLeave={() => memberMutation.mutate({ kind: "leave" })}
         />
 
@@ -258,40 +265,12 @@ export default function WorkspaceSettingsPage() {
           {(invites ?? [])
             .filter((i) => i.status === "pending")
             .map((inv) => (
-              <div key={inv.id} data-testid="invite-row">
-              <div className="py-2 flex justify-between items-center text-sm">
-                <div>
-                  <p className="font-medium">{inv.email}</p>
-                  <p className="text-gray-400 capitalize">
-                    {inv.role} · expires {new Date(inv.expires_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <button
-                    data-testid="invite-resend"
-                    onClick={() => resendMutation.mutate(inv.id)}
-                    disabled={resendMutation.isPending}
-                    className="text-indigo-600 hover:text-indigo-800 text-xs"
-                  >
-                    Resend
-                  </button>
-                  <button
-                    data-testid="invite-revoke"
-                    onClick={() => revokeMutation.mutate(inv.id)}
-                    disabled={revokeMutation.isPending}
-                    className="text-red-600 hover:text-red-800 text-xs"
-                  >
-                    Revoke
-                  </button>
-                </div>
-              </div>
-              {resentUrl?.id === inv.id && (
-                <p className="text-xs text-gray-600 pb-2 break-all" data-testid="invite-resent-link">
-                  New link (the old one no longer works, valid 7 days):{" "}
-                  <a href={resentUrl.url} className="text-indigo-600 underline">{resentUrl.url}</a>
-                </p>
-              )}
-              </div>
+              <PendingInviteRow
+                key={inv.id}
+                invite={inv}
+                onResend={async (id) => `${window.location.origin}${(await resendMutation.mutateAsync(id)).invite_url}`}
+                onRevoke={(id) => revokeMutation.mutateAsync(id)}
+              />
             ))}
           {(invites ?? []).filter((i) => i.status === "pending").length === 0 && (
             <p className="text-sm text-gray-400 py-2">No pending invites</p>

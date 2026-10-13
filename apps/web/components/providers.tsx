@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { onForbiddenRefreshMembership } from "@/lib/membership-freshness";
 import { AuthProvider } from "@/lib/auth-context";
 import { AppBootProvider } from "@/lib/app-boot-context";
 import { AppBootGate } from "@/components/ui/AppBootGate";
@@ -19,17 +20,20 @@ const ReactQueryDevtools = dynamic(
 );
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
+  const [queryClient] = useState(() => {
+    // A 403 from any call means the cached role may be stale: refetch the role queries.
+    const client: QueryClient = new QueryClient({
+        queryCache: new QueryCache({ onError: (err, query) => onForbiddenRefreshMembership(client, err, query.queryKey) }),
+        mutationCache: new MutationCache({ onError: (err) => onForbiddenRefreshMembership(client, err) }),
         defaultOptions: {
           queries: {
             staleTime: 60 * 1000,
             retry: 1,
           },
         },
-      })
-  );
+      });
+    return client;
+  });
 
   return (
     <AuthProvider>
