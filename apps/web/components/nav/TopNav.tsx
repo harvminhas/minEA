@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { SupportDialog } from "@/components/support/SupportDialog";
-import { ChevronDown, Bell, HelpCircle, LogOut, Settings, Plus } from "lucide-react";
+import { ChevronDown, Bell, HelpCircle, LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useAppStore } from "@/lib/store";
@@ -222,42 +222,15 @@ export function TopNav() {
                     router.push(href);
                     setWsOpen(false);
                   }}
+                  workspaceBlocked={
+                    canCreateWorkspace && !canCreateOwnWorkspace
+                      ? {
+                          message: workspaceCreateBlockedMessage(billingStatus?.plan, billingStatus?.own_workspace_limit),
+                          planHref: `/orgs/${orgSlug}/settings`,
+                        }
+                      : null
+                  }
                 />
-              )}
-              {canCreateWorkspace && (
-                <>
-                  {(workspaces ?? []).length > 0 && (
-                    <div className="my-1.5 border-t border-white/10" />
-                  )}
-                  {canCreateOwnWorkspace ? (
-                    <Link
-                      href={`/orgs/${orgSlug}/workspaces/new`}
-                      onClick={() => setWsOpen(false)}
-                      className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-indigo-300 hover:text-indigo-200 hover:bg-white/5 transition-colors"
-                    >
-                      <span className="h-5 w-5 rounded border border-indigo-500/40 flex items-center justify-center flex-shrink-0">
-                        <Plus size={12} />
-                      </span>
-                      <span>Create New</span>
-                    </Link>
-                  ) : (
-                    <div className="px-3 py-2">
-                      <p className="text-[11px] text-white/35 leading-snug">
-                        {workspaceCreateBlockedMessage(
-                          billingStatus?.plan,
-                          billingStatus?.own_workspace_limit
-                        )}
-                      </p>
-                      <Link
-                        href={`/orgs/${orgSlug}/settings`}
-                        onClick={() => setWsOpen(false)}
-                        className="mt-1.5 inline-block text-[11px] text-indigo-300 hover:text-indigo-200"
-                      >
-                        View plan →
-                      </Link>
-                    </div>
-                  )}
-                </>
               )}
             </div>
           )}

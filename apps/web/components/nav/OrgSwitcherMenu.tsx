@@ -1,6 +1,8 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, Plus } from "lucide-react";
+import type { OrgRole } from "@minea/types";
+import { hasPermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { askPath } from "@/lib/mvp-paths";
 import { orgLandingPath, roleLabel } from "@/lib/org-access";
@@ -11,6 +13,16 @@ export interface SwitcherOrg {
   role: string;
 }
 
+export const NEW_ORG_PATH = "/onboarding";
+export const NEW_ORG_LABEL = "Create new organisation";
+export const NEW_WORKSPACE_LABEL = "New workspace";
+export const MEMBER_WORKSPACE_HINT = "Only owners and admins can add workspaces";
+
+/** Same rule the API enforces on POST /orgs/{slug}/workspaces (workspace.create: owner, admin). */
+export function canCreateWorkspaceIn(role: string): boolean {
+  return hasPermission("workspace.create", { orgRole: role as OrgRole });
+}
+
 /** Every org the user belongs to, with their role and its workspaces. Current org/workspace marked. */
 export function OrgSwitcherMenu({
   orgs,
@@ -18,8 +30,11 @@ export function OrgSwitcherMenu({
   currentOrgSlug,
   currentWorkspaceSlug,
   onNavigate,
+  workspaceBlocked,
 }: {
   orgs: SwitcherOrg[];
+  /** Plan limit for the current org (from billing status): replaces "+ New workspace" with the reason. */
+  workspaceBlocked?: { message: string; planHref: string } | null;
   workspacesByOrg: Record<string, { slug: string; name: string }[] | undefined>;
   currentOrgSlug: string;
   currentWorkspaceSlug: string;
@@ -77,9 +92,50 @@ export function OrgSwitcherMenu({
                 </button>
               );
             })}
+            {canCreateWorkspaceIn(org.role) ? (
+              current && workspaceBlocked ? (
+                <div className="py-1.5 pl-6 pr-3" data-testid="switcher-workspace-blocked">
+                  <p className="text-[11px] leading-snug text-white/35">{workspaceBlocked.message}</p>
+                  <button type="button" onClick={() => onNavigate(workspaceBlocked.planHref)} className="mt-1 text-[11px] text-indigo-300 hover:text-indigo-200">
+                    View plan →
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  data-testid="switcher-new-workspace"
+                  onClick={() => onNavigate(`/orgs/${org.slug}/workspaces/new`)}
+                  className="flex w-full items-center gap-2.5 py-1.5 pl-6 pr-3 text-left text-sm text-indigo-300 hover:bg-white/5 hover:text-indigo-200"
+                >
+                  <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border border-indigo-500/40">
+                    <Plus size={12} />
+                  </span>
+                  <span>{NEW_WORKSPACE_LABEL}</span>
+                </button>
+              )
+            ) : (
+              current && (
+                <p className="py-1 pl-6 pr-3 text-[11px] text-white/30" data-testid="switcher-member-hint">
+                  {MEMBER_WORKSPACE_HINT}
+                </p>
+              )
+            )}
           </div>
         );
       })}
+      <div className="mt-1 border-t border-white/10 pt-1">
+        <button
+          type="button"
+          data-testid="switcher-new-org"
+          onClick={() => onNavigate(NEW_ORG_PATH)}
+          className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-indigo-300 hover:bg-white/5 hover:text-indigo-200"
+        >
+          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border border-indigo-500/40">
+            <Plus size={12} />
+          </span>
+          <span>{NEW_ORG_LABEL}</span>
+        </button>
+      </div>
     </div>
   );
 }
