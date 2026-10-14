@@ -62,6 +62,7 @@ MIGRATION_FILES = [
     "047_support_requests.sql",
     "048_workspace_settings.sql",
     "049_tool_catalog.sql",
+    "050_people_directory.sql",
 ]
 
 

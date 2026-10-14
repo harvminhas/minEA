@@ -381,6 +381,23 @@ export const addApi = {
     }),
 };
 
+export type DirectoryKind = "team" | "person" | "role";
+export type DirectoryRow = { id: string; name: string; usage: number; description?: string | null; lead_name?: string | null; lead_email?: string | null; email?: string | null; phone?: string | null; title?: string | null; notes?: string | null; team_id?: string | null; team_name?: string | null; role_kind?: string | null };
+export type PeopleDirectory = { teams: DirectoryRow[]; people: DirectoryRow[]; roles: DirectoryRow[]; contactExtras: boolean; duplicates: Record<DirectoryKind, string[][]> };
+
+export const peopleDirectoryApi = {
+  get: (orgSlug: string, workspace: string, token: string) =>
+    apiFetch<PeopleDirectory>(`/orgs/${orgSlug}/people-directory?workspace=${encodeURIComponent(workspace)}`, { token }),
+  add: (orgSlug: string, workspace: string, kind: DirectoryKind, body: Record<string, unknown>, token: string) =>
+    apiFetch<{ id: string; created: boolean }>(`/orgs/${orgSlug}/people-directory/${kind}?workspace=${encodeURIComponent(workspace)}`, { method: "POST", token, body: JSON.stringify(body) }),
+  edit: (orgSlug: string, workspace: string, kind: DirectoryKind, id: string, body: Record<string, unknown>, token: string) =>
+    apiFetch<{ ok: boolean }>(`/orgs/${orgSlug}/people-directory/${kind}/${id}?workspace=${encodeURIComponent(workspace)}`, { method: "PATCH", token, body: JSON.stringify(body) }),
+  merge: (orgSlug: string, workspace: string, kind: DirectoryKind, intoId: string, fromIds: string[], token: string) =>
+    apiFetch<{ merged: number }>(`/orgs/${orgSlug}/people-directory/${kind}/merge?workspace=${encodeURIComponent(workspace)}`, { method: "POST", token, body: JSON.stringify({ into_id: intoId, from_ids: fromIds }) }),
+  remove: (orgSlug: string, workspace: string, kind: DirectoryKind, id: string, token: string) =>
+    apiFetch<void>(`/orgs/${orgSlug}/people-directory/${kind}/${id}?workspace=${encodeURIComponent(workspace)}`, { method: "DELETE", token }),
+};
+
 export const workspacesApi = {
   list: (orgSlug: string, token: string) =>
     apiFetch<Workspace[]>(`/orgs/${orgSlug}/workspaces`, { token }),

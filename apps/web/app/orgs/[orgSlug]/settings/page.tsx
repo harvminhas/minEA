@@ -308,6 +308,12 @@ export default function OrgSettingsPage() {
   });
 
   const membersBlock = (
+    <>
+    {isOrgAdmin && (
+      <Link href={`/orgs/${orgSlug}/settings/people`} data-testid="people-teams-link" className="mb-3 inline-flex text-[13px] font-medium text-[#5b4ce6]">
+        People &amp; teams: owner teams, named owners and roles →
+      </Link>
+    )}
     <OrgMembersTable
       members={members}
       actorRole={orgRole}
@@ -318,6 +324,7 @@ export default function OrgSettingsPage() {
       onRemove={(userId) => memberMutation.mutateAsync({ kind: "remove", userId })}
       onLeave={() => memberMutation.mutate({ kind: "leave" })}
     />
+    </>
   );
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
