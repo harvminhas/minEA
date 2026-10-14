@@ -295,3 +295,51 @@ function isCloudRuntime(item: ChainItem): boolean {
   const kind = String(item.properties.runtime_kind ?? item.properties.compute_runtime_kind ?? "");
   return kind === "cloud_service" || kind === "serverless" || kind === "paas";
 }
+
+/** "What goes down" picker sections, in this order; empty ones are left out. */
+export const PICKER_GROUPS = [
+  "Providers",
+  "Provider · Region",
+  "Tenants & accounts",
+  "Tenant · Region",
+  "Servers & on-prem",
+  "Locations",
+  "People's computers",
+  "Apps",
+  "Other",
+] as const;
+export type PickerGroup = (typeof PICKER_GROUPS)[number];
+
+export function pickerGroup(item: Pick<ChainItem, "kind" | "properties"> | undefined): PickerGroup {
+  const derived = item?.properties?.derived ? item.properties.derived_kind : undefined;
+  if (derived === "provider") return "Providers";
+  if (derived === "region") return "Provider · Region";
+  if (derived === "tenant_region") return "Tenant · Region";
+  if (derived === "desktop") return "People's computers";
+  switch (item?.kind) {
+    case "platform": return "Tenants & accounts";
+    case "runtime": return "Servers & on-prem";
+    case "location": return "Locations";
+    case "application": return "Apps";
+    default: return "Other";
+  }
+}
+
+const NATURAL = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+
+/** Every node, grouped by PICKER_GROUPS and sorted by name (case-insensitive, natural: "VM2" < "VM10"). */
+export function pickerSections(nodes: { id: string; name: string }[], items: ChainItem[]): { label: PickerGroup; options: { id: string; name: string }[] }[] {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const sections = new Map<PickerGroup, { id: string; name: string }[]>();
+  const seen = new Set<string>();
+  for (const node of nodes) {
+    if (seen.has(node.id)) continue;
+    seen.add(node.id);
+    const label = pickerGroup(byId.get(node.id));
+    sections.set(label, [...(sections.get(label) ?? []), { id: node.id, name: node.name }]);
+  }
+  return PICKER_GROUPS.filter((label) => sections.has(label)).map((label) => ({
+    label,
+    options: sections.get(label)!.sort((a, b) => NATURAL.compare(a.name, b.name) || a.id.localeCompare(b.id)),
+  }));
+}

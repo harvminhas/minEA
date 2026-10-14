@@ -43,6 +43,7 @@ import {
   type ChainTodo,
   impactGate,
   NEEDS_HOST_COPY,
+  pickerSections,
 } from "@/lib/views/opening";
 import { derivedHosting, isDerivedHost, isDerivedRegion } from "@/lib/views/providers";
 import { useCustomRegions } from "@/lib/hosting/use-cloud-regions";
@@ -162,8 +163,12 @@ function ViewTitle({ tab, opening }: { tab: string; opening: OpeningModel }) {
         className="h-10 max-w-[280px] rounded-lg border border-[#e6e8ee] bg-white px-3 text-[16px] font-semibold text-[#1c2230] shadow-sm"
       >
         {!opening.selectedId && <option value="">Choose…</option>}
-        {opening.nodes.map((node) => (
-          <option key={node.id} value={node.id}>{node.name}</option>
+        {pickerSections(opening.nodes, opening.items).map((section) => (
+          <optgroup key={section.label} label={section.label}>
+            {section.options.map((node) => (
+              <option key={node.id} value={node.id}>{node.name}</option>
+            ))}
+          </optgroup>
         ))}
       </select>
       goes down?
