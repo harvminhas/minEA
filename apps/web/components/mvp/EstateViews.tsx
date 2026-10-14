@@ -41,6 +41,8 @@ import {
   viewsMotionCss,
   type ChainItem,
   type ChainTodo,
+  impactGate,
+  NEEDS_HOST_COPY,
 } from "@/lib/views/opening";
 import { sampleEdges, sampleItems, sampleNodes } from "@/lib/views/sample-estate";
 import { noHostLinked, readPlatformInfra, readRuntimeInfra } from "@/lib/infra/read";
@@ -600,18 +602,18 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
       </div>
       {opening.example && (
         <div className="absolute inset-0 flex items-start justify-center px-0 pt-24 sm:px-3">
-          {opening.blocked ? (
+          {impactGate(opening.blocked, opening.example) === "setup" ? (
             <SetupProgressCard
               state={setup.state}
               gap={opening.gap}
               sampleText="Until then this is a sample estate; nothing here is saved to your workspace."
             />
           ) : (
-            <SetupProgressCard
-              state={setup.state}
-              sampleText="Link your first app to a server to see yours. Until then this is a sample estate; nothing here is saved to your workspace."
-              action={<Link href={`${basePath}/views/impact?tab=hosting`} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">Open Hosting & location</Link>}
-            />
+            <div data-testid="impact-needs-host" className="w-full max-w-md rounded-2xl border border-[#e6e8ee] bg-white px-4 py-5 text-center shadow-lg sm:px-6">
+              <p className="text-[15px] font-semibold text-[#1c2230]">{NEEDS_HOST_COPY.title}</p>
+              <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">{NEEDS_HOST_COPY.body}</p>
+              <Link href={`${basePath}/views/impact?tab=hosting`} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">{NEEDS_HOST_COPY.button}</Link>
+            </div>
           )}
         </div>
       )}

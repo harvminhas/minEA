@@ -161,6 +161,23 @@ export function showExampleEstate(hostEdges: number, demoEmpty: boolean, dev: bo
   return dev && demoEmpty;
 }
 
+/**
+ * Why Impact shows sample data. "setup": the first-run minimum isn't met. "needs-host": it is,
+ * but impact follows runs_on / built_on links and there are none yet (Cloud or desktop apps count
+ * as located for setup, yet link to nothing). null: show the real estate.
+ */
+export type ImpactGate = "setup" | "needs-host" | null;
+export function impactGate(blocked: boolean, example: boolean): ImpactGate {
+  if (!example) return null;
+  return blocked ? "setup" : "needs-host";
+}
+
+export const NEEDS_HOST_COPY = {
+  title: "One more step for impact analysis",
+  body: "Impact analysis follows what each app runs on. Link at least one app to a server or platform it runs on, and your own chain appears here. Until then this is a sample estate; nothing here is saved to your workspace.",
+  button: "Link an app to a server",
+} as const;
+
 export function chainTodos(selected: ChainItem | undefined, hits: ImpactHit[], items: ChainItem[], edges: ImpactEdge[], today = new Date()): ChainTodo[] {
   if (!selected) return [];
   const byId = new Map(items.map((item) => [item.id, item]));
