@@ -187,6 +187,22 @@ def triple_allowed(rel_type: str, from_type: str, to_type: str) -> bool:
     return relationship_rejection(rel_type, from_type, to_type) is None
 
 
+REGION_MAX = 120
+
+
+def validate_hosting_attributes(rel_type: str, attributes: dict[str, Any] | None) -> None:
+    """runs_on / built_on may carry one optional free-text region ("Canada Central", "ca-central-1")."""
+    if rel_type not in {"runs_on", "built_on"}:
+        return
+    region = (attributes or {}).get("region")
+    if region is None:
+        return
+    if not isinstance(region, str):
+        raise ValueError("region must be text.")
+    if len(region.strip()) > REGION_MAX:
+        raise ValueError(f"region must be at most {REGION_MAX} characters.")
+
+
 def validate_flow_attributes(rel_type: str, attributes: dict[str, Any] | None) -> None:
     if rel_type != "sends_data_to":
         return
@@ -215,7 +231,14 @@ class RelationshipCreate(BaseModel):
         if self.type == "authenticates_via" and self.from_object_id == self.to_object_id:
             raise ValueError(SIGN_IN_WITH_ITSELF)
         validate_flow_attributes(self.type, self.attributes)
+        validate_hosting_attributes(self.type, self.attributes)
         return self
+
+
+class RelationshipAttributesUpdate(BaseModel):
+    """Merge into attributes; a None value removes that key (e.g. clear the region)."""
+
+    attributes: dict[str, Any]
 
 
 class RelationshipRead(BaseModel):
@@ -232,3 +255,16 @@ class RelationshipRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+def merge_attributes(rel_type: str, current: dict[str, Any] | None, patch: dict[str, Any]) -> dict[str, Any]:
+    """current + patch (None removes a key; a blank region is removed too), validated."""
+    merged = dict(current or {})
+    for key, value in patch.items():
+        if value is None or (key == "region" and isinstance(value, str) and not value.strip()):
+            merged.pop(key, None)
+        else:
+            merged[key] = value.strip() if key == "region" and isinstance(value, str) else value
+    validate_flow_attributes(rel_type, merged)
+    validate_hosting_attributes(rel_type, merged)
+    return merged

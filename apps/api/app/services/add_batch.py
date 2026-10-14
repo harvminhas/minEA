@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.objects import ChangeLog, MinEAObject
 from app.models.relationships import Relationship
 from app.schemas.objects import ObjectCreate, ObjectRead, ObjectUpdate
-from app.schemas.relationships import RelationshipCreate, RelationshipRead
+from app.schemas.relationships import RelationshipCreate, RelationshipRead, merge_attributes
 from app.services.relationship_write import save_relationship
 from app.services.capability_validation import validate_object_write
 from app.services.ai_features import apply_ai_features
@@ -45,6 +45,8 @@ class AddBatchUpdate(BaseModel):
 
 class AddBatchRel(BaseModel):
     type: str
+    # Optional link attributes (runs_on region). On an existing identical link they are merged in.
+    attributes: dict[str, Any] = Field(default_factory=dict)
     from_key: str | None = None
     to_key: str | None = None
     from_id: UUID | None = None
@@ -291,6 +293,7 @@ async def apply_add_batch(
                 from_type=item.from_type,
                 to_object_id=to_id,
                 to_type=item.to_type,
+                attributes=item.attributes,
             )
         except ValidationError as exc:
             message = exc.errors()[0]["msg"] if exc.errors() else "That relationship isn't allowed."
@@ -310,10 +313,12 @@ async def apply_add_batch(
                 from_type=checked.from_type,
                 to_object_id=checked.to_object_id,
                 to_type=checked.to_type,
-                attributes={},
+                attributes=checked.attributes,
                 created_by=user_id,
             ),
         )
+        if not created and item.attributes:
+            rel.attributes = merge_attributes(rel.type, rel.attributes, item.attributes)
         if created:
             rel_ids.append(rel.id)
         rels.append(rel)

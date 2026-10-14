@@ -7,7 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.objects import MinEAObject
 from app.models.relationships import Relationship
-from app.schemas.relationships import RelationshipCreate, RelationshipRead, identical_relationship
+from app.schemas.relationships import (
+    RelationshipAttributesUpdate,
+    RelationshipCreate,
+    RelationshipRead,
+    identical_relationship,
+    merge_attributes,
+)
 from app.services.relationship_rules import (
     assert_data_entity_ownership_allowed,
     assert_data_store_ownership_allowed,
@@ -281,6 +287,37 @@ async def create_relationship(
     response.status_code = relationship_http_status(created)
     if created:
         await mark_catalog_dirty(db, ctx.workspace.id)
+    return rel
+
+
+@router.patch("/{relationship_id}", response_model=RelationshipRead)
+async def update_relationship_attributes(
+    relationship_id: UUID,
+    body: RelationshipAttributesUpdate,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> Relationship:
+    """Edit a link's attributes in place (the region on an app → tenant runs_on link)."""
+    await ctx.require_permission(db, "object.edit")
+    assert ctx.workspace
+    rel = (
+        await db.execute(
+            select(Relationship).where(
+                Relationship.id == relationship_id,
+                Relationship.workspace_id == ctx.workspace.id,
+                Relationship.org_id == ctx.org_id,
+            ).with_for_update()
+        )
+    ).scalar_one_or_none()
+    if rel is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relationship not found")
+    try:
+        rel.attributes = merge_attributes(rel.type, rel.attributes, body.attributes)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    await mark_catalog_dirty(db, ctx.workspace.id)
+    await db.commit()
+    await db.refresh(rel)
     return rel
 
 
