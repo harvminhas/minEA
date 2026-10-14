@@ -163,7 +163,7 @@ function ViewTitle({ tab, opening }: { tab: string; opening: OpeningModel }) {
         className="h-10 max-w-[280px] rounded-lg border border-[#e6e8ee] bg-white px-3 text-[16px] font-semibold text-[#1c2230] shadow-sm"
       >
         {!opening.selectedId && <option value="">Choose…</option>}
-        {pickerSections(opening.nodes, opening.items).map((section) => (
+        {pickerSections(opening.nodes, opening.items, opening.selectedId).map((section) => (
           <optgroup key={section.label} label={section.label}>
             {section.options.map((node) => (
               <option key={node.id} value={node.id}>{node.name}</option>
@@ -213,13 +213,17 @@ function useOpeningModel() {
         criticality: "",
         description: object.description ?? "",
         properties: (object.properties ?? {}) as Record<string, unknown>,
+        objectType: "location",
       })),
     ];
     items.push(...derived.items);
     const known = new Set(items.map((item) => item.id));
+    const stored = new Map((catalog.data?.objects ?? []).map((object) => [object.id, object.type]));
     for (const node of impact.nodes) {
       if (known.has(node.id)) continue;
       items.push({
+        // "" = a link end whose record was deleted: kept in the graph, never offered in the picker.
+        objectType: stored.get(node.id) ?? "",
         id: node.id,
         name: node.name,
         kind: /capability/i.test(node.typeLabel ?? "") ? "capability" : "other",
@@ -230,7 +234,7 @@ function useOpeningModel() {
       });
     }
     return items;
-  }, [rows, locations, impact.nodes, derived]);
+  }, [rows, locations, impact.nodes, derived, catalog.data?.objects]);
   const liveNodes = useMemo(() => [...impact.nodes, ...derived.nodes], [impact.nodes, derived]);
   const liveEdges = useMemo(() => [...impact.edges, ...derived.edges], [impact.edges, derived]);
 
@@ -292,6 +296,7 @@ function rowToItem(row: CatalogRow): ChainItem {
     criticality: row.criticalityLabel,
     description: row.object.description ?? "",
     properties: (row.object.properties ?? {}) as Record<string, unknown>,
+    objectType: row.object.type,
   };
 }
 

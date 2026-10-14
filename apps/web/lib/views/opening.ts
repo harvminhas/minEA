@@ -13,6 +13,8 @@ export type ChainItem = {
   criticality: string;
   description: string;
   properties: Record<string, unknown>;
+  /** Stored object type when known (live estate). The picker uses it to offer only real failure points. */
+  objectType?: string;
 };
 
 export type Candidate = {
@@ -296,7 +298,10 @@ function isCloudRuntime(item: ChainItem): boolean {
   return kind === "cloud_service" || kind === "serverless" || kind === "paas";
 }
 
-/** "What goes down" picker sections, in this order; empty ones are left out. */
+/** "What goes down" picker sections, in this order; empty ones are left out. Only real failure points
+ * are offered: components, capabilities, data, flows/APIs/events, tools, brokers, AI agents/models,
+ * domains, roadmap items, tech debt and link ends whose record was deleted are not (they can still
+ * show up in the impact results). */
 export const PICKER_GROUPS = [
   "Providers",
   "Provider · Region",
@@ -306,40 +311,69 @@ export const PICKER_GROUPS = [
   "Locations",
   "People's computers",
   "Apps",
-  "Other",
+  "Outside parties",
 ] as const;
 export type PickerGroup = (typeof PICKER_GROUPS)[number];
 
-export function pickerGroup(item: Pick<ChainItem, "kind" | "properties"> | undefined): PickerGroup {
-  const derived = item?.properties?.derived ? item.properties.derived_kind : undefined;
+/** Stored types the picker offers, by section. Anything else is left out. */
+const PICKER_OBJECT_TYPES: Record<string, PickerGroup> = {
+  cloud_service: "Tenants & accounts",
+  model: "Servers & on-prem",
+  location: "Locations",
+  application: "Apps",
+  solution: "Apps",
+  external_party: "Outside parties",
+};
+
+const PICKER_KINDS: Partial<Record<ChainKind, PickerGroup>> = {
+  platform: "Tenants & accounts",
+  runtime: "Servers & on-prem",
+  location: "Locations",
+  application: "Apps",
+};
+
+/** The section an item goes in, or null when it is not a failure point (or its record is gone). */
+export function pickerGroup(item: Pick<ChainItem, "kind" | "properties" | "objectType"> | undefined): PickerGroup | null {
+  if (!item) return null;
+  const derived = item.properties?.derived ? item.properties.derived_kind : undefined;
   if (derived === "provider") return "Providers";
   if (derived === "region") return "Provider · Region";
   if (derived === "tenant_region") return "Tenant · Region";
   if (derived === "desktop") return "People's computers";
-  switch (item?.kind) {
-    case "platform": return "Tenants & accounts";
-    case "runtime": return "Servers & on-prem";
-    case "location": return "Locations";
-    case "application": return "Apps";
-    default: return "Other";
-  }
+  if (derived) return null;
+  if (item.objectType !== undefined) return PICKER_OBJECT_TYPES[item.objectType] ?? null;
+  return PICKER_KINDS[item.kind] ?? null;
 }
 
 const NATURAL = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
-/** Every node, grouped by PICKER_GROUPS and sorted by name (case-insensitive, natural: "VM2" < "VM10"). */
-export function pickerSections(nodes: { id: string; name: string }[], items: ChainItem[]): { label: PickerGroup; options: { id: string; name: string }[] }[] {
+/** Failure points, grouped by PICKER_GROUPS and sorted by name (case-insensitive, natural: "VM2" < "VM10").
+ * keepId (the current selection, e.g. an old ?sel link to a component) is listed last under "Selected"
+ * when it is not a failure point, so the select can still show it. */
+export function pickerSections(
+  nodes: { id: string; name: string }[],
+  items: ChainItem[],
+  keepId?: string,
+): { label: PickerGroup | "Selected"; options: { id: string; name: string }[] }[] {
   const byId = new Map(items.map((item) => [item.id, item]));
   const sections = new Map<PickerGroup, { id: string; name: string }[]>();
   const seen = new Set<string>();
+  let kept: { id: string; name: string } | null = null;
   for (const node of nodes) {
     if (seen.has(node.id)) continue;
     seen.add(node.id);
     const label = pickerGroup(byId.get(node.id));
+    if (!label) {
+      if (node.id === keepId) kept = { id: node.id, name: node.name };
+      continue;
+    }
     sections.set(label, [...(sections.get(label) ?? []), { id: node.id, name: node.name }]);
   }
-  return PICKER_GROUPS.filter((label) => sections.has(label)).map((label) => ({
-    label,
-    options: sections.get(label)!.sort((a, b) => NATURAL.compare(a.name, b.name) || a.id.localeCompare(b.id)),
-  }));
+  const grouped: { label: PickerGroup | "Selected"; options: { id: string; name: string }[] }[] = PICKER_GROUPS
+    .filter((label) => sections.has(label))
+    .map((label) => ({
+      label,
+      options: sections.get(label)!.sort((a, b) => NATURAL.compare(a.name, b.name) || a.id.localeCompare(b.id)),
+    }));
+  return kept ? [...grouped, { label: "Selected", options: [kept] }] : grouped;
 }
