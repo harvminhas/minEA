@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime
 from uuid import UUID
@@ -9,7 +10,7 @@ from uuid import UUID
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import AsyncSessionLocal
+from app.database import AsyncSessionLocal, engine
 from app.models.workspace_snapshot import WorkspaceSnapshot
 from app.schemas.workspace_summary import WorkspaceSnapshotResponse, WorkspaceSummaryRead
 from app.services.workspace_summary import fetch_workspace_summary
@@ -18,6 +19,7 @@ from app.utils.time import utc_now
 logger = logging.getLogger(__name__)
 
 DEBOUNCE_SECONDS = 0.45
+WRITE_LOCK_TIMEOUT = "10s"
 _pending_tasks: dict[UUID, asyncio.Task[None]] = {}
 
 
@@ -61,6 +63,9 @@ async def _get_or_create_row(
 
 
 async def mark_snapshot_dirty(db: AsyncSession, workspace_id: UUID, org_id: UUID) -> None:
+    # Bounded wait: a stuck lock holder now fails the write in seconds instead of hanging the
+    # request until the platform timeout. Scoped to this request's transaction.
+    await db.execute(text("SELECT set_config('lock_timeout', :t, true)"), {"t": WRITE_LOCK_TIMEOUT})
     row = await _get_or_create_row(db, workspace_id, org_id)
     row.dirty = True
     row.dirty_at = _utc_now()
@@ -95,58 +100,58 @@ def schedule_snapshot_rebuild(
     _pending_tasks[workspace_id] = loop.create_task(_run())
 
 
-async def rebuild_snapshot_now(workspace_id: UUID, org_id: UUID) -> None:
-    """Rebuild snapshot in isolated sessions (never share the request-scoped session)."""
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(WorkspaceSnapshot).where(WorkspaceSnapshot.workspace_id == workspace_id)
-        )
-        row = result.scalar_one_or_none()
-        if row is None:
-            row = WorkspaceSnapshot(
-                workspace_id=workspace_id,
-                org_id=org_id,
-                version=0,
-                payload={},
-                dirty=True,
-                rebuilding=True,
-                dirty_at=_utc_now(),
-            )
-            db.add(row)
-        else:
-            row.rebuilding = True
-            row.org_id = org_id
-        await db.commit()
+# Background rebuild bookkeeping runs as single autocommit statements. On Vercel the function can be
+# frozen right after the response, with this task mid-flight: an ORM UPDATE followed by a separate
+# COMMIT could freeze in between and leave the workspace_snapshots row locked "idle in transaction".
+# Every later write in that workspace (delete, edit) then waited on that lock in
+# notify_workspace_data_changed until the function timed out (FUNCTION_INVOCATION_TIMEOUT).
+# A single autocommit statement holds the row lock only while Postgres runs it.
+_MARK_REBUILDING = text(
+    """
+    INSERT INTO workspace_snapshots (workspace_id, org_id, version, payload, dirty, rebuilding, dirty_at)
+    VALUES (:workspace_id, :org_id, 0, '{}'::jsonb, TRUE, TRUE, now())
+    ON CONFLICT (workspace_id) DO UPDATE SET rebuilding = TRUE, org_id = EXCLUDED.org_id
+    """
+)
+_STORE_BUILT = text(
+    """
+    UPDATE workspace_snapshots
+    SET payload = CAST(:payload AS jsonb), version = version + 1, built_at = now(),
+        dirty = FALSE, rebuilding = FALSE, dirty_at = NULL
+    WHERE workspace_id = :workspace_id
+    """
+)
+_MARK_FAILED = text(
+    "UPDATE workspace_snapshots SET rebuilding = FALSE, dirty = TRUE WHERE workspace_id = :workspace_id"
+)
+# The summary read runs in a transaction too; if the function is frozen mid-read, Postgres ends it.
+READ_IDLE_TIMEOUT = "15s"
 
+
+async def _autocommit(statement, params: dict) -> None:
+    async with engine.connect() as conn:
+        conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
+        await conn.execute(statement, params)
+
+
+async def rebuild_snapshot_now(workspace_id: UUID, org_id: UUID) -> None:
+    """Rebuild snapshot in isolated connections (never share the request-scoped session)."""
+    ids = {"workspace_id": workspace_id}
+    await _autocommit(_MARK_REBUILDING, {**ids, "org_id": org_id})
     try:
         async with AsyncSessionLocal() as db:
+            await db.execute(
+                text("SELECT set_config('idle_in_transaction_session_timeout', :t, true)"),
+                {"t": READ_IDLE_TIMEOUT},
+            )
             await _set_rls_org(db, org_id)
             summary = await fetch_workspace_summary(db, workspace_id, org_id)
             payload = summary.model_dump(mode="json")
-
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(WorkspaceSnapshot).where(WorkspaceSnapshot.workspace_id == workspace_id)
-            )
-            row = result.scalar_one()
-            row.payload = payload
-            row.version = row.version + 1
-            row.built_at = _utc_now()
-            row.dirty = False
-            row.rebuilding = False
-            row.dirty_at = None
-            await db.commit()
+            await db.rollback()
+        await _autocommit(_STORE_BUILT, {**ids, "payload": json.dumps(payload)})
     except Exception:
         logger.exception("workspace snapshot rebuild failed workspace_id=%s", workspace_id)
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(WorkspaceSnapshot).where(WorkspaceSnapshot.workspace_id == workspace_id)
-            )
-            row = result.scalar_one_or_none()
-            if row is not None:
-                row.rebuilding = False
-                row.dirty = True
-                await db.commit()
+        await _autocommit(_MARK_FAILED, ids)
         raise
 
 
