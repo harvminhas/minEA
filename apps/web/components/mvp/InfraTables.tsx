@@ -21,6 +21,9 @@ import { AddFlow } from "@/components/add/AddFlow";
 import { AppPlatformHelp } from "@/components/mvp/AppPlatformHelp";
 import { cn } from "@/lib/utils";
 import { aiColumnLabel } from "@/lib/ai/features";
+import { PLATFORM_HOSTING_FILTERS, PLATFORM_KIND_FILTERS, platformKindView, presentOptions } from "@/lib/infra/platform-kind";
+import { tenantOptions } from "@/lib/hosting/cloud";
+import { useCustomRegions } from "@/lib/hosting/use-cloud-regions";
 
 const COMPUTE_FOR_KIND: Record<string, string> = {
   physical_server: "on_prem",
@@ -52,27 +55,61 @@ function dash(value: string) {
   return value || <span className="text-[#c5c8d4]">—</span>;
 }
 
+/** Kind as a readable chip; click opens the record, where Kind is edited. "Not set" stays subtle. */
+function KindChip({ view, onEdit }: { view: ReturnType<typeof platformKindView>; onEdit: () => void }) {
+  const title = view.chip ? (view.inferred ? "Worked out from the provider, name or hosting · click to change" : "Click to change") : "Set the kind";
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={(event) => {
+        event.stopPropagation();
+        onEdit();
+      }}
+      className={cn(
+        "inline-block max-w-full rounded-full px-2 py-0.5 text-left text-[11px] font-medium leading-snug",
+        view.group === "tenant" && "bg-[#ece9ff] text-[#5b4ce6]",
+        view.group === "saas_suite" && "bg-[#ecfdf3] text-[#067647]",
+        (view.group === "paas" || view.group === "self_hosted") && "bg-[#f3f4f8] text-[#4b5163]",
+        view.group === "unset" && "text-[#a0a4b3] hover:text-[#5b4ce6]",
+      )}
+    >
+      {view.chip || "Not set"}
+    </button>
+  );
+}
+
 export function PlatformsTable({ rows, selectedId, anywhere = false }: { rows: CatalogRow[]; selectedId?: string; anywhere?: boolean }) {
   const router = useRouter();
   const { basePath } = useTenancy();
   const impact = useImpactGraph();
   const [query, setQuery] = useState("");
-  const [kind, setKind] = useState("All kinds");
-  const [hosting, setHosting] = useState("Any hosting");
+  const [kind, setKind] = useState("all");
+  const [hosting, setHosting] = useState("all");
   const [missingOnly, setMissingOnly] = useState(false);
   const [adding, setAdding] = useState(false);
-  const platforms = sortBlanksLast(
-    rows.filter((row) => row.kind === "platform"),
-    (row) => readPlatformInfra(row.object).platformKind ?? "",
-    (row) => row.name
+  const custom = useCustomRegions();
+  const platformRows = rows.filter((row) => row.kind === "platform");
+  // Regions each tenant uses: its regions_used plus the regions its apps run in.
+  const regionKeys = new Map(
+    tenantOptions(platformRows.map((row) => row.object), impact.relationships, custom).map((option) => [option.id, option.regionKeys]),
   );
-  const platformKind = platformFields.find((field) => field.key === "platform_kind");
-  const views = platforms.map((row) => ({ row, infra: readPlatformInfra(row.object) }));
-  const filtered = views.filter(({ row, infra }) => {
-    const hay = `${row.name} ${infra.vendor} ${row.ownerTeam} ${row.ownerPerson}`.toLowerCase();
+  const views = platformRows.map((row) => ({
+    row,
+    infra: readPlatformInfra(row.object),
+    kindView: platformKindView(row.object, regionKeys.get(row.id) ?? [], custom),
+  }));
+  // Kind order (tenants, SaaS suites, PaaS, self-hosted, not set), then name.
+  const order = PLATFORM_KIND_FILTERS.map((item) => item.key);
+  views.sort((a, b) => order.indexOf(a.kindView.group) - order.indexOf(b.kindView.group) || a.row.name.localeCompare(b.row.name));
+  const platforms = views.map((view) => view.row);
+  const kindOptions = presentOptions(PLATFORM_KIND_FILTERS, views.map((view) => view.kindView.group));
+  const hostingOptions = presentOptions(PLATFORM_HOSTING_FILTERS, views.map((view) => view.kindView.hostingKey));
+  const filtered = views.filter(({ row, infra, kindView }) => {
+    const hay = `${row.name} ${infra.vendor} ${row.ownerTeam} ${row.ownerPerson} ${kindView.chip} ${kindView.hosting}`.toLowerCase();
     if (query && !hay.includes(query.toLowerCase())) return false;
-    if (kind !== "All kinds" && infra.kindLabel !== kind) return false;
-    if (hosting !== "Any hosting" && infra.hostingLabel !== hosting) return false;
+    if (kind !== "all" && kindView.group !== kind) return false;
+    if (hosting !== "all" && kindView.hostingKey !== hosting) return false;
     if (missingOnly && !row.missing.owner && !row.missing.cost) return false;
     return true;
   });
@@ -109,13 +146,13 @@ export function PlatformsTable({ rows, selectedId, anywhere = false }: { rows: C
       {adding && <div className="mb-4"><AddFlow origin="model" kind="platform" compact onClose={() => setAdding(false)} /></div>}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, vendor, or owner" className="h-9 w-[260px] max-w-full rounded-lg border border-[#e6e8ee] px-3 text-[13px] outline-none focus:border-[#5b4ce6]" />
-        <select value={kind} onChange={(event) => setKind(event.target.value)} className="h-9 rounded-lg border border-[#e6e8ee] px-2 text-[13px]">
-          <option>All kinds</option>
-          {infraConfig.platformKinds.map((item) => <option key={item.key}>{item.label}</option>)}
+        <select aria-label="Kind" value={kind} onChange={(event) => setKind(event.target.value)} className="h-9 rounded-lg border border-[#e6e8ee] px-2 text-[13px]">
+          <option value="all">All kinds</option>
+          {kindOptions.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
         </select>
-        <select value={hosting} onChange={(event) => setHosting(event.target.value)} className="h-9 rounded-lg border border-[#e6e8ee] px-2 text-[13px]">
-          <option>Any hosting</option>
-          {Object.values(infraConfig.platformHostingLabels).map((label) => <option key={label}>{label}</option>)}
+        <select aria-label="Hosting" value={hosting} onChange={(event) => setHosting(event.target.value)} className="h-9 rounded-lg border border-[#e6e8ee] px-2 text-[13px]">
+          <option value="all">Any hosting</option>
+          {hostingOptions.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
         </select>
         <button type="button" onClick={() => setMissingOnly(true)} className="rounded-lg border border-[#e6e8ee] px-2.5 py-1.5 text-[12px] text-[#4b5163]">Missing owner or cost</button>
       </div>
@@ -129,16 +166,16 @@ export function PlatformsTable({ rows, selectedId, anywhere = false }: { rows: C
             </tr>
           </thead>
           <tbody>
-            {filtered.map(({ row, infra }) => {
+            {filtered.map(({ row, infra, kindView }) => {
               const built = hostSourceIds(row.id, impact.edges).length;
               return (
                 <tr key={row.id} onClick={() => router.push(modelItemPath(basePath, "platforms", row.id))} className={cn("cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]", selectedId === row.id && "bg-[#f6f5ff]")}>
                   <td className="px-2 py-3 font-medium text-[#1c2230]">{row.name}</td>
                   <td className="px-2 py-3">{infra.vendor ? <><div>{infra.vendor}</div>{infra.product && <div className="truncate text-[12px] text-[#8b90a0]">{infra.vendorCode} · {infra.product}</div>}</> : dash("")}</td>
-                  <td className="px-2 py-3" title={infra.kindInferred ? "From hosting model" : undefined}>
-                    {platformKind ? <InfraControl object={row.object} field={platformKind} compact /> : dash(infra.kindLabel)}
+                  <td className="px-2 py-3">
+                    <KindChip view={kindView} onEdit={() => router.push(modelItemPath(basePath, "platforms", row.id))} />
                   </td>
-                  <td className="px-2 py-3">{infra.hostingLabel ? <span className="rounded-full bg-[#f3f4f8] px-2 py-0.5 text-[11px]">{infra.hostingLabel}</span> : dash("")}</td>
+                  <td className="px-2 py-3" title={kindView.hosting || undefined}>{kindView.hosting ? <span className="inline-block rounded-full bg-[#f3f4f8] px-2 py-0.5 text-[11px] leading-snug">{kindView.hosting}</span> : dash("")}</td>
                   <td className="px-2 py-3">{row.missing.owner ? <AddChip label="Add" onClick={() => router.push(modelItemPath(basePath, "platforms", row.id))} /> : row.ownerTeam || row.ownerPerson}</td>
                   <td className="px-2 py-3">{built || dash("")}</td>
                   <td className="px-2 py-3" onClick={(event) => event.stopPropagation()}>

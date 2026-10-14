@@ -27,8 +27,8 @@ export const infraConfig = {
   platformKinds: [
     { key: "saas_suite", label: "SaaS suite" },
     { key: "paas", label: "PaaS" },
-    { key: "cloud_account", label: "Cloud account" },
-    { key: "self_hosted", label: "Self-hosted" },
+    { key: "cloud_account", label: "Cloud tenant / account" },
+    { key: "self_hosted", label: "Self-hosted platform" },
   ],
   platformHostingLabels: { saas: "SaaS", paas: "PaaS", self_hosted: "Self-hosted", hybrid: "Hybrid" } as Record<string, string>,
   /** hosting_model -> platform_kind, read-only. Never written. */
