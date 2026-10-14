@@ -19,6 +19,7 @@ from app.routers import (
     auth,
     billing,
     catalog,
+    catalog_lookup,
     contact,
     support,
     capability_map,
@@ -101,6 +102,7 @@ app.include_router(capability_map.router, prefix="/api/v1")
 app.include_router(journeys.router, prefix="/api/v1")
 app.include_router(relationships.router, prefix="/api/v1")
 app.include_router(catalog.router, prefix="/api/v1")
+app.include_router(catalog_lookup.router, prefix="/api/v1")
 app.include_router(ai.router, prefix="/api/v1")
 app.include_router(webhooks.router, prefix="/api/v1")
 

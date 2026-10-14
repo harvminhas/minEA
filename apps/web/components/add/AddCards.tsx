@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MinEAObject, Relationship } from "@minea/types";
-import { addApi, objectsApi } from "@/lib/api-client";
+import { addApi, catalogLookupApi, objectsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { readCostLines } from "@/lib/cost/math";
 import { annualCost } from "@/lib/cost/service";
@@ -29,6 +29,7 @@ import {
   type AddReceipt,
   type GapField,
 } from "@/lib/setup/add-cards";
+import { LOOKUP_DEBOUNCE_MS, applySuggestions, builtInHouse, lookupKey, namesToLookUp, rememberFailed, rememberLookups } from "@/lib/setup/ai-lookup";
 import { buildBatch, catalogLists, planInputs, prepareRows, todoLines, type AddRow, type EstateItem } from "@/lib/setup/add-plan";
 import { choiceForTool } from "@/lib/setup/match-tools";
 import { setupState } from "@/lib/setup/setupMin";
@@ -160,7 +161,8 @@ export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: 
   const question = cardQuestion(row);
   const hosting = catalogHostingLine(row);
   const known = row.status === "matched" && row.tool;
-  const subtitle = known ? [row.tool?.category, row.tool?.vendor].filter(Boolean).join(" · ") : "New";
+  const suggested = Boolean(known && row.tool?.suggested);
+  const subtitle = known ? [row.tool?.category, row.tool?.vendor].filter(Boolean).join(" · ") : row.customBuilt ? "Built in-house" : "New";
   const typical = known && row.tool?.typicalAnnual ? `typical $${row.tool.typicalAnnual.toLocaleString("en-US")}` : "";
   return (
     <article className={`rounded-2xl border border-[#e6e8ee] bg-white p-4 ${dim ? "opacity-60" : ""} ${motion ? "add-card-rise" : ""}`} style={motion ? { ["--add-i" as string]: index } : undefined}>
@@ -170,6 +172,12 @@ export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: 
           <h3 className="truncate text-[16px] font-semibold text-[#1c2230]">{row.name}</h3>
           <p className="truncate text-[13px] text-[#6b7289]">{subtitle || "New"}</p>
           {typical && <span className="mt-1 inline-flex rounded-full bg-[#f3f4f8] px-2 py-0.5 text-[12px] text-[#3c4254]">{typical} /yr</span>}
+          {suggested && (
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-[12px]">
+              <span data-testid="suggested-label" title="Not in our catalogue yet: details suggested by AI. Check them." className="rounded-full border border-[#e6e8ee] px-2 py-0.5 text-[#6b7289]">Suggested</span>
+              <button type="button" className="text-[#6b7289] underline-offset-2 hover:underline" onClick={() => onChange(builtInHouse(row))}>We built it ourselves</button>
+            </p>
+          )}
         </div>
         <button type="button" aria-label={`Remove ${row.name}`} className="text-[16px] text-[#6b7289]" onClick={onRemove}>×</button>
       </div>
@@ -396,8 +404,42 @@ export function AskAdd({
     return () => media.removeEventListener("change", apply);
   }, []);
 
+  // AI lookup for names the catalogue doesn't know: debounced, cached per name, and silent on
+  // failure (the card just stays Custom). Suggestions never mark the rows as edited.
+  const dismissed = useRef(new Set<string>());
+  const [lookupTick, setLookupTick] = useState(0);
+  useEffect(() => {
+    setRows((current) => applySuggestions(current, dismissed.current));
+    if (!orgSlug || phase !== "idle") return;
+    const names = namesToLookUp(rows, dismissed.current);
+    if (names.length === 0) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      const giveUp = window.setTimeout(() => controller.abort(), 8000);
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const { results } = await catalogLookupApi.lookup(orgSlug, names, token, controller.signal);
+        rememberLookups(names, results);
+      } catch {
+        rememberFailed(names);
+      } finally {
+        window.clearTimeout(giveUp);
+      }
+      setLookupTick((n) => n + 1);
+    }, LOOKUP_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, orgSlug, phase, lookupTick]);
+
   const patch = (key: string, change: Partial<AddRow>) => {
     edited.current = true;
+    if (change.customBuilt) {
+      const row = rows.find((item) => item.key === key);
+      if (row) dismissed.current.add(lookupKey(row.input));
+    }
     setRows((current) => current.map((row) => (row.key === key ? { ...row, ...change } : row)));
   };
 

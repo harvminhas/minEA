@@ -332,6 +332,11 @@ export const workspaceSettingsApi = {
     apiFetch<WorkspaceSettings>(`${wsBase(orgSlug, workspaceSlug)}/settings`, { method: "PATCH", token, body: JSON.stringify(body) }),
 };
 
+export const catalogLookupApi = {
+  lookup: (orgSlug: string, names: string[], token: string, signal?: AbortSignal) =>
+    apiFetch<{ results: import("@/lib/setup/ai-lookup").LookupResult[] }>(`/orgs/${orgSlug}/catalog/lookup`, { method: "POST", token, body: JSON.stringify({ names }), signal }),
+};
+
 export const addApi = {
   save: (
     orgSlug: string,
