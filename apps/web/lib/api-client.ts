@@ -357,7 +357,7 @@ export const addApi = {
     workspaceSlug: string,
     body: {
       creates: { key: string; type: string; name: string; properties: Record<string, unknown>; owner?: string; owner_team_name?: string; point_of_contact_name?: string }[];
-      updates: { id: string; properties?: Record<string, unknown>; owner?: string; owner_team_name?: string; point_of_contact_name?: string }[];
+      updates: { id: string; properties?: Record<string, unknown>; overwrite?: boolean; owner?: string; owner_team_name?: string; point_of_contact_name?: string }[];
       relationships: { type: string; from_key?: string; to_key?: string; from_id?: string; to_id?: string; from_type: string; to_type: string }[];
     },
     token: string,

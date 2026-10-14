@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MinEAObject } from "@minea/types";
-import { objectsApi, relationshipsApi } from "@/lib/api-client";
+import { addApi, objectsApi } from "@/lib/api-client";
+import { serverIdsAfter, whereBatch } from "@/lib/setup/where-batch";
 import { useAuth } from "@/lib/auth-context";
 import { AppAddPanel } from "@/components/add/AppAddPanel";
 import { OwnerDatalists, PERSON_PICKS_ID, TEAM_PICKS_ID, useOwnerPicks } from "@/components/ownership/OwnerPicks";
@@ -349,69 +350,50 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     setStep(3);
   };
 
+  // Step 3 saves as ONE batch (servers, locations, links and hosting in one transaction), then one
+  // catalogue refetch. Step 4 opens straight away; its save waits for this one to land.
+  const whereSave = useRef<Promise<void> | null>(null);
+  const [whereSaving, setWhereSaving] = useState<string>("");
   const linkServers = async () => {
     const token = await auth();
     // Reuse the org's servers by name (case-insensitive): never create a duplicate.
     const catalogServers = whereStepSeed(catalog.data?.objects ?? [], []).serverIds;
-    const ids = { ...catalogServers, ...serverIds };
-    const existing = new Set(Object.keys(ids));
-    for (const server of planned.servers) {
-      if (ids[server.key]) continue;
-      const saved = await objectsApi.create(orgSlug!, workspaceSlug!, {
-        type: "model",
-        name: server.name,
-        properties: { runtime_kind: "physical_server", compute_runtime_kind: "on_prem" },
-      }, token);
-      remember(saved);
-      ids[server.key] = saved.id;
+    const existing = { ...catalogServers, ...serverIds };
+    const currentHosting = Object.fromEntries((catalog.data?.objects ?? []).map((object) => [object.id, (object.properties as Record<string, unknown> | undefined)?.hosting_model]));
+    const batch = whereBatch(planned.servers, planned.links, apps, existing, currentHosting);
+    const writes = batch.creates.length + batch.updates.length + batch.relationships.length;
+    if (writes === 0) {
+      setServerIds(existing);
+      setStep(4);
+      return;
     }
-    const located = new Set<string>();
-    for (const server of planned.servers) {
-      const serverId = ids[server.key];
-      if (!server.where || !serverId || located.has(server.key) || existing.has(server.key)) continue;
-      const place = await objectsApi.create(orgSlug!, workspaceSlug!, {
-        type: "location",
-        name: server.where,
-        properties: { location_type: "other" },
-      }, token);
-      remember(place);
-      const link = await relationshipsApi.create(orgSlug!, workspaceSlug!, {
-        type: "located_at",
-        from_object_id: serverId,
-        from_type: "model",
-        to_object_id: place.id,
-        to_type: "location",
-      }, token);
-      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: link });
-      located.add(server.key);
-    }
-    for (const link of planned.links) {
-      const app = apps.find((item) => item.key === link.appKey);
-      const serverId = ids[link.serverKey];
-      if (!app?.objectId || !serverId) continue;
-      const created = await relationshipsApi.create(orgSlug!, workspaceSlug!, {
-        type: "runs_on",
-        from_object_id: app.objectId,
-        from_type: "application",
-        to_object_id: serverId,
-        to_type: "model",
-      }, token);
-      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: created });
-    }
-    for (const app of apps) {
-      if (!app.objectId) continue;
-      const hosting_model = app.choice === "saas" ? "saas" : app.choice === "own" ? "on_premise" : app.choice === "desktop" ? "desktop" : "";
-      if (!hosting_model) continue;
-      const saved = await objectsApi.update(orgSlug!, workspaceSlug!, app.objectId, { properties: { hosting_model } }, token);
-      remember(saved);
-    }
-    setServerIds(ids);
-    // Reconcile with the server so every screen (and the setup card) sees the new link now.
-    if (orgSlug && workspaceSlug) void queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
+    setWhereSaving(`Saving where ${apps.length === 1 ? "1 app lives" : `${apps.length} apps live`}…`);
+    const save = (async () => {
+      try {
+        const result = await addApi.save(orgSlug!, workspaceSlug!, batch, token);
+        for (const object of result.objects) remember(object);
+        if (orgSlug && workspaceSlug) {
+          for (const relationship of result.relationships) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship });
+        }
+        setServerIds(serverIdsAfter(batch, existing, result.created_object_ids));
+        // Reconcile with the server once so every screen (and the setup card) sees the new links.
+        if (orgSlug && workspaceSlug) void queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
+      } catch (err) {
+        setStep(3);
+        setError(err instanceof Error ? err.message : "Could not save");
+        throw err;
+      } finally {
+        setWhereSaving("");
+        whereSave.current = null;
+      }
+    })();
+    whereSave.current = save;
+    save.catch(() => undefined);
     setStep(4);
   };
 
   const finish = async () => {
+    if (whereSave.current) await whereSave.current;
     const token = await auth();
     for (const app of apps) {
       if (!app.objectId) continue;
@@ -687,6 +669,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
               </tbody>
             </table>
           </div>
+          {whereSaving && <p role="status" data-testid="where-saving" className="mb-2 text-[12px] text-[#6b7289]">{whereSaving}</p>}
           <StepButtons busy={busy} onNext={() => void run(finish)} onSkip={() => void run(skip)} nextLabel="Show my map →" />
         </>
       )}

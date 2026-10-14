@@ -42,8 +42,9 @@ test("server picker: list + New server; search only past 6 servers", () => {
 test("wizard, Hosting & location and the app record all use the same four choices", () => {
   const flow = readFileSync(new URL("../mvp/setup-flow.tsx", import.meta.url), "utf8");
   assert.match(flow, /<LocationChips/);
-  assert.match(flow, /app\.choice === "desktop" \? "desktop"/);
-  assert.match(flow, /const ids = \{ \.\.\.catalogServers, \.\.\.serverIds \}/);
+  const batch = readFileSync(new URL("../../lib/setup/where-batch.ts", import.meta.url), "utf8");
+  assert.match(batch, /choice === "desktop" \? "desktop"/);
+  assert.match(flow, /const existing = \{ \.\.\.catalogServers, \.\.\.serverIds \}/);
   const views = readFileSync(new URL("../mvp/EstateViews.tsx", import.meta.url), "utf8");
   assert.match(views, /<AppLocationEditor app=\{row\.object\} compact \/>/);
   const panel = readFileSync(new URL("../mvp/ModelDetailPanel.tsx", import.meta.url), "utf8");

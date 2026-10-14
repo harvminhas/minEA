@@ -35,6 +35,9 @@ class AddBatchCreate(BaseModel):
 class AddBatchUpdate(BaseModel):
     id: UUID
     properties: dict[str, Any] | None = None
+    # False (default): only fill blank properties (Add flow). True: set them, like PUT /objects/{id}
+    # (setup "Where each one lives" changes an app's hosting in the same batch as its links).
+    overwrite: bool = False
     owner: str | None = None
     owner_team_name: str | None = None
     point_of_contact_name: str | None = None
@@ -163,12 +166,23 @@ async def apply_add_batch(
         obj = result.scalar_one_or_none()
         if obj is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
-        patch = empty_property_patch(obj.properties or {}, item.properties)
+        if item.overwrite:
+            patch = dict(item.properties or {})
+            try:
+                validate_infra_patch(obj.type, patch)
+            except ValueError as exc:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        else:
+            patch = empty_property_patch(obj.properties or {}, item.properties)
         changed = False
         if patch:
+            base = {**(obj.properties or {}), **patch}
+            for key, val in patch.items():
+                if val is None:
+                    base.pop(key, None)
             merged = apply_ai_features(
                 obj.type,
-                apply_cost_lines(obj.type, {**(obj.properties or {}), **patch}),
+                apply_cost_lines(obj.type, base),
                 strict="ai_features" in patch,
             )
             if merged != (obj.properties or {}):
