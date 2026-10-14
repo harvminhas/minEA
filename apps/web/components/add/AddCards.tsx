@@ -193,7 +193,7 @@ export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: 
       <div className="mt-3 text-[13px] text-[#4b5163]">
         {hosting && <p>{hosting}</p>}
         {question === "fuzzy" && row.status === "weak" && (
-          <p>Is it {row.tool?.name}? <button type="button" className="ml-2 font-medium text-[#3f35b5]" onClick={() => onChange({ status: "matched", name: row.tool?.name || row.name })}>Yes</button> <button type="button" className="ml-2 text-[#6b7289]" onClick={() => onChange({ status: "custom", tool: null, choice: "unknown", name: row.input })}>No</button></p>
+          <p data-testid="did-you-mean">Did you mean <strong>{row.tool?.name}</strong>? <button type="button" className="ml-2 font-medium text-[#3f35b5]" onClick={() => onChange({ status: "matched", name: row.tool?.name || row.name })}>Yes, use {row.tool?.name}</button> <button type="button" className="ml-2 text-[#6b7289]" onClick={() => onChange({ status: "custom", tool: null, options: [], choice: "unknown", name: row.input, keptTyped: true })}>Keep “{row.input}”</button></p>
         )}
         {question === "fuzzy" && row.status === "pick" && (
           <div className="flex flex-wrap gap-1.5">{row.options.map((option) => <button key={option.name} type="button" className="rounded-full border border-[#e6e8ee] px-2 py-0.5" onClick={() => onChange({ status: "matched", tool: option, name: option.name, choice: choiceForTool(option) })}>{option.name}</button>)}</div>

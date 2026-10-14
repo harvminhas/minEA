@@ -107,6 +107,8 @@ export type AddRow = {
   choice: HostingChoice;
   existing: EstateItem | null;
   hint: string | null;
+  /** The person turned down a "Did you mean" hint: keep their spelling, ask nothing more. */
+  keptTyped?: boolean;
 };
 
 export function objectTypeFor(kind: AddKind): string {

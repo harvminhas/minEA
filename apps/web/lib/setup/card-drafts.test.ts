@@ -36,3 +36,12 @@ test("wizard step 1 uses the shared add panel, not its own table", () => {
   assert.match(src, /Next →/);
   assert.match(src, /Your map needs both/);
 });
+
+test("a 'Did you mean' answer carries into the later wizard steps", () => {
+  const base = { input: "ArchGIS", tool: { name: "ArcGIS Online" }, choice: "unknown" as const, status: "weak" };
+  const [accepted] = draftsFromCards([base], [{ id: "o1", name: "ArcGIS Online", type: "application" }]);
+  assert.equal(accepted!.status, "matched");
+  const [kept] = draftsFromCards([base], [{ id: "o2", name: "ArchGIS", type: "application" }]);
+  assert.equal(kept!.status, "custom");
+  assert.equal(kept!.tool, null);
+});

@@ -20,7 +20,7 @@ export function namesToLookUp(rows: AddRow[], dismissed: ReadonlySet<string>): s
   const out: string[] = [];
   for (const row of rows) {
     const key = lookupKey(row.input);
-    if (row.status !== "custom" || row.existing || row.customBuilt) continue;
+    if (row.status !== "custom" || row.existing || row.customBuilt || row.keptTyped) continue;
     if (row.kind !== "app" && row.kind !== "platform") continue;
     if (key.length < 3 || GENERIC_TERMS.has(key) || dismissed.has(key) || cache.has(key)) continue;
     if (!out.includes(row.input)) out.push(row.input);
@@ -50,7 +50,7 @@ export function applySuggestions(rows: AddRow[], dismissed: ReadonlySet<string>)
   let changed = false;
   const next = rows.map((row) => {
     const key = lookupKey(row.input);
-    if (row.status !== "custom" || row.existing || row.customBuilt || dismissed.has(key)) return row;
+    if (row.status !== "custom" || row.existing || row.customBuilt || row.keptTyped || dismissed.has(key)) return row;
     const hit = cache.get(key);
     if (!hit || hit.status !== "suggested" || hit.kind !== row.kind) return row;
     changed = true;

@@ -132,15 +132,22 @@ function tierFor(input: string, tool: ToolRecord): "exact" | "token" | "fuzzy" |
   if (names.includes(input)) return "exact";
   if (GENERIC_TERMS.has(input)) return null;
   const tokens = input.split(" ").filter((token) => token.length >= 3 && !/^\d+$/.test(token));
+  let partial = false;
   for (const name of names) {
-    if (input.length >= 3 && (name.startsWith(input) || input.startsWith(`${name} `))) return "token";
+    if (input.length >= 3 && input.startsWith(`${name} `)) return "token";
+    if (input.length >= 3 && name.startsWith(input)) {
+      // "Arc" → "ArcGIS Online" ends mid-word: likely a typo or a different tool, so ask.
+      if (name.length === input.length || name[input.length] === " ") return "token";
+      partial = true;
+      continue;
+    }
     if (tokenHit(input, name)) return "token";
   }
   const hintHit = (tool.hints ?? []).some((hint) => tokens.includes(normalizeTerm(hint)));
   // Short words are a couple of letters from many names, so they need to be closer.
   const maxEdits = input.length <= 4 ? 0 : input.length <= 6 ? 1 : 2;
   const close = names.some((name) => similarity(input, name) >= 0.6 || (name.length >= 4 && editDistance(input, name) <= maxEdits));
-  if (hintHit || close) return "fuzzy";
+  if (partial || hintHit || close) return "fuzzy";
   return null;
 }
 

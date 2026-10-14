@@ -1,7 +1,7 @@
 import { normalizeTerm, type HostingChoice } from "@/lib/setup/match-tools";
 
 type CardObject = { id: string; name: string; type: string; properties?: Record<string, unknown> | null };
-type DraftLike = { input: string; tool: { name: string } | null; objectId?: string; choice: HostingChoice };
+type DraftLike = { input: string; tool: { name: string } | null; objectId?: string; choice: HostingChoice; status?: string };
 
 /** The card's "Where does it live?" pick, read back from the saved object's hosting_model. */
 export function choiceFromHosting(model: unknown): HostingChoice {
@@ -24,6 +24,12 @@ export function draftsFromCards<T extends DraftLike>(drafts: T[], objects: CardO
     const hit = ordered.find((object) => (object.type === "application" || object.type === "model") && names.has(normalizeTerm(object.name)));
     if (!hit) return draft;
     const choice = choiceFromHosting(hit.properties?.hosting_model);
-    return { ...draft, objectId: hit.id, choice: choice === "unknown" ? draft.choice : choice };
+    const resolved = { ...draft, objectId: hit.id, choice: choice === "unknown" ? draft.choice : choice };
+    // The card answered "Did you mean": the saved name says which way.
+    if (draft.status === "weak" || draft.status === "pick") {
+      if (draft.tool && normalizeTerm(hit.name) === normalizeTerm(draft.tool.name)) return { ...resolved, status: "matched" };
+      if (normalizeTerm(hit.name) === normalizeTerm(draft.input)) return { ...resolved, status: "custom", tool: null };
+    }
+    return resolved;
   });
 }

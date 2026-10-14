@@ -239,7 +239,9 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   const cardDrafts = (createdIds: string[] = []): Draft[] => {
     const cached = orgSlug && workspaceSlug ? queryClient.getQueryData<{ objects?: MinEAObject[] }>(catalogQueryKey(orgSlug, workspaceSlug)) : undefined;
     const objects = cached?.objects ?? catalog.data?.objects ?? [];
-    return draftsFromCards(toDrafts(setupMatch(text)), objects, createdIds);
+    return draftsFromCards(toDrafts(setupMatch(text)), objects, createdIds).map((draft) =>
+      draft.status === "matched" && !draft.yearly ? { ...draft, ...yearlyFor(draft.tool, draft.licences, { yearly: "", typical: true }) } : draft,
+    );
   };
 
   // Next: anything new on the cards saves through the panel (onSaved continues); when every card is
