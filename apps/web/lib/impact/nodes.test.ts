@@ -73,8 +73,9 @@ test("impact names resolve loaded relationship ends", () => {
   assert.equal(connectionPhrase(hit, nodes), "Uses model QA GPT-4o");
 });
 
-test("an unloaded relationship end stays Unnamed ai model", () => {
+test("a link to a deleted record adds no node (no 'Unnamed …' card)", () => {
   const agent = object("agent", "agent", "QA agent");
   const nodes = impactNodes([], [agent], [edge("uses_model", agent, { id: "missing", type: "ai_model" })]);
-  assert.equal(nodes.find((node) => node.id === "missing")?.name, "Unnamed ai model");
+  assert.equal(nodes.find((node) => node.id === "missing"), undefined);
+  assert.ok(!nodes.some((node) => node.name.startsWith("Unnamed")));
 });

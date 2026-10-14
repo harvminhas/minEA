@@ -1,10 +1,10 @@
+import { platformKindView } from "@/lib/infra/platform-kind";
 import type { MinEAObject } from "@minea/types";
 import {
   infraConfig,
   isManagedKind,
   locationLabel,
   mapComputeKind,
-  platformKindLabel,
   runtimeKindLabel,
 } from "@/lib/infra/infraConfig";
 import { RUNTIME_PROVIDER_LABEL } from "@/lib/runtime-utils";
@@ -76,7 +76,8 @@ export function readPlatformInfra(object: Pick<MinEAObject, "id" | "name" | "pro
     id: object.id,
     name: object.name,
     platformKind,
-    kindLabel: platformKindLabel(platformKind),
+    // Same derived label as the Platforms & cloud list: "Tenant · Azure", "SaaS suite · Microsoft 365"…
+    kindLabel: platformKindView(object).chip,
     kindInferred: !explicit && Boolean(inferred),
     hostingLabel: infraConfig.platformHostingLabels[hosting] ?? hosting.replace(/_/g, " "),
     vendor: PLATFORM_VENDOR_LABEL[code] ?? code,

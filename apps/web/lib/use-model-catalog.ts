@@ -39,13 +39,16 @@ export function catalogQueryKey(orgSlug: string, workspaceSlug: string) {
 
 export function shapeCatalog(body: CatalogBody): WorkspaceCatalog {
   const objects = body.objects ?? [];
+  // A link whose end is not in the catalogue (record deleted) is never shown: no "Unnamed …" cards.
+  const ids = new Set(objects.map((object) => object.id));
+  const relationships = (body.relationships ?? []).filter((rel) => ids.has(rel.from_object_id) && ids.has(rel.to_object_id));
   const rows = objects.map(rowFromObject).filter((row): row is CatalogRow => row != null);
   return {
     version: body.version ?? 0,
     builtAt: body.builtAt ?? null,
     dirty: Boolean(body.dirty),
     objects,
-    relationships: body.relationships ?? [],
+    relationships,
     rows,
     connections: objects.filter((object) =>
       object.type === "integration_flow" || object.type === "api" || object.type === "event" || object.type === "tool"
@@ -115,6 +118,10 @@ export function applyCatalogWrite(
         : [...objects, next];
     }
     let relationships = current.relationships;
+    // Deleting a record deletes its links (ON DELETE CASCADE): drop them here too.
+    if (change.removeId) {
+      relationships = relationships.filter((rel) => rel.from_object_id !== change.removeId && rel.to_object_id !== change.removeId);
+    }
     if (change.removeRelationshipId) {
       relationships = relationships.filter((rel) => rel.id !== change.removeRelationshipId);
     }

@@ -39,6 +39,8 @@ export function impactNodes(
     return { id, name, typeLabel: typeLabel(object.type) };
   };
   for (const rel of relationships) {
+    // A link to a deleted record is not a node ("Unnamed application"): skip the whole link.
+    if (!byId.has(rel.from_object_id) || !byId.has(rel.to_object_id)) continue;
     if (!nodes.has(rel.from_object_id)) nodes.set(rel.from_object_id, namedEnd(rel.from_object_id, rel.from_type));
     if (!nodes.has(rel.to_object_id)) nodes.set(rel.to_object_id, namedEnd(rel.to_object_id, rel.to_type));
   }
