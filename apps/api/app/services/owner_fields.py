@@ -12,6 +12,15 @@ from app.models.people import PeopleContact, Team
 from app.services.owner_accountability_sync import sync_owner_team_accountability
 
 
+def name_key(value: str | None) -> str:
+    """Case- and whitespace-insensitive identity for team/person names ("  sales  team" == "Sales Team")."""
+    return " ".join((value or "").split()).lower()
+
+
+def _sql_key(column):
+    return func.lower(func.regexp_replace(func.trim(column), r"\s+", " ", "g"))
+
+
 class Ownable(Protocol):
     owner: str | None
     owner_team_id: uuid.UUID | None
@@ -85,7 +94,7 @@ async def resolve_owner_team(
         resolved_name = (owner_team_name or owner or "").strip() or None
         return team_uuid, resolved_name
 
-    team_name = (owner_team_name or owner or "").strip()
+    team_name = " ".join((owner_team_name or owner or "").split())
     if not team_name:
         return None, None
 
@@ -93,10 +102,10 @@ async def resolve_owner_team(
         select(Team).where(
             Team.workspace_id == workspace_id,
             Team.org_id == org_id,
-            func.lower(Team.name) == team_name.lower(),
-        )
+            _sql_key(Team.name) == name_key(team_name),
+        ).order_by(Team.created_at)
     )
-    team = result.scalar_one_or_none()
+    team = result.scalars().first()
     if not team:
         team = Team(
             workspace_id=workspace_id,
@@ -139,7 +148,7 @@ async def resolve_point_of_contact(
             return contact.id, contact.name
         return contact_uuid, (point_of_contact_name or "").strip() or None
 
-    contact_name = (point_of_contact_name or "").strip()
+    contact_name = " ".join((point_of_contact_name or "").split())
     if not contact_name:
         return None, None
 
@@ -147,10 +156,10 @@ async def resolve_point_of_contact(
         select(PeopleContact).where(
             PeopleContact.workspace_id == workspace_id,
             PeopleContact.org_id == org_id,
-            func.lower(PeopleContact.name) == contact_name.lower(),
-        )
+            _sql_key(PeopleContact.name) == name_key(contact_name),
+        ).order_by(PeopleContact.created_at)
     )
-    contact = result.scalar_one_or_none()
+    contact = result.scalars().first()
     if not contact:
         contact = PeopleContact(
             workspace_id=workspace_id,

@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { MinEAObject, Relationship } from "@minea/types";
 import { addApi, catalogLookupApi, objectsApi, toolCatalogApi } from "@/lib/api-client";
 import { refreshLiveCatalog } from "@/lib/catalog/live-catalog";
+import { OwnerDatalists, TEAM_PICKS_ID, useOwnerPicks } from "@/components/ownership/OwnerPicks";
 import { useAuth } from "@/lib/auth-context";
 import { readCostLines } from "@/lib/cost/math";
 import { annualCost } from "@/lib/cost/service";
@@ -85,6 +86,12 @@ function dependents(id: string, relationships: Relationship[], objects: MinEAObj
     .filter(Boolean);
 }
 
+/** Teams already in the workspace, offered while typing an owner (typing a new one still works). */
+function TeamPickList() {
+  const picks = useOwnerPicks();
+  return <OwnerDatalists teams={picks.teams} people={picks.people} />;
+}
+
 function GapFieldEditor({ label, kind, onSave }: { label: string; kind: GapField; onSave: (value: string) => void }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
@@ -97,7 +104,8 @@ function GapFieldEditor({ label, kind, onSave }: { label: string; kind: GapField
   }
   return (
     <form className="flex gap-1" onSubmit={(event) => { event.preventDefault(); if (value.trim()) onSave(value.trim()); setOpen(false); }}>
-      <input autoFocus type={kind === "renewal" ? "date" : "text"} value={value} onChange={(event) => setValue(event.target.value)} className="h-7 rounded-lg border border-[#e6e8ee] px-2 text-[12px]" />
+      {kind === "owner" && <TeamPickList />}
+      <input autoFocus type={kind === "renewal" ? "date" : "text"} list={kind === "owner" ? TEAM_PICKS_ID : undefined} autoComplete={kind === "owner" ? "off" : undefined} value={value} onChange={(event) => setValue(event.target.value)} className="h-7 rounded-lg border border-[#e6e8ee] px-2 text-[12px]" />
       <button type="submit" className="rounded-lg bg-[#5b4ce6] px-2 text-[12px] font-semibold text-white">Save</button>
     </form>
   );

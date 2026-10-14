@@ -8,6 +8,8 @@ import type { MinEAObject } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { AppAddPanel } from "@/components/add/AppAddPanel";
+import { OwnerDatalists, PERSON_PICKS_ID, TEAM_PICKS_ID, useOwnerPicks } from "@/components/ownership/OwnerPicks";
+import { canonicalOwner } from "@/lib/owner-picks";
 import { draftsFromCards } from "@/lib/setup/card-drafts";
 import { useAppStore } from "@/lib/store";
 import type { CostLine } from "@/lib/cost/math";
@@ -171,6 +173,8 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     apps.map((app) => ({ key: app.key, name: app.input, choice: app.choice, serverName: app.serverName })),
     whereByServer,
   );
+  // Owner picks: workspace teams/people plus whatever was typed on another row (immediately).
+  const ownerPickLists = useOwnerPicks(apps.map((app) => app.ownerTeam), apps.map((app) => app.ownerName));
   const catalogState = setupState(catalog.data?.objects ?? [], catalog.data?.relationships ?? []);
   const unsavedApps = apps.filter((app) => !app.objectId).length;
   // Apps given a known location on this screen (Cloud, a picked server, people's computers) and not
@@ -412,10 +416,13 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
         const current = catalog.data?.objects.find((object) => object.id === app.objectId) ?? hosts[app.key];
         properties.cost_lines = replaceTypicalLine(current?.properties, typicalLine(yearly, app.tool?.vendor ?? ""));
       }
+      // One spelling per team/person: "sales " on one row reuses "Sales" from another (or the workspace).
+      const ownerTeam = canonicalOwner(app.ownerTeam, ownerPickLists.teams);
+      const ownerName = canonicalOwner(app.ownerName, ownerPickLists.people);
       const saved = await objectsApi.update(orgSlug!, workspaceSlug!, app.objectId, {
-        owner: app.ownerTeam || undefined,
-        owner_team_name: app.ownerTeam || undefined,
-        point_of_contact_name: app.ownerName || undefined,
+        owner: ownerTeam || undefined,
+        owner_team_name: ownerTeam || undefined,
+        point_of_contact_name: ownerName || undefined,
         ...(Object.keys(properties).length ? { properties } : {}),
       }, token);
       remember(saved);
@@ -628,6 +635,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
           <Stepper step={4} />
           <h2 className="text-[18px] font-semibold text-[#1c2230]">Owners and renewals</h2>
           <p className="mt-1 text-[13px] text-[#6b7289]">All optional. Empty cells are the ones still open.</p>
+          <OwnerDatalists teams={ownerPickLists.teams} people={ownerPickLists.people} />
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-left text-[13px]">
               <thead className="text-[12px] text-[#8b90a0]">
@@ -639,8 +647,8 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
                 {apps.map((app) => (
                   <tr key={app.key}>
                     <td className="px-2 py-1">{displayName(app)}</td>
-                    <Cell value={app.ownerTeam} onChange={(ownerTeam) => patch(app.key, { ownerTeam })} />
-                    <Cell value={app.ownerName} onChange={(ownerName) => patch(app.key, { ownerName })} />
+                    <Cell value={app.ownerTeam} list={TEAM_PICKS_ID} label={`Owner team for ${displayName(app)}`} onChange={(ownerTeam) => patch(app.key, { ownerTeam })} />
+                    <Cell value={app.ownerName} list={PERSON_PICKS_ID} label={`Named owner for ${displayName(app)}`} onChange={(ownerName) => patch(app.key, { ownerName })} />
                     <Cell value={app.renewal} onChange={(renewal) => patch(app.key, { renewal })} type="date" />
                     <td className="px-2 py-1">
                       <input
@@ -701,11 +709,14 @@ function Stepper({ step }: { step: number }) {
 }
 
 
-function Cell({ value, onChange, type = "text" }: { value: string; onChange: (value: string) => void; type?: string }) {
+function Cell({ value, onChange, type = "text", list, label }: { value: string; onChange: (value: string) => void; type?: string; list?: string; label?: string }) {
   return (
     <td className="px-2 py-1">
       <input
         type={type}
+        list={list}
+        aria-label={label}
+        autoComplete={list ? "off" : undefined}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className={`h-8 w-full min-w-[8rem] rounded-lg border px-2 ${value ? "border-[#e6e8ee]" : "border-[#fdba74] bg-[#fff7ed]"}`}
