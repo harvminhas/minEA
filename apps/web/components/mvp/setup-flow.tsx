@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MinEAObject } from "@minea/types";
-import { addApi, objectsApi } from "@/lib/api-client";
+import { addApi } from "@/lib/api-client";
 import { serverIdsAfter, whereBatch } from "@/lib/setup/where-batch";
 import { useAuth } from "@/lib/auth-context";
 import { AppAddPanel } from "@/components/add/AppAddPanel";
@@ -263,6 +263,8 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   // Screens: 0 paste, 1 matched, 2 AI turned on?, 3 where, 4 owners. The stored setupStep keeps its old
   // numbers (see storedSetupStep), so workspaces that stopped mid-setup before this step existed read the same.
   const skip = async () => {
+    // Let a step-2/3 save still in flight land before leaving.
+    await Promise.allSettled([aiSave.current, whereSave.current].filter(Boolean));
     if (!setupPreview()) await setup.save({ setupDismissedAt: new Date().toISOString(), setupStep: storedSetupStep(SETUP_SCREENS[step] ?? "paste") });
     if (step === 4) {
       openReadyMap();
@@ -287,6 +289,20 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     const nextIds = { ...serverIds };
     const created: Draft[] = [];
     const stored: Record<string, MinEAObject> = { ...hosts };
+    // Anything the add panel didn't already save goes in ONE batch (it used to be a create per row).
+    const pending = source.flatMap((draft) => {
+      const spec = draft.objectId ? null : setupCreate(draft);
+      return spec ? [{ key: draft.key, type: spec.type, name: spec.name, properties: spec.properties }] : [];
+    });
+    const made = new Map<string, MinEAObject>();
+    if (pending.length > 0) {
+      const result = await addApi.save(orgSlug!, workspaceSlug!, { creates: pending, updates: [], relationships: [] }, token);
+      pending.forEach((item, index) => {
+        const object = result.objects.find((entry) => entry.id === result.created_object_ids[index]);
+        if (object) made.set(item.key, object);
+      });
+      for (const object of result.objects) remember(object);
+    }
     for (const draft of source) {
       if (draft.objectId) {
         const known = catalog.data?.objects.find((object) => object.id === draft.objectId);
@@ -294,19 +310,13 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
         created.push(draft);
         continue;
       }
-      const spec = setupCreate(draft);
-      if (!spec) {
+      const saved = made.get(draft.key);
+      if (!saved) {
         created.push(draft);
         continue;
       }
-      const saved = await objectsApi.create(orgSlug!, workspaceSlug!, {
-        type: spec.type,
-        name: spec.name,
-        properties: spec.properties,
-      }, token);
-      remember(saved);
       stored[draft.key] = saved;
-      if (spec.type === "model") nextIds[draft.key] = saved.id;
+      if (saved.type === "model") nextIds[draft.key] = saved.id;
       created.push({ ...draft, objectId: saved.id, input: saved.name });
     }
     setServerIds(nextIds);
@@ -322,6 +332,8 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     setStep(rows.length > 0 ? 2 : 3);
   };
 
+  const aiSave = useRef<Promise<void> | null>(null);
+  const [stepSaving, setStepSaving] = useState("");
   const saveAi = async () => {
     const token = await auth();
     const person = user?.displayName || user?.email || "Someone";
@@ -339,14 +351,36 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
         })),
       }];
     });
-    for (const change of aiStepPatch(choices, person)) {
-      const saved = await objectsApi.update(orgSlug!, workspaceSlug!, change.objectId, { properties: change.properties }, token);
-      remember(saved);
-      setHosts((current) => {
-        const key = Object.keys(current).find((name) => current[name].id === saved.id);
-        return key ? { ...current, [key]: saved } : current;
-      });
+    const updates = aiStepPatch(choices, person).map((change) => ({ id: change.objectId, properties: change.properties, overwrite: true as const }));
+    if (updates.length === 0) {
+      setStep(3);
+      return;
     }
+    // One batch for every app's AI answers; step 3 opens now and its save waits for this one.
+    setStepSaving(`Saving AI answers for ${updates.length === 1 ? "1 app" : `${updates.length} apps`}…`);
+    const save = (async () => {
+      try {
+        const result = await addApi.save(orgSlug!, workspaceSlug!, { creates: [], updates, relationships: [] }, token);
+        for (const saved of result.objects) remember(saved);
+        setHosts((current) => {
+          const next = { ...current };
+          for (const saved of result.objects) {
+            const key = Object.keys(next).find((name) => next[name].id === saved.id);
+            if (key) next[key] = saved;
+          }
+          return next;
+        });
+      } catch (err) {
+        setStep(2);
+        setError(err instanceof Error ? err.message : "Could not save");
+        throw err;
+      } finally {
+        setStepSaving("");
+        aiSave.current = null;
+      }
+    })();
+    aiSave.current = save;
+    save.catch(() => undefined);
     setStep(3);
   };
 
@@ -355,6 +389,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   const whereSave = useRef<Promise<void> | null>(null);
   const [whereSaving, setWhereSaving] = useState<string>("");
   const linkServers = async () => {
+    if (aiSave.current) await aiSave.current;
     const token = await auth();
     // Reuse the org's servers by name (case-insensitive): never create a duplicate.
     const catalogServers = whereStepSeed(catalog.data?.objects ?? [], []).serverIds;
@@ -393,8 +428,10 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   };
 
   const finish = async () => {
+    if (aiSave.current) await aiSave.current;
     if (whereSave.current) await whereSave.current;
     const token = await auth();
+    const updates: { id: string; overwrite: true; owner?: string; owner_team_name?: string; point_of_contact_name?: string; properties?: Record<string, unknown> }[] = [];
     for (const app of apps) {
       if (!app.objectId) continue;
       const yearly = Number(app.yearly);
@@ -415,13 +452,25 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
       // One spelling per team/person: "sales " on one row reuses "Sales" from another (or the workspace).
       const ownerTeam = canonicalOwner(app.ownerTeam, ownerPickLists.teams);
       const ownerName = canonicalOwner(app.ownerName, ownerPickLists.people);
-      const saved = await objectsApi.update(orgSlug!, workspaceSlug!, app.objectId, {
-        owner: ownerTeam || undefined,
-        owner_team_name: ownerTeam || undefined,
-        point_of_contact_name: ownerName || undefined,
+      const update = {
+        id: app.objectId,
+        overwrite: true as const,
+        ...(ownerTeam ? { owner: ownerTeam, owner_team_name: ownerTeam } : {}),
+        ...(ownerName ? { point_of_contact_name: ownerName } : {}),
         ...(Object.keys(properties).length ? { properties } : {}),
-      }, token);
-      remember(saved);
+      };
+      if (Object.keys(update).length > 2) updates.push(update);
+    }
+    // One batch, one transaction: rows are applied in order, so "sales " on row 3 still reuses the
+    // "Sales" team row 1 created (same dedupe as the old PUT per row).
+    if (updates.length > 0) {
+      setStepSaving(`Saving owners and renewals for ${updates.length === 1 ? "1 app" : `${updates.length} apps`}…`);
+      try {
+        const result = await addApi.save(orgSlug!, workspaceSlug!, { creates: [], updates, relationships: [] }, token);
+        for (const saved of result.objects) remember(saved);
+      } finally {
+        setStepSaving("");
+      }
     }
     openReadyMap();
   };
@@ -622,6 +671,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
               ))}
             </div>
           )}
+          {stepSaving && <p role="status" data-testid="ai-saving" className="mb-2 text-[12px] text-[#6b7289]">{stepSaving}</p>}
           <StepButtons busy={busy} onNext={() => void run(linkServers)} onSkip={() => void run(skip)} nextLabel="Next: owners & renewals →" />
         </>
       )}
@@ -669,7 +719,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
               </tbody>
             </table>
           </div>
-          {whereSaving && <p role="status" data-testid="where-saving" className="mb-2 text-[12px] text-[#6b7289]">{whereSaving}</p>}
+          {(whereSaving || stepSaving) && <p role="status" data-testid="where-saving" className="mb-2 text-[12px] text-[#6b7289]">{whereSaving || stepSaving}</p>}
           <StepButtons busy={busy} onNext={() => void run(finish)} onSkip={() => void run(skip)} nextLabel="Show my map →" />
         </>
       )}

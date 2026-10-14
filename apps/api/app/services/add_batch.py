@@ -1,4 +1,4 @@
-"""One-transaction add: create records, fill only empty fields, link them."""
+"""One-transaction add: create records, fill only empty fields (or overwrite, like PUT), link them."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.objects import ChangeLog, MinEAObject
 from app.models.relationships import Relationship
-from app.schemas.objects import ObjectCreate, ObjectRead
+from app.schemas.objects import ObjectCreate, ObjectRead, ObjectUpdate
 from app.schemas.relationships import RelationshipCreate, RelationshipRead
 from app.services.relationship_write import save_relationship
 from app.services.capability_validation import validate_object_write
@@ -84,6 +84,69 @@ def blank(value: Any) -> bool:
 def empty_property_patch(existing: dict | None, incoming: dict | None) -> dict[str, Any]:
     current = existing or {}
     return {key: value for key, value in (incoming or {}).items() if blank(current.get(key))}
+
+
+OWNERSHIP_FIELDS = ("owner", "owner_team_name", "point_of_contact_name")
+
+
+async def _overwrite_update(
+    db: AsyncSession,
+    obj: MinEAObject,
+    item: "AddBatchUpdate",
+    *,
+    workspace_id: UUID,
+    org_id: UUID,
+    user_id: UUID | None,
+) -> bool:
+    """Same writes as PUT /objects/{id}: validate + normalize, set ownership, merge properties
+    (None clears a key), cost lines, AI features, and a field-diff change log. True if anything
+    was sent (PUT also stamps updated_by then)."""
+    ownership = {k: getattr(item, k) for k in OWNERSHIP_FIELDS if getattr(item, k) is not None}
+    if item.properties is None and not ownership:
+        return False
+    body = ObjectUpdate(properties=item.properties, **ownership)
+    await validate_object_write(
+        db,
+        workspace_id,
+        org_id,
+        body,
+        object_type=obj.type,
+        existing_id=obj.id,
+        existing_properties=obj.properties or {},
+        existing_name=obj.name,
+    )
+    if ownership:
+        await apply_ownership_write_resolved(
+            db, obj, workspace_id=workspace_id, org_id=org_id, user_id=user_id, **ownership
+        )
+    field_changes: dict[str, Any] = {}
+    if body.properties is not None:
+        value = body.properties
+        try:
+            validate_infra_patch(obj.type, value)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        merged = {**(obj.properties or {}), **value}
+        for key, val in value.items():
+            if val is None:
+                merged.pop(key, None)
+        merged = apply_cost_lines(obj.type, merged)
+        merged = apply_ai_features(obj.type, merged, strict="ai_features" in value)
+        if merged != (obj.properties or {}):
+            field_changes["properties"] = {"old": obj.properties, "new": merged}
+        obj.properties = merged
+    if field_changes:
+        db.add(ChangeLog(
+            workspace_id=workspace_id,
+            org_id=org_id,
+            object_id=obj.id,
+            object_type=obj.type,
+            action="updated",
+            diff={"action_type": "updated_fields", "changes": field_changes},
+            performed_by=user_id,
+        ))
+    obj.updated_by = user_id
+    return True
 
 
 async def apply_add_batch(
@@ -161,28 +224,25 @@ async def apply_add_batch(
                 MinEAObject.id == item.id,
                 MinEAObject.workspace_id == workspace_id,
                 MinEAObject.org_id == org_id,
+            ).with_for_update(of=MinEAObject) if item.overwrite else select(MinEAObject).where(
+                MinEAObject.id == item.id,
+                MinEAObject.workspace_id == workspace_id,
+                MinEAObject.org_id == org_id,
             )
         )
         obj = result.scalar_one_or_none()
         if obj is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
         if item.overwrite:
-            patch = dict(item.properties or {})
-            try:
-                validate_infra_patch(obj.type, patch)
-            except ValueError as exc:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-        else:
-            patch = empty_property_patch(obj.properties or {}, item.properties)
+            if await _overwrite_update(db, obj, item, workspace_id=workspace_id, org_id=org_id, user_id=user_id):
+                updated.append(obj)
+            continue
+        patch = empty_property_patch(obj.properties or {}, item.properties)
         changed = False
         if patch:
-            base = {**(obj.properties or {}), **patch}
-            for key, val in patch.items():
-                if val is None:
-                    base.pop(key, None)
             merged = apply_ai_features(
                 obj.type,
-                apply_cost_lines(obj.type, base),
+                apply_cost_lines(obj.type, {**(obj.properties or {}), **patch}),
                 strict="ai_features" in patch,
             )
             if merged != (obj.properties or {}):
