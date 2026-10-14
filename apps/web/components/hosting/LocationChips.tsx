@@ -10,8 +10,8 @@ import {
   type LocationChoice,
   type ServerOption,
 } from "@/lib/setup/hosting-choice";
-import { CloudFields } from "@/components/hosting/CloudFields";
-import type { HostingDetail, TenantOption } from "@/lib/hosting/cloud";
+import { CloudPicker } from "@/components/hosting/CloudPicker";
+import { providerForVendor, type CloudProvider, type CustomRegion, type HostingDetail, type TenantOption } from "@/lib/hosting/cloud";
 
 /**
  * Five compact chips (SaaS / Our cloud / Our server / On people's computers / Don't know). "Our server"
@@ -29,6 +29,8 @@ export function LocationChips({
   firstChipProps,
   detail,
   tenants = [],
+  custom,
+  onAddRegion,
   vendor,
   onDetail,
   suggest,
@@ -43,14 +45,16 @@ export function LocationChips({
   firstChipProps?: Record<string, string>;
   detail?: HostingDetail;
   tenants?: TenantOption[];
-  /** SaaS provider from the catalogue vendor. */
+  custom?: CustomRegion[];
+  onAddRegion?: (provider: CloudProvider, name: string) => Promise<string>;
+  /** Catalogue vendor: the SaaS provider (Microsoft → Microsoft 365). */
   vendor?: string;
   onDetail?: (next: HostingDetail) => void;
   /** A choice to mark as suggested ("We built it ourselves" → Our cloud). */
   suggest?: LocationChoice;
 }) {
   const [picking, setPicking] = useState(false);
-  const [saasOpen, setSaasOpen] = useState(Boolean(detail?.tenantName || detail?.region));
+  const [saasOpen, setSaasOpen] = useState(Boolean(detail?.tenantName || detail?.tenantId || detail?.regionKey));
   return (
     <div data-testid="location-chips">
       <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap" role="radiogroup" aria-label="Where it runs">
@@ -87,13 +91,22 @@ export function LocationChips({
         <p className="mt-1 text-[11px] text-[#6b7289]">Suggested: {LOCATION_CHOICES.find((item) => item.choice === suggest)?.label}</p>
       )}
       {onDetail && detail && value === "own_cloud" && (
-        <CloudFields mode="own_cloud" value={detail} tenants={tenants} onChange={onDetail} disabled={disabled} />
+        <CloudPicker mode="own_cloud" value={detail} tenants={tenants} custom={custom} onAddRegion={onAddRegion} onChange={onDetail} disabled={disabled} />
       )}
       {onDetail && detail && value === "saas" && (
         saasOpen ? (
-          <CloudFields mode="saas" value={detail} tenants={tenants} vendor={vendor} onChange={onDetail} disabled={disabled} />
+          <CloudPicker mode="saas" value={detail} tenants={tenants} custom={custom} onAddRegion={onAddRegion} onChange={onDetail} disabled={disabled} />
         ) : (
-          <button type="button" onClick={() => setSaasOpen(true)} className="mt-1 text-[12px] font-medium text-[#5b4ce6]">+ Tenant &amp; region (optional)</button>
+          <button
+            type="button"
+            onClick={() => {
+              setSaasOpen(true);
+              if (!detail.provider) onDetail({ ...detail, provider: providerForVendor(vendor) ?? "other" });
+            }}
+            className="mt-1 text-[12px] font-medium text-[#5b4ce6]"
+          >
+            + Tenant &amp; region (optional)
+          </button>
         )
       )}
       {value === "own" && picking && (

@@ -34,8 +34,9 @@ import {
 import { LOOKUP_DEBOUNCE_MS, applySuggestions, builtInHouse, lookupKey, namesToLookUp, rememberFailed, rememberLookups } from "@/lib/setup/ai-lookup";
 import { buildBatch, catalogLists, planInputs, prepareRows, todoLines, type AddRow, type EstateItem } from "@/lib/setup/add-plan";
 import { choiceForTool } from "@/lib/setup/match-tools";
-import { CloudFields } from "@/components/hosting/CloudFields";
-import { defaultTenantName, providerGroupLabel, suggestsOwnCloud, tenantOptions } from "@/lib/hosting/cloud";
+import { CLOUD_PROVIDERS, SAAS_PROVIDERS, defaultTenantName, providerForVendor, suggestsOwnCloud, type CloudProvider } from "@/lib/hosting/cloud";
+import { useCloudPicker } from "@/lib/hosting/use-cloud-regions";
+import { CloudPicker } from "@/components/hosting/CloudPicker";
 import { setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
@@ -168,12 +169,24 @@ export function RecordCard({
   );
 }
 
+/** Switching the card's choice: Our cloud starts on Azure (its one tenant picked, else a new one);
+ *  SaaS starts on the catalogue vendor's provider; a provider from the other mode is dropped. */
+export function choicePatch(row: AddRow, choice: AddRow["choice"], azureTenants: { id: string; name: string }[], saasProvider: CloudProvider): Partial<AddRow> {
+  if (choice === "own_cloud" && (!row.cloudProvider || !CLOUD_PROVIDERS.some((p) => p.id === row.cloudProvider))) {
+    const only = azureTenants.length === 1 ? azureTenants[0]! : undefined;
+    return { choice, cloudProvider: "azure", tenantId: only?.id, tenantName: only ? only.name : azureTenants.length ? "" : defaultTenantName("azure"), regionKey: null };
+  }
+  if (choice === "saas" && row.cloudProvider && !SAAS_PROVIDERS.some((p) => p.id === row.cloudProvider)) {
+    return { choice, cloudProvider: saasProvider, tenantId: undefined, tenantName: "", regionKey: null };
+  }
+  return { choice };
+}
+
 /** The five "Where does it run?" chips on an app card, with provider / tenant / region for Our cloud and SaaS. */
 function CardWhere({ row, onChange }: { row: AddRow; onChange: (patch: Partial<AddRow>) => void }) {
-  const catalog = useModelCatalog();
-  const tenants = useMemo(() => tenantOptions(catalog.data?.objects ?? []), [catalog.data?.objects]);
-  const vendor = providerGroupLabel(row.tool?.vendor ?? "");
-  const detail = { provider: row.cloudProvider ?? null, tenantName: row.tenantName ?? "", tenantId: row.tenantId, region: row.region ?? "" };
+  const { tenants, custom, addRegion } = useCloudPicker();
+  const saasProvider = providerForVendor(row.tool?.vendor) ?? "other";
+  const detail = { provider: row.cloudProvider ?? (row.choice === "saas" ? saasProvider : null), tenantName: row.tenantName ?? "", tenantId: row.tenantId, regionKey: row.regionKey ?? null };
   return (
     <div data-testid="card-where">
       <p className="mb-1">Where does it run?</p>
@@ -182,19 +195,20 @@ function CardWhere({ row, onChange }: { row: AddRow; onChange: (patch: Partial<A
           const on = row.choice === choice;
           const suggested = !on && choice === "own_cloud" && suggestsOwnCloud(row);
           return (
-            <button key={choice} type="button" role="radio" aria-checked={on} data-choice={choice} className={`rounded-full border px-2 py-0.5 ${on ? "border-[#5b4ce6] bg-[#ece9ff]" : suggested ? "border-dashed border-[#a99cf5] text-[#3f35b5]" : "border-[#e6e8ee]"}`} onClick={() => onChange({ choice, ...(choice === "own_cloud" && !row.cloudProvider ? { cloudProvider: "azure" as const, tenantName: row.tenantName || defaultTenantName("azure") } : {}) })}>
+            <button key={choice} type="button" role="radio" aria-checked={on} data-choice={choice} className={`rounded-full border px-2 py-0.5 ${on ? "border-[#5b4ce6] bg-[#ece9ff]" : suggested ? "border-dashed border-[#a99cf5] text-[#3f35b5]" : "border-[#e6e8ee]"}`} onClick={() => onChange(choicePatch(row, choice, tenants.filter((tenant) => tenant.provider === "azure"), saasProvider))}>
               {label}{suggested ? " · suggested" : ""}
             </button>
           );
         })}
       </div>
       {(row.choice === "own_cloud" || row.choice === "saas") && (
-        <CloudFields
+        <CloudPicker
           mode={row.choice === "own_cloud" ? "own_cloud" : "saas"}
           value={detail}
           tenants={tenants}
-          vendor={vendor || undefined}
-          onChange={(next) => onChange({ cloudProvider: next.provider, tenantName: next.tenantName, tenantId: next.tenantId, region: next.region })}
+          custom={custom}
+          onAddRegion={addRegion}
+          onChange={(next) => onChange({ cloudProvider: next.provider, tenantName: next.tenantName, tenantId: next.tenantId, regionKey: next.regionKey })}
         />
       )}
     </div>

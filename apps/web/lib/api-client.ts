@@ -398,6 +398,36 @@ export const peopleDirectoryApi = {
     apiFetch<void>(`/orgs/${orgSlug}/people-directory/${kind}/${id}?workspace=${encodeURIComponent(workspace)}`, { method: "DELETE", token }),
 };
 
+export type CloudRegionRow = { id: string; key: string; provider: string; name: string; usage: number };
+export type CloudTenantRow = { id: string; name: string; owner: string; provider: string; platform_kind: string; tenant_id: string; annual_cost: string; regions_used: string[]; usage: number };
+export type CloudsDirectory = { tenants: CloudTenantRow[]; custom: CloudRegionRow[]; available: boolean; duplicates: string[][] };
+
+/** Custom regions for the pickers (built-in providers and regions ship in lib/hosting/cloud-regions.json). */
+export const cloudRegionsApi = {
+  list: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<{ custom: CloudRegionRow[]; available: boolean }>(`/orgs/${orgSlug}/workspaces/${workspaceSlug}/cloud-regions`, { token }),
+  add: (orgSlug: string, workspaceSlug: string, provider: string, name: string, token: string) =>
+    apiFetch<{ key: string; name: string; created: boolean }>(`/orgs/${orgSlug}/workspaces/${workspaceSlug}/cloud-regions`, { method: "POST", token, body: JSON.stringify({ provider, name }) }),
+};
+
+/** Org settings > Clouds & tenants (org admins), one workspace at a time like People & teams. */
+export const cloudsApi = {
+  get: (orgSlug: string, workspace: string, token: string) =>
+    apiFetch<CloudsDirectory>(`/orgs/${orgSlug}/clouds?workspace=${encodeURIComponent(workspace)}`, { token }),
+  editTenant: (orgSlug: string, workspace: string, id: string, body: Record<string, unknown>, token: string) =>
+    apiFetch<{ ok: boolean }>(`/orgs/${orgSlug}/clouds/tenants/${id}?workspace=${encodeURIComponent(workspace)}`, { method: "PATCH", token, body: JSON.stringify(body) }),
+  mergeTenants: (orgSlug: string, workspace: string, intoId: string, fromIds: string[], token: string) =>
+    apiFetch<{ merged: number }>(`/orgs/${orgSlug}/clouds/tenants/merge?workspace=${encodeURIComponent(workspace)}`, { method: "POST", token, body: JSON.stringify({ into_id: intoId, from_ids: fromIds }) }),
+  deleteTenant: (orgSlug: string, workspace: string, id: string, token: string) =>
+    apiFetch<void>(`/orgs/${orgSlug}/clouds/tenants/${id}?workspace=${encodeURIComponent(workspace)}`, { method: "DELETE", token }),
+  renameRegion: (orgSlug: string, workspace: string, id: string, name: string, token: string) =>
+    apiFetch<{ ok: boolean }>(`/orgs/${orgSlug}/clouds/regions/${id}?workspace=${encodeURIComponent(workspace)}`, { method: "PATCH", token, body: JSON.stringify({ name }) }),
+  mergeRegions: (orgSlug: string, workspace: string, intoKey: string, fromIds: string[], token: string) =>
+    apiFetch<{ merged: number }>(`/orgs/${orgSlug}/clouds/regions/merge?workspace=${encodeURIComponent(workspace)}`, { method: "POST", token, body: JSON.stringify({ into_key: intoKey, from_ids: fromIds }) }),
+  deleteRegion: (orgSlug: string, workspace: string, id: string, token: string) =>
+    apiFetch<void>(`/orgs/${orgSlug}/clouds/regions/${id}?workspace=${encodeURIComponent(workspace)}`, { method: "DELETE", token }),
+};
+
 export const workspacesApi = {
   list: (orgSlug: string, token: string) =>
     apiFetch<Workspace[]>(`/orgs/${orgSlug}/workspaces`, { token }),

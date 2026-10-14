@@ -1,4 +1,4 @@
-import { defaultTenantName, findTenant, tenantProperties, type HostingDetail, type TenantOption } from "@/lib/hosting/cloud";
+import { defaultTenantName, findTenant, providerForVendor, regionAttributes, tenantProperties, type HostingDetail, type TenantOption } from "@/lib/hosting/cloud";
 import { normalizeTerm, type HostingChoice } from "@/lib/setup/match-tools";
 
 /**
@@ -60,25 +60,26 @@ export function whereBatch(
     });
   }
   // Our cloud / SaaS tenant: reuse the platform by id or name, else one new record per tenant name;
-  // runs_on carries the optional region. An app already linked to a tenant with nothing typed is left.
+  // runs_on carries the optional region key. An app already linked to a tenant with nothing typed is left.
   for (const app of apps) {
     if (!app.objectId || (app.choice !== "own_cloud" && app.choice !== "saas")) continue;
     const typed = (app.detail?.tenantName ?? "").trim();
     if (!typed && (app.choice === "saas" || cloud.tenantLinked.has(app.objectId))) continue;
-    const name = typed || defaultTenantName(app.detail?.provider ?? "other");
+    const provider = app.detail?.provider ?? (app.choice === "saas" ? providerForVendor(cloud.vendorOf?.(app)) ?? "other" : "other");
+    const name = typed || defaultTenantName(provider);
     const known = (app.detail?.tenantId && cloud.tenants.find((tenant) => tenant.id === app.detail?.tenantId)) || findTenant(cloud.tenants, name);
     const key = `tenant:${normalizeTerm(name)}`;
     if (!known && !creates.some((item) => item.key === key)) {
-      creates.push({ key, type: "cloud_service", name, properties: tenantProperties(app.choice === "own_cloud" ? app.detail?.provider ?? "other" : null, cloud.vendorOf?.(app)) });
+      creates.push({ key, type: "cloud_service", name, properties: tenantProperties(provider, app.choice === "own_cloud" ? "own_cloud" : "saas") });
     }
-    const region = (app.detail?.region ?? "").trim();
+    const attributes = regionAttributes(app.detail?.regionKey);
     relationships.push({
       type: "runs_on",
       from_id: app.objectId,
       from_type: "application",
       ...(known ? { to_id: known.id } : { to_key: key }),
       to_type: "cloud_service",
-      ...(region ? { attributes: { region } } : {}),
+      ...(attributes.region_key ? { attributes } : {}),
     });
   }
   const updates: Update[] = [];

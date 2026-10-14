@@ -44,8 +44,9 @@ import {
   impactGate,
   NEEDS_HOST_COPY,
 } from "@/lib/views/opening";
-import { derivedHosting, isDerivedHost } from "@/lib/views/providers";
-import { NO_REGION, hostingGroups } from "@/lib/views/hosting-groups";
+import { derivedHosting, isDerivedHost, isDerivedRegion } from "@/lib/views/providers";
+import { useCustomRegions } from "@/lib/hosting/use-cloud-regions";
+import { hostingGroups } from "@/lib/views/hosting-groups";
 import { sampleEdges, sampleItems, sampleNodes } from "@/lib/views/sample-estate";
 import { noHostLinked, readPlatformInfra, readRuntimeInfra } from "@/lib/infra/read";
 import { infraStatus } from "@/lib/infra/status";
@@ -181,14 +182,16 @@ function useOpeningModel() {
   const rows = catalog.data?.rows ?? [];
   const locations = catalog.data?.locations ?? [];
   const setup = useWorkspaceSetup();
-  // Cloud (SaaS) apps run on their provider, desktop apps on people's computers: derived, not saved.
+  // Cloud (SaaS) apps run on their provider, desktop apps on people's computers, apps on a tenant in
+  // a region add "Provider · Region" and "Tenant · Region": derived, not saved.
+  const customRegions = useCustomRegions();
   const derived = useMemo(
     () => derivedHosting(
       rows.filter((row) => row.object.type === "application").map((row) => ({ id: row.id, name: row.name, vendor: row.vendor, properties: (row.object.properties ?? {}) as Record<string, unknown> })),
       impact.edges,
-      { tenants: catalog.data?.objects ?? [], links: catalog.data?.relationships ?? [] },
+      { tenants: catalog.data?.objects ?? [], links: catalog.data?.relationships ?? [], custom: customRegions },
     ),
-    [rows, impact.edges, catalog.data?.objects, catalog.data?.relationships],
+    [rows, impact.edges, catalog.data?.objects, catalog.data?.relationships, customRegions],
   );
   const hostEdges = impact.edges.filter((edge) => edge.type === "runs_on" || edge.type === "built_on").length + derived.edges.length;
   const blocked = setup.enabled && Boolean(catalog.data) && !setup.state.met;
@@ -355,7 +358,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug || !selected) throw new Error("Not signed in");
       const otherType = objectTypeOf(otherId);
-      if (isDerivedHost(selected.id) && selected.properties.derived_kind === "region" && (picker === "app" || picker === "server")) {
+      if (isDerivedHost(selected.id) && isDerivedRegion(selected.properties.derived_kind) && (picker === "app" || picker === "server")) {
         throw new Error("Set an app's region under Hosting & location (Our cloud or SaaS tenant).");
       }
       if (isDerivedHost(selected.id) && (picker === "app" || picker === "server")) {
@@ -576,13 +579,13 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
                 ))}
                 {bands.stop.length === 0 ? (
                   <CollapsedLine text={collapsedCopy("stop", 0)} action="Link an app" onClick={() => setPicker(picker === "app" ? null : "app")} />
-                ) : selected?.properties.derived_kind === "region" ? null : (
+                ) : isDerivedRegion(selected?.properties.derived_kind) ? null : (
                   <AddButton label={stopAdd} onClick={() => setPicker(picker === "app" ? null : "app")} />
                 )}
               </Lane>
               <Lane label="Goes down with it" delay={delay(1)} thin={bands.infra.length === 0}>
                 {bands.infra.length === 0 && isDerivedHost(selected?.id) ? (
-                  <p className="text-[12px] text-[#8b90a0]">{selected?.properties.derived_kind === "desktop" ? "Installed on people’s computers." : selected?.properties.derived_kind === "region" ? `Hosted in ${selected?.name}.` : `Run by ${selected?.name}.`}</p>
+                  <p className="text-[12px] text-[#8b90a0]">{selected?.properties.derived_kind === "desktop" ? "Installed on people’s computers." : isDerivedRegion(selected?.properties.derived_kind) ? `Hosted in ${selected?.name}.` : `Run by ${selected?.name}.`}</p>
                 ) : bands.infra.length === 0 ? (
                   <CollapsedLine text={collapsedCopy("infra", 0)} action="Add a server" onClick={() => setPicker(picker === "server" ? null : "server")} />
                 ) : bands.infra.map((hit) => (
@@ -672,7 +675,7 @@ function sourceSubtitle(item: ChainItem, rows: CatalogRow[]): string {
     const status = infraStatus(runtime, new Date());
     return [runtime.kindLabel || row.typeLabel, status.severity === "bad" ? "out of support" : ""].filter(Boolean).join(" · ");
   }
-  if (item.properties.derived) return item.properties.derived_kind === "desktop" ? "Installed desktop software" : item.properties.derived_kind === "region" ? "Region" : "Cloud provider";
+  if (item.properties.derived) return item.properties.derived_kind === "desktop" ? "Installed desktop software" : item.properties.derived_kind === "region" ? "Region (all tenants)" : item.properties.derived_kind === "tenant_region" ? "Tenant region" : "Cloud provider";
   if (item.kind === "platform" && row) return readPlatformInfra(row.object).kindLabel || row.typeLabel;
   if (item.kind === "location") {
     const type = String(item.properties.location_type ?? "");
@@ -1036,6 +1039,7 @@ function HostingView() {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const catalog = useModelCatalog();
+  const customRegions = useCustomRegions();
   const impact = useImpactGraph();
   const rows = catalog.data?.rows ?? [];
   const locations = catalog.data?.locations ?? [];
@@ -1084,7 +1088,6 @@ function HostingView() {
   // or is Cloud (SaaS) or on people's computers.
   const unplaced = appRows.filter((row) => setupState([row.object], relationshipsAll).located === 0);
   const onDesktops = appRows.filter((row) => (row.object.properties as Record<string, unknown> | undefined)?.hosting_model === "desktop");
-  // Cloud (SaaS) apps with no platform link, grouped by provider (derived from vendor / catalogue).
   // Cloud apps: Provider › tenant/account (platform records) › region (on the runs-on link);
   // SaaS apps with no tenant link keep the derived provider under "No tenant recorded".
   const cloudGroups = hostingGroups(
@@ -1092,6 +1095,7 @@ function HostingView() {
     catalog.data?.objects ?? [],
     catalog.data?.relationships ?? [],
     impact.edges,
+    customRegions,
   );
   const placed = rows.filter((row) => row.kind === "runtime" && impact.relationships.some((rel) => rel.type === "located_at" && rel.from_object_id === row.id)).length;
 
@@ -1137,8 +1141,8 @@ function HostingView() {
                         <p className="mb-1 text-[11px] text-[#8b90a0]">{tenant.meta}</p>
                         {tenant.regions.length === 0 && <p className="text-[11px] text-[#c5c8d4]">No apps yet</p>}
                         {tenant.regions.map((region) => (
-                          <div key={region.region} data-testid="cloud-region" className="mt-2">
-                            <span className={`rounded-full px-2 py-0.5 text-[11px] ${region.region === NO_REGION ? "bg-[#fff8eb] text-[#b45309]" : "bg-[#f1f5f9] text-[#475569]"}`}>{region.region}</span>
+                          <div key={region.key} data-testid="cloud-region" className="mt-2">
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] ${!region.key ? "bg-[#fff8eb] text-[#b45309]" : "bg-[#f1f5f9] text-[#475569]"}`}>{region.region}</span>
                             <div className="mt-1 flex flex-wrap gap-1">
                               {region.apps.map((app) => <span key={app.id} className="rounded-full bg-[#eef4ff] px-2 py-0.5 text-[11px] text-[#1d4ed8]">{app.name}</span>)}
                             </div>

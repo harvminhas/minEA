@@ -5,6 +5,7 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { LOCATION_CHOICES, choiceFromApp, filterServers, findServer, hostingForChoice, planLocationChange } from "../../lib/setup/hosting-choice.ts";
 import { LocationChips, ServerPicker } from "./LocationChips.tsx";
+import { CloudPicker } from "./CloudPicker.tsx";
 (globalThis as any).React = React;
 
 test("five choices, in order, with their stored hosting values; old 'cloud' reads as SaaS", () => {
@@ -105,14 +106,39 @@ test("picking another server replaces the single chip link; picking the same one
   assert.deepEqual(many.removeLinkIds, []);
 });
 
-test("Our cloud shows provider, tenant and region fields; built-ourselves apps get the suggestion", () => {
+test("Our cloud: provider -> tenant (pick or + new) -> region (pick; tenant's regions first, + custom)", () => {
+  const tenants = [
+    { id: "prod", name: "Contoso Azure prod", provider: "azure" as const, regionKeys: ["azure:canadacentral"] },
+    { id: "dev", name: "Contoso Azure dev", provider: "azure" as const, regionKeys: [] },
+    { id: "m", name: "Contoso M365", provider: "m365" as const, regionKeys: [] },
+  ];
   const html = renderToStaticMarkup(React.createElement(LocationChips, {
     value: "own_cloud", servers: [], onChoose() {}, onPickServer() {},
-    detail: { provider: "azure", tenantName: "Contoso Azure", region: "Canada Central" }, tenants: [], onDetail() {},
+    detail: { provider: "azure", tenantName: "Contoso Azure prod", tenantId: "prod", regionKey: "azure:canadacentral" }, tenants, onDetail() {},
+    custom: [{ id: "c1", key: "custom:c1", provider: "azure", name: "Lab DC" }], onAddRegion: async () => "",
   }));
-  assert.match(html, /data-testid="cloud-fields"/);
-  assert.match(html, /Azure[\s\S]*AWS[\s\S]*Google Cloud/);
-  assert.match(html, /Canada Central/);
+  assert.match(html, /data-testid="cloud-picker"/);
+  // Our cloud lists the cloud providers only (Microsoft 365 is a SaaS provider).
+  assert.match(html, /data-provider="azure"[\s\S]*data-provider="aws"[\s\S]*data-provider="gcp"[\s\S]*data-provider="other"/);
+  assert.doesNotMatch(html, /data-provider="m365"/);
+  // Tenants of that provider only, plus "+ New tenant…".
+  assert.match(html, /Contoso Azure prod[\s\S]*Contoso Azure dev[\s\S]*\+ New tenant/);
+  assert.doesNotMatch(html, /Contoso M365/);
+  // Region: picked, never typed. This tenant's regions first, then Azure's, then custom, then + custom.
+  assert.match(html, /<optgroup label="Used by Contoso Azure prod"><option value="azure:canadacentral" selected="">Canada Central<\/option><\/optgroup><optgroup label="Azure regions">/);
+  assert.match(html, /<optgroup label="Custom"><option value="custom:c1">Lab DC/);
+  assert.match(html, /\+ Custom region…/);
+  assert.doesNotMatch(html, /<input[^>]*aria-label="Region"/);
   const suggested = renderToStaticMarkup(React.createElement(LocationChips, { value: "unknown", servers: [], onChoose() {}, onPickServer() {}, suggest: "own_cloud" }));
   assert.match(suggested, /Suggested/);
+});
+
+test("SaaS tenant picker offers the SaaS providers and the M365 geos", () => {
+  const html = renderToStaticMarkup(React.createElement(CloudPicker, {
+    mode: "saas", value: { provider: "m365", tenantName: "", regionKey: null }, tenants: [], onChange() {},
+  }));
+  assert.match(html, /data-provider="m365"[\s\S]*data-provider="google_workspace"[\s\S]*data-provider="salesforce"/);
+  assert.doesNotMatch(html, /data-provider="azure"/);
+  assert.match(html, /<option value="m365:canada">Canada<\/option>/);
+  assert.doesNotMatch(html, /Custom region/, "no + custom without onAddRegion");
 });

@@ -314,6 +314,11 @@ export default function OrgSettingsPage() {
         People &amp; teams: owner teams, named owners and roles →
       </Link>
     )}
+    {isOrgAdmin && (
+      <Link href={`/orgs/${orgSlug}/settings/clouds`} data-testid="clouds-tenants-link" className="mb-3 ml-4 inline-flex text-[13px] font-medium text-[#5b4ce6]">
+        Clouds &amp; tenants: providers, tenants and regions →
+      </Link>
+    )}
     <OrgMembersTable
       members={members}
       actorRole={orgRole}

@@ -17,17 +17,17 @@ const appItems: ChainItem[] = apps.map((app) => ({ id: app.id, name: app.name, k
 test("cloud apps group under their catalogue provider; desktop under People's computers", () => {
   const groups = providerGroups(apps, []);
   const byName = Object.fromEntries(groups.map((group) => [group.name, group.apps.map((app) => app.name)]));
-  assert.deepEqual(byName["Microsoft"], ["Microsoft 365", "Microsoft Teams"]);
+  assert.deepEqual(byName["Microsoft 365"], ["Microsoft 365", "Microsoft Teams"]);
   assert.deepEqual(byName["Salesforce"], ["Salesforce", "Slack"]);
-  assert.deepEqual(byName["Google"], ["Google Workspace"]);
+  assert.deepEqual(byName["Google Workspace"], ["Google Workspace"]);
   assert.deepEqual(byName["Intuit"], ["QuickBooks Online"]);
   assert.deepEqual(byName["People's computers"], ["Adobe Photoshop"]);
   // A saved vendor wins; a real host link removes the app from derived groups.
   assert.equal(providerGroups([{ ...apps[0]!, vendor: "Contoso" }], [])[0]!.name, "Contoso");
-  assert.equal(providerGroups(apps, [{ type: "built_on", fromId: "a0", toId: "p1" }]).find((g) => g.name === "Microsoft")!.apps.length, 1);
+  assert.equal(providerGroups(apps, [{ type: "built_on", fromId: "a0", toId: "p1" }]).find((g) => g.name === "Microsoft 365")!.apps.length, 1);
 });
 
-test("Impact works for that org with no servers: 'If Microsoft goes down' and app-to-app flows", () => {
+test("Impact works for that org with no servers: 'If Microsoft 365 goes down' and app-to-app flows", () => {
   const objects = apps.map((app) => ({ id: app.id, type: "application", properties: app.properties }));
   assert.equal(setupState(objects, []).met, true);
   const flow = { type: "depends_on", fromId: "a4", toId: "a3" }; // QuickBooks needs Salesforce
@@ -38,8 +38,8 @@ test("Impact works for that org with no servers: 'If Microsoft goes down' and ap
   assert.equal(impactGate(false, showExampleEstate(derived.edges.length, false, false)), null);
   const items = [...appItems, ...derived.items];
   const candidates = impactCandidates(items, nodes, edges);
-  assert.equal(candidates[0]!.name === "Microsoft" || candidates[0]!.name === "Salesforce", true);
-  const ms = impactOf(nodes, edges, "provider:microsoft").map((hit) => hit.id).sort();
+  assert.equal(candidates[0]!.name === "Microsoft 365" || candidates[0]!.name === "Salesforce", true);
+  const ms = impactOf(nodes, edges, "provider:m365").map((hit) => hit.id).sort();
   assert.deepEqual(ms, ["a0", "a1"]);
   const sf = impactOf(nodes, edges, "provider:salesforce").map((hit) => hit.id);
   assert.ok(sf.includes("a3") && sf.includes("a5") && sf.includes("a4"), "Salesforce down also breaks QuickBooks through the flow");

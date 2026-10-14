@@ -18,15 +18,15 @@ import {
 import { LocationChips } from "@/components/hosting/LocationChips";
 import {
   EMPTY_DETAIL,
-  cloudProvider,
-  findTenant,
-  linkRegion,
+  isTenantLink,
+  linkRegionKey,
   planTenantSave,
-  providerGroupLabel,
-  tenantOptions,
+  providerForVendor,
+  regionAttributes,
   tenantProperties,
   type HostingDetail,
 } from "@/lib/hosting/cloud";
+import { useCloudPicker } from "@/lib/hosting/use-cloud-regions";
 import { usePermissions } from "@/lib/use-permissions";
 
 /** The org's servers & infrastructure that an app can run on ("model" records). */
@@ -69,25 +69,19 @@ export function AppLocationEditor({ app, compact = false }: { app: MinEAObject; 
   const serverLinks = (catalog.data?.relationships ?? [])
     .filter((rel) => rel.from_object_id === app.id && rel.type === "runs_on" && serverIds.has(rel.to_object_id))
     .map((rel) => ({ id: rel.id, serverId: rel.to_object_id }));
-  const objects = catalog.data?.objects ?? [];
-  const tenants = useMemo(() => tenantOptions(objects), [objects]);
-  const tenantIds = new Set(tenants.map((tenant) => tenant.id));
+  const { tenants, custom, addRegion } = useCloudPicker();
+  const tenantById = new Map(tenants.map((tenant) => [tenant.id, tenant]));
   const tenantLinks = (catalog.data?.relationships ?? [])
-    .filter((rel) => rel.from_object_id === app.id && (rel.type === "runs_on" || rel.type === "built_on") && tenantIds.has(rel.to_object_id))
-    .map((rel) => ({ id: rel.id, tenantId: rel.to_object_id, region: linkRegion(rel.attributes) }));
-  const storedTenant = tenantLinks[0] ? objects.find((object) => object.id === tenantLinks[0]!.tenantId) : undefined;
+    .filter((rel) => rel.from_object_id === app.id && isTenantLink(rel) && tenantById.has(rel.to_object_id))
+    .map((rel) => ({ id: rel.id, tenantId: rel.to_object_id, regionKey: linkRegionKey(rel.attributes, tenantById.get(rel.to_object_id)!.provider, custom) }));
+  const storedTenant = tenantLinks[0] ? tenantById.get(tenantLinks[0]!.tenantId) : undefined;
   const storedDetail: HostingDetail = storedTenant
-    ? {
-        provider: cloudProvider((storedTenant.properties as Record<string, unknown> | undefined)?.cloud_provider)?.id ?? null,
-        tenantName: storedTenant.name,
-        tenantId: storedTenant.id,
-        region: tenantLinks[0]!.region,
-      }
+    ? { provider: storedTenant.provider, tenantName: storedTenant.name, tenantId: storedTenant.id, regionKey: tenantLinks[0]!.regionKey || null }
     : EMPTY_DETAIL;
   const [draft, setDraft] = useState<HostingDetail | null>(null);
   const detail = draft ?? storedDetail;
   const props = (app.properties ?? {}) as Record<string, unknown>;
-  const vendor = providerGroupLabel(String(props.vendor ?? ""));
+  const vendor = String(props.vendor ?? "");
   const stored: Shown = {
     choice: choiceFromApp(props.hosting_model),
     serverName: serverLinks.length ? servers.find((server) => server.id === serverLinks[0]!.serverId)?.name : undefined,
@@ -174,13 +168,13 @@ export function AppLocationEditor({ app, compact = false }: { app: MinEAObject; 
         const created = await objectsApi.create(orgSlug, workspaceSlug, {
           type: "cloud_service",
           name: plan.createTenant,
-          properties: tenantProperties(choice === "own_cloud" ? detail.provider ?? "other" : null, vendor || undefined),
+          properties: tenantProperties(detail.provider ?? (choice === "saas" ? providerForVendor(vendor) ?? "other" : "other"), choice),
         }, token);
         applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: created });
         tenantId = created.id;
       }
       if (plan.updateLinkId) {
-        const link = await relationshipsApi.updateAttributes(orgSlug, workspaceSlug, plan.updateLinkId, { region: plan.region || null }, token);
+        const link = await relationshipsApi.updateAttributes(orgSlug, workspaceSlug, plan.updateLinkId, { region_key: plan.regionKey && !plan.regionKey.startsWith("legacy:") ? plan.regionKey : null, region: plan.regionKey.startsWith("legacy:") ? undefined : null }, token);
         applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: link });
       } else if (tenantId) {
         const link = await relationshipsApi.create(orgSlug, workspaceSlug, {
@@ -189,7 +183,7 @@ export function AppLocationEditor({ app, compact = false }: { app: MinEAObject; 
           from_type: app.type,
           to_object_id: tenantId,
           to_type: "cloud_service",
-          attributes: plan.region ? { region: plan.region } : {},
+          attributes: regionAttributes(plan.regionKey),
         }, token);
         applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: link });
       }
@@ -226,7 +220,7 @@ export function AppLocationEditor({ app, compact = false }: { app: MinEAObject; 
     setPicking(false);
     if (choice === "own_cloud") {
       setCloudPick(stored.choice !== "own_cloud");
-      if (stored.choice !== "own_cloud") setDraft({ ...detail, provider: detail.provider ?? "azure", tenantName: detail.tenantName || "" });
+      if (stored.choice !== "own_cloud") setDraft({ ...detail, provider: detail.provider && detail.provider !== "m365" ? detail.provider : "azure" });
       return;
     }
     setCloudPick(false);
@@ -266,12 +260,14 @@ export function AppLocationEditor({ app, compact = false }: { app: MinEAObject; 
         disabled={busy || !canEdit}
         detail={detail}
         tenants={tenants}
+        custom={custom}
+        onAddRegion={canEdit ? addRegion : undefined}
         vendor={vendor || undefined}
         onDetail={(next) => setDraft(next)}
       />
       {(shown.choice === "own_cloud" || shown.choice === "saas") && draft && canEdit && (
         <div className="mt-2 flex items-center gap-2">
-          <button type="button" data-testid="cloud-save" disabled={busy || (shown.choice === "own_cloud" && !detail.tenantName.trim())} onClick={() => void saveCloud(shown.choice as "own_cloud" | "saas")} className="rounded-lg bg-[#5b4ce6] px-3 py-1 text-[12px] font-semibold text-white disabled:opacity-50">Save</button>
+          <button type="button" data-testid="cloud-save" disabled={busy || (shown.choice === "own_cloud" && !detail.tenantId && !detail.tenantName.trim())} onClick={() => void saveCloud(shown.choice as "own_cloud" | "saas")} className="rounded-lg bg-[#5b4ce6] px-3 py-1 text-[12px] font-semibold text-white disabled:opacity-50">Save</button>
           <button type="button" onClick={() => { setDraft(null); setCloudPick(false); }} className="text-[12px] text-[#6b7289]">Cancel</button>
         </div>
       )}

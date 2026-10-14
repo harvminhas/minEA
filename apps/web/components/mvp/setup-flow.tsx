@@ -31,7 +31,8 @@ import type { AiFeatureAudience } from "@minea/types";
 import { modelPath } from "@/lib/mvp-paths";
 import { SETUP_MIN, setupMeter, setupState } from "@/lib/setup/setupMin";
 import { LocationChips } from "@/components/hosting/LocationChips";
-import { EMPTY_DETAIL, providerGroupLabel, suggestsOwnCloud, tenantOptions, type HostingDetail } from "@/lib/hosting/cloud";
+import { CLOUD_PROVIDERS, EMPTY_DETAIL, suggestsOwnCloud, type HostingDetail } from "@/lib/hosting/cloud";
+import { useCloudPicker } from "@/lib/hosting/use-cloud-regions";
 import type { LocationChoice } from "@/lib/setup/hosting-choice";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
@@ -178,7 +179,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     return [...names.entries()].map(([key, name]) => ({ key, name }));
   }, [catalog.data?.objects, drafts]);
 
-  const tenantList = useMemo(() => tenantOptions(catalog.data?.objects ?? []), [catalog.data?.objects]);
+  const { tenants: tenantList, custom: customRegions, addRegion } = useCloudPicker();
   const planned = planHosting(
     apps.map((app) => ({ key: app.key, name: app.input, choice: app.choice, serverName: app.serverName })),
     whereByServer,
@@ -659,11 +660,17 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
                     value={wizardChoice(app.choice)}
                     serverName={app.choice === "own" ? app.serverName || undefined : undefined}
                     servers={serverOptions}
-                    onChoose={(choice) => patch(app.key, { choice, serverName: choice === "own" ? app.serverName : "" })}
+                    onChoose={(choice) => patch(app.key, {
+                      choice,
+                      serverName: choice === "own" ? app.serverName : "",
+                      ...(choice === "own_cloud" && !CLOUD_PROVIDERS.some((p) => p.id === app.detail?.provider) ? { detail: { ...EMPTY_DETAIL, provider: "azure" as const } } : {}),
+                    })}
                     onPickServer={(name) => patch(app.key, { choice: "own", serverName: name })}
                     detail={app.detail ?? EMPTY_DETAIL}
                     tenants={tenantList}
-                    vendor={providerGroupLabel(app.tool?.vendor ?? "") || undefined}
+                    custom={customRegions}
+                    onAddRegion={addRegion}
+                    vendor={app.tool?.vendor || undefined}
                     suggest={suggestsOwnCloud(app) ? "own_cloud" : undefined}
                     onDetail={(detail) => patch(app.key, { detail })}
                   />
