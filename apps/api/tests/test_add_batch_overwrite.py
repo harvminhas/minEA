@@ -24,6 +24,12 @@ class _Db:
     def add(self, row):
         self.added.append(row)
 
+    async def flush(self):
+        self.flushed = True
+
+    async def refresh(self, obj):
+        self.refreshed = [*getattr(self, "refreshed", []), obj.id]
+
 
 def _run(obj, update):
     db = _Db(obj)

@@ -323,6 +323,13 @@ async def apply_add_batch(
             rel_ids.append(rel.id)
         rels.append(rel)
 
+    # Updated rows: write them now and reload server-set columns (updated_at is onupdate=now()).
+    # Without this, the first to_read's query autoflushes the rest, expiring their updated_at,
+    # and reading it outside the async loader raised MissingGreenlet -> HTTP 500 (setup AI step).
+    if updated:
+        await db.flush()
+        for obj in updated:
+            await db.refresh(obj)
     reads = [await to_read(db, obj) for obj in [*created_objects, *updated]]
     return AddBatchResult(
         objects=reads,
