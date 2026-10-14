@@ -358,7 +358,7 @@ export const addApi = {
     body: {
       creates: { key: string; type: string; name: string; properties: Record<string, unknown>; owner?: string; owner_team_name?: string; point_of_contact_name?: string }[];
       updates: { id: string; properties?: Record<string, unknown>; overwrite?: boolean; owner?: string; owner_team_name?: string; point_of_contact_name?: string }[];
-      relationships: { type: string; from_key?: string; to_key?: string; from_id?: string; to_id?: string; from_type: string; to_type: string }[];
+      relationships: { type: string; from_key?: string; to_key?: string; from_id?: string; to_id?: string; from_type: string; to_type: string; attributes?: Record<string, unknown> }[];
     },
     token: string,
   ) =>
@@ -610,6 +610,14 @@ export const relationshipsApi = {
       body: JSON.stringify(body),
       token,
       returnStatus: true,
+    }),
+
+  /** Merge into a link's attributes (None clears a key), e.g. the region on app → tenant. */
+  updateAttributes: (orgSlug: string, workspaceSlug: string, id: string, attributes: Record<string, unknown>, token: string) =>
+    apiFetch<Relationship>(`${wsBase(orgSlug, workspaceSlug)}/relationships/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ attributes }),
+      token,
     }),
 
   delete: (orgSlug: string, workspaceSlug: string, id: string, token: string) =>

@@ -48,6 +48,7 @@ test("Impact works for that org with no servers: 'If Microsoft goes down' and ap
 
 test("Hosting & location lists cloud apps by provider instead of an empty box", () => {
   const src = readFileSync(new URL("../../components/mvp/EstateViews.tsx", import.meta.url), "utf8");
-  assert.match(src, /providers\.map\(\(group\) =>/);
+  assert.match(src, /cloudGroups\.map\(\(group\) =>/);
+  assert.match(src, /hostingGroups\(/);
   assert.match(src, /data-testid="cloud-provider"/);
 });

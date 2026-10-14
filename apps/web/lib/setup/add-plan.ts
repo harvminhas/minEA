@@ -4,6 +4,7 @@ import { readCostLines } from "@/lib/cost/math";
 import { catalogEntriesFor } from "@/lib/ai/catalog";
 import { confirmFeature, readFeatures, setFeatureSeats } from "@/lib/ai/features";
 import { splitAddList } from "@/lib/setup/add-intent";
+import { defaultTenantName, findTenant, tenantProperties, type CloudProvider } from "@/lib/hosting/cloud";
 import { defaultHosting, isSetupApp, matchEntries, normalizeTerm, planHosting, type HostingChoice, type MatchItem, type ToolKind, type ToolRecord } from "@/lib/setup/match-tools";
 
 export type AddKind = "app" | "platform" | "server" | "location" | "capability" | "vendor";
@@ -109,6 +110,11 @@ export type AddRow = {
   hint: string | null;
   /** The person turned down a "Did you mean" hint: keep their spelling, ask nothing more. */
   keptTyped?: boolean;
+  /** Our cloud (or an optional SaaS tenant): provider, tenant/account platform, region on the link. */
+  cloudProvider?: CloudProvider | null;
+  tenantName?: string;
+  tenantId?: string;
+  region?: string;
 };
 
 export function objectTypeFor(kind: AddKind): string {
@@ -317,6 +323,7 @@ export type BatchUpdate = {
 
 export type BatchRel = {
   type: string;
+  attributes?: Record<string, unknown>;
   fromKey?: string;
   toKey?: string;
   fromId?: string;
@@ -393,6 +400,8 @@ function createProperties(row: PlanInput): Record<string, unknown> {
     if (platformType) properties.platform_type = platformType;
   } else if (row.choice === "saas") {
     properties.hosting_model = "saas";
+  } else if (row.kind === "app" && row.choice === "own_cloud") {
+    properties.hosting_model = "own_cloud";
   } else if (row.kind === "app" && row.choice === "own") {
     properties.hosting_model = "on_premise";
   } else if (row.kind === "app" && row.choice === "desktop") {
@@ -497,7 +506,39 @@ export function buildBatch(rows: PlanInput[], estate: EstateItem[]): { creates: 
       toType: "model",
     });
   }
+  relationships.push(...tenantLinks(active, estate, creates));
   return { creates, updates, relationships };
+}
+
+/**
+ * New apps on Our cloud (or SaaS with a tenant named): reuse the tenant/account platform by id or
+ * name, else create one record per tenant (shared by every row naming it), and link the app to it
+ * with runs_on carrying the optional region.
+ */
+export function tenantLinks(rows: PlanInput[], estate: EstateItem[], creates: BatchCreate[]): BatchRel[] {
+  const relationships: BatchRel[] = [];
+  for (const row of rows) {
+    if (row.existing || row.kind !== "app") continue;
+    const cloud = row.choice === "own_cloud";
+    const name = (row.tenantName ?? "").trim() || (cloud ? defaultTenantName(row.cloudProvider ?? null) : "");
+    if (!(cloud || (row.choice === "saas" && name))) continue;
+    if (!name) continue;
+    const known = row.tenantId ? estate.find((item) => item.id === row.tenantId) : findTenant(estate.filter((item) => item.type === "cloud_service"), name);
+    const key = `tenant:${dedupeKey(name)}`;
+    if (!known && !creates.some((item) => item.key === key)) {
+      creates.push({ key, type: "cloud_service", name, properties: tenantProperties(cloud ? row.cloudProvider ?? "other" : null, row.tool?.vendor) });
+    }
+    const region = (row.region ?? "").trim();
+    relationships.push({
+      type: "runs_on",
+      fromKey: row.key,
+      fromType: "application",
+      ...(known ? { toId: known.id } : { toKey: key }),
+      toType: "cloud_service",
+      ...(region ? { attributes: { region } } : {}),
+    });
+  }
+  return relationships;
 }
 
 const NO_ITEMS: never[] = [];

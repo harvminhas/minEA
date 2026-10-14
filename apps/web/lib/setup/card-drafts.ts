@@ -6,6 +6,7 @@ type DraftLike = { input: string; tool: { name: string } | null; objectId?: stri
 /** The card's "Where does it live?" pick, read back from the saved object's hosting_model. */
 export function choiceFromHosting(model: unknown): HostingChoice {
   if (model === "saas" || model === "paas" || model === "self_hosted") return "saas";
+  if (model === "own_cloud") return "own_cloud";
   if (model === "on_premise") return "own";
   if (model === "desktop") return "desktop";
   return "unknown";

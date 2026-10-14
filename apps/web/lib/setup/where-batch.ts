@@ -1,4 +1,5 @@
-import type { HostingChoice } from "@/lib/setup/match-tools";
+import { defaultTenantName, findTenant, tenantProperties, type HostingDetail, type TenantOption } from "@/lib/hosting/cloud";
+import { normalizeTerm, type HostingChoice } from "@/lib/setup/match-tools";
 
 /**
  * Setup step 3 "Where each one lives" as ONE /objects/batch call (one transaction, one snapshot /
@@ -8,14 +9,14 @@ import type { HostingChoice } from "@/lib/setup/match-tools";
  */
 export type WhereServer = { key: string; name: string; where?: string };
 export type WhereLink = { appKey: string; serverKey: string };
-export type WhereApp = { key: string; objectId?: string; choice: HostingChoice };
+export type WhereApp = { key: string; objectId?: string; choice: HostingChoice; detail?: HostingDetail };
 type Create = { key: string; type: string; name: string; properties: Record<string, unknown> };
 type Update = { id: string; properties: Record<string, unknown>; overwrite: true };
-type Rel = { type: string; from_key?: string; to_key?: string; from_id?: string; to_id?: string; from_type: string; to_type: string };
+type Rel = { attributes?: Record<string, unknown>; type: string; from_key?: string; to_key?: string; from_id?: string; to_id?: string; from_type: string; to_type: string };
 export type WhereBatch = { creates: Create[]; updates: Update[]; relationships: Rel[] };
 
 export const hostingFor = (choice: HostingChoice): string =>
-  choice === "saas" ? "saas" : choice === "own" ? "on_premise" : choice === "desktop" ? "desktop" : "";
+  choice === "saas" ? "saas" : choice === "own_cloud" ? "own_cloud" : choice === "own" ? "on_premise" : choice === "desktop" ? "desktop" : "";
 
 const serverRef = (key: string) => `server:${key}`;
 
@@ -27,6 +28,7 @@ export function whereBatch(
   existingIds: Record<string, string>,
   /** Current hosting_model per app object id: an unchanged value is not re-sent. */
   currentHosting: Record<string, unknown> = {},
+  cloud: { tenants: TenantOption[]; tenantLinked: Set<string>; vendorOf?: (app: WhereApp) => string } = { tenants: [], tenantLinked: new Set() },
 ): WhereBatch {
   const creates: Create[] = [];
   const relationships: Rel[] = [];
@@ -55,6 +57,28 @@ export function whereBatch(
       from_type: "application",
       ...("id" in server ? { to_id: server.id } : { to_key: server.key }),
       to_type: "model",
+    });
+  }
+  // Our cloud / SaaS tenant: reuse the platform by id or name, else one new record per tenant name;
+  // runs_on carries the optional region. An app already linked to a tenant with nothing typed is left.
+  for (const app of apps) {
+    if (!app.objectId || (app.choice !== "own_cloud" && app.choice !== "saas")) continue;
+    const typed = (app.detail?.tenantName ?? "").trim();
+    if (!typed && (app.choice === "saas" || cloud.tenantLinked.has(app.objectId))) continue;
+    const name = typed || defaultTenantName(app.detail?.provider ?? "other");
+    const known = (app.detail?.tenantId && cloud.tenants.find((tenant) => tenant.id === app.detail?.tenantId)) || findTenant(cloud.tenants, name);
+    const key = `tenant:${normalizeTerm(name)}`;
+    if (!known && !creates.some((item) => item.key === key)) {
+      creates.push({ key, type: "cloud_service", name, properties: tenantProperties(app.choice === "own_cloud" ? app.detail?.provider ?? "other" : null, cloud.vendorOf?.(app)) });
+    }
+    const region = (app.detail?.region ?? "").trim();
+    relationships.push({
+      type: "runs_on",
+      from_id: app.objectId,
+      from_type: "application",
+      ...(known ? { to_id: known.id } : { to_key: key }),
+      to_type: "cloud_service",
+      ...(region ? { attributes: { region } } : {}),
     });
   }
   const updates: Update[] = [];

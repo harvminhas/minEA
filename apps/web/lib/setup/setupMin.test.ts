@@ -14,10 +14,10 @@ describe("setupState", () => {
   });
 
   it("Cloud, people's computers and a server link all count; on_premise alone and Don't know don't", () => {
-    for (const hosting of ["saas", "cloud", "desktop"]) assert.equal(setupState(apps(5, hosting), []).located, 5, hosting);
+    for (const hosting of ["saas", "cloud", "own_cloud", "desktop"]) assert.equal(setupState(apps(5, hosting), []).located, 5, hosting);
     assert.equal(setupState(apps(5, "on_premise"), []).located, 0);
     assert.equal(setupState(apps(5), []).located, 0);
-    assert.deepEqual([...KNOWN_LOCATION_HOSTING].sort(), ["cloud", "desktop", "saas"]);
+    assert.deepEqual([...KNOWN_LOCATION_HOSTING].sort(), ["cloud", "desktop", "own_cloud", "saas"]);
   });
 
   it("counts apps, not links: two links from one app is one located app", () => {

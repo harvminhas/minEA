@@ -10,10 +10,13 @@ import {
   type LocationChoice,
   type ServerOption,
 } from "@/lib/setup/hosting-choice";
+import { CloudFields } from "@/components/hosting/CloudFields";
+import type { HostingDetail, TenantOption } from "@/lib/hosting/cloud";
 
 /**
- * Four compact chips (Cloud / Our server / On people's computers / Don't know). "Our server"
- * expands an inline picker: the org's servers (searchable past 6) and "+ New server".
+ * Five compact chips (SaaS / Our cloud / Our server / On people's computers / Don't know). "Our server"
+ * expands an inline picker: the org's servers (searchable past 6) and "+ New server". "Our cloud"
+ * (and, optionally, SaaS) shows provider / tenant / region fields when the caller passes onDetail.
  * Presentational: the caller decides whether a pick is saved now or later.
  */
 export function LocationChips({
@@ -24,6 +27,11 @@ export function LocationChips({
   onPickServer,
   disabled,
   firstChipProps,
+  detail,
+  tenants = [],
+  vendor,
+  onDetail,
+  suggest,
 }: {
   value: LocationChoice;
   serverName?: string;
@@ -33,8 +41,16 @@ export function LocationChips({
   onPickServer: (name: string, existing?: ServerOption) => void;
   disabled?: boolean;
   firstChipProps?: Record<string, string>;
+  detail?: HostingDetail;
+  tenants?: TenantOption[];
+  /** SaaS provider from the catalogue vendor. */
+  vendor?: string;
+  onDetail?: (next: HostingDetail) => void;
+  /** A choice to mark as suggested ("We built it ourselves" → Our cloud). */
+  suggest?: LocationChoice;
 }) {
   const [picking, setPicking] = useState(false);
+  const [saasOpen, setSaasOpen] = useState(Boolean(detail?.tenantName || detail?.region));
   return (
     <div data-testid="location-chips">
       <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap" role="radiogroup" aria-label="Where it runs">
@@ -56,8 +72,9 @@ export function LocationChips({
                 else setPicking(false);
                 onChoose(choice);
               }}
+              data-suggested={!on && suggest === choice ? "" : undefined}
               className={`inline-flex min-h-[30px] items-center justify-center gap-1 rounded-xl border px-2.5 py-1 text-center text-[12px] leading-4 sm:justify-start sm:whitespace-nowrap sm:rounded-full transition-colors disabled:opacity-50 ${
-                on ? "border-[#5b4ce6] bg-[#ece9ff] font-medium text-[#3f35b5]" : "border-[#e6e8ee] text-[#4b5163] hover:border-[#c9c6f5]"
+                on ? "border-[#5b4ce6] bg-[#ece9ff] font-medium text-[#3f35b5]" : suggest === choice ? "border-dashed border-[#a99cf5] text-[#3f35b5]" : "border-[#e6e8ee] text-[#4b5163] hover:border-[#c9c6f5]"
               }`}
             >
               {on && <Check size={12} />}
@@ -66,6 +83,19 @@ export function LocationChips({
           );
         })}
       </div>
+      {suggest && value !== suggest && value === "unknown" && (
+        <p className="mt-1 text-[11px] text-[#6b7289]">Suggested: {LOCATION_CHOICES.find((item) => item.choice === suggest)?.label}</p>
+      )}
+      {onDetail && detail && value === "own_cloud" && (
+        <CloudFields mode="own_cloud" value={detail} tenants={tenants} onChange={onDetail} disabled={disabled} />
+      )}
+      {onDetail && detail && value === "saas" && (
+        saasOpen ? (
+          <CloudFields mode="saas" value={detail} tenants={tenants} vendor={vendor} onChange={onDetail} disabled={disabled} />
+        ) : (
+          <button type="button" onClick={() => setSaasOpen(true)} className="mt-1 text-[12px] font-medium text-[#5b4ce6]">+ Tenant &amp; region (optional)</button>
+        )
+      )}
       {value === "own" && picking && (
         <ServerPicker
           servers={servers}

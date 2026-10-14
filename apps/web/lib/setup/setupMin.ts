@@ -3,13 +3,13 @@ export const SETUP_MIN = { apps: 5, located: 1 };
 
 /**
  * Where an app lives (application.properties.hosting_model). The wizard, Hosting & location and the
- * app record all offer the same four choices:
- *   Cloud (SaaS) → "saas" · Our server → "on_premise" + a runs_on link · On people's computers →
+ * app record all offer the same five choices:
+ *   SaaS → "saas" · Our cloud → "own_cloud" + a tenant link · Our server → "on_premise" + a runs_on link · On people's computers →
  *   "desktop" · Don't know → no value.
  * An app has a KNOWN LOCATION when it runs on / is built on something, or is Cloud or desktop.
  * "on_premise" alone doesn't count: "Our server" is only known once a server is picked.
  */
-export const KNOWN_LOCATION_HOSTING = new Set(["saas", "cloud", "desktop"]);
+export const KNOWN_LOCATION_HOSTING = new Set(["saas", "cloud", "own_cloud", "desktop"]);
 
 /** Share of a typed list that must already be known before Ask treats it as an add. */
 export const ADD_KNOWN_SHARE = 0.6;

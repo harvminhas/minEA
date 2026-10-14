@@ -1,17 +1,19 @@
 /**
- * The four "where does it run?" choices for an app, shared by the add-apps wizard, Hosting &
+ * The five "where does it run?" choices for an app, shared by the add-apps wizard, Hosting &
  * location and the app record. Stored on application.properties.hosting_model (no migration):
- *   saas    → Cloud (SaaS), vendor-run
+ *   saas      → SaaS, vendor-run (old "cloud" values read as SaaS)
+ *   own_cloud → "own_cloud" + a runs_on link to a tenant/account platform (see lib/hosting/cloud)
  *   own     → "on_premise" + a runs_on link to one of the org's servers
  *   desktop → "desktop" (installed on people's computers; no per-machine records)
  *   unknown → hosting_model cleared
  */
 import { normalizeTerm } from "@/lib/setup/match-tools";
 
-export type LocationChoice = "saas" | "own" | "desktop" | "unknown";
+export type LocationChoice = "saas" | "own_cloud" | "own" | "desktop" | "unknown";
 
 export const LOCATION_CHOICES: { choice: LocationChoice; label: string; hint: string }[] = [
-  { choice: "saas", label: "Cloud (SaaS)", hint: "Run by the vendor" },
+  { choice: "saas", label: "SaaS", hint: "Run by the vendor" },
+  { choice: "own_cloud", label: "Our cloud", hint: "Our Azure, AWS or Google Cloud tenant/account" },
   { choice: "own", label: "Our server", hint: "Pick or add the server" },
   { choice: "desktop", label: "On people's computers", hint: "Installed desktop software" },
   { choice: "unknown", label: "Don't know", hint: "Leave it for later" },
@@ -20,8 +22,11 @@ export const LOCATION_CHOICES: { choice: LocationChoice; label: string; hint: st
 /** Show the search box once the list is longer than this. */
 export const SERVER_SEARCH_AFTER = 6;
 
-export function hostingForChoice(choice: LocationChoice): "saas" | "on_premise" | "desktop" | null {
+export type HostingModel = "saas" | "own_cloud" | "on_premise" | "desktop";
+
+export function hostingForChoice(choice: LocationChoice): HostingModel | null {
   if (choice === "saas") return "saas";
+  if (choice === "own_cloud") return "own_cloud";
   if (choice === "own") return "on_premise";
   if (choice === "desktop") return "desktop";
   return null;
@@ -33,6 +38,7 @@ export function hostingForChoice(choice: LocationChoice): "saas" | "on_premise" 
  */
 export function choiceFromApp(hosting: unknown): LocationChoice {
   if (hosting === "saas" || hosting === "cloud") return "saas";
+  if (hosting === "own_cloud") return "own_cloud";
   if (hosting === "desktop") return "desktop";
   if (hosting === "on_premise") return "own";
   return "unknown";
@@ -46,7 +52,7 @@ export function choiceFromApp(hosting: unknown): LocationChoice {
 export function planLocationChange(
   current: { hosting: unknown; serverLinks: { id: string; serverId: string }[] },
   next: { choice: Exclude<LocationChoice, "own"> } | { choice: "own"; serverId: string },
-): { hosting: "saas" | "on_premise" | "desktop" | null; addServerId: string | null; removeLinkIds: string[]; needsConfirm: boolean } {
+): { hosting: HostingModel | null; addServerId: string | null; removeLinkIds: string[]; needsConfirm: boolean } {
   const hosting = hostingForChoice(next.choice);
   if (next.choice === "own") {
     const has = current.serverLinks.some((link) => link.serverId === next.serverId);

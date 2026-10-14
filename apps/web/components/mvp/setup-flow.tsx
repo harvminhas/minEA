@@ -31,6 +31,7 @@ import type { AiFeatureAudience } from "@minea/types";
 import { modelPath } from "@/lib/mvp-paths";
 import { SETUP_MIN, setupMeter, setupState } from "@/lib/setup/setupMin";
 import { LocationChips } from "@/components/hosting/LocationChips";
+import { EMPTY_DETAIL, providerGroupLabel, suggestsOwnCloud, tenantOptions, type HostingDetail } from "@/lib/hosting/cloud";
 import type { LocationChoice } from "@/lib/setup/hosting-choice";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
@@ -47,6 +48,8 @@ type Draft = MatchItem & {
   licences: string;
   yearly: string;
   typical: boolean;
+  /** Our cloud / SaaS: provider, tenant platform and region for the runs-on link. */
+  detail?: HostingDetail;
 };
 
 function isApp(item: Draft): boolean {
@@ -87,6 +90,7 @@ function mergeDrafts(previous: Draft[], next: Draft[]): Draft[] {
       customBuilt: old.customBuilt,
       choice: old.choice,
       serverName: old.serverName,
+      detail: old.detail,
       objectId: old.objectId,
       ownerTeam: old.ownerTeam,
       licences: old.licences,
@@ -118,7 +122,7 @@ function toDrafts(items: MatchItem[]): Draft[] {
 }
 
 function wizardChoice(choice: HostingChoice): LocationChoice {
-  return choice === "saas" || choice === "own" || choice === "desktop" ? choice : choice === "paas" || choice === "self_hosted" ? "saas" : "unknown";
+  return choice === "saas" || choice === "own_cloud" || choice === "own" || choice === "desktop" ? choice : choice === "paas" || choice === "self_hosted" ? "saas" : "unknown";
 }
 
 /** Saved apps with no host yet, plus saved servers keyed like planHosting keys them. */
@@ -174,6 +178,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     return [...names.entries()].map(([key, name]) => ({ key, name }));
   }, [catalog.data?.objects, drafts]);
 
+  const tenantList = useMemo(() => tenantOptions(catalog.data?.objects ?? []), [catalog.data?.objects]);
   const planned = planHosting(
     apps.map((app) => ({ key: app.key, name: app.input, choice: app.choice, serverName: app.serverName })),
     whereByServer,
@@ -395,7 +400,12 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     const catalogServers = whereStepSeed(catalog.data?.objects ?? [], []).serverIds;
     const existing = { ...catalogServers, ...serverIds };
     const currentHosting = Object.fromEntries((catalog.data?.objects ?? []).map((object) => [object.id, (object.properties as Record<string, unknown> | undefined)?.hosting_model]));
-    const batch = whereBatch(planned.servers, planned.links, apps, existing, currentHosting);
+    const tenantLinked = new Set((catalog.data?.relationships ?? []).filter((rel) => rel.type === "runs_on" && rel.to_type === "cloud_service").map((rel) => rel.from_object_id));
+    const batch = whereBatch(planned.servers, planned.links, apps, existing, currentHosting, {
+      tenants: tenantList,
+      tenantLinked,
+      vendorOf: (app) => apps.find((item) => item.key === app.key)?.tool?.vendor ?? "",
+    });
     const writes = batch.creates.length + batch.updates.length + batch.relationships.length;
     if (writes === 0) {
       setServerIds(existing);
@@ -651,6 +661,11 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
                     servers={serverOptions}
                     onChoose={(choice) => patch(app.key, { choice, serverName: choice === "own" ? app.serverName : "" })}
                     onPickServer={(name) => patch(app.key, { choice: "own", serverName: name })}
+                    detail={app.detail ?? EMPTY_DETAIL}
+                    tenants={tenantList}
+                    vendor={providerGroupLabel(app.tool?.vendor ?? "") || undefined}
+                    suggest={suggestsOwnCloud(app) ? "own_cloud" : undefined}
+                    onDetail={(detail) => patch(app.key, { detail })}
                   />
                 </div>
               </li>

@@ -44,7 +44,8 @@ import {
   impactGate,
   NEEDS_HOST_COPY,
 } from "@/lib/views/opening";
-import { derivedHosting, isDerivedHost, providerGroups } from "@/lib/views/providers";
+import { derivedHosting, isDerivedHost } from "@/lib/views/providers";
+import { NO_REGION, hostingGroups } from "@/lib/views/hosting-groups";
 import { sampleEdges, sampleItems, sampleNodes } from "@/lib/views/sample-estate";
 import { noHostLinked, readPlatformInfra, readRuntimeInfra } from "@/lib/infra/read";
 import { infraStatus } from "@/lib/infra/status";
@@ -182,8 +183,12 @@ function useOpeningModel() {
   const setup = useWorkspaceSetup();
   // Cloud (SaaS) apps run on their provider, desktop apps on people's computers: derived, not saved.
   const derived = useMemo(
-    () => derivedHosting(rows.filter((row) => row.object.type === "application").map((row) => ({ id: row.id, name: row.name, vendor: row.vendor, properties: (row.object.properties ?? {}) as Record<string, unknown> })), impact.edges),
-    [rows, impact.edges],
+    () => derivedHosting(
+      rows.filter((row) => row.object.type === "application").map((row) => ({ id: row.id, name: row.name, vendor: row.vendor, properties: (row.object.properties ?? {}) as Record<string, unknown> })),
+      impact.edges,
+      { tenants: catalog.data?.objects ?? [], links: catalog.data?.relationships ?? [] },
+    ),
+    [rows, impact.edges, catalog.data?.objects, catalog.data?.relationships],
   );
   const hostEdges = impact.edges.filter((edge) => edge.type === "runs_on" || edge.type === "built_on").length + derived.edges.length;
   const blocked = setup.enabled && Boolean(catalog.data) && !setup.state.met;
@@ -350,6 +355,9 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug || !selected) throw new Error("Not signed in");
       const otherType = objectTypeOf(otherId);
+      if (isDerivedHost(selected.id) && selected.properties.derived_kind === "region" && (picker === "app" || picker === "server")) {
+        throw new Error("Set an app's region under Hosting & location (Our cloud or SaaS tenant).");
+      }
       if (isDerivedHost(selected.id) && (picker === "app" || picker === "server")) {
         const desktop = selected.properties.derived_kind === "desktop";
         const current = opening.rows.find((row) => row.id === otherId)?.object.properties ?? {};
@@ -568,13 +576,13 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
                 ))}
                 {bands.stop.length === 0 ? (
                   <CollapsedLine text={collapsedCopy("stop", 0)} action="Link an app" onClick={() => setPicker(picker === "app" ? null : "app")} />
-                ) : (
+                ) : selected?.properties.derived_kind === "region" ? null : (
                   <AddButton label={stopAdd} onClick={() => setPicker(picker === "app" ? null : "app")} />
                 )}
               </Lane>
               <Lane label="Goes down with it" delay={delay(1)} thin={bands.infra.length === 0}>
                 {bands.infra.length === 0 && isDerivedHost(selected?.id) ? (
-                  <p className="text-[12px] text-[#8b90a0]">{selected?.properties.derived_kind === "desktop" ? "Installed on people’s computers." : `Run by ${selected?.name}.`}</p>
+                  <p className="text-[12px] text-[#8b90a0]">{selected?.properties.derived_kind === "desktop" ? "Installed on people’s computers." : selected?.properties.derived_kind === "region" ? `Hosted in ${selected?.name}.` : `Run by ${selected?.name}.`}</p>
                 ) : bands.infra.length === 0 ? (
                   <CollapsedLine text={collapsedCopy("infra", 0)} action="Add a server" onClick={() => setPicker(picker === "server" ? null : "server")} />
                 ) : bands.infra.map((hit) => (
@@ -664,7 +672,7 @@ function sourceSubtitle(item: ChainItem, rows: CatalogRow[]): string {
     const status = infraStatus(runtime, new Date());
     return [runtime.kindLabel || row.typeLabel, status.severity === "bad" ? "out of support" : ""].filter(Boolean).join(" · ");
   }
-  if (item.properties.derived) return item.properties.derived_kind === "desktop" ? "Installed desktop software" : "Cloud provider";
+  if (item.properties.derived) return item.properties.derived_kind === "desktop" ? "Installed desktop software" : item.properties.derived_kind === "region" ? "Region" : "Cloud provider";
   if (item.kind === "platform" && row) return readPlatformInfra(row.object).kindLabel || row.typeLabel;
   if (item.kind === "location") {
     const type = String(item.properties.location_type ?? "");
@@ -1077,7 +1085,14 @@ function HostingView() {
   const unplaced = appRows.filter((row) => setupState([row.object], relationshipsAll).located === 0);
   const onDesktops = appRows.filter((row) => (row.object.properties as Record<string, unknown> | undefined)?.hosting_model === "desktop");
   // Cloud (SaaS) apps with no platform link, grouped by provider (derived from vendor / catalogue).
-  const providers = providerGroups(appRows.map((row) => ({ id: row.id, name: row.name, vendor: row.vendor, properties: (row.object.properties ?? {}) as Record<string, unknown> })), impact.edges).filter((group) => !group.desktop);
+  // Cloud apps: Provider › tenant/account (platform records) › region (on the runs-on link);
+  // SaaS apps with no tenant link keep the derived provider under "No tenant recorded".
+  const cloudGroups = hostingGroups(
+    appRows.map((row) => ({ id: row.id, name: row.name, vendor: row.vendor, properties: (row.object.properties ?? {}) as Record<string, unknown> })),
+    catalog.data?.objects ?? [],
+    catalog.data?.relationships ?? [],
+    impact.edges,
+  );
   const placed = rows.filter((row) => row.kind === "runtime" && impact.relationships.some((rel) => rel.type === "located_at" && rel.from_object_id === row.id)).length;
 
   return (
@@ -1104,21 +1119,37 @@ function HostingView() {
             ))}
           </div>
           <section className="rounded-xl bg-[#f4f7fb] p-4">
-            <h2 className="mb-3 text-[14px] font-semibold text-[#1c2230]">Cloud & SaaS <span className="text-[12px] font-normal text-[#8b90a0]">Run by a provider</span></h2>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {platforms.map((platform) => (
-                <HostCard key={platform.id} host={platform} apps={appsOn(platform.id)} vms={[]} appsOn={appsOn} onDrop={(appId) => place.mutate({ appId, hostId: platform.id })} />
-              ))}
-              {providers.map((group) => (
-                <div key={group.id} data-testid="cloud-provider" className="rounded-lg border border-[#e6e8ee] bg-white p-3">
-                  <p className="text-[13px] font-semibold text-[#1c2230]">{group.name}</p>
-                  <p className="mb-2 text-[11px] text-[#8b90a0]">Cloud provider · {group.apps.length} app{group.apps.length === 1 ? "" : "s"}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {group.apps.map((app) => <span key={app.id} className="rounded-full bg-[#eef4ff] px-2 py-0.5 text-[11px] text-[#1d4ed8]">{app.name}</span>)}
+            <h2 className="mb-3 text-[14px] font-semibold text-[#1c2230]">Cloud & SaaS <span className="text-[12px] font-normal text-[#8b90a0]">Provider › tenant or account › region</span></h2>
+            <div className="space-y-3">
+              {cloudGroups.map((group) => (
+                <div key={group.provider} data-testid="cloud-provider" className="rounded-lg bg-white/60 p-2">
+                  <p className="mb-2 text-[13px] font-semibold text-[#1c2230]">{group.provider} <span className="text-[11px] font-normal text-[#8b90a0]">{group.apps} app{group.apps === 1 ? "" : "s"}</span></p>
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {group.tenants.map((tenant) => (
+                      <div
+                        key={tenant.id ?? `none:${group.provider}`}
+                        data-testid="cloud-tenant"
+                        onDragOver={tenant.id ? (event) => event.preventDefault() : undefined}
+                        onDrop={tenant.id ? (event) => { const appId = event.dataTransfer.getData("text/plain"); if (appId) place.mutate({ appId, hostId: tenant.id! }); } : undefined}
+                        className="rounded-lg border border-[#e6e8ee] bg-white p-3"
+                      >
+                        <p className="text-[13px] font-semibold text-[#1c2230]">{tenant.name}</p>
+                        <p className="mb-1 text-[11px] text-[#8b90a0]">{tenant.meta}</p>
+                        {tenant.regions.length === 0 && <p className="text-[11px] text-[#c5c8d4]">No apps yet</p>}
+                        {tenant.regions.map((region) => (
+                          <div key={region.region} data-testid="cloud-region" className="mt-2">
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] ${region.region === NO_REGION ? "bg-[#fff8eb] text-[#b45309]" : "bg-[#f1f5f9] text-[#475569]"}`}>{region.region}</span>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {region.apps.map((app) => <span key={app.id} className="rounded-full bg-[#eef4ff] px-2 py-0.5 text-[11px] text-[#1d4ed8]">{app.name}</span>)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
-              {platforms.length === 0 && providers.length === 0 && <span className="text-[11px] text-[#c5c8d4]">None yet</span>}
+              {cloudGroups.length === 0 && <span className="text-[11px] text-[#c5c8d4]">None yet</span>}
             </div>
           </section>
           <section data-testid="desktop-apps" className="rounded-xl border border-[#e6e8ee] bg-white p-4">
@@ -1131,7 +1162,7 @@ function HostingView() {
           {unplaced.length > 0 && (
             <section id="where-each-runs" data-testid="where-each-runs" className="rounded-xl border border-[#e6e8ee] bg-white p-4">
               <h2 className="text-[14px] font-semibold text-[#1c2230]">Where does each one run?</h2>
-              <p className="mb-3 text-[12px] text-[#8b90a0]">Cloud, one of your servers, or people&apos;s computers.</p>
+              <p className="mb-3 text-[12px] text-[#8b90a0]">SaaS, our cloud, one of your servers, or people&apos;s computers.</p>
               <ul className="space-y-3">
                 {unplaced.map((row) => (
                   <li key={row.id} className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-3">

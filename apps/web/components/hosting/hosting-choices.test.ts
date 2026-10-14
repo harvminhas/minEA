@@ -7,9 +7,11 @@ import { LOCATION_CHOICES, choiceFromApp, filterServers, findServer, hostingForC
 import { LocationChips, ServerPicker } from "./LocationChips.tsx";
 (globalThis as any).React = React;
 
-test("four choices, in order, with their stored hosting values", () => {
-  assert.deepEqual(LOCATION_CHOICES.map((c) => c.label), ["Cloud (SaaS)", "Our server", "On people's computers", "Don't know"]);
-  assert.deepEqual(LOCATION_CHOICES.map((c) => hostingForChoice(c.choice)), ["saas", "on_premise", "desktop", null]);
+test("five choices, in order, with their stored hosting values; old 'cloud' reads as SaaS", () => {
+  assert.deepEqual(LOCATION_CHOICES.map((c) => c.label), ["SaaS", "Our cloud", "Our server", "On people's computers", "Don't know"]);
+  assert.deepEqual(LOCATION_CHOICES.map((c) => hostingForChoice(c.choice)), ["saas", "own_cloud", "on_premise", "desktop", null]);
+  assert.equal(choiceFromApp("cloud"), "saas");
+  assert.equal(choiceFromApp("own_cloud"), "own_cloud");
   assert.equal(choiceFromApp("desktop"), "desktop");
   assert.equal(choiceFromApp("saas"), "saas");
   assert.equal(choiceFromApp("on_premise"), "own");
@@ -27,7 +29,7 @@ test("servers are reused by name, case- and punctuation-insensitively", () => {
 test("chips render as a radio group; Our server shows the picked server", () => {
   const html = renderToStaticMarkup(React.createElement(LocationChips, { value: "own", serverName: "AS400", servers: [], onChoose() {}, onPickServer() {} }));
   assert.match(html, /role="radiogroup"/);
-  assert.equal((html.match(/role="radio"/g) ?? []).length, 4);
+  assert.equal((html.match(/role="radio"/g) ?? []).length, 5);
   assert.match(html, /aria-checked="true"[^>]*data-choice="own"[\s\S]*Our server · AS400/);
 });
 
@@ -101,4 +103,16 @@ test("picking another server replaces the single chip link; picking the same one
   assert.deepEqual([same.addServerId, same.removeLinkIds], [null, []]);
   const many = planLocationChange({ hosting: "on_premise", serverLinks: [{ id: "r1", serverId: "a" }, { id: "r2", serverId: "b" }] }, { choice: "own", serverId: "c" });
   assert.deepEqual(many.removeLinkIds, []);
+});
+
+test("Our cloud shows provider, tenant and region fields; built-ourselves apps get the suggestion", () => {
+  const html = renderToStaticMarkup(React.createElement(LocationChips, {
+    value: "own_cloud", servers: [], onChoose() {}, onPickServer() {},
+    detail: { provider: "azure", tenantName: "Contoso Azure", region: "Canada Central" }, tenants: [], onDetail() {},
+  }));
+  assert.match(html, /data-testid="cloud-fields"/);
+  assert.match(html, /Azure[\s\S]*AWS[\s\S]*Google Cloud/);
+  assert.match(html, /Canada Central/);
+  const suggested = renderToStaticMarkup(React.createElement(LocationChips, { value: "unknown", servers: [], onChoose() {}, onPickServer() {}, suggest: "own_cloud" }));
+  assert.match(suggested, /Suggested/);
 });

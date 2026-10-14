@@ -237,6 +237,7 @@ function AnywhereAdd({
         to_id: item.toId,
         from_type: item.fromType,
         to_type: item.toType,
+        ...(item.attributes ? { attributes: item.attributes } : {}),
       })),
     }, token);
     for (const object of saved.objects) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object });

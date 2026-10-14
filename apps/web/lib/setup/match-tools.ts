@@ -213,7 +213,7 @@ export function isSetupApp(item: { input: string; tool: { kind: ToolKind } | nul
   return exactCatalogTool(item.input)?.kind !== "platform";
 }
 
-export type HostingChoice = "saas" | "paas" | "self_hosted" | "own" | "desktop" | "unknown";
+export type HostingChoice = "saas" | "paas" | "self_hosted" | "own_cloud" | "own" | "desktop" | "unknown";
 
 export function choiceForTool(tool: { hosting: ToolHosting } | null | undefined): HostingChoice {
   if (!tool) return "unknown";

@@ -34,6 +34,8 @@ import {
 import { LOOKUP_DEBOUNCE_MS, applySuggestions, builtInHouse, lookupKey, namesToLookUp, rememberFailed, rememberLookups } from "@/lib/setup/ai-lookup";
 import { buildBatch, catalogLists, planInputs, prepareRows, todoLines, type AddRow, type EstateItem } from "@/lib/setup/add-plan";
 import { choiceForTool } from "@/lib/setup/match-tools";
+import { CloudFields } from "@/components/hosting/CloudFields";
+import { defaultTenantName, providerGroupLabel, suggestsOwnCloud, tenantOptions } from "@/lib/hosting/cloud";
 import { setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
@@ -166,8 +168,42 @@ export function RecordCard({
   );
 }
 
+/** The five "Where does it run?" chips on an app card, with provider / tenant / region for Our cloud and SaaS. */
+function CardWhere({ row, onChange }: { row: AddRow; onChange: (patch: Partial<AddRow>) => void }) {
+  const catalog = useModelCatalog();
+  const tenants = useMemo(() => tenantOptions(catalog.data?.objects ?? []), [catalog.data?.objects]);
+  const vendor = providerGroupLabel(row.tool?.vendor ?? "");
+  const detail = { provider: row.cloudProvider ?? null, tenantName: row.tenantName ?? "", tenantId: row.tenantId, region: row.region ?? "" };
+  return (
+    <div data-testid="card-where">
+      <p className="mb-1">Where does it run?</p>
+      <div role="radiogroup" aria-label="Where it runs" className="flex flex-wrap gap-1.5">
+        {hostingChoices("app").map(({ choice, label }) => {
+          const on = row.choice === choice;
+          const suggested = !on && choice === "own_cloud" && suggestsOwnCloud(row);
+          return (
+            <button key={choice} type="button" role="radio" aria-checked={on} data-choice={choice} className={`rounded-full border px-2 py-0.5 ${on ? "border-[#5b4ce6] bg-[#ece9ff]" : suggested ? "border-dashed border-[#a99cf5] text-[#3f35b5]" : "border-[#e6e8ee]"}`} onClick={() => onChange({ choice, ...(choice === "own_cloud" && !row.cloudProvider ? { cloudProvider: "azure" as const, tenantName: row.tenantName || defaultTenantName("azure") } : {}) })}>
+              {label}{suggested ? " · suggested" : ""}
+            </button>
+          );
+        })}
+      </div>
+      {(row.choice === "own_cloud" || row.choice === "saas") && (
+        <CloudFields
+          mode={row.choice === "own_cloud" ? "own_cloud" : "saas"}
+          value={detail}
+          tenants={tenants}
+          vendor={vendor || undefined}
+          onChange={(next) => onChange({ cloudProvider: next.provider, tenantName: next.tenantName, tenantId: next.tenantId, region: next.region })}
+        />
+      )}
+    </div>
+  );
+}
+
 export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: AddRow; index: number; dim: boolean; motion: boolean; onRemove: () => void; onChange: (patch: Partial<AddRow>) => void }) {
   const question = cardQuestion(row);
+  const [open, setOpen] = useState(false);
   const hosting = catalogHostingLine(row);
   const known = row.status === "matched" && row.tool;
   const suggested = Boolean(known && row.tool?.suggested);
@@ -191,14 +227,14 @@ export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: 
         <button type="button" aria-label={`Remove ${row.name}`} className="text-[16px] text-[#6b7289]" onClick={onRemove}>×</button>
       </div>
       <div className="mt-3 text-[13px] text-[#4b5163]">
-        {hosting && <p>{hosting}</p>}
+        {hosting && !open && <p>{hosting}</p>}
         {question === "fuzzy" && row.status === "weak" && (
           <p data-testid="did-you-mean">Did you mean <strong>{row.tool?.name}</strong>? <button type="button" className="ml-2 font-medium text-[#3f35b5]" onClick={() => onChange({ status: "matched", name: row.tool?.name || row.name })}>Yes, use {row.tool?.name}</button> <button type="button" className="ml-2 text-[#6b7289]" onClick={() => onChange({ status: "custom", tool: null, options: [], choice: "unknown", name: row.input, keptTyped: true })}>Keep “{row.input}”</button></p>
         )}
         {question === "fuzzy" && row.status === "pick" && (
           <div className="flex flex-wrap gap-1.5">{row.options.map((option) => <button key={option.name} type="button" className="rounded-full border border-[#e6e8ee] px-2 py-0.5" onClick={() => onChange({ status: "matched", tool: option, name: option.name, choice: choiceForTool(option) })}>{option.name}</button>)}</div>
         )}
-        {question === "hosting" && (
+        {question === "hosting" && row.kind !== "app" && (
           <div>
             <p className="mb-1">{row.kind === "platform" ? "Platform hosting" : "Where does it live?"}</p>
             <div className="flex flex-wrap gap-1.5">
@@ -207,6 +243,12 @@ export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: 
               ))}
             </div>
           </div>
+        )}
+        {row.kind === "app" && (question === "hosting" || (question === "none" && open)) && (
+          <CardWhere row={row} onChange={onChange} />
+        )}
+        {row.kind === "app" && question === "none" && hosting && !open && (
+          <button type="button" data-testid="card-where-change" className="mt-1 text-[12px] font-medium text-[#5b4ce6]" onClick={() => setOpen(true)}>Change, or add tenant &amp; region</button>
         )}
         {row.hint && <p className="mt-2 text-[13px] text-[#9a3412]">{row.hint}</p>}
       </div>
@@ -478,7 +520,7 @@ export function AskAdd({
       const saved = await addApi.save(orgSlug, workspaceSlug, {
         creates: batch.creates.map((item) => ({ key: item.key, type: item.type, name: item.name, properties: item.properties, owner: item.owner, owner_team_name: item.ownerTeam, point_of_contact_name: item.ownerName })),
         updates: batch.updates.map((item) => ({ id: item.id, properties: item.properties, owner: item.owner, owner_team_name: item.ownerTeam, point_of_contact_name: item.ownerName })),
-        relationships: batch.relationships.map((item) => ({ type: item.type, from_key: item.fromKey, to_key: item.toKey, from_id: item.fromId, to_id: item.toId, from_type: item.fromType, to_type: item.toType })),
+        relationships: batch.relationships.map((item) => ({ type: item.type, from_key: item.fromKey, to_key: item.toKey, from_id: item.fromId, to_id: item.toId, from_type: item.fromType, to_type: item.toType, ...(item.attributes ? { attributes: item.attributes } : {}) })),
       }, token);
       for (const object of saved.objects) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object });
       for (const relationship of saved.relationships) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship });
