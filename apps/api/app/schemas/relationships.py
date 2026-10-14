@@ -191,10 +191,18 @@ REGION_MAX = 120
 
 
 def validate_hosting_attributes(rel_type: str, attributes: dict[str, Any] | None) -> None:
-    """runs_on / built_on may carry one optional free-text region ("Canada Central", "ca-central-1")."""
+    """runs_on / built_on to a tenant may carry region_key ("azure:canadacentral", "custom:<id>").
+    Links from before migration 051 may still carry the old free-text region; it stays readable."""
     if rel_type not in {"runs_on", "built_on"}:
         return
-    region = (attributes or {}).get("region")
+    attrs = attributes or {}
+    key = attrs.get("region_key")
+    if key is not None:
+        from app.services.cloud_regions import valid_region_key
+
+        if not valid_region_key(key):
+            raise ValueError("region_key must be a built-in region or a custom region.")
+    region = attrs.get("region")
     if region is None:
         return
     if not isinstance(region, str):
@@ -258,8 +266,11 @@ class RelationshipRead(BaseModel):
 
 
 def merge_attributes(rel_type: str, current: dict[str, Any] | None, patch: dict[str, Any]) -> dict[str, Any]:
-    """current + patch (None removes a key; a blank region is removed too), validated."""
+    """current + patch (None removes a key; a blank region is removed too), validated.
+    Setting a region_key drops the old free-text region it replaces."""
     merged = dict(current or {})
+    if patch.get("region_key") is not None:
+        merged.pop("region", None)
     for key, value in patch.items():
         if value is None or (key == "region" and isinstance(value, str) and not value.strip()):
             merged.pop(key, None)

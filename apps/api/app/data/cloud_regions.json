@@ -1,0 +1,881 @@
+{
+ "_comment": "Clouds & tenants: the fixed provider list and built-in region list. Mirrored in apps/api/app/data/cloud_regions.json and apps/web/lib/hosting/cloud-regions.json (parity tests on both sides).",
+ "providers": [
+  {
+   "id": "azure",
+   "label": "Azure",
+   "kind": "cloud",
+   "vendor": "microsoft",
+   "tenantWord": "tenant"
+  },
+  {
+   "id": "aws",
+   "label": "AWS",
+   "kind": "cloud",
+   "vendor": "amazon",
+   "tenantWord": "account"
+  },
+  {
+   "id": "gcp",
+   "label": "Google Cloud",
+   "kind": "cloud",
+   "vendor": "google",
+   "tenantWord": "project"
+  },
+  {
+   "id": "m365",
+   "label": "Microsoft 365",
+   "kind": "saas",
+   "vendor": "microsoft",
+   "tenantWord": "tenant"
+  },
+  {
+   "id": "google_workspace",
+   "label": "Google Workspace",
+   "kind": "saas",
+   "vendor": "google",
+   "tenantWord": "tenant"
+  },
+  {
+   "id": "salesforce",
+   "label": "Salesforce",
+   "kind": "saas",
+   "vendor": "salesforce",
+   "tenantWord": "org"
+  },
+  {
+   "id": "other",
+   "label": "Other",
+   "kind": "any",
+   "vendor": "other",
+   "tenantWord": "account"
+  }
+ ],
+ "regions": {
+  "azure": [
+   {
+    "key": "azure:canadacentral",
+    "name": "Canada Central",
+    "note": "",
+    "aliases": [
+     "canadacentral",
+     "Azure Canada Central"
+    ]
+   },
+   {
+    "key": "azure:canadaeast",
+    "name": "Canada East",
+    "note": "",
+    "aliases": [
+     "canadaeast",
+     "Azure Canada East"
+    ]
+   },
+   {
+    "key": "azure:eastus",
+    "name": "East US",
+    "note": "",
+    "aliases": [
+     "eastus",
+     "Azure East US"
+    ]
+   },
+   {
+    "key": "azure:eastus2",
+    "name": "East US 2",
+    "note": "",
+    "aliases": [
+     "eastus2",
+     "Azure East US 2"
+    ]
+   },
+   {
+    "key": "azure:centralus",
+    "name": "Central US",
+    "note": "",
+    "aliases": [
+     "centralus",
+     "Azure Central US"
+    ]
+   },
+   {
+    "key": "azure:northcentralus",
+    "name": "North Central US",
+    "note": "",
+    "aliases": [
+     "northcentralus",
+     "Azure North Central US"
+    ]
+   },
+   {
+    "key": "azure:southcentralus",
+    "name": "South Central US",
+    "note": "",
+    "aliases": [
+     "southcentralus",
+     "Azure South Central US"
+    ]
+   },
+   {
+    "key": "azure:westcentralus",
+    "name": "West Central US",
+    "note": "",
+    "aliases": [
+     "westcentralus",
+     "Azure West Central US"
+    ]
+   },
+   {
+    "key": "azure:westus",
+    "name": "West US",
+    "note": "",
+    "aliases": [
+     "westus",
+     "Azure West US"
+    ]
+   },
+   {
+    "key": "azure:westus2",
+    "name": "West US 2",
+    "note": "",
+    "aliases": [
+     "westus2",
+     "Azure West US 2"
+    ]
+   },
+   {
+    "key": "azure:westus3",
+    "name": "West US 3",
+    "note": "",
+    "aliases": [
+     "westus3",
+     "Azure West US 3"
+    ]
+   },
+   {
+    "key": "azure:northeurope",
+    "name": "North Europe",
+    "note": "",
+    "aliases": [
+     "northeurope",
+     "Azure North Europe"
+    ]
+   },
+   {
+    "key": "azure:westeurope",
+    "name": "West Europe",
+    "note": "",
+    "aliases": [
+     "westeurope",
+     "Azure West Europe"
+    ]
+   },
+   {
+    "key": "azure:uksouth",
+    "name": "UK South",
+    "note": "",
+    "aliases": [
+     "uksouth",
+     "Azure UK South"
+    ]
+   },
+   {
+    "key": "azure:ukwest",
+    "name": "UK West",
+    "note": "",
+    "aliases": [
+     "ukwest",
+     "Azure UK West"
+    ]
+   },
+   {
+    "key": "azure:francecentral",
+    "name": "France Central",
+    "note": "",
+    "aliases": [
+     "francecentral",
+     "Azure France Central"
+    ]
+   },
+   {
+    "key": "azure:germanywestcentral",
+    "name": "Germany West Central",
+    "note": "",
+    "aliases": [
+     "germanywestcentral",
+     "Azure Germany West Central"
+    ]
+   },
+   {
+    "key": "azure:swedencentral",
+    "name": "Sweden Central",
+    "note": "",
+    "aliases": [
+     "swedencentral",
+     "Azure Sweden Central"
+    ]
+   },
+   {
+    "key": "azure:switzerlandnorth",
+    "name": "Switzerland North",
+    "note": "",
+    "aliases": [
+     "switzerlandnorth",
+     "Azure Switzerland North"
+    ]
+   },
+   {
+    "key": "azure:norwayeast",
+    "name": "Norway East",
+    "note": "",
+    "aliases": [
+     "norwayeast",
+     "Azure Norway East"
+    ]
+   },
+   {
+    "key": "azure:australiaeast",
+    "name": "Australia East",
+    "note": "",
+    "aliases": [
+     "australiaeast",
+     "Azure Australia East"
+    ]
+   },
+   {
+    "key": "azure:australiasoutheast",
+    "name": "Australia Southeast",
+    "note": "",
+    "aliases": [
+     "australiasoutheast",
+     "Azure Australia Southeast"
+    ]
+   },
+   {
+    "key": "azure:japaneast",
+    "name": "Japan East",
+    "note": "",
+    "aliases": [
+     "japaneast",
+     "Azure Japan East"
+    ]
+   },
+   {
+    "key": "azure:koreacentral",
+    "name": "Korea Central",
+    "note": "",
+    "aliases": [
+     "koreacentral",
+     "Azure Korea Central"
+    ]
+   },
+   {
+    "key": "azure:southeastasia",
+    "name": "Southeast Asia",
+    "note": "",
+    "aliases": [
+     "southeastasia",
+     "Azure Southeast Asia"
+    ]
+   },
+   {
+    "key": "azure:eastasia",
+    "name": "East Asia",
+    "note": "",
+    "aliases": [
+     "eastasia",
+     "Azure East Asia"
+    ]
+   },
+   {
+    "key": "azure:centralindia",
+    "name": "Central India",
+    "note": "",
+    "aliases": [
+     "centralindia",
+     "Azure Central India"
+    ]
+   },
+   {
+    "key": "azure:brazilsouth",
+    "name": "Brazil South",
+    "note": "",
+    "aliases": [
+     "brazilsouth",
+     "Azure Brazil South"
+    ]
+   },
+   {
+    "key": "azure:southafricanorth",
+    "name": "South Africa North",
+    "note": "",
+    "aliases": [
+     "southafricanorth",
+     "Azure South Africa North"
+    ]
+   },
+   {
+    "key": "azure:uaenorth",
+    "name": "UAE North",
+    "note": "",
+    "aliases": [
+     "uaenorth",
+     "Azure UAE North"
+    ]
+   }
+  ],
+  "aws": [
+   {
+    "key": "aws:ca-central-1",
+    "name": "ca-central-1",
+    "note": "Canada (Central)",
+    "aliases": [
+     "Canada (Central)",
+     "AWS ca-central-1"
+    ]
+   },
+   {
+    "key": "aws:ca-west-1",
+    "name": "ca-west-1",
+    "note": "Canada West (Calgary)",
+    "aliases": [
+     "Canada West (Calgary)",
+     "AWS ca-west-1"
+    ]
+   },
+   {
+    "key": "aws:us-east-1",
+    "name": "us-east-1",
+    "note": "US East (N. Virginia)",
+    "aliases": [
+     "US East (N. Virginia)",
+     "AWS us-east-1"
+    ]
+   },
+   {
+    "key": "aws:us-east-2",
+    "name": "us-east-2",
+    "note": "US East (Ohio)",
+    "aliases": [
+     "US East (Ohio)",
+     "AWS us-east-2"
+    ]
+   },
+   {
+    "key": "aws:us-west-1",
+    "name": "us-west-1",
+    "note": "US West (N. California)",
+    "aliases": [
+     "US West (N. California)",
+     "AWS us-west-1"
+    ]
+   },
+   {
+    "key": "aws:us-west-2",
+    "name": "us-west-2",
+    "note": "US West (Oregon)",
+    "aliases": [
+     "US West (Oregon)",
+     "AWS us-west-2"
+    ]
+   },
+   {
+    "key": "aws:eu-west-1",
+    "name": "eu-west-1",
+    "note": "Europe (Ireland)",
+    "aliases": [
+     "Europe (Ireland)",
+     "AWS eu-west-1"
+    ]
+   },
+   {
+    "key": "aws:eu-west-2",
+    "name": "eu-west-2",
+    "note": "Europe (London)",
+    "aliases": [
+     "Europe (London)",
+     "AWS eu-west-2"
+    ]
+   },
+   {
+    "key": "aws:eu-west-3",
+    "name": "eu-west-3",
+    "note": "Europe (Paris)",
+    "aliases": [
+     "Europe (Paris)",
+     "AWS eu-west-3"
+    ]
+   },
+   {
+    "key": "aws:eu-central-1",
+    "name": "eu-central-1",
+    "note": "Europe (Frankfurt)",
+    "aliases": [
+     "Europe (Frankfurt)",
+     "AWS eu-central-1"
+    ]
+   },
+   {
+    "key": "aws:eu-north-1",
+    "name": "eu-north-1",
+    "note": "Europe (Stockholm)",
+    "aliases": [
+     "Europe (Stockholm)",
+     "AWS eu-north-1"
+    ]
+   },
+   {
+    "key": "aws:ap-southeast-1",
+    "name": "ap-southeast-1",
+    "note": "Asia Pacific (Singapore)",
+    "aliases": [
+     "Asia Pacific (Singapore)",
+     "AWS ap-southeast-1"
+    ]
+   },
+   {
+    "key": "aws:ap-southeast-2",
+    "name": "ap-southeast-2",
+    "note": "Asia Pacific (Sydney)",
+    "aliases": [
+     "Asia Pacific (Sydney)",
+     "AWS ap-southeast-2"
+    ]
+   },
+   {
+    "key": "aws:ap-northeast-1",
+    "name": "ap-northeast-1",
+    "note": "Asia Pacific (Tokyo)",
+    "aliases": [
+     "Asia Pacific (Tokyo)",
+     "AWS ap-northeast-1"
+    ]
+   },
+   {
+    "key": "aws:ap-south-1",
+    "name": "ap-south-1",
+    "note": "Asia Pacific (Mumbai)",
+    "aliases": [
+     "Asia Pacific (Mumbai)",
+     "AWS ap-south-1"
+    ]
+   },
+   {
+    "key": "aws:sa-east-1",
+    "name": "sa-east-1",
+    "note": "South America (São Paulo)",
+    "aliases": [
+     "South America (São Paulo)",
+     "AWS sa-east-1"
+    ]
+   }
+  ],
+  "gcp": [
+   {
+    "key": "gcp:northamerica-northeast1",
+    "name": "northamerica-northeast1",
+    "note": "Montréal",
+    "aliases": [
+     "Montréal"
+    ]
+   },
+   {
+    "key": "gcp:northamerica-northeast2",
+    "name": "northamerica-northeast2",
+    "note": "Toronto",
+    "aliases": [
+     "Toronto"
+    ]
+   },
+   {
+    "key": "gcp:us-central1",
+    "name": "us-central1",
+    "note": "Iowa",
+    "aliases": [
+     "Iowa"
+    ]
+   },
+   {
+    "key": "gcp:us-east1",
+    "name": "us-east1",
+    "note": "South Carolina",
+    "aliases": [
+     "South Carolina"
+    ]
+   },
+   {
+    "key": "gcp:us-east4",
+    "name": "us-east4",
+    "note": "Northern Virginia",
+    "aliases": [
+     "Northern Virginia"
+    ]
+   },
+   {
+    "key": "gcp:us-west1",
+    "name": "us-west1",
+    "note": "Oregon",
+    "aliases": [
+     "Oregon"
+    ]
+   },
+   {
+    "key": "gcp:europe-west1",
+    "name": "europe-west1",
+    "note": "Belgium",
+    "aliases": [
+     "Belgium"
+    ]
+   },
+   {
+    "key": "gcp:europe-west2",
+    "name": "europe-west2",
+    "note": "London",
+    "aliases": [
+     "London"
+    ]
+   },
+   {
+    "key": "gcp:europe-west3",
+    "name": "europe-west3",
+    "note": "Frankfurt",
+    "aliases": [
+     "Frankfurt"
+    ]
+   },
+   {
+    "key": "gcp:europe-west4",
+    "name": "europe-west4",
+    "note": "Netherlands",
+    "aliases": [
+     "Netherlands"
+    ]
+   },
+   {
+    "key": "gcp:asia-northeast1",
+    "name": "asia-northeast1",
+    "note": "Tokyo",
+    "aliases": [
+     "Tokyo"
+    ]
+   },
+   {
+    "key": "gcp:asia-southeast1",
+    "name": "asia-southeast1",
+    "note": "Singapore",
+    "aliases": [
+     "Singapore"
+    ]
+   },
+   {
+    "key": "gcp:australia-southeast1",
+    "name": "australia-southeast1",
+    "note": "Sydney",
+    "aliases": [
+     "Sydney"
+    ]
+   },
+   {
+    "key": "gcp:southamerica-east1",
+    "name": "southamerica-east1",
+    "note": "São Paulo",
+    "aliases": [
+     "São Paulo"
+    ]
+   }
+  ],
+  "m365": [
+   {
+    "key": "m365:canada",
+    "name": "Canada",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:united-states",
+    "name": "United States",
+    "note": "",
+    "aliases": [
+     "US",
+     "USA"
+    ]
+   },
+   {
+    "key": "m365:european-union",
+    "name": "European Union",
+    "note": "",
+    "aliases": [
+     "EU",
+     "Europe"
+    ]
+   },
+   {
+    "key": "m365:united-kingdom",
+    "name": "United Kingdom",
+    "note": "",
+    "aliases": [
+     "UK"
+    ]
+   },
+   {
+    "key": "m365:australia",
+    "name": "Australia",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:asia-pacific",
+    "name": "Asia Pacific",
+    "note": "",
+    "aliases": [
+     "APC"
+    ]
+   },
+   {
+    "key": "m365:brazil",
+    "name": "Brazil",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:france",
+    "name": "France",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:germany",
+    "name": "Germany",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:india",
+    "name": "India",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:israel",
+    "name": "Israel",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:italy",
+    "name": "Italy",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:japan",
+    "name": "Japan",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:korea",
+    "name": "Korea",
+    "note": "",
+    "aliases": [
+     "South Korea"
+    ]
+   },
+   {
+    "key": "m365:norway",
+    "name": "Norway",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:qatar",
+    "name": "Qatar",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:south-africa",
+    "name": "South Africa",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:spain",
+    "name": "Spain",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:sweden",
+    "name": "Sweden",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:switzerland",
+    "name": "Switzerland",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "m365:uae",
+    "name": "United Arab Emirates",
+    "note": "",
+    "aliases": [
+     "UAE"
+    ]
+   }
+  ],
+  "google_workspace": [
+   {
+    "key": "google_workspace:united-states",
+    "name": "United States",
+    "note": "",
+    "aliases": [
+     "US"
+    ]
+   },
+   {
+    "key": "google_workspace:europe",
+    "name": "Europe",
+    "note": "",
+    "aliases": [
+     "EU"
+    ]
+   }
+  ],
+  "salesforce": [
+   {
+    "key": "salesforce:canada",
+    "name": "Canada",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "salesforce:united-states",
+    "name": "United States",
+    "note": "",
+    "aliases": [
+     "US"
+    ]
+   },
+   {
+    "key": "salesforce:germany",
+    "name": "Germany",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "salesforce:france",
+    "name": "France",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "salesforce:united-kingdom",
+    "name": "United Kingdom",
+    "note": "",
+    "aliases": [
+     "UK"
+    ]
+   },
+   {
+    "key": "salesforce:australia",
+    "name": "Australia",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "salesforce:japan",
+    "name": "Japan",
+    "note": "",
+    "aliases": []
+   },
+   {
+    "key": "salesforce:india",
+    "name": "India",
+    "note": "",
+    "aliases": []
+   }
+  ],
+  "other": []
+ },
+ "provider_cases": [
+  [
+   {
+    "cloud_provider": "azure"
+   },
+   "Anything",
+   "azure"
+  ],
+  [
+   {
+    "platform_kind": "cloud_account",
+    "vendor": "microsoft"
+   },
+   "Contoso prod",
+   "azure"
+  ],
+  [
+   {
+    "platform_kind": "saas_suite",
+    "vendor": "microsoft"
+   },
+   "Contoso tenant",
+   "m365"
+  ],
+  [
+   {},
+   "Contoso Azure dev",
+   "azure"
+  ],
+  [
+   {},
+   "Office 365",
+   "m365"
+  ],
+  [
+   {
+    "vendor": "amazon"
+   },
+   "Prod",
+   "aws"
+  ],
+  [
+   {
+    "platform_kind": "cloud_account",
+    "vendor": "google"
+   },
+   "Data",
+   "gcp"
+  ],
+  [
+   {
+    "vendor": "google"
+   },
+   "Mail",
+   "google_workspace"
+  ],
+  [
+   {
+    "vendor": "salesforce"
+   },
+   "Sales org",
+   "salesforce"
+  ],
+  [
+   {
+    "vendor": "oracle"
+   },
+   "ERP",
+   "other"
+  ],
+  [
+   {
+    "cloud_provider": "nope"
+   },
+   "Thing",
+   "other"
+  ]
+ ]
+}

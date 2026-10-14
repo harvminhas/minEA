@@ -22,6 +22,7 @@ from app.routers import (
     catalog_lookup,
     platform_catalog,
     people_directory,
+    clouds,
     contact,
     support,
     capability_map,
@@ -107,6 +108,8 @@ app.include_router(catalog.router, prefix="/api/v1")
 app.include_router(catalog_lookup.router, prefix="/api/v1")
 app.include_router(platform_catalog.router, prefix="/api/v1")
 app.include_router(people_directory.router, prefix="/api/v1")
+app.include_router(clouds.router, prefix="/api/v1")
+app.include_router(clouds.regions_router, prefix="/api/v1")
 app.include_router(ai.router, prefix="/api/v1")
 app.include_router(webhooks.router, prefix="/api/v1")
 

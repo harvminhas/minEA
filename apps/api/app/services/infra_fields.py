@@ -28,9 +28,22 @@ DATES = {"support_ends", "end_of_life", "commitment_ends", "contract_renewal"}
 TEXT = {"os_name", "os_version", "notice_period", "vendor", "vendor_product", "runtime_provider"}
 
 
+CLOUD_PROVIDERS = {"azure", "aws", "gcp", "m365", "google_workspace", "salesforce", "other"}
+
+
 def validate_infra_patch(object_type: str, patch: dict | None) -> None:
     if not patch or object_type not in {"model", "cloud_service"}:
         return
+    if object_type == "cloud_service":
+        provider = patch.get("cloud_provider")
+        if provider not in (None, "") and provider not in CLOUD_PROVIDERS:
+            raise ValueError("Pick a cloud provider from the list.")
+        used = patch.get("regions_used")
+        if used is not None:
+            from app.services.cloud_regions import valid_region_key
+
+            if not isinstance(used, list) or len(used) > 100 or not all(valid_region_key(k) for k in used):
+                raise ValueError("regions_used must be a list of region keys.")
     enums = RUNTIME_ENUMS if object_type == "model" else PLATFORM_ENUMS
     allowed = set(enums) | DATES | TEXT
     for key, value in patch.items():
