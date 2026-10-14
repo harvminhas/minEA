@@ -332,6 +332,20 @@ export const workspaceSettingsApi = {
     apiFetch<WorkspaceSettings>(`${wsBase(orgSlug, workspaceSlug)}/settings`, { method: "PATCH", token, body: JSON.stringify(body) }),
 };
 
+export type CatalogEntry = import("@/lib/setup/match-tools").ToolRecord & { id: string };
+export type CatalogMiss = { key: string; name: string; count: number; lastSeen: string; suggestion: { name?: string; vendor?: string; category?: string; hosting?: string; kind?: string; confidence?: number } | null };
+
+export const toolCatalogApi = {
+  tools: (token: string) => apiFetch<{ version: string; source: string; tools: unknown }>(`/catalog/tools`, { token }),
+  me: (token: string) => apiFetch<{ platformAdmin: boolean }>(`/platform/me`, { token }),
+  list: (q: string, token: string) => apiFetch<{ total: number; entries: CatalogEntry[] }>(`/platform/catalog/entries?q=${encodeURIComponent(q)}`, { token }),
+  create: (body: Partial<CatalogEntry>, token: string) => apiFetch<CatalogEntry>(`/platform/catalog/entries`, { method: "POST", token, body: JSON.stringify(body) }),
+  update: (id: string, body: Partial<CatalogEntry>, token: string) => apiFetch<CatalogEntry>(`/platform/catalog/entries/${id}`, { method: "PUT", token, body: JSON.stringify(body) }),
+  remove: (id: string, token: string) => apiFetch<void>(`/platform/catalog/entries/${id}`, { method: "DELETE", token }),
+  misses: (token: string) => apiFetch<{ misses: CatalogMiss[] }>(`/platform/catalog/misses`, { token }),
+  dismissMiss: (key: string, token: string) => apiFetch<void>(`/platform/catalog/misses/${encodeURIComponent(key)}`, { method: "DELETE", token }),
+};
+
 export const catalogLookupApi = {
   lookup: (orgSlug: string, names: string[], token: string, signal?: AbortSignal) =>
     apiFetch<{ results: import("@/lib/setup/ai-lookup").LookupResult[] }>(`/orgs/${orgSlug}/catalog/lookup`, { method: "POST", token, body: JSON.stringify({ names }), signal }),

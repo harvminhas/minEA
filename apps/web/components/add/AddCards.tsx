@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MinEAObject, Relationship } from "@minea/types";
-import { addApi, catalogLookupApi, objectsApi } from "@/lib/api-client";
+import { addApi, catalogLookupApi, objectsApi, toolCatalogApi } from "@/lib/api-client";
+import { refreshLiveCatalog } from "@/lib/catalog/live-catalog";
 import { useAuth } from "@/lib/auth-context";
 import { readCostLines } from "@/lib/cost/math";
 import { annualCost } from "@/lib/cost/service";
@@ -406,6 +407,15 @@ export function AskAdd({
 
   // AI lookup for names the catalogue doesn't know: debounced, cached per name, and silent on
   // failure (the card just stays Custom). Suggestions never mark the rows as edited.
+  // The platform-admin-edited catalogue (falls back to the bundled list when the API can't serve it).
+  useEffect(() => {
+    void refreshLiveCatalog(async () => {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      return toolCatalogApi.tools(token);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const dismissed = useRef(new Set<string>());
   const [lookupTick, setLookupTick] = useState(0);
   useEffect(() => {

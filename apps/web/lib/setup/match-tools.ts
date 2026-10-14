@@ -115,7 +115,7 @@ export const GENERIC_TERMS = new Set([
   "demo", "sample", "custom", "inhouse", "in house", "internal tool", "tool", "tools", "software", "system",
 ]);
 
-const index = new Map<ToolRecord, string[]>();
+const index = new WeakMap<ToolRecord, string[]>();
 function cachedNames(tool: ToolRecord): string[] {
   let names = index.get(tool);
   if (!names) {

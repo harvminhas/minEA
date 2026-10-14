@@ -16,7 +16,7 @@ import { ASK_BAR_ID, askShortcut, stripSplitUrl } from "@/components/nav/ask-sho
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { OrgSwitcherMenu } from "@/components/nav/OrgSwitcherMenu";
 import { activeTopNavTab, orgSettingsLabel, roleLabel } from "@/lib/org-access";
-import { billingApi, orgsApi, workspacesApi } from "@/lib/api-client";
+import { billingApi, orgsApi, toolCatalogApi, workspacesApi } from "@/lib/api-client";
 import { usePermissions } from "@/lib/use-permissions";
 import { workspaceCreateBlockedMessage } from "@/lib/plan-features";
 import { BuboMapWordmark } from "@/components/brand/BuboMapLogo";
@@ -38,6 +38,18 @@ export function TopNav() {
   const userRef = useRef<HTMLDivElement>(null);
 
   const insights = useArchitectureInsights(orgSlug ?? "", workspaceSlug ?? "");
+  // Platform admins (PLATFORM_ADMIN_EMAILS on the API) get the app catalogue link. Others never see it.
+  const platformMe = useQuery({
+    queryKey: ["platform-me", user?.email ?? ""],
+    enabled: Boolean(user),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return { platformAdmin: false };
+      return toolCatalogApi.me(token);
+    },
+  });
   const { canCreateWorkspace, canManageWorkspace } = usePermissions();
 
   // Close dropdowns on outside click
@@ -341,6 +353,17 @@ export function TopNav() {
                   <span className="truncate" data-testid="user-menu-ws-settings">
                     {WORKSPACE_SETTINGS_LABEL} · {activeWorkspace.name}
                   </span>
+                </Link>
+              )}
+              {platformMe.data?.platformAdmin && (
+                <Link
+                  href="/platform/catalog"
+                  onClick={() => setUserOpen(false)}
+                  data-testid="user-menu-platform-catalog"
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  <Settings size={13} className="flex-shrink-0" />
+                  <span className="truncate">App catalogue (platform admin)</span>
                 </Link>
               )}
               {orgSlug && (
