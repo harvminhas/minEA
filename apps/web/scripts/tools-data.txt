@@ -1,0 +1,811 @@
+# CRM
+Microsoft Dynamics 365 Sales|dynamics 365 sales,dynamics crm,ms dynamics crm,d365 sales|Microsoft|CRM|s|a|1
+Zoho CRM|zoho crm|Zoho|CRM|s|a|1
+Pipedrive|pipedrive,pipe drive|Pipedrive|CRM|s|a|1
+Freshsales|freshsales,freshworks crm|Freshworks|CRM|s|a|1
+Zendesk Sell|zendesk sell|Zendesk|CRM|s|a|1
+Insightly|insightly|Insightly|CRM|s|a|0
+SugarCRM|sugarcrm,sugar crm|SugarCRM|CRM|e|a|1
+Copper|copper crm|Copper|CRM|s|a|0
+Keap|keap,infusionsoft|Keap|CRM|s|a|0
+Close|close crm,close io|Close|CRM|s|a|0
+Monday Sales CRM|monday crm,monday sales crm|monday.com|CRM|s|a|1
+Salesloft|salesloft|Salesloft|Sales|s|a|1
+Outreach|outreach io,outreach|Outreach|Sales|s|a|1
+Apollo.io|apollo io|Apollo.io|Sales|s|a|0
+ZoomInfo|zoominfo,zoom info|ZoomInfo|Sales|s|a|1
+LinkedIn Sales Navigator|sales navigator,linkedin sales navigator|LinkedIn|Sales|s|a|0
+Gong|gong,gong io|Gong|Sales|s|a|1
+Clari|clari|Clari|Sales|s|a|1
+DocuSign|docusign,docu sign,docusing|DocuSign|Contracts|s|a|1
+PandaDoc|pandadoc,panda doc|PandaDoc|Contracts|s|a|1
+Adobe Acrobat Sign|adobe sign,acrobat sign,echosign|Adobe|Contracts|s|a|1
+Dropbox Sign|hellosign,dropbox sign|Dropbox|Contracts|s|a|0
+Ironclad|ironclad|Ironclad|Contracts|s|a|1
+Conga|conga|Conga|Contracts|s|a|1
+Salesforce CPQ|salesforce cpq,sfdc cpq|Salesforce|Sales|s|a|1
+# ERP
+SAP S/4HANA|sap s 4hana,s4hana,s 4 hana,sap s4|SAP|ERP|e|a|1
+SAP ECC|sap ecc,sap r 3,sap r3|SAP|ERP|o|a|1
+SAP Business One|sap business one,sap b1,sap b one|SAP|ERP|e|a|0
+SAP Business ByDesign|sap bydesign,business bydesign|SAP|ERP|s|a|1
+Microsoft Dynamics 365 Business Central|business central,dynamics 365 business central,d365 bc,dynamics nav,navision|Microsoft|ERP|e|a|1
+Microsoft Dynamics 365 Finance|dynamics 365 finance,d365 finance,d365 f o,dynamics ax|Microsoft|ERP|s|a|1
+Microsoft Dynamics GP|dynamics gp,great plains,ms gp|Microsoft|ERP|o|a|0
+Oracle Fusion Cloud ERP|oracle fusion,oracle cloud erp,oracle erp cloud|Oracle|ERP|s|a|1
+Oracle E-Business Suite|oracle ebs,e business suite,oracle e business suite|Oracle|ERP|o|a|1
+JD Edwards|jd edwards,jde,jd edwards enterpriseone|Oracle|ERP|o|a|0
+Infor CloudSuite|infor cloudsuite,infor|Infor|ERP|s|a|1
+Infor SyteLine|syteline,infor csi|Infor|ERP|e|a|0
+Infor M3|infor m3|Infor|ERP|e|a|0
+Epicor Kinetic|epicor,epicor kinetic,epicor erp|Epicor|ERP|e|a|1
+Epicor Prophet 21|prophet 21,p21|Epicor|ERP|e|a|0
+Sage Intacct|sage intacct,intacct|Sage|Finance|s|a|1
+Sage 50|sage 50,sage50,peachtree|Sage|Finance|d|a|0
+Sage 100|sage 100,sage100,mas 90|Sage|ERP|o|a|0
+Sage 300|sage 300,accpac|Sage|ERP|o|a|0
+Sage X3|sage x3|Sage|ERP|e|a|0
+Acumatica|acumatica|Acumatica|ERP|s|a|1
+IFS Cloud|ifs,ifs cloud,ifs applications|IFS|ERP|e|a|1
+Odoo|odoo|Odoo|ERP|e|a|0
+Unit4|unit4,unit 4|Unit4|ERP|s|a|1
+Workday Financial Management|workday financials,workday finance|Workday|Finance|s|a|1
+Plex|plex smart manufacturing,plex erp|Rockwell Automation|ERP|s|a|1
+QAD|qad,qad adaptive erp|QAD|ERP|e|a|0
+Syspro|syspro|Syspro|ERP|e|a|0
+Deltek Vantagepoint|vantagepoint,deltek vantagepoint|Deltek|ERP|s|a|1
+Deltek Costpoint|costpoint,deltek costpoint|Deltek|ERP|e|a|1
+Macola|macola|ECI|ERP|o|a|0
+Global Shop Solutions|global shop solutions|Global Shop Solutions|ERP|e|a|0
+MRPeasy|mrpeasy|MRPeasy|ERP|s|a|0
+Katana|katana mrp|Katana|ERP|s|a|0
+Fishbowl|fishbowl inventory,fishbowl|Fishbowl|Inventory|e|a|0
+Cin7|cin7|Cin7|Inventory|s|a|0
+# Finance / accounting
+QuickBooks Desktop|quickbooks desktop,qb desktop,qbd,quickbooks enterprise|Intuit|Finance|d|a|0
+Xero|xero|Xero|Finance|s|a|0
+FreshBooks|freshbooks,fresh books|FreshBooks|Finance|s|a|0
+Wave|wave accounting|Wave|Finance|s|a|0
+Zoho Books|zoho books|Zoho|Finance|s|a|0
+MYOB|myob|MYOB|Finance|e|a|0
+Bill.com|bill com,billcom|BILL|Finance|s|a|1
+Expensify|expensify|Expensify|Finance|s|a|1
+SAP Concur|concur,sap concur|SAP|Finance|s|a|1
+Ramp|ramp|Ramp|Finance|s|a|1
+Brex|brex|Brex|Finance|s|a|1
+Navan|navan,tripactions|Navan|Finance|s|a|1
+Coupa|coupa|Coupa|Procurement|s|a|1
+SAP Ariba|ariba,sap ariba|SAP|Procurement|s|a|1
+Procurify|procurify|Procurify|Procurement|s|a|0
+Tipalti|tipalti|Tipalti|Finance|s|a|1
+AvidXchange|avidxchange|AvidXchange|Finance|s|a|0
+Avalara|avalara,avatax|Avalara|Finance|s|a|0
+Vertex Tax|vertex tax,vertex o series|Vertex|Finance|e|a|0
+BlackLine|blackline,black line|BlackLine|Finance|s|a|1
+FloQast|floqast|FloQast|Finance|s|a|1
+Adaptive Planning|adaptive planning,adaptive insights,workday adaptive|Workday|Finance|s|a|1
+Anaplan|anaplan|Anaplan|Finance|s|a|1
+Planful|planful,host analytics|Planful|Finance|s|a|1
+Oracle Hyperion|hyperion,oracle hyperion,oracle epm|Oracle|Finance|e|a|1
+OneStream|onestream|OneStream|Finance|s|a|1
+Vena|vena,vena solutions|Vena|Finance|s|a|1
+Prophix|prophix|Prophix|Finance|s|a|0
+Stripe|stripe|Stripe|Payments|s|a|1
+PayPal|paypal|PayPal|Payments|s|a|0
+Square|square,square pos|Block|Payments|s|a|0
+Adyen|adyen|Adyen|Payments|s|a|1
+Chargebee|chargebee|Chargebee|Billing|s|a|1
+Recurly|recurly|Recurly|Billing|s|a|0
+Zuora|zuora|Zuora|Billing|s|a|1
+Moneris|moneris|Moneris|Payments|s|a|0
+Kyriba|kyriba|Kyriba|Finance|s|a|1
+Carta|carta|Carta|Finance|s|a|0
+# HR / payroll / HCM
+Dayforce|dayforce,ceridian,ceridian dayforce,day force|Dayforce|HR|s|a|1
+Workday HCM|workday,workday hcm,work day|Workday|HR|s|a|1
+ADP Workforce Now|adp,adp workforce now,adp wfn|ADP|Payroll|s|a|1
+ADP Run|adp run|ADP|Payroll|s|a|0
+ADP Vantage HCM|adp vantage|ADP|HR|s|a|1
+BambooHR|bamboohr,bamboo hr|BambooHR|HR|s|a|1
+Gusto|gusto|Gusto|Payroll|s|a|1
+Rippling|rippling|Rippling|HR|s|a|1
+Paychex Flex|paychex,paychex flex|Paychex|Payroll|s|a|1
+Paycom|paycom|Paycom|HR|s|a|1
+Paylocity|paylocity|Paylocity|HR|s|a|1
+Paycor|paycor|Paycor|HR|s|a|1
+UKG Pro|ukg,ukg pro,ultipro,ultimate software|UKG|HR|s|a|1
+UKG Ready|ukg ready,kronos workforce ready|UKG|HR|s|a|1
+Kronos Workforce Central|kronos,kronos workforce central|UKG|Workforce|e|a|1
+SAP SuccessFactors|successfactors,sap successfactors,success factors|SAP|HR|s|a|1
+Oracle HCM Cloud|oracle hcm,oracle hcm cloud|Oracle|HR|s|a|1
+PeopleSoft|peoplesoft,people soft,oracle peoplesoft|Oracle|HR|o|a|1
+Namely|namely|Namely|HR|s|a|1
+Justworks|justworks|Justworks|HR|s|a|1
+TriNet|trinet|TriNet|HR|s|a|1
+Deel|deel|Deel|HR|s|a|1
+Remote|remote com|Remote|HR|s|a|1
+Personio|personio|Personio|HR|s|a|1
+HiBob|hibob|HiBob|HR|s|a|1
+Humi|humi|Employment Hero|HR|s|a|0
+Wagepoint|wagepoint|Wagepoint|Payroll|s|a|0
+Ceridian Powerpay|powerpay|Dayforce|Payroll|s|a|0
+Greenhouse|greenhouse,greenhouse io|Greenhouse|Recruiting|s|a|1
+Lever||Employ|Recruiting|s|a|1
+iCIMS|icims|iCIMS|Recruiting|s|a|1
+Workable|workable|Workable|Recruiting|s|a|0
+JazzHR|jazzhr|Employ|Recruiting|s|a|0
+SmartRecruiters|smartrecruiters|SmartRecruiters|Recruiting|s|a|1
+Taleo|taleo,oracle taleo|Oracle|Recruiting|s|a|1
+Lattice|lattice|Lattice|HR|s|a|1
+Culture Amp|culture amp,cultureamp|Culture Amp|HR|s|a|1
+15Five|15five|15Five|HR|s|a|1
+Cornerstone OnDemand|cornerstone,cornerstone ondemand,csod|Cornerstone|Learning|s|a|1
+Docebo|docebo|Docebo|Learning|s|a|1
+TalentLMS|talentlms|Epignosis|Learning|s|a|0
+Absorb LMS|absorb lms|Absorb|Learning|s|a|1
+KnowBe4|knowbe4,know be 4|KnowBe4|Security|s|a|1
+Deputy|deputy|Deputy|Workforce|s|a|0
+When I Work|when i work|When I Work|Workforce|s|a|0
+7shifts|7shifts|7shifts|Workforce|s|a|0
+Homebase|homebase|Homebase|Workforce|s|a|0
+TSheets|tsheets,quickbooks time|Intuit|Workforce|s|a|0
+Harvest|harvest time,harvest|Harvest|Workforce|s|a|0
+Clockify|clockify|CAKE.com|Workforce|s|a|0
+Benefitfocus|benefitfocus|Voya|HR|s|a|0
+# GIS
+ArcGIS Online|arcgis,arcgis online,arc gis,agol,esri|Esri|GIS|s|a|1
+ArcGIS Pro|arcgis pro|Esri|GIS|d|a|0
+ArcGIS Enterprise|arcgis enterprise,arcgis server,portal for arcgis|Esri|GIS|o|a|1
+QGIS|qgis,quantum gis|QGIS.org|GIS|d|a|0
+Global Mapper|global mapper|Blue Marble Geographics|GIS|d|a|0
+MapInfo Pro|mapinfo,mapinfo pro|Precisely|GIS|d|a|0
+Google Earth Pro|google earth,google earth pro|Google|GIS|d|a|0
+Mapbox|mapbox|Mapbox|GIS|s|p|0
+Google Maps Platform|google maps api,google maps platform|Google|GIS|s|p|0
+Trimble Business Center|trimble business center|Trimble|GIS|d|a|0
+Cityworks|cityworks|Trimble|GIS|e|a|1
+GeoServer|geoserver|OSGeo|GIS|o|a|0
+# Data governance / catalog
+Collibra|collibra,colibra,collibra data intelligence|Collibra|Data governance|s|a|1
+Alation|alation,allation|Alation|Data governance|s|a|1
+Informatica Axon|informatica axon,axon|Informatica|Data governance|s|a|1
+Atlan|atlan|Atlan|Data governance|s|a|1
+data.world|data world|data.world|Data governance|s|a|1
+Microsoft Purview|purview,microsoft purview,azure purview|Microsoft|Data governance|s|a|1
+OneTrust|onetrust,one trust|OneTrust|Privacy|s|a|1
+BigID|bigid,big id|BigID|Data governance|s|a|1
+Monte Carlo|monte carlo data|Monte Carlo|Data governance|s|a|1
+Ataccama|ataccama|Ataccama|Data governance|e|a|1
+Talend|talend|Qlik|Integration|e|a|1
+Informatica PowerCenter|informatica,informatica powercenter,powercenter|Informatica|Integration|o|a|0
+Informatica IDMC|informatica cloud,iics,idmc|Informatica|Integration|s|a|1
+# BI / analytics
+Power BI|power bi,powerbi,pbi|Microsoft|BI|s|a|1
+Tableau|tableau,tablaeu|Salesforce|BI|e|a|1
+Looker|looker|Google|BI|s|a|1
+Looker Studio|looker studio,google data studio,data studio|Google|BI|s|a|0
+Qlik Sense|qlik,qlik sense,qlikview|Qlik|BI|e|a|1
+Domo|domo|Domo|BI|s|a|1
+Sisense|sisense|Sisense|BI|e|a|1
+ThoughtSpot|thoughtspot|ThoughtSpot|BI|s|a|1
+MicroStrategy|microstrategy|Strategy|BI|e|a|1
+SAP BusinessObjects|business objects,sap bo,businessobjects|SAP|BI|o|a|0
+IBM Cognos|cognos,ibm cognos|IBM|BI|e|a|1
+Metabase|metabase|Metabase|BI|e|a|0
+Mode|mode analytics|ThoughtSpot|BI|s|a|1
+Alteryx|alteryx|Alteryx|Analytics|d|a|0
+SAS|sas,sas viya|SAS|Analytics|e|a|1
+SPSS|spss,ibm spss|IBM|Analytics|d|a|0
+Google Analytics|google analytics,ga4|Google|Analytics|s|a|0
+Adobe Analytics|adobe analytics,omniture|Adobe|Analytics|s|a|1
+Mixpanel|mixpanel|Mixpanel|Analytics|s|a|1
+Amplitude|amplitude|Amplitude|Analytics|s|a|1
+Heap|heap analytics|Contentsquare|Analytics|s|a|1
+Hotjar|hotjar|Contentsquare|Analytics|s|a|0
+FullStory|fullstory|FullStory|Analytics|s|a|1
+Segment|segment,twilio segment|Twilio|Analytics|s|a|1
+Fivetran|fivetran|Fivetran|Integration|s|a|1
+dbt Cloud|dbt,dbt cloud|dbt Labs|Analytics|s|a|1
+Google BigQuery|bigquery,big query|Google|Analytics|s|p|1
+Amazon Redshift|redshift,amazon redshift|Amazon|Analytics|s|p|0
+Azure Synapse Analytics|synapse,azure synapse|Microsoft|Analytics|s|p|1
+Teradata|teradata|Teradata|Analytics|e|p|0
+Stata|stata|StataCorp|Analytics|d|a|0
+MATLAB|matlab|MathWorks|Analytics|d|a|0
+# Integration / iPaaS / EDI
+MuleSoft|mulesoft,mule soft,anypoint|Salesforce|Integration|e|p|1
+Boomi|boomi,dell boomi|Boomi|Integration|s|p|1
+Workato|workato|Workato|Integration|s|p|1
+Zapier|zapier|Zapier|Integration|s|a|1
+Make|make com,integromat|Make|Integration|s|a|0
+Celigo|celigo|Celigo|Integration|s|p|1
+Jitterbit|jitterbit|Jitterbit|Integration|s|p|1
+Microsoft Power Automate|power automate,microsoft flow|Microsoft|Integration|s|p|1
+Microsoft Power Apps|power apps,powerapps|Microsoft|Low-code|s|p|1
+Azure Logic Apps|logic apps,azure logic apps|Microsoft|Integration|p|p|0
+UiPath|uipath,ui path|UiPath|Automation|e|p|1
+Automation Anywhere|automation anywhere|Automation Anywhere|Automation|e|p|1
+IBM Sterling B2B Integrator|ibm sterling,sterling b2b|IBM|Integration|o|a|0
+OpenText Trading Grid|opentext trading grid,gxs|OpenText|Integration|s|a|0
+Kleinschmidt|kleinschmidt|Kleinschmidt|Integration|s|a|0
+DiCentral|dicentral|DiCentral|Integration|s|a|0
+Orderful|orderful|Orderful|Integration|s|a|0
+Kafka|kafka,apache kafka|Apache|Integration|o|p|0
+Confluent Cloud|confluent,confluent cloud|Confluent|Integration|s|p|1
+RabbitMQ|rabbitmq,rabbit mq|Broadcom|Integration|o|p|0
+Retool|retool|Retool|Low-code|s|p|1
+Airtable|airtable,air table|Airtable|Low-code|s|a|1
+Smartsheet|smartsheet,smart sheet|Smartsheet|Project management|s|a|1
+OutSystems|outsystems|OutSystems|Low-code|s|p|1
+Mendix|mendix|Siemens|Low-code|s|p|1
+Appian|appian|Appian|Low-code|s|p|1
+Pega|pega,pegasystems|Pegasystems|Low-code|s|p|1
+Nintex|nintex|Nintex|Automation|e|p|1
+Laserfiche|laserfiche|Laserfiche|Documents|e|a|1
+DocuWare|docuware|DocuWare|Documents|e|a|1
+M-Files|m files,mfiles|M-Files|Documents|e|a|1
+OpenText Content Server|opentext,open text,livelink|OpenText|Documents|o|a|1
+Hyland OnBase|onbase,hyland onbase|Hyland|Documents|e|a|1
+# ITSM / IT ops
+ServiceNow|servicenow,service now|ServiceNow|ITSM|s|a|1
+Jira Service Management|jira service management,jsm,jira service desk|Atlassian|ITSM|s|a|1
+Zendesk|zendesk,zen desk|Zendesk|Support|s|a|1
+Freshdesk|freshdesk|Freshworks|Support|s|a|1
+Freshservice|freshservice|Freshworks|ITSM|s|a|1
+ManageEngine ServiceDesk Plus|servicedesk plus,manageengine servicedesk|Zoho|ITSM|e|a|0
+ManageEngine Endpoint Central|endpoint central,desktop central|Zoho|IT management|e|a|0
+SolarWinds Service Desk|solarwinds service desk,samanage|SolarWinds|ITSM|s|a|1
+SolarWinds Orion|solarwinds,solarwinds orion,orion npm|SolarWinds|Monitoring|o|a|0
+BMC Helix|bmc helix,bmc remedy,remedy|BMC|ITSM|e|a|1
+Ivanti Neurons|ivanti,ivanti neurons,cherwell|Ivanti|ITSM|e|a|1
+TOPdesk|topdesk|TOPdesk|ITSM|s|a|1
+SysAid|sysaid|SysAid|ITSM|e|a|0
+Spiceworks|spiceworks|Spiceworks|ITSM|s|a|0
+Help Scout|help scout,helpscout|Help Scout|Support|s|a|0
+Intercom|intercom|Intercom|Support|s|a|1
+Front|front app,frontapp|Front|Support|s|a|1
+Gorgias|gorgias|Gorgias|Support|s|a|0
+Kustomer|kustomer|Kustomer|Support|s|a|1
+ConnectWise Manage|connectwise,connectwise manage,connectwise psa|ConnectWise|ITSM|s|a|0
+ConnectWise Automate|connectwise automate,labtech|ConnectWise|IT management|e|a|0
+ConnectWise ScreenConnect|screenconnect,connectwise control|ConnectWise|Remote access|e|a|0
+Kaseya VSA|kaseya,kaseya vsa|Kaseya|IT management|e|a|0
+Datto RMM|datto rmm|Kaseya|IT management|s|a|0
+NinjaOne|ninjaone,ninja rmm,ninjarmm|NinjaOne|IT management|s|a|1
+N-able|n able,n central,solarwinds msp|N-able|IT management|s|a|0
+Atera|atera|Atera|IT management|s|a|0
+Microsoft Intune|intune,microsoft intune,endpoint manager|Microsoft|IT management|s|a|1
+Microsoft SCCM|sccm,configuration manager,mecm|Microsoft|IT management|o|a|0
+Jamf Pro|jamf,jamf pro|Jamf|IT management|s|a|1
+Kandji|kandji|Kandji|IT management|s|a|1
+Lansweeper|lansweeper|Lansweeper|IT management|e|a|0
+Snipe-IT|snipe it,snipeit|Grokability|IT management|e|a|0
+TeamViewer|teamviewer,team viewer|TeamViewer|Remote access|e|a|0
+AnyDesk|anydesk|AnyDesk|Remote access|e|a|0
+Splashtop|splashtop|Splashtop|Remote access|e|a|0
+LogMeIn|logmein|GoTo|Remote access|s|a|0
+PagerDuty|pagerduty,pager duty|PagerDuty|Monitoring|s|a|1
+Opsgenie|opsgenie|Atlassian|Monitoring|s|a|1
+Datadog|datadog,data dog|Datadog|Monitoring|s|a|1
+New Relic|new relic,newrelic|New Relic|Monitoring|s|a|1
+Dynatrace|dynatrace|Dynatrace|Monitoring|s|a|1
+Splunk|splunk|Cisco|Monitoring|e|a|1
+Elastic|elastic,elasticsearch,elk,kibana|Elastic|Monitoring|e|p|1
+Grafana|grafana|Grafana Labs|Monitoring|e|a|1
+Prometheus|prometheus|CNCF|Monitoring|o|a|0
+Nagios|nagios|Nagios|Monitoring|o|a|0
+Zabbix|zabbix|Zabbix|Monitoring|o|a|0
+PRTG|prtg,paessler prtg|Paessler|Monitoring|o|a|0
+Sentry|sentry,sentry io|Sentry|Monitoring|s|a|1
+StatusPage|statuspage,atlassian statuspage|Atlassian|Monitoring|s|a|0
+# Security / identity
+OneLogin|onelogin,one login|One Identity|Identity|s|a|0
+Ping Identity|ping identity,pingfederate,pingone|Ping Identity|Identity|e|a|0
+Auth0|auth0,auth 0|Okta|Identity|s|p|0
+JumpCloud|jumpcloud,jump cloud|JumpCloud|Identity|s|a|0
+Duo Security|duo,duo security,cisco duo|Cisco|Identity|s|a|1
+CyberArk|cyberark,cyber ark|CyberArk|Identity|e|a|1
+BeyondTrust|beyondtrust|BeyondTrust|Identity|e|a|1
+Delinea Secret Server|delinea,thycotic,secret server|Delinea|Identity|e|a|1
+SailPoint|sailpoint,sail point|SailPoint|Identity|s|a|1
+Active Directory|active directory,ms ad,on prem ad|Microsoft|Identity|o|s|0
+1Password|1password,one password|AgileBits|Security|s|a|1
+LastPass|lastpass,last pass|LastPass|Security|s|a|1
+Bitwarden|bitwarden|Bitwarden|Security|s|a|1
+Keeper|keeper security,keeper|Keeper|Security|s|a|1
+Dashlane|dashlane|Dashlane|Security|s|a|1
+CrowdStrike Falcon|crowdstrike,crowd strike,falcon|CrowdStrike|Security|s|a|1
+SentinelOne|sentinelone,sentinel one|SentinelOne|Security|s|a|1
+Microsoft Defender for Endpoint|defender,microsoft defender,mde,defender for endpoint|Microsoft|Security|s|a|1
+Microsoft Sentinel|azure sentinel,microsoft sentinel|Microsoft|Security|s|a|1
+Sophos Central|sophos,sophos central|Sophos|Security|s|a|0
+Bitdefender GravityZone|bitdefender,gravityzone|Bitdefender|Security|s|a|0
+ESET PROTECT|eset|ESET|Security|e|a|0
+Trend Micro Vision One|trend micro,trendmicro|Trend Micro|Security|s|a|1
+Symantec Endpoint Security|symantec,symantec endpoint|Broadcom|Security|e|a|0
+McAfee|mcafee,trellix|Trellix|Security|e|a|0
+Webroot|webroot|OpenText|Security|s|a|0
+Malwarebytes|malwarebytes|Malwarebytes|Security|s|a|0
+Huntress|huntress|Huntress|Security|s|a|0
+Arctic Wolf|arctic wolf|Arctic Wolf|Security|s|a|1
+Rapid7 InsightVM|rapid7,insightvm,nexpose|Rapid7|Security|s|a|1
+Tenable|tenable,nessus,tenable io|Tenable|Security|e|a|1
+Qualys|qualys|Qualys|Security|s|a|1
+Wiz|wiz,wiz io|Wiz|Security|s|a|1
+Palo Alto Networks|palo alto,palo alto firewall,panorama|Palo Alto Networks|Network|o|s|1
+Prisma Access|prisma access,prisma|Palo Alto Networks|Security|s|a|1
+Zscaler|zscaler,zia,zpa|Zscaler|Security|s|a|1
+Netskope|netskope|Netskope|Security|s|a|1
+Cloudflare|cloudflare,cloud flare|Cloudflare|Network|s|p|1
+Fortinet FortiGate|fortinet,fortigate,forti gate|Fortinet|Network|o|s|0
+Cisco Meraki|meraki,cisco meraki|Cisco|Network|s|s|1
+Cisco AnyConnect|anyconnect,cisco anyconnect,cisco secure client|Cisco|Network|e|a|1
+SonicWall|sonicwall,sonic wall|SonicWall|Network|o|s|0
+WatchGuard|watchguard|WatchGuard|Network|o|s|0
+Ubiquiti UniFi|unifi,ubiquiti|Ubiquiti|Network|o|s|0
+Tailscale|tailscale|Tailscale|Network|s|a|1
+Mimecast|mimecast|Mimecast|Security|s|a|1
+Proofpoint|proofpoint,proof point|Proofpoint|Security|s|a|1
+Barracuda Email Protection|barracuda|Barracuda|Security|s|a|0
+Abnormal Security|abnormal,abnormal security|Abnormal|Security|s|a|1
+Vanta|vanta|Vanta|Compliance|s|a|1
+Drata|drata|Drata|Compliance|s|a|1
+Secureframe|secureframe|Secureframe|Compliance|s|a|1
+Archer|rsa archer,archer grc|Archer|Compliance|e|a|1
+LogicGate|logicgate|LogicGate|Compliance|s|a|1
+AuditBoard|auditboard|AuditBoard|Compliance|s|a|1
+Snyk|snyk|Snyk|Security|s|a|1
+# Dev tools
+GitHub|github,git hub|Microsoft|Dev tools|s|a|1
+GitLab|gitlab,git lab|GitLab|Dev tools|e|a|1
+Bitbucket|bitbucket,bit bucket|Atlassian|Dev tools|s|a|1
+Azure DevOps|azure devops,ado,vsts,tfs,team foundation server|Microsoft|Dev tools|e|a|1
+Jira|jira,jira software|Atlassian|Project management|s|a|1
+Confluence|confluence,confluance|Atlassian|Knowledge|s|a|1
+Jenkins|jenkins|Jenkins|Dev tools|o|a|0
+CircleCI|circleci,circle ci|CircleCI|Dev tools|s|a|1
+Postman|postman|Postman|Dev tools|e|a|1
+JetBrains IntelliJ IDEA|intellij,intellij idea,jetbrains|JetBrains|Dev tools|d|a|0
+Visual Studio|visual studio|Microsoft|Dev tools|d|a|0
+Visual Studio Code|vs code,vscode,visual studio code|Microsoft|Dev tools|d|a|0
+GitHub Copilot|github copilot|Microsoft|AI|s|a|1
+Cursor|cursor ide,cursor editor|Anysphere|Dev tools|d|a|1
+Docker|docker,docker desktop|Docker|Dev tools|d|p|0
+Kubernetes|kubernetes,k8s|CNCF|Infrastructure|o|p|0
+Terraform|terraform,hashicorp terraform|HashiCorp|Infrastructure|e|a|1
+HashiCorp Vault|hashicorp vault|HashiCorp|Security|e|a|1
+SonarQube|sonarqube,sonar,sonarcloud|Sonar|Dev tools|e|a|1
+JFrog Artifactory|artifactory,jfrog|JFrog|Dev tools|e|a|1
+LaunchDarkly|launchdarkly|LaunchDarkly|Dev tools|s|a|1
+Vercel|vercel|Vercel|Infrastructure|s|p|1
+Netlify|netlify|Netlify|Infrastructure|s|p|1
+Heroku|heroku|Salesforce|Infrastructure|s|p|1
+Supabase|supabase|Supabase|Database|s|p|0
+Firebase|firebase|Google|Infrastructure|s|p|0
+Twilio|twilio|Twilio|Communications|s|p|1
+SendGrid|sendgrid,send grid|Twilio|Communications|s|p|0
+Mailgun|mailgun|Sinch|Communications|s|p|0
+Algolia|algolia|Algolia|Infrastructure|s|p|0
+Linear|linear app,linear|Linear|Project management|s|a|1
+# AI
+ChatGPT|chatgpt,chat gpt,chatgpt enterprise,chatgpt team,openai|OpenAI|AI|s|a|1
+Claude|claude,claude ai,anthropic|Anthropic|AI|s|a|1
+Google Gemini|gemini,google gemini,bard|Google|AI|s|a|1
+Microsoft 365 Copilot|m365 copilot,microsoft copilot|Microsoft|AI|s|a|1
+Perplexity|perplexity|Perplexity|AI|s|a|0
+Grammarly|grammarly|Grammarly|AI|s|a|1
+Otter.ai|otter,otter ai|Otter.ai|AI|s|a|0
+Fireflies.ai|fireflies,fireflies ai|Fireflies.ai|AI|s|a|0
+Jasper|jasper ai|Jasper|AI|s|a|0
+Azure OpenAI|azure openai|Microsoft|AI|s|p|0
+# Collaboration / productivity
+Microsoft Teams|teams,ms teams,microsoft teams|Microsoft|Meetings|s|a|1
+SharePoint|sharepoint,share point,spo|Microsoft|Files|s|a|1
+OneDrive|onedrive,one drive|Microsoft|Files|s|a|1
+Exchange Server|exchange,exchange server,on prem exchange|Microsoft|Email|o|s|0
+Exchange Online|exchange online|Microsoft|Email|s|a|1
+Outlook|outlook,ms outlook|Microsoft|Email|e|a|1
+Microsoft Excel|excel,ms excel|Microsoft|Productivity|d|a|0
+Microsoft Access|ms access|Microsoft|Database|d|a|0
+Microsoft Visio|visio|Microsoft|Design|e|a|1
+Microsoft Project|ms project,microsoft project,project online|Microsoft|Project management|e|a|1
+Microsoft Planner|planner,ms planner|Microsoft|Project management|s|a|1
+Microsoft Loop|microsoft loop|Microsoft|Productivity|s|a|1
+Google Drive|google drive,gdrive|Google|Files|s|a|1
+Google Meet|google meet|Google|Meetings|s|a|1
+Box|box,box com|Box|Files|s|a|1
+Egnyte|egnyte|Egnyte|Files|e|a|1
+ShareFile|sharefile,citrix sharefile|Progress|Files|s|a|1
+WeTransfer|wetransfer|WeTransfer|Files|s|a|0
+Notion|notion|Notion|Knowledge|s|a|1
+Coda|coda io|Coda|Knowledge|s|a|1
+Evernote|evernote|Bending Spoons|Knowledge|s|a|0
+Guru|guru|Guru|Knowledge|s|a|1
+Slab||Slab|Knowledge|s|a|1
+Webex|webex,cisco webex|Cisco|Meetings|s|a|1
+GoTo Meeting|gotomeeting,goto meeting,goto|GoTo|Meetings|s|a|1
+RingCentral|ringcentral,ring central|RingCentral|Phone|s|a|1
+Zoom Phone|zoom phone|Zoom|Phone|s|a|1
+Dialpad|dialpad|Dialpad|Phone|s|a|1
+8x8|8x8|8x8|Phone|s|a|1
+Vonage|vonage|Ericsson|Phone|s|a|1
+Aircall|aircall|Aircall|Phone|s|a|1
+Nextiva|nextiva|Nextiva|Phone|s|a|0
+Genesys Cloud|genesys,genesys cloud,purecloud|Genesys|Contact center|s|a|1
+Five9|five9|Five9|Contact center|s|a|1
+NICE CXone|cxone,incontact|NICE|Contact center|s|a|1
+Talkdesk|talkdesk|Talkdesk|Contact center|s|a|1
+Amazon Connect|amazon connect|Amazon|Contact center|s|p|1
+Mitel|mitel|Mitel|Phone|o|s|0
+Avaya|avaya|Avaya|Phone|o|s|0
+Cisco Unified Communications Manager|cucm,cisco call manager,callmanager|Cisco|Phone|o|s|0
+Asana|asana|Asana|Project management|s|a|1
+monday.com|monday,monday com|monday.com|Project management|s|a|1
+Trello|trello|Atlassian|Project management|s|a|1
+ClickUp|clickup,click up|ClickUp|Project management|s|a|1
+Wrike|wrike|Wrike|Project management|s|a|1
+Basecamp|basecamp|37signals|Project management|s|a|0
+Teamwork.com|teamwork com|Teamwork.com|Project management|s|a|0
+Miro|miro|Miro|Collaboration|s|a|1
+Mural||Mural|Collaboration|s|a|1
+Lucidchart|lucidchart,lucid chart,lucid|Lucid|Design|s|a|1
+Loom|loom|Atlassian|Collaboration|s|a|1
+Calendly|calendly|Calendly|Productivity|s|a|1
+Doodle|doodle|Doodle|Productivity|s|a|0
+SurveyMonkey|surveymonkey,survey monkey|SurveyMonkey|Forms|s|a|1
+Typeform|typeform|Typeform|Forms|s|a|0
+Jotform|jotform|Jotform|Forms|s|a|0
+Google Forms|google forms|Google|Forms|s|a|0
+Qualtrics|qualtrics|Qualtrics|Forms|s|a|1
+Microsoft Forms|ms forms,microsoft forms|Microsoft|Forms|s|a|1
+Adobe Acrobat|acrobat,adobe acrobat,adobe reader,acrobat pro|Adobe|Productivity|d|a|1
+Foxit PDF Editor|foxit|Foxit|Productivity|d|a|0
+Nitro PDF|nitro pdf,nitro|Nitro|Productivity|d|a|0
+Bluebeam Revu|bluebeam,bluebeam revu|Nemetschek|Construction|d|a|0
+Citrix Virtual Apps|citrix,citrix virtual apps,xenapp,citrix workspace|Cloud Software Group|Infrastructure|o|p|1
+VMware Horizon|vmware horizon,horizon view|Broadcom|Infrastructure|o|p|1
+Azure Virtual Desktop|avd,azure virtual desktop,wvd|Microsoft|Infrastructure|s|p|1
+Windows 365|windows 365,cloud pc|Microsoft|Infrastructure|s|a|1
+Remote Desktop Services|rds,remote desktop services,terminal server|Microsoft|Infrastructure|o|s|0
+# Marketing
+Marketo|marketo,adobe marketo|Adobe|Marketing|s|a|1
+Pardot|pardot,account engagement,marketing cloud account engagement|Salesforce|Marketing|s|a|1
+Salesforce Marketing Cloud|marketing cloud,exacttarget,sfmc|Salesforce|Marketing|s|a|1
+Mailchimp|mailchimp,mail chimp|Intuit|Marketing|s|a|0
+Constant Contact|constant contact|Constant Contact|Marketing|s|a|0
+Klaviyo|klaviyo|Klaviyo|Marketing|s|a|0
+ActiveCampaign|activecampaign,active campaign|ActiveCampaign|Marketing|s|a|0
+Brevo|brevo,sendinblue|Brevo|Marketing|s|a|0
+Braze|braze|Braze|Marketing|s|a|1
+Iterable|iterable|Iterable|Marketing|s|a|1
+Customer.io|customer io|Customer.io|Marketing|s|a|0
+Hootsuite|hootsuite|Hootsuite|Marketing|s|a|1
+Sprout Social|sprout social,sprout|Sprout Social|Marketing|s|a|1
+Buffer||Buffer|Marketing|s|a|0
+Later|later com|Later|Marketing|s|a|0
+Semrush|semrush|Semrush|Marketing|s|a|0
+Ahrefs|ahrefs|Ahrefs|Marketing|s|a|0
+Moz|moz pro|Moz|Marketing|s|a|0
+Google Ads|google ads,adwords|Google|Marketing|s|a|0
+Meta Business Suite|meta business suite,facebook ads,meta ads|Meta|Marketing|s|a|0
+LinkedIn Ads|linkedin ads,linkedin campaign manager|LinkedIn|Marketing|s|a|0
+Hubspot Marketing Hub|hubspot marketing hub|HubSpot|Marketing|s|a|1
+6sense|6sense|6sense|Marketing|s|a|1
+Demandbase|demandbase|Demandbase|Marketing|s|a|1
+Cvent|cvent|Cvent|Events|s|a|1
+Eventbrite|eventbrite|Eventbrite|Events|s|a|0
+ON24|on24|ON24|Events|s|a|1
+WordPress|wordpress,word press|Automattic|Website|e|a|0
+Webflow|webflow|Webflow|Website|s|a|1
+Wix|wix|Wix|Website|s|a|0
+Squarespace|squarespace|Squarespace|Website|s|a|0
+Contentful|contentful|Contentful|Website|s|p|1
+Sitecore|sitecore|Sitecore|Website|e|a|1
+Adobe Experience Manager|aem,adobe experience manager|Adobe|Website|e|a|1
+Drupal|drupal|Drupal|Website|o|a|0
+Optimizely|optimizely,episerver|Optimizely|Website|s|a|1
+Unbounce|unbounce|Unbounce|Website|s|a|0
+Bitly|bitly|Bitly|Marketing|s|a|0
+Yext|yext|Yext|Marketing|s|a|0
+Birdeye|birdeye|Birdeye|Marketing|s|a|0
+Podium|podium|Podium|Marketing|s|a|0
+# E-commerce / retail
+BigCommerce|bigcommerce,big commerce|BigCommerce|Commerce|s|a|0
+WooCommerce|woocommerce,woo commerce,woo|Automattic|Commerce|o|a|0
+Magento|magento,adobe commerce|Adobe|Commerce|e|a|0
+Salesforce Commerce Cloud|commerce cloud,demandware,sfcc|Salesforce|Commerce|s|a|1
+Amazon Seller Central|seller central,amazon seller central,amazon marketplace|Amazon|Commerce|s|a|0
+eBay|ebay|eBay|Commerce|s|a|0
+Etsy|etsy|Etsy|Commerce|s|a|0
+Lightspeed|lightspeed,lightspeed pos|Lightspeed|POS|s|a|0
+Clover|clover,clover pos|Fiserv|POS|s|a|0
+Toast|toast,toast pos|Toast|POS|s|a|0
+Revel Systems|revel,revel pos|Revel Systems|POS|s|a|0
+NCR Aloha|aloha,ncr aloha|NCR Voyix|POS|e|a|0
+Oracle MICROS|micros,oracle micros,simphony|Oracle|POS|e|a|0
+Vend||Lightspeed|POS|s|a|0
+ShipStation|shipstation,ship station|Auctane|Shipping|s|a|0
+ShipBob|shipbob|ShipBob|Shipping|s|a|0
+EasyPost|easypost|EasyPost|Shipping|s|p|0
+UPS WorldShip|worldship,ups worldship|UPS|Shipping|d|a|0
+FedEx Ship Manager|fedex,fedex ship manager|FedEx|Shipping|e|a|0
+Linnworks|linnworks|Linnworks|Commerce|s|a|0
+ChannelAdvisor|channeladvisor,channel advisor,rithum|Rithum|Commerce|s|a|0
+Yotpo|yotpo|Yotpo|Commerce|s|a|0
+Recharge|recharge payments|Recharge|Commerce|s|a|0
+Manhattan WMS|manhattan,manhattan associates,manhattan wms|Manhattan Associates|Supply chain|e|a|1
+Blue Yonder|blue yonder,jda|Blue Yonder|Supply chain|s|a|1
+Kinaxis|kinaxis,rapidresponse|Kinaxis|Supply chain|s|a|1
+SAP Extended Warehouse Management|sap ewm,ewm|SAP|Supply chain|e|a|1
+Oracle Transportation Management|otm,oracle otm|Oracle|Supply chain|s|a|1
+Descartes|descartes|Descartes|Supply chain|s|a|0
+project44|project44,project 44|project44|Supply chain|s|a|1
+Samsara|samsara|Samsara|Fleet|s|a|1
+Geotab|geotab|Geotab|Fleet|s|a|0
+Motive|keeptruckin,motive fleet|Motive|Fleet|s|a|0
+Fleetio|fleetio|Fleetio|Fleet|s|a|0
+McLeod LoadMaster|mcleod,loadmaster|McLeod Software|Supply chain|e|a|0
+# Manufacturing / engineering / design
+AutoCAD|autocad,auto cad,acad|Autodesk|Design|d|a|0
+Autodesk Revit|revit|Autodesk|Design|d|a|0
+Autodesk Construction Cloud|autodesk construction cloud,bim 360,bim360|Autodesk|Construction|s|a|1
+Autodesk Inventor|inventor,autodesk inventor|Autodesk|Design|d|a|0
+Autodesk Fusion|fusion 360,autodesk fusion|Autodesk|Design|e|a|0
+Autodesk Vault|autodesk vault|Autodesk|Design|o|a|0
+Civil 3D|civil 3d,civil3d|Autodesk|Design|d|a|0
+SolidWorks|solidworks,solid works|Dassault Systemes|Design|d|a|0
+CATIA|catia|Dassault Systemes|Design|d|a|0
+3DEXPERIENCE|3dexperience,3d experience|Dassault Systemes|Design|s|a|1
+Siemens NX|siemens nx,unigraphics|Siemens|Design|d|a|0
+Siemens Teamcenter|teamcenter|Siemens|PLM|e|a|1
+PTC Creo|creo,ptc creo|PTC|Design|d|a|0
+PTC Windchill|windchill|PTC|PLM|e|a|1
+Arena PLM|arena plm|PTC|PLM|s|a|1
+Onshape|onshape|PTC|Design|s|a|0
+SketchUp|sketchup,sketch up|Trimble|Design|e|a|0
+Bentley MicroStation|microstation|Bentley Systems|Design|d|a|0
+Bentley OpenRoads|openroads|Bentley Systems|Design|d|a|0
+ANSYS|ansys|Synopsys|Engineering|d|a|0
+Altium Designer|altium,altium designer|Altium|Design|d|a|0
+LabVIEW|labview|Emerson|Engineering|d|a|0
+Mastercam|mastercam|CNC Software|Manufacturing|d|a|0
+Rockwell FactoryTalk|factorytalk,rockwell factorytalk|Rockwell Automation|Manufacturing|o|a|0
+Ignition SCADA|ignition,inductive automation|Inductive Automation|Manufacturing|o|a|0
+Wonderware|wonderware,aveva,aveva intouch|AVEVA|Manufacturing|o|a|0
+OSIsoft PI|osisoft pi,pi system,aveva pi|AVEVA|Manufacturing|o|a|0
+MasterControl|mastercontrol|MasterControl|Quality|s|a|1
+Veeva Vault|veeva,veeva vault|Veeva|Life sciences|s|a|1
+ETQ Reliance|etq,etq reliance|Hexagon|Quality|s|a|1
+Intelex|intelex|Fortive|EHS|s|a|1
+Cority|cority|Cority|EHS|s|a|1
+UpKeep|upkeep|UpKeep|Maintenance|s|a|0
+Fiix|fiix|Rockwell Automation|Maintenance|s|a|0
+IBM Maximo|maximo,ibm maximo|IBM|Maintenance|e|a|1
+eMaint|emaint|Fluke Reliability|Maintenance|s|a|0
+Limble CMMS|limble|Limble|Maintenance|s|a|0
+Adobe Creative Cloud|adobe creative cloud,creative cloud,adobe cc|Adobe|Design|e|a|1
+Adobe Photoshop|photoshop|Adobe|Design|d|a|1
+Adobe Illustrator|illustrator|Adobe|Design|d|a|1
+Adobe InDesign|indesign|Adobe|Design|d|a|1
+Adobe Premiere Pro|premiere,premiere pro|Adobe|Design|d|a|1
+Figma|figma|Figma|Design|s|a|1
+Canva|canva|Canva|Design|s|a|1
+Sketch|sketch app,bohemian sketch|Sketch|Design|d|a|0
+InVision|invision|InVision|Design|s|a|0
+Frame.io|frame io|Adobe|Design|s|a|1
+Bynder|bynder|Bynder|Design|s|a|1
+Brandfolder|brandfolder|Smartsheet|Design|s|a|1
+# Construction / property
+Procore|procore,pro core|Procore|Construction|s|a|1
+Yardi Voyager|yardi,yardi voyager,yardi breeze|Yardi|Property|s|a|1
+MRI Software|mri,mri software|MRI Software|Property|e|a|1
+AppFolio|appfolio,app folio|AppFolio|Property|s|a|0
+Buildium|buildium|RealPage|Property|s|a|0
+RealPage|realpage,real page,onesite|RealPage|Property|s|a|1
+Entrata|entrata|Entrata|Property|s|a|0
+Rent Manager|rent manager|London Computer Systems|Property|e|a|0
+ResMan|resman|ResMan|Property|s|a|0
+VTS|vts|VTS|Property|s|a|1
+CoStar|costar|CoStar Group|Property|s|a|0
+Argus Enterprise|argus,argus enterprise|Altus Group|Property|e|a|0
+Sage 300 CRE|sage 300 cre,timberline|Sage|Construction|o|a|0
+Sage Intacct Construction|sage intacct construction|Sage|Construction|s|a|1
+Viewpoint Vista|trimble viewpoint|Trimble|Construction|e|a|0
+Viewpoint Spectrum|spectrum construction,viewpoint spectrum|Trimble|Construction|s|a|0
+Foundation Software|foundation software|Foundation Software|Construction|e|a|0
+CMiC|cmic|CMiC|Construction|e|a|1
+Buildertrend|buildertrend|Buildertrend|Construction|s|a|0
+CoConstruct|coconstruct|Buildertrend|Construction|s|a|0
+PlanGrid|plangrid|Autodesk|Construction|s|a|0
+Newforma|newforma|Newforma|Construction|e|a|0
+Aconex|aconex|Oracle|Construction|s|a|1
+Primavera P6|primavera,p6,oracle primavera|Oracle|Construction|e|a|1
+Oracle Primavera Unifier|unifier,primavera unifier|Oracle|Construction|s|a|1
+e-Builder|e builder,ebuilder|Trimble|Construction|s|a|1
+Kahua|kahua|Kahua|Construction|s|a|1
+BuildingConnected|buildingconnected,building connected|Autodesk|Construction|s|a|0
+Textura|textura|Oracle|Construction|s|a|0
+Jonas Construction|jonas,jonas construction|Jonas|Construction|e|a|0
+HCSS HeavyJob|hcss,heavyjob,heavybid|HCSS|Construction|e|a|0
+B2W Software|b2w|Trimble|Construction|e|a|0
+Raken|raken|Raken|Construction|s|a|0
+Fieldwire|fieldwire|Hilti|Construction|s|a|0
+STACK|stack takeoff|STACK|Construction|s|a|0
+On-Screen Takeoff|on screen takeoff|ConstructConnect|Construction|d|a|0
+BuildPro|buildpro,supplypro|Hyphen Solutions|Construction|s|a|0
+MarkSystems|marksystems|MarkSystems|Construction|e|a|0
+NEWSTAR|newstar|Constellation HomeBuilder Systems|Construction|e|a|0
+ServiceTitan|servicetitan,service titan|ServiceTitan|Field service|s|a|0
+Jobber|jobber|Jobber|Field service|s|a|0
+Housecall Pro|housecall pro|Housecall Pro|Field service|s|a|0
+Salesforce Field Service|field service lightning,salesforce field service|Salesforce|Field service|s|a|1
+FieldEdge|fieldedge|FieldEdge|Field service|s|a|0
+IFS Field Service|ifs field service|IFS|Field service|s|a|1
+Accruent|accruent,famis|Fortive|Facilities|s|a|1
+Archibus|archibus|Eptura|Facilities|e|a|1
+Envoy||Envoy|Facilities|s|a|1
+Robin|robin powered|Robin|Facilities|s|a|1
+Verkada|verkada|Verkada|Facilities|s|a|1
+Brivo|brivo|Brivo|Facilities|s|a|0
+# Healthcare
+Epic|epic,epic emr,epic hyperspace|Epic Systems|Healthcare|o|a|1
+Oracle Health|cerner,oracle health,cerner millennium|Oracle|Healthcare|e|a|1
+MEDITECH|meditech|MEDITECH|Healthcare|e|a|1
+athenahealth|athenahealth,athena,athenaone|athenahealth|Healthcare|s|a|1
+eClinicalWorks|eclinicalworks,ecw|eClinicalWorks|Healthcare|e|a|0
+NextGen Healthcare|nextgen,nextgen healthcare|NextGen|Healthcare|e|a|0
+Allscripts|allscripts,veradigm|Veradigm|Healthcare|e|a|0
+Kareo|kareo,tebra|Tebra|Healthcare|s|a|0
+DrChrono|drchrono|EverHealth|Healthcare|s|a|0
+SimplePractice|simplepractice,simple practice|SimplePractice|Healthcare|s|a|0
+Jane App|jane app|Jane|Healthcare|s|a|0
+Dentrix|dentrix|Henry Schein One|Healthcare|e|a|0
+Eaglesoft|eaglesoft|Patterson|Healthcare|o|a|0
+Open Dental|open dental|Open Dental|Healthcare|o|a|0
+PointClickCare|pointclickcare|PointClickCare|Healthcare|s|a|1
+Netsmart|netsmart,netsmart myavatar|Netsmart|Healthcare|s|a|1
+Doxy.me|doxy me|Doxy.me|Healthcare|s|a|0
+Accuro EMR|accuro|QHR Technologies|Healthcare|s|a|0
+OSCAR EMR|oscar emr,oscar pro|WELL Health|Healthcare|e|a|0
+Telus PS Suite|ps suite,telus ps suite|TELUS Health|Healthcare|e|a|0
+# Legal
+Clio|clio,clio manage|Clio|Legal|s|a|1
+MyCase|mycase|AffiniPay|Legal|s|a|0
+PracticePanther|practicepanther|PracticePanther|Legal|s|a|0
+Smokeball|smokeball|Smokeball|Legal|s|a|0
+iManage|imanage,i manage|iManage|Legal|e|a|1
+NetDocuments|netdocuments,net documents|NetDocuments|Legal|s|a|1
+Relativity|relativity,relativityone|Relativity|Legal|s|a|1
+Westlaw|westlaw|Thomson Reuters|Legal|s|a|1
+LexisNexis|lexisnexis,lexis|LexisNexis|Legal|s|a|1
+Aderant|aderant|Aderant|Legal|e|a|1
+Elite 3E|elite 3e|Thomson Reuters|Legal|e|a|1
+Litera|litera|Litera|Legal|e|a|1
+Everlaw|everlaw|Everlaw|Legal|s|a|1
+CaseWare|caseware|CaseWare|Finance|d|a|0
+CCH Axcess|cch axcess,cch|Wolters Kluwer|Finance|s|a|1
+Thomson Reuters UltraTax|ultratax|Thomson Reuters|Finance|d|a|0
+Karbon|karbon|Karbon|Finance|s|a|1
+Canopy|canopy tax|Canopy|Finance|s|a|0
+TaxDome|taxdome|TaxDome|Finance|s|a|0
+# Education / nonprofit
+Canvas LMS|canvas,canvas lms,instructure|Instructure|Education|s|a|1
+Blackboard|blackboard,blackboard learn|Anthology|Education|s|a|1
+Moodle|moodle|Moodle|Education|e|a|0
+Google Classroom|google classroom|Google|Education|s|a|1
+PowerSchool|powerschool,power school|PowerSchool|Education|s|a|1
+Ellucian Banner|ellucian,ellucian banner|Ellucian|Education|e|a|1
+Raiser's Edge NXT|raisers edge,raiser s edge,re nxt|Blackbaud|Nonprofit|s|a|1
+Blackbaud Financial Edge|financial edge|Blackbaud|Nonprofit|s|a|1
+Bloomerang|bloomerang|Bloomerang|Nonprofit|s|a|0
+DonorPerfect|donorperfect|DonorPerfect|Nonprofit|s|a|0
+Salesforce Nonprofit Cloud|nonprofit cloud,npsp|Salesforce|Nonprofit|s|a|1
+Planning Center|planning center|Planning Center|Nonprofit|s|a|0
+# Hospitality
+Oracle OPERA|opera pms,oracle opera|Oracle|Hospitality|e|a|1
+Cloudbeds|cloudbeds|Cloudbeds|Hospitality|s|a|0
+Mews|mews|Mews|Hospitality|s|a|0
+OpenTable|opentable|OpenTable|Hospitality|s|a|0
+MarketMan|marketman|MarketMan|Hospitality|s|a|0
+# Cloud infra / hosting
+Amazon Web Services|amazon web services|Amazon|Infrastructure|s|p|1
+Microsoft Azure|microsoft azure|Microsoft|Infrastructure|s|p|1
+Google Cloud|google cloud platform,gcp|Google|Infrastructure|s|p|1
+Oracle Cloud Infrastructure|oci,oracle cloud|Oracle|Infrastructure|s|p|1
+IBM Cloud|ibm cloud|IBM|Infrastructure|s|p|1
+DigitalOcean|digitalocean,digital ocean|DigitalOcean|Infrastructure|s|p|0
+Linode|linode,akamai cloud|Akamai|Infrastructure|s|p|0
+OVHcloud|ovh,ovhcloud|OVHcloud|Infrastructure|s|p|0
+Rackspace|rackspace|Rackspace|Infrastructure|s|p|0
+GoDaddy|godaddy,go daddy|GoDaddy|Website|s|a|0
+Amazon S3|s3,amazon s3|Amazon|Infrastructure|s|p|0
+Amazon EC2|ec2,amazon ec2|Amazon|Infrastructure|s|p|0
+Azure App Service|azure app service,app service|Microsoft|Infrastructure|p|p|0
+VMware vSphere|vmware,vsphere,esxi,vcenter|Broadcom|Infrastructure|o|s|0
+Microsoft Hyper-V|hyper v,hyperv|Microsoft|Infrastructure|o|s|0
+Nutanix|nutanix|Nutanix|Infrastructure|o|s|0
+Proxmox VE|proxmox|Proxmox|Infrastructure|o|s|0
+Windows Server|windows server,win server|Microsoft|Server|o|s|0
+Red Hat Enterprise Linux|rhel,red hat,redhat|Red Hat|Server|o|s|0
+Ubuntu Server|ubuntu,ubuntu server|Canonical|Server|o|s|0
+Synology NAS|synology,synology nas|Synology|Server|o|s|0
+QNAP NAS|qnap|QNAP|Server|o|s|0
+IBM Power Systems|ibm power,power systems,iseries|IBM|Server|o|s|0
+Mainframe|mainframe,z os,ibm z,zos|IBM|Server|o|s|0
+Akamai|akamai|Akamai|Network|s|p|1
+# Databases
+Microsoft SQL Server|sql server,mssql,ms sql,microsoft sql|Microsoft|Database|o|p|0
+Azure SQL Database|azure sql,azure sql database|Microsoft|Database|s|p|0
+Oracle Database|oracle db,oracle database|Oracle|Database|o|p|0
+MySQL|mysql,my sql|Oracle|Database|o|p|0
+PostgreSQL|postgres,postgresql,postgre sql|PostgreSQL|Database|o|p|0
+MongoDB Atlas|mongodb,mongo,mongodb atlas|MongoDB|Database|s|p|1
+Redis|redis|Redis|Database|e|p|0
+Amazon RDS|rds aws,amazon rds,aurora|Amazon|Database|s|p|0
+Amazon DynamoDB|dynamodb,dynamo db|Amazon|Database|s|p|0
+Cosmos DB|cosmos db,cosmosdb,azure cosmos|Microsoft|Database|s|p|0
+IBM Db2|db2,ibm db2|IBM|Database|o|p|0
+SAP HANA|sap hana,hana|SAP|Database|e|p|0
+Couchbase|couchbase|Couchbase|Database|e|p|0
+Cassandra|cassandra,apache cassandra|Apache|Database|o|p|0
+FileMaker|filemaker,claris filemaker|Claris|Database|e|a|0
+Progress OpenEdge|openedge,progress openedge|Progress|Database|o|p|0
+# Backup / storage
+Veeam Backup & Replication|veeam,veeam backup|Veeam|Backup|o|a|0
+Acronis Cyber Protect|acronis|Acronis|Backup|e|a|0
+Datto BCDR|datto,datto bcdr|Kaseya|Backup|e|a|0
+Druva|druva|Druva|Backup|s|a|1
+Rubrik|rubrik|Rubrik|Backup|e|a|1
+Cohesity|cohesity|Cohesity|Backup|e|a|1
+Commvault|commvault,comm vault|Commvault|Backup|e|a|1
+Veritas NetBackup|netbackup,veritas,veritas netbackup|Cohesity|Backup|o|a|0
+Backblaze|backblaze|Backblaze|Backup|s|a|0
+Carbonite|carbonite|OpenText|Backup|s|a|0
+Barracuda Backup|barracuda backup|Barracuda|Backup|e|a|0
+Wasabi|wasabi|Wasabi|Backup|s|p|0
+Azure Backup|azure backup|Microsoft|Backup|s|p|0
+AWS Backup|aws backup|Amazon|Backup|s|p|0
+NetApp ONTAP|netapp,ontap|NetApp|Storage|o|s|0
+Dell PowerStore|dell emc,powerstore,emc|Dell|Storage|o|s|0
+Pure Storage|pure storage,flasharray|Pure Storage|Storage|o|s|0
+# Misc business ops
+Gong Engage|gong engage|Gong|Sales|s|a|1
+Concur Travel|concur travel|SAP|Finance|s|a|1
+Egencia|egencia|Amex GBT|Finance|s|a|1
+Zoho One|zoho one|Zoho|Productivity|s|a|1
+Zoho Desk|zoho desk|Zoho|Support|s|a|0
+Freshchat|freshchat|Freshworks|Support|s|a|0
+LiveChat|livechat|LiveChat|Support|s|a|0
+Drift|drift|Salesloft|Marketing|s|a|1
+Gainsight|gainsight|Gainsight|Customer success|s|a|1
+ChurnZero|churnzero|ChurnZero|Customer success|s|a|1
+Totango|totango|Totango|Customer success|s|a|1
+UserVoice|uservoice|UserVoice|Product|s|a|1
+Productboard|productboard|Productboard|Product|s|a|1
+Aha!|aha,aha roadmaps|Aha!|Product|s|a|1
+Pendo|pendo|Pendo|Product|s|a|1
+WalkMe|walkme|SAP|Product|s|a|1
+Whatfix|whatfix|Whatfix|Product|s|a|1
+LeanIX|leanix,sap leanix|SAP|Enterprise architecture|s|a|1
+Ardoq|ardoq|Ardoq|Enterprise architecture|s|a|1
+MEGA HOPEX|hopex,mega hopex|MEGA|Enterprise architecture|s|a|1
+Sparx Enterprise Architect|sparx,sparx ea,enterprise architect|Sparx Systems|Enterprise architecture|d|a|0
+BiZZdesign|bizzdesign|Bizzdesign|Enterprise architecture|s|a|1
+Flexera One|flexera|Flexera|IT management|s|a|1
+Zylo|zylo|Zylo|IT management|s|a|1
+Productiv|productiv|Productiv|IT management|s|a|1
+Torii|torii|Torii|IT management|s|a|1
+Cloudability|cloudability,apptio cloudability|IBM|IT management|s|a|1
+Apptio|apptio|IBM|IT management|s|a|1
+Coupa Supply Chain|llamasoft,coupa supply chain|Coupa|Supply chain|s|a|1
+Jaggaer|jaggaer|Jaggaer|Procurement|s|a|1
+GEP SMART|gep smart,gep|GEP|Procurement|s|a|1
+Ivalua|ivalua|Ivalua|Procurement|s|a|1
+Icertis|icertis|Icertis|Contracts|s|a|1
+ContractWorks|contractworks|Onit|Contracts|s|a|0
+Paperless Parts|paperless parts|Paperless Parts|Manufacturing|s|a|0
+ProShop ERP|proshop|ProShop|ERP|s|a|0
+JobBOSS|jobboss,jobboss2|ECI|ERP|e|a|0
+E2 Shop System|e2 shop,shoptech|ECI|ERP|e|a|0
+DELMIAworks|delmiaworks,iqms|Dassault Systemes|ERP|e|a|0
+Visual ERP|infor visual,visual erp|Infor|ERP|o|a|0

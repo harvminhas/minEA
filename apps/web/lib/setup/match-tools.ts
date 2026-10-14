@@ -1,6 +1,6 @@
 import { TOOL_CATALOG as catalog } from "@/lib/catalog/tools-catalog";
 
-export type ToolHosting = "saas" | "paas" | "own" | "either";
+export type ToolHosting = "saas" | "paas" | "own" | "either" | "desktop";
 export type ToolKind = "app" | "server" | "platform";
 
 export type ToolRecord = {
@@ -101,16 +101,41 @@ function tokenHit(input: string, name: string): boolean {
   return editDistance(`${letters}${numbers[0]}`, compact) <= 1 || nameTokens.some((word) => word.startsWith(letters));
 }
 
+/** Everyday words people type that are not products. They stay Custom even when a catalog name
+ * starts with them or is a couple of letters away. */
+export const GENERIC_TERMS = new Set([
+  "test", "testing", "website", "web site", "site", "app", "apps", "application", "server", "servers",
+  "email", "mail", "crm", "erp", "hr", "payroll", "accounting", "database", "db", "files", "backup",
+  "phone", "phones", "printer", "printers", "wifi", "network", "internet", "laptop", "laptops", "portal",
+  "intranet", "spreadsheet", "spreadsheets", "excel sheet", "other", "misc", "tbd", "none", "n a", "todo",
+  // A vendor or cloud on its own names a family of products, not one of them.
+  "aws", "azure", "gcp", "google", "microsoft", "amazon", "oracle", "sap", "adobe", "ibm", "cisco", "dell",
+  "demo", "sample", "custom", "inhouse", "in house", "internal tool", "tool", "tools", "software", "system",
+]);
+
+const index = new Map<ToolRecord, string[]>();
+function cachedNames(tool: ToolRecord): string[] {
+  let names = index.get(tool);
+  if (!names) {
+    names = namesOf(tool);
+    index.set(tool, names);
+  }
+  return names;
+}
+
 function tierFor(input: string, tool: ToolRecord): "exact" | "token" | "fuzzy" | null {
-  const names = namesOf(tool);
+  const names = cachedNames(tool);
   if (names.includes(input)) return "exact";
+  if (GENERIC_TERMS.has(input)) return null;
   const tokens = input.split(" ").filter((token) => token.length >= 3 && !/^\d+$/.test(token));
   for (const name of names) {
-    if (input.length >= 3 && (name.startsWith(input) || input.startsWith(name))) return "token";
+    if (input.length >= 3 && (name.startsWith(input) || input.startsWith(`${name} `))) return "token";
     if (tokenHit(input, name)) return "token";
   }
   const hintHit = (tool.hints ?? []).some((hint) => tokens.includes(normalizeTerm(hint)));
-  const close = names.some((name) => similarity(input, name) >= 0.6 || editDistance(input, name) <= 2);
+  // Short words are a couple of letters from many names, so they need to be closer.
+  const maxEdits = input.length <= 4 ? 0 : input.length <= 6 ? 1 : 2;
+  const close = names.some((name) => similarity(input, name) >= 0.6 || (name.length >= 4 && editDistance(input, name) <= maxEdits));
   if (hintHit || close) return "fuzzy";
   return null;
 }
@@ -134,6 +159,10 @@ export function matchEntries(text: string, kind?: ToolKind | readonly ToolKind[]
   const exactOnly = kinds != null && [...kinds].every((item) => item === "server" || item === "platform");
   return splitEntries(text).map((input) => {
     const key = normalizeTerm(input);
+    // Typed exactly as a catalog tool of another kind (a platform in the app flow): never
+    // stretch it onto a look-alike of this kind.
+    const exactOther = kinds ? exactCatalogTool(input) : null;
+    if (exactOther && !kinds!.has(exactOther.kind)) return { input, status: "custom" as const, tool: null, options: [], customBuilt: false };
     const hits = { exact: [] as ToolRecord[], token: [] as ToolRecord[], fuzzy: [] as ToolRecord[] };
     for (const tool of tools) {
       const tier = tierFor(key, tool);
@@ -180,6 +209,7 @@ export function choiceForTool(tool: { hosting: ToolHosting } | null | undefined)
   if (tool.hosting === "saas") return "saas";
   if (tool.hosting === "paas") return "paas";
   if (tool.hosting === "own") return "own";
+  if (tool.hosting === "desktop") return "desktop";
   return "unknown";
 }
 

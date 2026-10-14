@@ -92,8 +92,8 @@ describe("tool matcher", () => {
   it("Dynamics 365 does not match Microsoft 365", () => {
     const row = matchEntries("Dynamics 365", "app")[0];
     assert.equal(row?.input, "Dynamics 365");
-    assert.equal(row?.tool, null);
-    assert.equal(row?.status, "custom");
+    // With the grown catalogue it offers the Dynamics 365 products, never Microsoft 365.
+    assert.ok(row?.options.length && row.options.every((tool) => tool.name.includes("Dynamics")), JSON.stringify(row?.options.map((tool) => tool.name)));
     assert.equal(matchEntries("Microsoft 365", "app")[0]?.tool?.name, "Microsoft 365");
     assert.equal(matchEntries("ms 365", "app")[0]?.tool?.name, "Microsoft 365");
   });
