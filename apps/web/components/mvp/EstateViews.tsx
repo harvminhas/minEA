@@ -44,6 +44,7 @@ import {
   impactGate,
   NEEDS_HOST_COPY,
 } from "@/lib/views/opening";
+import { derivedHosting, isDerivedHost, providerGroups } from "@/lib/views/providers";
 import { sampleEdges, sampleItems, sampleNodes } from "@/lib/views/sample-estate";
 import { noHostLinked, readPlatformInfra, readRuntimeInfra } from "@/lib/infra/read";
 import { infraStatus } from "@/lib/infra/status";
@@ -179,7 +180,12 @@ function useOpeningModel() {
   const rows = catalog.data?.rows ?? [];
   const locations = catalog.data?.locations ?? [];
   const setup = useWorkspaceSetup();
-  const hostEdges = impact.edges.filter((edge) => edge.type === "runs_on" || edge.type === "built_on").length;
+  // Cloud (SaaS) apps run on their provider, desktop apps on people's computers: derived, not saved.
+  const derived = useMemo(
+    () => derivedHosting(rows.filter((row) => row.object.type === "application").map((row) => ({ id: row.id, name: row.name, vendor: row.vendor, properties: (row.object.properties ?? {}) as Record<string, unknown> })), impact.edges),
+    [rows, impact.edges],
+  );
+  const hostEdges = impact.edges.filter((edge) => edge.type === "runs_on" || edge.type === "built_on").length + derived.edges.length;
   const blocked = setup.enabled && Boolean(catalog.data) && !setup.state.met;
   const example = blocked || (ready && showExampleEstate(hostEdges, params.get("demo") === "empty", dev));
 
@@ -196,6 +202,7 @@ function useOpeningModel() {
         properties: (object.properties ?? {}) as Record<string, unknown>,
       })),
     ];
+    items.push(...derived.items);
     const known = new Set(items.map((item) => item.id));
     for (const node of impact.nodes) {
       if (known.has(node.id)) continue;
@@ -210,11 +217,13 @@ function useOpeningModel() {
       });
     }
     return items;
-  }, [rows, locations, impact.nodes]);
+  }, [rows, locations, impact.nodes, derived]);
+  const liveNodes = useMemo(() => [...impact.nodes, ...derived.nodes], [impact.nodes, derived]);
+  const liveEdges = useMemo(() => [...impact.edges, ...derived.edges], [impact.edges, derived]);
 
   const items = example ? sampleItems : liveItems;
-  const nodes = example ? sampleNodes : impact.nodes;
-  const edges = example ? sampleEdges : impact.edges;
+  const nodes = example ? sampleNodes : liveNodes;
+  const edges = example ? sampleEdges : liveEdges;
   const candidates = useMemo(() => (ready || example ? impactCandidates(items, nodes, edges) : []), [items, nodes, edges, ready, example]);
   const knownIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
   const explicit = params.get("sel");
@@ -294,10 +303,10 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
   const slowSignIn = bands.slow.some((hit) => hit.severity === "loses_sign_in");
   const dollars = chainRunDollars(selected, hits, opening.items);
   const caption = spofCaption(opening.candidates[0], opening.showingDefault);
-  const todos = chainTodos(selected, hits, opening.items, opening.edges);
+  const todos = chainTodos(selected, hits, opening.items, opening.edges).filter((todo) => !(todo.id === "confirm" && isDerivedHost(selected?.id)));
   const cards = openingCards(opening.candidates);
   const confirmed = String(selected?.properties.impact_confirmed_at ?? "");
-  const openCount = todos.filter((todo) => todo.id !== "confirm").length + (confirmed ? 0 : 1);
+  const openCount = todos.filter((todo) => todo.id !== "confirm").length + (confirmed || isDerivedHost(selected?.id) ? 0 : 1);
   const teams = teamBoxes([...bands.stop, ...bands.slow].map((hit) => byId.get(hit.id)).filter((item): item is ChainItem => Boolean(item)));
   const lines = useConnectors(canvasRef, `${opening.selectedId}:${hits.map((hit) => hit.id).join(",")}:${picker ?? ""}:${teams.length}`);
   const delay = (fromBottom: number) => laneDelayMs(fromBottom, opening.reduced);
@@ -341,6 +350,13 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug || !selected) throw new Error("Not signed in");
       const otherType = objectTypeOf(otherId);
+      if (isDerivedHost(selected.id) && (picker === "app" || picker === "server")) {
+        const desktop = selected.properties.derived_kind === "desktop";
+        const current = opening.rows.find((row) => row.id === otherId)?.object.properties ?? {};
+        return { object: await objectsApi.update(orgSlug, workspaceSlug, otherId, {
+          properties: { ...current, hosting_model: desktop ? "desktop" : "saas", ...(desktop ? {} : { vendor: selected.name }) },
+        }, token) };
+      }
       if (picker === "capability") {
         const app = bands.stop[0] ?? bands.slow[0];
         const targetId = app?.id ?? (selected.kind === "application" ? selected.id : "");
@@ -399,7 +415,8 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
       setPicker(null);
       setError("");
       if (created && orgSlug && workspaceSlug) {
-        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: created });
+        if ("object" in created) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: created.object as MinEAObject });
+        else applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: created });
       }
     },
     onError: (err: Error) => setError(err.message),
@@ -407,7 +424,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
 
   const confirm = useMutation({
     mutationFn: async () => {
-      if (opening.example || !selected) return;
+      if (opening.example || !selected || isDerivedHost(selected.id)) return;
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
       return objectsApi.update(orgSlug, workspaceSlug, selected.id, {
@@ -556,7 +573,9 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
                 )}
               </Lane>
               <Lane label="Goes down with it" delay={delay(1)} thin={bands.infra.length === 0}>
-                {bands.infra.length === 0 ? (
+                {bands.infra.length === 0 && isDerivedHost(selected?.id) ? (
+                  <p className="text-[12px] text-[#8b90a0]">{selected?.properties.derived_kind === "desktop" ? "Installed on people’s computers." : `Run by ${selected?.name}.`}</p>
+                ) : bands.infra.length === 0 ? (
                   <CollapsedLine text={collapsedCopy("infra", 0)} action="Add a server" onClick={() => setPicker(picker === "server" ? null : "server")} />
                 ) : bands.infra.map((hit) => (
                   <HitBox key={hit.id} hit={hit} nodes={opening.nodes} item={byId.get(hit.id)} tone="infra" delay={delay(1)} />
@@ -612,7 +631,7 @@ function ImpactView({ opening }: { opening: OpeningModel }) {
             <div data-testid="impact-needs-host" className="w-full max-w-md rounded-2xl border border-[#e6e8ee] bg-white px-4 py-5 text-center shadow-lg sm:px-6">
               <p className="text-[15px] font-semibold text-[#1c2230]">{NEEDS_HOST_COPY.title}</p>
               <p className="mt-2 text-[13px] leading-5 text-[#4b5163]">{NEEDS_HOST_COPY.body}</p>
-              <Link href={`${basePath}/views/impact?tab=hosting`} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">{NEEDS_HOST_COPY.button}</Link>
+              <Link href={`${basePath}/views/impact?tab=hosting#where-each-runs`} className="mt-4 inline-flex rounded-lg bg-[#5b4ce6] px-4 py-2 text-[13px] font-medium text-white">{NEEDS_HOST_COPY.button}</Link>
             </div>
           )}
         </div>
@@ -645,6 +664,7 @@ function sourceSubtitle(item: ChainItem, rows: CatalogRow[]): string {
     const status = infraStatus(runtime, new Date());
     return [runtime.kindLabel || row.typeLabel, status.severity === "bad" ? "out of support" : ""].filter(Boolean).join(" · ");
   }
+  if (item.properties.derived) return item.properties.derived_kind === "desktop" ? "Installed desktop software" : "Cloud provider";
   if (item.kind === "platform" && row) return readPlatformInfra(row.object).kindLabel || row.typeLabel;
   if (item.kind === "location") {
     const type = String(item.properties.location_type ?? "");
@@ -1056,6 +1076,8 @@ function HostingView() {
   // or is Cloud (SaaS) or on people's computers.
   const unplaced = appRows.filter((row) => setupState([row.object], relationshipsAll).located === 0);
   const onDesktops = appRows.filter((row) => (row.object.properties as Record<string, unknown> | undefined)?.hosting_model === "desktop");
+  // Cloud (SaaS) apps with no platform link, grouped by provider (derived from vendor / catalogue).
+  const providers = providerGroups(appRows.map((row) => ({ id: row.id, name: row.name, vendor: row.vendor, properties: (row.object.properties ?? {}) as Record<string, unknown> })), impact.edges).filter((group) => !group.desktop);
   const placed = rows.filter((row) => row.kind === "runtime" && impact.relationships.some((rel) => rel.type === "located_at" && rel.from_object_id === row.id)).length;
 
   return (
@@ -1087,6 +1109,16 @@ function HostingView() {
               {platforms.map((platform) => (
                 <HostCard key={platform.id} host={platform} apps={appsOn(platform.id)} vms={[]} appsOn={appsOn} onDrop={(appId) => place.mutate({ appId, hostId: platform.id })} />
               ))}
+              {providers.map((group) => (
+                <div key={group.id} data-testid="cloud-provider" className="rounded-lg border border-[#e6e8ee] bg-white p-3">
+                  <p className="text-[13px] font-semibold text-[#1c2230]">{group.name}</p>
+                  <p className="mb-2 text-[11px] text-[#8b90a0]">Cloud provider · {group.apps.length} app{group.apps.length === 1 ? "" : "s"}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {group.apps.map((app) => <span key={app.id} className="rounded-full bg-[#eef4ff] px-2 py-0.5 text-[11px] text-[#1d4ed8]">{app.name}</span>)}
+                  </div>
+                </div>
+              ))}
+              {platforms.length === 0 && providers.length === 0 && <span className="text-[11px] text-[#c5c8d4]">None yet</span>}
             </div>
           </section>
           <section data-testid="desktop-apps" className="rounded-xl border border-[#e6e8ee] bg-white p-4">
@@ -1097,7 +1129,7 @@ function HostingView() {
             </div>
           </section>
           {unplaced.length > 0 && (
-            <section data-testid="where-each-runs" className="rounded-xl border border-[#e6e8ee] bg-white p-4">
+            <section id="where-each-runs" data-testid="where-each-runs" className="rounded-xl border border-[#e6e8ee] bg-white p-4">
               <h2 className="text-[14px] font-semibold text-[#1c2230]">Where does each one run?</h2>
               <p className="mb-3 text-[12px] text-[#8b90a0]">Cloud, one of your servers, or people&apos;s computers.</p>
               <ul className="space-y-3">

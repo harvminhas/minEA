@@ -173,9 +173,9 @@ export function impactGate(blocked: boolean, example: boolean): ImpactGate {
 }
 
 export const NEEDS_HOST_COPY = {
-  title: "One more step for impact analysis",
-  body: "Impact analysis follows what each app runs on. Link at least one app to a server or platform it runs on, and your own chain appears here. Until then this is a sample estate; nothing here is saved to your workspace.",
-  button: "Link an app to a server",
+  title: "Say where your apps run",
+  body: "Impact analysis follows what each app runs on: a cloud provider, one of your servers, or people’s computers. None of your apps has that yet. Pick it for each one and your own chain appears here. Until then this is a sample estate; nothing here is saved to your workspace.",
+  button: "Choose where each app runs",
 } as const;
 
 export function chainTodos(selected: ChainItem | undefined, hits: ImpactHit[], items: ChainItem[], edges: ImpactEdge[], today = new Date()): ChainTodo[] {
