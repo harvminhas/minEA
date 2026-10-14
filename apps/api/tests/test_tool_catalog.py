@@ -26,7 +26,7 @@ def test_validate_entry_cleans_and_rejects():
     entry = tc.validate_entry({"name": " Tekla Structures ", "aliases": "tekla, Tekla Structures, TEKLA", "vendor": "Trimble",
                                "category": "Construction", "hosting": "desktop", "kind": "app", "typicalAnnual": "", "ssoUsual": 0})
     assert entry == {"name": "Tekla Structures", "aliases": ["tekla"], "vendor": "Trimble", "category": "Construction",
-                     "hosting": "desktop", "kind": "app", "typicalAnnual": None, "ssoUsual": False}
+                     "hosting": "desktop", "kind": "app", "typicalAnnual": None, "ssoUsual": False, "typicalPerSeatMonthly": None}
     for bad in ({"name": ""}, {"name": "X", "hosting": "moon"}, {"name": "X", "kind": "thing"}, {"name": "X", "typicalAnnual": "lots"}):
         with pytest.raises(ValueError):
             tc.validate_entry(bad)
@@ -86,3 +86,11 @@ def test_require_platform_admin_rejects_unlisted(monkeypatch):
     with pytest.raises(HTTPException) as err:
         asyncio.run(require_platform_admin(AuthContext("uid", "x@example.com"), _BrokenDb()))
     assert err.value.status_code == 403
+
+
+def test_per_seat_price_optional_and_validated():
+    assert tc.validate_entry({"name": "X", "typicalPerSeatMonthly": "12.5"})["typicalPerSeatMonthly"] == 12.5
+    for bad in ("abc", -1):
+        with pytest.raises(ValueError):
+            tc.validate_entry({"name": "X", "typicalPerSeatMonthly": bad})
+    assert all("typicalPerSeatMonthly" not in t for t in tc.bundled_tools()), "no invented per-seat prices"

@@ -291,6 +291,7 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
       source: { kind: "rel", edge: "supplied_by", dir: "out", target: ["external_party"], single: true },
     },
     { key: "cost", label: "Annual cost", section: "cost", editor: "costLines", source: { kind: "prop", key: "cost_lines" } },
+    { key: "licence_count", label: "Licences", section: "cost", editor: "number", source: { kind: "prop", key: "licence_count" } },
     { key: "contract_renewal", label: "Renewal", section: "cost", editor: "date", source: { kind: "prop", key: "contract_renewal" } },
     { key: "hosting_model", label: "Hosting model", section: "hosting", editor: "select", source: { kind: "prop", key: "hosting_model" }, options: APPLICATION_HOSTING_OPTIONS },
     {

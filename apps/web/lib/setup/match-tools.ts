@@ -11,6 +11,8 @@ export type ToolRecord = {
   hosting: ToolHosting;
   kind: ToolKind;
   typicalAnnual: number | null;
+  /** Public list price per licence per month (USD), when the catalogue has one. Never guessed. */
+  typicalPerSeatMonthly?: number | null;
   unit: string;
   hints?: string[];
   /** An identity provider: apps usually sign in with it (Signs in with suggestions). */

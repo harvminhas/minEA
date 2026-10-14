@@ -77,7 +77,18 @@ def validate_entry(body: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("Typical annual cost must be a whole number or empty") from None
         if typical < 0:
             raise ValueError("Typical annual cost can't be negative")
+    per_seat = body.get("typicalPerSeatMonthly")
+    if per_seat in ("", None):
+        per_seat = None
+    else:
+        try:
+            per_seat = round(float(per_seat), 2)
+        except (TypeError, ValueError):
+            raise ValueError("Per-licence monthly price must be a number or empty") from None
+        if per_seat < 0:
+            raise ValueError("Per-licence monthly price can't be negative")
     return {
+        "typicalPerSeatMonthly": per_seat,
         "name": name[:200],
         "aliases": clean_aliases[:40],
         "vendor": str(body.get("vendor") or "").strip()[:200],
@@ -96,7 +107,7 @@ def row_to_tool(row: Any) -> dict[str, Any]:
         "name": m["name"], "aliases": list(m["aliases"] or []), "vendor": m["vendor"], "category": m["category"],
         "hosting": m["hosting"], "kind": m["kind"], "typicalAnnual": m["typical_annual"], "unit": extra.get("unit", "year"),
     }
-    for key in ("hints", "idp"):
+    for key in ("hints", "idp", "typicalPerSeatMonthly"):
         if key in extra:
             tool[key] = extra[key]
     if m["sso_usual"]:
@@ -136,7 +147,7 @@ async def seed_if_empty(db: AsyncSession) -> int:
                 "name": tool["name"], "key": normalize(tool["name"]), "aliases": json.dumps(tool["aliases"]),
                 "vendor": tool["vendor"], "category": tool["category"], "hosting": tool["hosting"], "kind": tool["kind"],
                 "typical": tool.get("typicalAnnual"), "sso": bool(tool.get("ssoUsual")),
-                "extra": json.dumps({k: tool[k] for k in ("unit", "hints", "idp") if k in tool}),
+                "extra": json.dumps({k: tool[k] for k in ("unit", "hints", "idp", "typicalPerSeatMonthly") if k in tool}),
             },
         )
     await db.commit()

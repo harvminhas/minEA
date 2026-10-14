@@ -85,16 +85,17 @@ async def _write(db: AsyncSession, body: dict, admin: AuthContext, entry_id: str
         "name": entry["name"], "key": tc.normalize(entry["name"]), "aliases": json.dumps(entry["aliases"]),
         "vendor": entry["vendor"], "category": entry["category"], "hosting": entry["hosting"], "kind": entry["kind"],
         "typical": entry["typicalAnnual"], "sso": entry["ssoUsual"], "by": admin.email,
+        "extra": json.dumps({"typicalPerSeatMonthly": entry["typicalPerSeatMonthly"]}),
     }
     if current:
         row = (await db.execute(text(
             "UPDATE tool_catalog_entries SET name=:name, name_key=:key, aliases=CAST(:aliases AS JSONB), vendor=:vendor, category=:category,"
-            " hosting=:hosting, kind=:kind, typical_annual=:typical, sso_usual=:sso, updated_by=:by, updated_at=now() WHERE id = CAST(:id AS UUID) RETURNING *"
+            " hosting=:hosting, kind=:kind, typical_annual=:typical, sso_usual=:sso, extra = COALESCE(extra, '{}'::jsonb) || CAST(:extra AS JSONB), updated_by=:by, updated_at=now() WHERE id = CAST(:id AS UUID) RETURNING *"
         ), {**params, "id": entry_id})).first()
     else:
         row = (await db.execute(text(
-            "INSERT INTO tool_catalog_entries (name, name_key, aliases, vendor, category, hosting, kind, typical_annual, sso_usual, updated_by)"
-            " VALUES (:name, :key, CAST(:aliases AS JSONB), :vendor, :category, :hosting, :kind, :typical, :sso, :by) RETURNING *"
+            "INSERT INTO tool_catalog_entries (name, name_key, aliases, vendor, category, hosting, kind, typical_annual, sso_usual, extra, updated_by)"
+            " VALUES (:name, :key, CAST(:aliases AS JSONB), :vendor, :category, :hosting, :kind, :typical, :sso, CAST(:extra AS JSONB), :by) RETURNING *"
         ), params)).first()
         await db.execute(text("DELETE FROM tool_catalog_misses WHERE name_key = :key"), {"key": params["key"]})
         for alias in entry["aliases"]:

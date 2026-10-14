@@ -6,14 +6,14 @@ import { toolCatalogApi, type CatalogEntry, type CatalogMiss } from "@/lib/api-c
 import { useAuth } from "@/lib/auth-context";
 import { refreshLiveCatalog } from "@/lib/catalog/live-catalog";
 
-type Form = { id?: string; name: string; aliases: string; vendor: string; category: string; hosting: string; kind: string; typicalAnnual: string; ssoUsual: boolean };
+type Form = { id?: string; name: string; aliases: string; vendor: string; category: string; hosting: string; kind: string; typicalAnnual: string; typicalPerSeatMonthly: string; ssoUsual: boolean };
 
-const EMPTY: Form = { name: "", aliases: "", vendor: "", category: "", hosting: "saas", kind: "app", typicalAnnual: "", ssoUsual: false };
+const EMPTY: Form = { name: "", aliases: "", vendor: "", category: "", hosting: "saas", kind: "app", typicalAnnual: "", typicalPerSeatMonthly: "", ssoUsual: false };
 export const HOSTING_OPTIONS = [["saas", "SaaS"], ["paas", "PaaS"], ["own", "Self-hosted"], ["either", "Either / hybrid"], ["desktop", "Desktop"]] as const;
 export const KIND_OPTIONS = [["app", "App"], ["platform", "Platform"], ["server", "Server"]] as const;
 
 export function formFromEntry(entry: CatalogEntry): Form {
-  return { id: entry.id, name: entry.name, aliases: entry.aliases.join(", "), vendor: entry.vendor, category: entry.category, hosting: entry.hosting, kind: entry.kind, typicalAnnual: entry.typicalAnnual == null ? "" : String(entry.typicalAnnual), ssoUsual: Boolean(entry.ssoUsual) };
+  return { id: entry.id, name: entry.name, aliases: entry.aliases.join(", "), vendor: entry.vendor, category: entry.category, hosting: entry.hosting, kind: entry.kind, typicalAnnual: entry.typicalAnnual == null ? "" : String(entry.typicalAnnual), typicalPerSeatMonthly: entry.typicalPerSeatMonthly == null ? "" : String(entry.typicalPerSeatMonthly), ssoUsual: Boolean(entry.ssoUsual) };
 }
 
 export function formFromMiss(miss: CatalogMiss): Form {
@@ -22,7 +22,7 @@ export function formFromMiss(miss: CatalogMiss): Form {
 }
 
 export function bodyFromForm(form: Form) {
-  return { name: form.name.trim(), aliases: form.aliases.split(",").map((item) => item.trim()).filter(Boolean), vendor: form.vendor.trim(), category: form.category.trim(), hosting: form.hosting as CatalogEntry["hosting"], kind: form.kind as CatalogEntry["kind"], typicalAnnual: form.typicalAnnual.trim() === "" ? null : Number(form.typicalAnnual), ssoUsual: form.ssoUsual };
+  return { name: form.name.trim(), aliases: form.aliases.split(",").map((item) => item.trim()).filter(Boolean), vendor: form.vendor.trim(), category: form.category.trim(), hosting: form.hosting as CatalogEntry["hosting"], kind: form.kind as CatalogEntry["kind"], typicalAnnual: form.typicalAnnual.trim() === "" ? null : Number(form.typicalAnnual), typicalPerSeatMonthly: form.typicalPerSeatMonthly.trim() === "" ? null : Number(form.typicalPerSeatMonthly), ssoUsual: form.ssoUsual };
 }
 
 export function CatalogAdmin() {
@@ -170,6 +170,7 @@ export function CatalogAdmin() {
                   </select>
                 </label>
                 {field("typicalAnnual", "Typical annual cost, USD (optional: only a public list-price estimate)", { inputMode: "numeric", placeholder: "Leave empty if unknown" })}
+                {field("typicalPerSeatMonthly", "Per-licence price per month, USD (optional: public list price; setup multiplies by licences)", { inputMode: "decimal", placeholder: "Leave empty if unknown" })}
                 <label className="mt-5 flex items-center gap-2 text-[13px] text-[#1c2230]">
                   <input type="checkbox" checked={form.ssoUsual} onChange={(event) => setForm({ ...form, ssoUsual: event.target.checked })} />
                   Usually set up with single sign-on

@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth-context";
 import { AppAddPanel } from "@/components/add/AppAddPanel";
 import { OwnerDatalists, PERSON_PICKS_ID, TEAM_PICKS_ID, useOwnerPicks } from "@/components/ownership/OwnerPicks";
 import { canonicalOwner } from "@/lib/owner-picks";
+import { licenceCount, perSeatLine, yearlyFor } from "@/lib/setup/licence-cost";
 import { draftsFromCards } from "@/lib/setup/card-drafts";
 import { useAppStore } from "@/lib/store";
 import type { CostLine } from "@/lib/cost/math";
@@ -42,6 +43,7 @@ type Draft = MatchItem & {
   ownerTeam: string;
   ownerName: string;
   renewal: string;
+  licences: string;
   yearly: string;
   typical: boolean;
 };
@@ -86,6 +88,7 @@ function mergeDrafts(previous: Draft[], next: Draft[]): Draft[] {
       serverName: old.serverName,
       objectId: old.objectId,
       ownerTeam: old.ownerTeam,
+      licences: old.licences,
       ownerName: old.ownerName,
       renewal: old.renewal,
       yearly: old.yearly,
@@ -104,6 +107,7 @@ function toDrafts(items: MatchItem[]): Draft[] {
       choice: defaultHosting(item),
       serverName: "",
       ownerTeam: "",
+      licences: "",
       ownerName: "",
       renewal: "",
       yearly: yearly ? String(yearly) : "",
@@ -412,6 +416,14 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
       const yearly = Number(app.yearly);
       const properties: Record<string, unknown> = {};
       if (app.renewal) properties.contract_renewal = app.renewal;
+      const seats = licenceCount(app.licences);
+      if (seats) properties.licence_count = seats;
+      const perSeat = app.tool?.typicalPerSeatMonthly;
+      if (app.typical && seats && perSeat && perSeat > 0) {
+        // Licences × the catalogue's per-licence list price, saved as a "typical" per-user line.
+        const current = catalog.data?.objects.find((object) => object.id === app.objectId) ?? hosts[app.key];
+        properties.cost_lines = replaceTypicalLine(current?.properties, perSeatLine(seats, perSeat, app.tool?.vendor ?? ""));
+      }
       if (!app.typical && Number.isFinite(yearly) && yearly > 0) {
         const current = catalog.data?.objects.find((object) => object.id === app.objectId) ?? hosts[app.key];
         properties.cost_lines = replaceTypicalLine(current?.properties, typicalLine(yearly, app.tool?.vendor ?? ""));
@@ -640,7 +652,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
             <table className="w-full text-left text-[13px]">
               <thead className="text-[12px] text-[#8b90a0]">
                 <tr>
-                  {["App", "Owner team", "Named owner", "Renewal", "Yearly cost"].map((heading) => <th key={heading} className="px-2 py-1 font-medium">{heading}</th>)}
+                  {["App", "Owner team", "Named owner", "Renewal", "Licences", "Yearly cost"].map((heading) => <th key={heading} className="px-2 py-1 font-medium">{heading}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -650,6 +662,16 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
                     <Cell value={app.ownerTeam} list={TEAM_PICKS_ID} label={`Owner team for ${displayName(app)}`} onChange={(ownerTeam) => patch(app.key, { ownerTeam })} />
                     <Cell value={app.ownerName} list={PERSON_PICKS_ID} label={`Named owner for ${displayName(app)}`} onChange={(ownerName) => patch(app.key, { ownerName })} />
                     <Cell value={app.renewal} onChange={(renewal) => patch(app.key, { renewal })} type="date" />
+                    <td className="px-2 py-1">
+                      <input
+                        inputMode="numeric"
+                        aria-label={`Licences for ${displayName(app)}`}
+                        value={app.licences}
+                        onChange={(event) => patch(app.key, { licences: event.target.value, ...yearlyFor(app.tool, event.target.value, app) })}
+                        placeholder="—"
+                        className="h-8 w-20 rounded-lg border border-[#e6e8ee] px-2"
+                      />
+                    </td>
                     <td className="px-2 py-1">
                       <input
                         value={app.yearly}
