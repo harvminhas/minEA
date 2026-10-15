@@ -46,7 +46,8 @@ import { summarizeLicences } from "@/lib/billing/licences";
 import { useLicenceRoster } from "@/lib/billing/use-licence-roster";
 import { useAppStore } from "@/lib/store";
 import Link from "next/link";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { parsePlanIntent, shouldAutoStartStarter, START_PARAM } from "@/lib/billing/plan-intent";
 
 export default function OrgSettingsPage() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
@@ -236,6 +237,20 @@ export default function OrgSettingsPage() {
     [roster.rows, displayPlan]
   );
   const billingHref = adminTabHref(orgSlug, "billing", preview);
+  // Arrived from "Get Starter" (?start=starter): start Starter checkout once if this org can buy
+  // and this user may; otherwise just show the tab. The param is dropped either way.
+  const startIntent = billingUi ? parsePlanIntent(searchParams.get(START_PARAM)) : null;
+  const autoStarted = useRef(false);
+  const [autoStartError, setAutoStartError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!startIntent || autoStarted.current || !billingStatus || !realPlan) return;
+    autoStarted.current = true;
+    router.replace(adminTabHref(orgSlug, "billing"), { scroll: false });
+    if (!shouldAutoStartStarter(startIntent, realPlan, billingStatus)) return;
+    startCheckout("starter", "monthly").catch((err) => setAutoStartError(billingErrorMessage(err)));
+    // startCheckout is stable enough for a one-shot; the ref guards re-runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startIntent, billingStatus, realPlan, orgSlug, router]);
   // Billing tab: owner (as before) plus org admins. The API enforces owner/admin + verified email.
   const canSeeBilling = canManageBilling || isOrgAdmin;
 
@@ -637,6 +652,11 @@ export default function OrgSettingsPage() {
       </section>
       )}
 
+      {autoStartError && show("billing") && (
+        <p role="alert" data-testid="starter-autostart-error" className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {autoStartError}
+        </p>
+      )}
       {billingUi && canSeeBilling && show("billing") && (
         <BillingCentre
           orgSlug={orgSlug}

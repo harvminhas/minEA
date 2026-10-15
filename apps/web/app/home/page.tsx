@@ -16,6 +16,7 @@ import {
   splitViewIdForPath,
 } from "@/lib/last-app-path";
 import { useAppBoot } from "@/lib/app-boot-context";
+import { orgSlugFromPath, parsePlanIntent, savePlanIntent, starterBillingHref, takePlanIntent } from "@/lib/billing/plan-intent";
 
 type HomePhase = "orgs" | "workspaces" | "redirect";
 
@@ -41,7 +42,12 @@ export default function HomePage() {
   useEffect(() => {
     if (isLoading || !isLoaded || isError || !storeHydrated) return;
 
+    // "Get Starter" on the pricing page: ?plan=starter, or the intent saved before sign-up.
+    const urlIntent = parsePlanIntent(new URLSearchParams(window.location.search).get("plan"));
+    const intent = takePlanIntent() ?? urlIntent;
+
     if (!orgs || orgs.length === 0) {
+      if (intent) savePlanIntent(intent); // onboarding creates the org, then goes to billing
       router.replace("/onboarding");
       return;
     }
@@ -55,6 +61,11 @@ export default function HomePage() {
         lastAppPath,
         getToken,
       });
+      if (intent === "starter") {
+        const slug = orgSlugFromPath(destination) ?? orgs[0].slug;
+        router.replace(starterBillingHref(slug));
+        return;
+      }
       const persistedMode = useAppStore.getState().viewMode;
       if (restored) {
         setViewMode(inferViewModeForPath(destination, persistedMode));

@@ -12,18 +12,25 @@ import {
   formatUsd,
   planIncludes,
 } from "@/lib/billing/plans";
-import { PAID_COMING_SOON_LABEL } from "@/lib/billing/checkout";
-import { PlanCtaLink } from "@/components/marketing/home/visitor";
+import Link from "next/link";
+import { PlanCtaLink, useVisitor } from "@/components/marketing/home/visitor";
+import { savePlanIntent, starterCtaHref } from "@/lib/billing/plan-intent";
 import { BusinessGetStartedDialog } from "@/components/billing/BusinessGetStartedDialog";
 
 /**
  * Public pricing: Free, Starter and Business. Shown when NEXT_PUBLIC_BILLING_UI is on.
- * Starter shows its monthly price (monthly only, no yearly option) with a disabled "Coming soon" button (checkout is allowlisted).
+ * Free is the highlighted card ("Start free"): most teams start there. Starter shows its monthly
+ * price (monthly only) and "Get Starter": sign up (signed out) or straight on, then the org's
+ * Plan & billing tab starts Stripe Checkout. A short line nudges people to start on Free.
  * Business shows no price, only its details, and "Get started" opens the request form.
  * Team is no longer sold (orgs already on it keep it).
  */
+export const STARTER_CTA_LABEL = "Get Starter";
+export const STARTER_NUDGE = "Most teams start on Free and upgrade when they're ready.";
+
 export function PricingPlans() {
   const [businessOpen, setBusinessOpen] = useState(false);
+  const signedIn = useVisitor() === "signed_in";
 
   return (
     <section id="pricing" className="mt-28 w-full max-w-6xl scroll-mt-8 text-left">
@@ -36,7 +43,7 @@ export function PricingPlans() {
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3 max-w-5xl mx-auto">
         {PUBLIC_PLAN_ORDER.map((id) => {
           const plan = CATALOG[id];
-          const featured = id === "business";
+          const featured = id === "free";
           const isBusiness = id === "business";
           return (
             <div
@@ -52,6 +59,11 @@ export function PricingPlans() {
                 <h3 className="text-lg font-semibold text-white">{plan.label}</h3>
                 {featured && (
                   <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-300">
+                    Start here
+                  </span>
+                )}
+                {isBusiness && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/60">
                     For teams of 5+
                   </span>
                 )}
@@ -86,7 +98,7 @@ export function PricingPlans() {
                 ))}
               </ul>
               {id === "free" ? (
-                <PlanCtaLink className="mt-6 inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:border-white/40">
+                <PlanCtaLink className="mt-6 inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-500">
                   Start free
                 </PlanCtaLink>
               ) : isBusiness ? (
@@ -94,20 +106,22 @@ export function PricingPlans() {
                   type="button"
                   data-get-started="business"
                   onClick={() => setBusinessOpen(true)}
-                  className="mt-6 inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-500"
+                  className="mt-6 inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:border-white/40"
                 >
                   {BUSINESS_GET_STARTED_LABEL}
                 </button>
               ) : (
-                // Starter is not on sale yet outside the checkout allowlist (the API refuses too). are not on sale yet (the API refuses checkout too). Same for everyone.
-                <button
-                  type="button"
-                  disabled
-                  data-coming-soon={id}
-                  className="mt-6 inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-white/10 px-5 py-2.5 text-sm font-semibold text-white/40"
-                >
-                  {PAID_COMING_SOON_LABEL}
-                </button>
+                <>
+                  <Link
+                    href={starterCtaHref(signedIn)}
+                    data-get-started={id}
+                    onClick={() => savePlanIntent("starter")}
+                    className="mt-6 inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:border-white/40"
+                  >
+                    {STARTER_CTA_LABEL}
+                  </Link>
+                  <p data-testid="starter-nudge" className="mt-2 text-center text-xs text-white/40">{STARTER_NUDGE}</p>
+                </>
               )}
             </div>
           );

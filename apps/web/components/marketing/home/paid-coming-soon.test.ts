@@ -1,4 +1,4 @@
-/** Home page pricing: Starter/Team/Business are disabled "Coming soon" for everyone; Free unchanged. */
+/** Home page pricing: Free is the highlighted start; Starter has a working "Get Starter"; Business opens the form. */
 import assert from "node:assert/strict";
 import { afterEach, before, test } from "node:test";
 import * as React from "react";
@@ -44,17 +44,19 @@ function card(html: string, id: string): string {
 }
 
 for (const [name, auth] of STATES) {
-  test(`pricing cards, billing UI on, ${name}: Free, Starter Coming soon, Business Get started with no price`, () => {
+  test(`pricing cards, billing UI on, ${name}: Free highlighted, Get Starter enabled, Business Get started with no price`, () => {
     const html = render(React.createElement(PricingPlans), auth, "1");
     assert.deepEqual([...html.matchAll(/data-plan="([a-z]+)"/g)].map((m) => m[1]), ["free", "starter", "business"]);
     const starter = card(html, "starter");
-    assert.match(starter, /<button type="button" disabled="" data-coming-soon="starter"[^>]*>Coming soon<\/button>/);
+    const starterHref = auth?.isLoaded && auth.isSignedIn ? "/home?plan=starter" : "/auth/sign-up?redirect_url=%2Fhome%3Fplan%3Dstarter";
+    assert.ok(starter.includes(`href="${starterHref.replace(/&/g, "&amp;")}"`), `Starter goes to ${starterHref}`);
+    assert.match(starter, /data-get-started="starter"[^>]*>Get Starter<\/a>/);
+    assert.match(starter, /data-testid="starter-nudge"[^>]*>Most teams start on Free/);
     assert.ok(starter.includes("$149"), "Starter price shown");
     assert.match(starter, /Billed monthly/);
     // Monthly only: no yearly price, no billing-period toggle on the page.
     assert.doesNotMatch(html, /\$99|\$990|\/year|Yearly|months free|aria-label="Billing period"/);
-    assert.doesNotMatch(starter, /<a /);
-    assert.equal((html.match(/>Coming soon</g) ?? []).length, 1);
+    assert.doesNotMatch(html, /Coming soon|disabled=""/);
     const business = card(html, "business");
     assert.doesNotMatch(business, /\$/, "Business shows no price");
     assert.match(business, /Starting from 5 licences/);
@@ -66,7 +68,9 @@ for (const [name, auth] of STATES) {
     assert.doesNotMatch(business, /<a |disabled=""/);
     assert.doesNotMatch(html, /contact sales|talk to us|sales call/i);
     const free = card(html, "free");
-    assert.doesNotMatch(free, /Coming soon/);
+    assert.match(free, /Start here/);
+    assert.match(free, /bg-indigo-600/, "Free has the primary button");
+    assert.doesNotMatch(starter, /bg-indigo-600/);
     if (auth?.isLoaded && auth.isSignedIn) assert.match(free, /href="\/home"[^>]*>Open BuboMap</);
     else assert.match(free, /href="\/auth\/sign-up"[^>]*>Start free</);
   });
@@ -74,11 +78,12 @@ for (const [name, auth] of STATES) {
 
 for (const flag of ["0", "1"]) {
   for (const [name, auth] of STATES) {
-    test(`home page, billing UI ${flag}, ${name}: no paid plan can be started from the page`, () => {
+    test(`home page, billing UI ${flag}, ${name}: only Starter starts a paid plan from the page`, () => {
       const html = render(React.createElement(HomePage), auth, flag);
       // Nothing on the page links a paid pack to sign-up / the app other than Free and the CTAs.
       if (flag === "1") {
-        assert.equal((html.match(/data-coming-soon="(starter|team|business)"[^>]*>Coming soon</g) ?? []).length, 1);
+        assert.equal((html.match(/data-get-started="starter"[^>]*>Get Starter</g) ?? []).length, 1);
+        assert.doesNotMatch(html, /Coming soon/);
         // Business never checks out from the page: it opens the Get started form.
         assert.equal((html.match(/data-get-started="business"/g) ?? []).length, 1);
       } else {

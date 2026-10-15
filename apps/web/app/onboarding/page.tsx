@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { orgsApi } from "@/lib/api-client";
 import { primaryViewPath } from "@/lib/tenancy";
+import { starterBillingHref, takePlanIntent } from "@/lib/billing/plan-intent";
 
 function slugify(value: string) {
   return value
@@ -37,7 +38,7 @@ export default function OnboardingPage() {
       );
     },
     onSuccess: (org) => {
-      router.replace(primaryViewPath(org.slug, "default"));
+      router.replace(takePlanIntent() === "starter" ? starterBillingHref(org.slug) : primaryViewPath(org.slug, "default"));
     },
   });
 
