@@ -1,0 +1,61 @@
+{
+ "creates": [
+  {
+   "key": "acf list",
+   "type": "application",
+   "name": "ACF List",
+   "properties": {
+    "hosting_model": "own_cloud"
+   }
+  },
+  {
+   "key": "power app",
+   "type": "application",
+   "name": "Power App",
+   "properties": {
+    "hosting_model": "own_cloud"
+   }
+  },
+  {
+   "key": "power bi",
+   "type": "application",
+   "name": "Power BI",
+   "properties": {
+    "vendor": "Microsoft",
+    "category": "BI",
+    "catalog_tool": "power bi",
+    "hosting_model": "saas"
+   }
+  },
+  {
+   "key": "tenant:azure:azure tenant",
+   "type": "cloud_service",
+   "name": "Azure Tenant",
+   "properties": {
+    "platform_kind": "cloud_account",
+    "vendor": "microsoft",
+    "cloud_provider": "azure"
+   }
+  }
+ ],
+ "updates": [],
+ "relationships": [
+  {
+   "type": "runs_on",
+   "from_key": "acf list",
+   "to_key": "tenant:azure:azure tenant",
+   "from_type": "application",
+   "to_type": "cloud_service",
+   "attributes": {
+    "region_key": "azure:canadaeast"
+   }
+  },
+  {
+   "type": "runs_on",
+   "from_key": "power app",
+   "to_key": "tenant:azure:azure tenant",
+   "from_type": "application",
+   "to_type": "cloud_service"
+  }
+ ]
+}

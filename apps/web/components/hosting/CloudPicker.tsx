@@ -13,7 +13,7 @@ import {
   type Region,
   type TenantOption,
 } from "@/lib/hosting/cloud";
-import { pendingTenantId, type PendingTenant } from "@/lib/hosting/pending-tenants";
+import { firstPendingFor, pendingTenantId, type PendingTenant } from "@/lib/hosting/pending-tenants";
 
 const NEW = "__new";
 const CUSTOM = "__custom";
@@ -62,14 +62,19 @@ export function CloudPicker({
   const [error, setError] = useState("");
   const pickProvider = (next: CloudProvider) => {
     const first = tenants.filter((item) => item.provider === next);
+    const joined = first.length === 0 ? firstPendingFor(pending, next) : undefined;
+    if (joined) {
+      onChange({ provider: next, tenantId: undefined, tenantName: joined.name, tenantShared: true, tenantSharedWith: joined.originKey, regionKey: null });
+      return;
+    }
     onChange({ provider: next, ...(first.length === 1 ? { tenantId: first[0]!.id, tenantName: first[0]!.name } : { tenantId: undefined, tenantName: first.length ? "" : defaultTenantName(next) }), regionKey: null });
   };
   const pickTenant = (id: string) => {
     const shared = pending.find((item) => item.id === id);
-    if (shared) onChange({ ...value, tenantId: undefined, tenantName: shared.name, tenantShared: true });
-    else if (id === NEW) onChange({ ...value, tenantId: undefined, tenantShared: false, tenantName: pendingShown.length ? "" : defaultTenantName(provider) });
-    else if (!id) onChange({ ...value, tenantId: undefined, tenantShared: false, tenantName: "" });
-    else onChange({ ...value, tenantId: id, tenantShared: false, tenantName: tenants.find((item) => item.id === id)?.name ?? "" });
+    if (shared) onChange({ ...value, tenantId: undefined, tenantName: shared.name, tenantShared: true, tenantSharedWith: shared.originKey });
+    else if (id === NEW) onChange({ ...value, tenantId: undefined, tenantShared: false, tenantSharedWith: undefined, tenantName: pendingShown.length ? "" : defaultTenantName(provider) });
+    else if (!id) onChange({ ...value, tenantId: undefined, tenantShared: false, tenantSharedWith: undefined, tenantName: "" });
+    else onChange({ ...value, tenantId: id, tenantShared: false, tenantSharedWith: undefined, tenantName: tenants.find((item) => item.id === id)?.name ?? "" });
   };
   const addRegion = async () => {
     if (!provider || !onAddRegion || !customName.trim()) return;
@@ -120,12 +125,16 @@ export function CloudPicker({
                 data-testid="tenant-new"
                 disabled={disabled}
                 value={value.tenantName}
-                onChange={(event) => onChange({ ...value, tenantId: undefined, tenantShared: false, tenantName: event.target.value })}
+                onChange={(event) => onChange({ ...value, tenantId: undefined, tenantShared: false, tenantSharedWith: undefined, tenantName: event.target.value })}
                 className="mt-1 h-8 w-full rounded-lg border border-dashed border-[#a99cf5] bg-white px-2 text-[13px] text-[#1c2230]"
               />
             )}
-            {typingNew && <span className="text-[11px]">New platform record</span>}
-            {sharedPick && <span className="text-[11px]" data-testid="tenant-shared">New platform record, shared with other cards</span>}
+            {typingNew && (
+              <span className="text-[11px]" data-testid="tenant-new-note">
+                {(pending.find((item) => item.id === ownPendingId)?.count ?? 1) > 1 ? "New platform record, same as another card (saved once)" : "New platform record"} · created when you click Add
+              </span>
+            )}
+            {sharedPick && <span className="text-[11px]" data-testid="tenant-shared">New platform record, shared with other cards · created when you click Add</span>}
           </label>
           <label className="block">
             Region (optional)

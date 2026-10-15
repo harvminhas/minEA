@@ -195,6 +195,8 @@ export type HostingDetail = {
   regionKey: string | null;
   /** Picked a new tenant typed on another card ("X (new)"): saved as the same one record. */
   tenantShared?: boolean;
+  /** The card that typed that tenant (its key): follows its name. */
+  tenantSharedWith?: string;
 };
 export const EMPTY_DETAIL: HostingDetail = { provider: null, tenantName: "", regionKey: null };
 

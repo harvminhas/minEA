@@ -36,7 +36,7 @@ import { buildBatch, catalogLists, planInputs, prepareRows, todoLines, type AddR
 import { choiceForTool } from "@/lib/setup/match-tools";
 import { CLOUD_PROVIDERS, SAAS_PROVIDERS, defaultTenantName, providerForVendor, suggestsOwnCloud, type CloudProvider } from "@/lib/hosting/cloud";
 import { useCloudPicker } from "@/lib/hosting/use-cloud-regions";
-import { collectPendingTenants, type PendingTenant } from "@/lib/hosting/pending-tenants";
+import { collectPendingTenants, firstPendingFor, resolveSharedTenants, type PendingTenant } from "@/lib/hosting/pending-tenants";
 import { CloudPicker } from "@/components/hosting/CloudPicker";
 import { setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
@@ -172,8 +172,11 @@ export function RecordCard({
 
 /** Switching the card's choice: Our cloud starts on Azure (its one tenant picked, else a new one);
  *  SaaS starts on the catalogue vendor's provider; a provider from the other mode is dropped. */
-export function choicePatch(row: AddRow, choice: AddRow["choice"], azureTenants: { id: string; name: string }[], saasProvider: CloudProvider): Partial<AddRow> {
+export function choicePatch(row: AddRow, choice: AddRow["choice"], azureTenants: { id: string; name: string }[], saasProvider: CloudProvider, pending: PendingTenant[] = []): Partial<AddRow> {
   if (choice === "own_cloud" && (!row.cloudProvider || !CLOUD_PROVIDERS.some((p) => p.id === row.cloudProvider))) {
+    // No saved Azure tenant but another card is adding one: join it instead of starting a second.
+    const joined = azureTenants.length === 0 ? firstPendingFor(pending, "azure") : undefined;
+    if (joined) return { choice, cloudProvider: "azure", tenantId: undefined, tenantName: joined.name, tenantShared: true, tenantSharedWith: joined.originKey, regionKey: null };
     const only = azureTenants.length === 1 ? azureTenants[0]! : undefined;
     return { choice, cloudProvider: "azure", tenantId: only?.id, tenantName: only ? only.name : azureTenants.length ? "" : defaultTenantName("azure"), regionKey: null };
   }
@@ -186,12 +189,12 @@ export function choicePatch(row: AddRow, choice: AddRow["choice"], azureTenants:
 /** The five "Where does it run?" chips on an app card, with provider / tenant / region for Our cloud and SaaS. */
 /** A card's hosting as the picker sees it. */
 export function cardDetail(row: AddRow, saasProvider: CloudProvider) {
-  return { provider: row.cloudProvider ?? (row.choice === "saas" ? saasProvider : null), tenantName: row.tenantName ?? "", tenantId: row.tenantId, regionKey: row.regionKey ?? null, tenantShared: row.tenantShared };
+  return { provider: row.cloudProvider ?? (row.choice === "saas" ? saasProvider : null), tenantName: row.tenantName ?? "", tenantId: row.tenantId, regionKey: row.regionKey ?? null, tenantShared: row.tenantShared, tenantSharedWith: row.tenantSharedWith };
 }
 
 /** New tenants typed on any card, offered on every card. */
 export function cardPendingTenants(rows: AddRow[], tenants: { id: string; name: string; provider: CloudProvider; regionKeys: string[] }[]): PendingTenant[] {
-  return collectPendingTenants(rows.map((row) => (row.choice === "own_cloud" || row.choice === "saas" ? cardDetail(row, providerForVendor(row.tool?.vendor) ?? "other") : null)), tenants);
+  return collectPendingTenants(rows.map((row) => (row.choice === "own_cloud" || row.choice === "saas" ? { ...cardDetail(row, providerForVendor(row.tool?.vendor) ?? "other"), key: row.key } : null)), tenants);
 }
 
 function CardWhere({ row, onChange, pending }: { row: AddRow; onChange: (patch: Partial<AddRow>) => void; pending: PendingTenant[] }) {
@@ -206,7 +209,7 @@ function CardWhere({ row, onChange, pending }: { row: AddRow; onChange: (patch: 
           const on = row.choice === choice;
           const suggested = !on && choice === "own_cloud" && suggestsOwnCloud(row);
           return (
-            <button key={choice} type="button" role="radio" aria-checked={on} data-choice={choice} className={`rounded-full border px-2 py-0.5 ${on ? "border-[#5b4ce6] bg-[#ece9ff]" : suggested ? "border-dashed border-[#a99cf5] text-[#3f35b5]" : "border-[#e6e8ee]"}`} onClick={() => onChange(choicePatch(row, choice, tenants.filter((tenant) => tenant.provider === "azure"), saasProvider))}>
+            <button key={choice} type="button" role="radio" aria-checked={on} data-choice={choice} className={`rounded-full border px-2 py-0.5 ${on ? "border-[#5b4ce6] bg-[#ece9ff]" : suggested ? "border-dashed border-[#a99cf5] text-[#3f35b5]" : "border-[#e6e8ee]"}`} onClick={() => onChange(choicePatch(row, choice, tenants.filter((tenant) => tenant.provider === "azure"), saasProvider, pending))}>
               {label}{suggested ? " · suggested" : ""}
             </button>
           );
@@ -220,7 +223,7 @@ function CardWhere({ row, onChange, pending }: { row: AddRow; onChange: (patch: 
           pending={pending}
           custom={custom}
           onAddRegion={addRegion}
-          onChange={(next) => onChange({ cloudProvider: next.provider, tenantName: next.tenantName, tenantId: next.tenantId, regionKey: next.regionKey, tenantShared: next.tenantShared })}
+          onChange={(next) => onChange({ cloudProvider: next.provider, tenantName: next.tenantName, tenantId: next.tenantId, regionKey: next.regionKey, tenantShared: next.tenantShared, tenantSharedWith: next.tenantSharedWith })}
         />
       )}
     </div>
@@ -528,7 +531,8 @@ export function AskAdd({
       const row = rows.find((item) => item.key === key);
       if (row) dismissed.current.add(lookupKey(row.input));
     }
-    setRows((current) => current.map((row) => (row.key === key ? { ...row, ...change } : row)));
+    // Cards that picked a new tenant typed on this one follow its name (one record on save).
+    setRows((current) => resolveSharedTenants(current.map((row) => (row.key === key ? { ...row, ...change } : row))));
   };
 
   const save = async () => {

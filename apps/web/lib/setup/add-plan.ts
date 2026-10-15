@@ -118,6 +118,7 @@ export type AddRow = {
   regionKey?: string | null;
   /** Picked a new tenant typed on another card: same name, so the save makes one record. */
   tenantShared?: boolean;
+  tenantSharedWith?: string;
 };
 
 export function objectTypeFor(kind: AddKind): string {
