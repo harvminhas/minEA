@@ -1,0 +1,244 @@
+{
+ "objects": [
+  {
+   "id": "6a1d28fc-a03e-495e-97be-1c118849d582",
+   "workspace_id": "d5ffd717-4c65-49ad-8f32-01b353b9a1a0",
+   "org_id": "510a5f74-20d2-4bd2-b290-316385829b02",
+   "type": "application",
+   "name": "Payroll Tool",
+   "description": null,
+   "owner": "IT Ops",
+   "owner_team_id": "f6959ba6-bff1-43e3-8cd4-84244862e1ff",
+   "owner_team_name": "IT Ops",
+   "point_of_contact_id": "91f266cf-9be5-47ac-b616-a8fd8ff9ba7a",
+   "point_of_contact_name": "Raj Patel",
+   "status": null,
+   "tags": [],
+   "external_id": null,
+   "source": "user",
+   "confidence": null,
+   "properties": {
+    "hosting_model": "own_cloud",
+    "licence_count": 40,
+    "is_custom_built": true,
+    "contract_renewal": "2027-06-30",
+    "governance_status": "sanctioned"
+   },
+   "created_by": "e9ec1913-2e74-4334-80fe-36cd7eba5ee8",
+   "created_at": "2026-10-15T20:45:26.259159+00:00",
+   "updated_at": "2026-10-15T20:45:26.372357+00:00"
+  },
+  {
+   "id": "b3845227-fe23-47c6-ba00-aa862a73307c",
+   "workspace_id": "d5ffd717-4c65-49ad-8f32-01b353b9a1a0",
+   "org_id": "510a5f74-20d2-4bd2-b290-316385829b02",
+   "type": "application",
+   "name": "Time Clock",
+   "description": null,
+   "owner": "IT Ops",
+   "owner_team_id": "f6959ba6-bff1-43e3-8cd4-84244862e1ff",
+   "owner_team_name": "IT Ops",
+   "point_of_contact_id": "d7f1c651-b623-41af-b0e4-a2736e8b7914",
+   "point_of_contact_name": "Mo Khan",
+   "status": null,
+   "tags": [],
+   "external_id": null,
+   "source": "user",
+   "confidence": null,
+   "properties": {
+    "hosting_model": "on_premise",
+    "licence_count": 15,
+    "is_custom_built": false,
+    "contract_renewal": "2027-09-30",
+    "governance_status": "sanctioned"
+   },
+   "created_by": "e9ec1913-2e74-4334-80fe-36cd7eba5ee8",
+   "created_at": "2026-10-15T20:45:26.259159+00:00",
+   "updated_at": "2026-10-15T20:45:26.372357+00:00"
+  },
+  {
+   "id": "c420e948-289c-4935-b0f9-40fae3985754",
+   "workspace_id": "d5ffd717-4c65-49ad-8f32-01b353b9a1a0",
+   "org_id": "510a5f74-20d2-4bd2-b290-316385829b02",
+   "type": "cloud_service",
+   "name": "Contoso Azure",
+   "description": null,
+   "owner": null,
+   "owner_team_id": null,
+   "owner_team_name": null,
+   "point_of_contact_id": null,
+   "point_of_contact_name": null,
+   "status": null,
+   "tags": [],
+   "external_id": null,
+   "source": "user",
+   "confidence": null,
+   "properties": {
+    "vendor": "microsoft",
+    "platform_kind": "cloud_account",
+    "cloud_provider": "azure"
+   },
+   "created_by": "e9ec1913-2e74-4334-80fe-36cd7eba5ee8",
+   "created_at": "2026-10-15T20:45:26.259159+00:00",
+   "updated_at": "2026-10-15T20:45:26.259159+00:00"
+  },
+  {
+   "id": "9e9faf16-de3f-42dc-84b5-cca4b839fd7d",
+   "workspace_id": "d5ffd717-4c65-49ad-8f32-01b353b9a1a0",
+   "org_id": "510a5f74-20d2-4bd2-b290-316385829b02",
+   "type": "model",
+   "name": "SRV-01",
+   "description": null,
+   "owner": null,
+   "owner_team_id": null,
+   "owner_team_name": null,
+   "point_of_contact_id": null,
+   "point_of_contact_name": null,
+   "status": null,
+   "tags": [],
+   "external_id": null,
+   "source": "user",
+   "confidence": null,
+   "properties": {
+    "runtime_kind": "physical_server",
+    "compute_runtime_kind": "on_prem"
+   },
+   "created_by": "e9ec1913-2e74-4334-80fe-36cd7eba5ee8",
+   "created_at": "2026-10-15T20:45:26.328481+00:00",
+   "updated_at": "2026-10-15T20:45:26.328481+00:00"
+  },
+  {
+   "id": "e16dfd75-6652-4296-9f74-820a9ebcfcb4",
+   "workspace_id": "d5ffd717-4c65-49ad-8f32-01b353b9a1a0",
+   "org_id": "510a5f74-20d2-4bd2-b290-316385829b02",
+   "type": "location",
+   "name": "Main plant",
+   "description": null,
+   "owner": null,
+   "owner_team_id": null,
+   "owner_team_name": null,
+   "point_of_contact_id": null,
+   "point_of_contact_name": null,
+   "status": null,
+   "tags": [],
+   "external_id": null,
+   "source": "user",
+   "confidence": null,
+   "properties": {
+    "location_type": "other"
+   },
+   "created_by": "e9ec1913-2e74-4334-80fe-36cd7eba5ee8",
+   "created_at": "2026-10-15T20:45:26.328481+00:00",
+   "updated_at": "2026-10-15T20:45:26.328481+00:00"
+  },
+  {
+   "id": "f9a71166-b133-429f-bd67-1009aec97ec8",
+   "workspace_id": "d5ffd717-4c65-49ad-8f32-01b353b9a1a0",
+   "org_id": "510a5f74-20d2-4bd2-b290-316385829b02",
+   "type": "application",
+   "name": "Slack",
+   "description": null,
+   "owner": "IT Ops",
+   "owner_team_id": "f6959ba6-bff1-43e3-8cd4-84244862e1ff",
+   "owner_team_name": "IT Ops",
+   "point_of_contact_id": "9cbd6c21-0675-4e28-a15c-19252082bd23",
+   "point_of_contact_name": "Dana Lee",
+   "status": null,
+   "tags": [],
+   "external_id": null,
+   "source": "user",
+   "confidence": null,
+   "properties": {
+    "vendor": "Salesforce",
+    "category": "Productivity",
+    "cost_lines": [
+     {
+      "id": "b1bdbf88-2273-4e45-abfe-404c98d0ff79",
+      "type": "subscription",
+      "notes": "typical",
+      "source": "estimate",
+      "vendor": "Slack",
+      "frequency": "annual",
+      "created_at": "2026-10-15T12:00:00Z",
+      "created_by": "setup",
+      "updated_at": "2026-10-15T12:00:00Z",
+      "updated_by": "setup",
+      "calculation": {
+       "kind": "per_user",
+       "seats": 120,
+       "unit_price_monthly_cents": 875
+      }
+     }
+    ],
+    "ai_features": [
+     {
+      "key": "slack-ai",
+      "name": "Slack AI (summaries, recaps, search answers)",
+      "source": "onboarding",
+      "status": "on",
+      "audience": "everyone",
+      "confirmed_at": "2026-10-15T12:00:00Z",
+      "confirmed_by": "Harvinder Minhas",
+      "vendor_trains": "no",
+      "sees_company_data": "yes"
+     }
+    ],
+    "annual_cost": 12600,
+    "catalog_tool": "slack",
+    "hosting_model": "saas",
+    "licence_count": 120,
+    "is_custom_built": false,
+    "contract_renewal": "2027-03-31",
+    "governance_status": "sanctioned"
+   },
+   "created_by": "e9ec1913-2e74-4334-80fe-36cd7eba5ee8",
+   "created_at": "2026-10-15T20:45:26.259159+00:00",
+   "updated_at": "2026-10-15T20:45:26.372357+00:00"
+  }
+ ],
+ "relationships": [
+  {
+   "id": "dc22c193-eae4-42b0-abcf-c80dd30962cf",
+   "workspace_id": "d5ffd717-4c65-49ad-8f32-01b353b9a1a0",
+   "org_id": "510a5f74-20d2-4bd2-b290-316385829b02",
+   "type": "located_at",
+   "from_object_id": "9e9faf16-de3f-42dc-84b5-cca4b839fd7d",
+   "from_type": "model",
+   "to_object_id": "e16dfd75-6652-4296-9f74-820a9ebcfcb4",
+   "to_type": "location",
+   "attributes": {},
+   "created_by": "e9ec1913-2e74-4334-80fe-36cd7eba5ee8",
+   "created_at": "2026-10-15T20:45:26.328481+00:00"
+  },
+  {
+   "id": "7ed99ce2-067c-4277-9c93-fac5cf33cd16",
+   "workspace_id": "d5ffd717-4c65-49ad-8f32-01b353b9a1a0",
+   "org_id": "510a5f74-20d2-4bd2-b290-316385829b02",
+   "type": "runs_on",
+   "from_object_id": "6a1d28fc-a03e-495e-97be-1c118849d582",
+   "from_type": "application",
+   "to_object_id": "c420e948-289c-4935-b0f9-40fae3985754",
+   "to_type": "cloud_service",
+   "attributes": {
+    "region_key": "azure:canadaeast"
+   },
+   "created_by": "e9ec1913-2e74-4334-80fe-36cd7eba5ee8",
+   "created_at": "2026-10-15T20:45:26.259159+00:00"
+  },
+  {
+   "id": "0247c441-cc5a-4e01-9515-bcb2982a7e6b",
+   "workspace_id": "d5ffd717-4c65-49ad-8f32-01b353b9a1a0",
+   "org_id": "510a5f74-20d2-4bd2-b290-316385829b02",
+   "type": "runs_on",
+   "from_object_id": "b3845227-fe23-47c6-ba00-aa862a73307c",
+   "from_type": "application",
+   "to_object_id": "9e9faf16-de3f-42dc-84b5-cca4b839fd7d",
+   "to_type": "model",
+   "attributes": {},
+   "created_by": "e9ec1913-2e74-4334-80fe-36cd7eba5ee8",
+   "created_at": "2026-10-15T20:45:26.328481+00:00"
+  }
+ ],
+ "teams": [],
+ "people": []
+}

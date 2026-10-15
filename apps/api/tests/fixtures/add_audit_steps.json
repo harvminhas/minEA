@@ -1,0 +1,202 @@
+{
+ "card": {
+  "creates": [
+   {
+    "key": "slack",
+    "type": "application",
+    "name": "Slack",
+    "properties": {
+     "vendor": "Salesforce",
+     "category": "Productivity",
+     "catalog_tool": "slack",
+     "hosting_model": "saas",
+     "cost_lines": [
+      {
+       "id": "typical-salesforce",
+       "type": "subscription",
+       "amount_cents": 90000,
+       "frequency": "annual",
+       "calculation": {
+        "kind": "flat"
+       },
+       "vendor": "Salesforce",
+       "source": "estimate",
+       "notes": "typical",
+       "created_at": "2026-10-15T20:44:02.772Z",
+       "created_by": "add",
+       "updated_at": "2026-10-15T20:44:02.772Z",
+       "updated_by": "add"
+      }
+     ]
+    }
+   },
+   {
+    "key": "payroll tool",
+    "type": "application",
+    "name": "Payroll Tool",
+    "properties": {
+     "is_custom_built": true,
+     "hosting_model": "own_cloud"
+    }
+   },
+   {
+    "key": "time clock",
+    "type": "application",
+    "name": "Time Clock",
+    "properties": {}
+   },
+   {
+    "key": "tenant:azure:contoso azure",
+    "type": "cloud_service",
+    "name": "Contoso Azure",
+    "properties": {
+     "platform_kind": "cloud_account",
+     "vendor": "microsoft",
+     "cloud_provider": "azure"
+    }
+   }
+  ],
+  "updates": [],
+  "relationships": [
+   {
+    "type": "runs_on",
+    "from_key": "payroll tool",
+    "to_key": "tenant:azure:contoso azure",
+    "from_type": "application",
+    "to_type": "cloud_service",
+    "attributes": {
+     "region_key": "azure:canadaeast"
+    }
+   }
+  ]
+ },
+ "where": {
+  "creates": [
+   {
+    "key": "server:srv 01",
+    "type": "model",
+    "name": "SRV-01",
+    "properties": {
+     "runtime_kind": "physical_server",
+     "compute_runtime_kind": "on_prem"
+    }
+   },
+   {
+    "key": "location:srv 01",
+    "type": "location",
+    "name": "Main plant",
+    "properties": {
+     "location_type": "other"
+    }
+   }
+  ],
+  "updates": [
+   {
+    "id": "$id:Time Clock",
+    "properties": {
+     "hosting_model": "on_premise"
+    },
+    "overwrite": true
+   }
+  ],
+  "relationships": [
+   {
+    "type": "located_at",
+    "from_key": "server:srv 01",
+    "to_key": "location:srv 01",
+    "from_type": "model",
+    "to_type": "location"
+   },
+   {
+    "type": "runs_on",
+    "to_key": "server:srv 01",
+    "from_id": "$id:Time Clock",
+    "from_type": "application",
+    "to_type": "model"
+   }
+  ]
+ },
+ "ai": {
+  "creates": [],
+  "relationships": [],
+  "updates": [
+   {
+    "id": "$id:Slack",
+    "properties": {
+     "ai_features": [
+      {
+       "key": "slack-ai",
+       "name": "Slack AI (summaries, recaps, search answers)",
+       "status": "on",
+       "audience": "everyone",
+       "sees_company_data": "yes",
+       "vendor_trains": "no",
+       "source": "onboarding",
+       "confirmed_at": "2026-10-15T12:00:00Z",
+       "confirmed_by": "Harvinder Minhas"
+      }
+     ]
+    },
+    "overwrite": true
+   }
+  ]
+ },
+ "owners": {
+  "creates": [],
+  "relationships": [],
+  "updates": [
+   {
+    "id": "$id:Slack",
+    "overwrite": true,
+    "owner": "IT Ops",
+    "owner_team_name": "IT Ops",
+    "point_of_contact_name": "Dana Lee",
+    "properties": {
+     "contract_renewal": "2027-03-31",
+     "licence_count": 120,
+     "cost_lines": [
+      {
+       "id": "b1bdbf88-2273-4e45-abfe-404c98d0ff79",
+       "type": "subscription",
+       "frequency": "annual",
+       "calculation": {
+        "kind": "per_user",
+        "seats": 120,
+        "unit_price_monthly_cents": 875
+       },
+       "vendor": "Slack",
+       "source": "estimate",
+       "notes": "typical",
+       "created_at": "2026-10-15T12:00:00Z",
+       "created_by": "setup",
+       "updated_at": "2026-10-15T12:00:00Z",
+       "updated_by": "setup"
+      }
+     ]
+    }
+   },
+   {
+    "id": "$id:Payroll Tool",
+    "overwrite": true,
+    "owner": "IT Ops",
+    "owner_team_name": "IT Ops",
+    "point_of_contact_name": "Raj Patel",
+    "properties": {
+     "contract_renewal": "2027-06-30",
+     "licence_count": 40
+    }
+   },
+   {
+    "id": "$id:Time Clock",
+    "overwrite": true,
+    "owner": "IT Ops",
+    "owner_team_name": "IT Ops",
+    "point_of_contact_name": "Mo Khan",
+    "properties": {
+     "contract_renewal": "2027-09-30",
+     "licence_count": 15
+    }
+   }
+  ]
+ }
+}

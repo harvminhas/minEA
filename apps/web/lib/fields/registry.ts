@@ -138,6 +138,8 @@ export const APPLICATION_HOSTING_OPTIONS = [
   { value: "on_premise", label: "On-premises" },
   { value: "hybrid", label: "Hybrid" },
   { value: "saas", label: "SaaS" },
+  // "Our cloud" on the Add cards (our own AWS/Azure/GCP account) — was saved but not choosable here.
+  { value: "own_cloud", label: "Our cloud" },
   { value: "desktop", label: "On people's computers" },
 ] as const;
 

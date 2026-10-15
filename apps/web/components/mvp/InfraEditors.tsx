@@ -159,7 +159,7 @@ export function toFieldEdges(rels: { id: string; type: string; from_object_id: s
   }));
 }
 
-function asRecord(object: MinEAObject, edges: FieldEdge[]): FieldRecord {
+export function asRecord(object: MinEAObject, edges: FieldEdge[]): FieldRecord {
   return {
     id: object.id,
     type: object.type,
@@ -183,7 +183,7 @@ function dateLabel(value: string): string {
   return formatDate(new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
 }
 
-function displayValue(def: FieldDef, record: FieldRecord, object: MinEAObject, edges: FieldEdge[], names: Map<string, string>): string {
+export function displayValue(def: FieldDef, record: FieldRecord, object: MinEAObject, edges: FieldEdge[], names: Map<string, string>): string {
   if (def.editor === "none") {
     if (def.key === "runs_on_it") {
       const count = edges.filter((edge) => edge.to_object_id === record.id && edge.type === "runs_on").length;
@@ -238,6 +238,8 @@ function displayValue(def: FieldDef, record: FieldRecord, object: MinEAObject, e
   }
   if (def.editor === "date") return typeof value === "string" && value ? dateLabel(value) : "";
   if (value == null) return "";
+  // Numbers (e.g. licence_count saved by Add's owners step) used to render blank.
+  if (typeof value === "number") return Number.isFinite(value) ? value.toLocaleString("en-US") : "";
   return typeof value === "string" ? value : "";
 }
 
