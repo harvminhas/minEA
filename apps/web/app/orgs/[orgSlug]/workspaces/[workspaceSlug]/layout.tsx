@@ -14,6 +14,8 @@ import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { AccessProvider } from "@/lib/access-context";
 import { ReadOnlyBanner } from "@/components/ui/ReadOnlyBanner";
 import { effectiveWorkspaceRole } from "@/lib/permissions";
+import { useForgetGone } from "@/lib/use-forget-gone";
+import { retryUnlessClientError } from "@/lib/org-unavailable";
 import type { OrgRole, WorkspaceRole } from "@minea/types";
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
@@ -25,15 +27,19 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   const queryClient = useQueryClient();
   const queryEnabled = useAuthQueryEnabled(orgSlug, workspaceSlug);
 
-  const { data: workspace } = useQuery({
+  const { data: workspace, isError: wsFailed, error: wsError } = useQuery({
     queryKey: ["workspace", orgSlug, workspaceSlug],
     enabled: queryEnabled,
+    retry: retryUnlessClientError,
     queryFn: async () => {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
       return workspacesApi.get(orgSlug!, workspaceSlug!, token);
     },
   });
+
+  // Workspace gone (403/404) while the org is fine: forget it and go to /home once.
+  const leavingGoneWorkspace = useForgetGone({ failed: wsFailed && !workspace, error: wsError, orgSlug, workspaceSlug });
 
   useEffect(() => {
     if (workspace) setActiveWorkspace(workspace);
@@ -60,8 +66,8 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   return (
     <AccessProvider mode={accessMode}>
       {!isEmbed && viewerByRole && <ReadOnlyBanner />}
-      {children}
-      {!isEmbed && <ChatPanel />}
+      {leavingGoneWorkspace ? null : children}
+      {!isEmbed && !leavingGoneWorkspace && <ChatPanel />}
     </AccessProvider>
   );
 }

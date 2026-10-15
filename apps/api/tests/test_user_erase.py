@@ -199,3 +199,42 @@ def test_sole_admin_of_shared_org_is_blocked_and_nothing_changes(monkeypatch):
         await db.commit()
 
     _run(scenario)
+
+
+@pg
+def test_erased_user_signing_in_again_gets_a_fresh_empty_account(monkeypatch):
+    """Still signed in to Firebase after being erased: org routes 403 (the web app then goes to /home),
+    and the org list (what /home calls) recreates an empty account, so /home sends them to create an org."""
+    from fastapi import HTTPException
+    from sqlalchemy import text
+    from app.auth import AuthContext
+    from app.services import tenancy
+
+    monkeypatch.delenv("PLATFORM_ADMIN_EMAILS", raising=False)
+
+    async def no_ms(*_a, **_k):
+        return False
+
+    monkeypatch.setattr(tenancy, "microsoft_sign_in_verified", no_ms)
+
+    async def scenario(db):
+        ids, tag = await _seed(db)
+        await db.commit()
+        email = f"target-{tag}@example.com"
+        await ue.execute_erase(db, ids["t"], admin_email="harvminhas@gmail.com", admin_uid="admin", confirm_email=email, acknowledge_subscriptions=False)
+        auth = AuthContext("fb-t-" + tag, email=email, email_verified=True)
+        with pytest.raises(HTTPException) as e:
+            await tenancy._resolve_user(db, auth)
+        assert e.value.status_code == 403
+        await db.rollback()
+        fresh = await tenancy._resolve_user(db, auth, create_if_missing=True)
+        await db.commit()
+        assert fresh.id != ids["t"] and fresh.email == email
+        n = (await db.execute(text("SELECT count(*) FROM org_memberships WHERE user_id = :u"), {"u": fresh.id})).scalar()
+        assert n == 0
+        await db.execute(text("DELETE FROM users WHERE id = :u"), {"u": fresh.id})
+        await db.execute(text("DELETE FROM orgs WHERE id = :shared"), ids)
+        await db.execute(text("DELETE FROM users WHERE id = :b"), ids)
+        await db.commit()
+
+    _run(scenario)

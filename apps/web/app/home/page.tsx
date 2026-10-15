@@ -56,11 +56,12 @@ export default function HomePage() {
 
     (async () => {
       setPhase("redirect");
+      // Never get stuck here: if checking the remembered workspace fails, open the first org.
       const { destination, restored } = await resolvePostLoginDestination({
         orgs,
         lastAppPath,
         getToken,
-      });
+      }).catch(() => ({ destination: `/orgs/${orgs[0].slug}/settings`, restored: false }));
       if (intent === "starter") {
         const slug = orgSlugFromPath(destination) ?? orgs[0].slug;
         router.replace(starterBillingHref(slug));

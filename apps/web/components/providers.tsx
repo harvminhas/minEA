@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { onForbiddenRefreshMembership } from "@/lib/membership-freshness";
+import { retryUnlessClientError } from "@/lib/org-unavailable";
 import { AuthProvider } from "@/lib/auth-context";
 import { AppBootProvider } from "@/lib/app-boot-context";
 import { AppBootGate } from "@/components/ui/AppBootGate";
@@ -28,7 +29,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
         defaultOptions: {
           queries: {
             staleTime: 60 * 1000,
-            retry: 1,
+            // 4xx never succeeds on retry (a deleted org stays deleted); network/5xx get one more try.
+            retry: (count, err) => retryUnlessClientError(count, err),
           },
         },
       });

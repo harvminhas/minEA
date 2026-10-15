@@ -40,8 +40,19 @@ export function invalidateMembership(qc: QueryClient, orgSlug?: string | null): 
  * A 403 anywhere means our idea of the role may be out of date: refetch the role queries.
  * Not when the failing query is itself a role query (that would refetch it in a loop).
  */
-export function onForbiddenRefreshMembership(qc: QueryClient, err: unknown, failingKey?: QueryKey): boolean {
+let lastForbiddenRefresh = -Infinity;
+/** Many queries on one page can 403 together (e.g. the org was erased): refresh roles once, not per error. */
+export const FORBIDDEN_REFRESH_GAP_MS = 5_000;
+
+export function onForbiddenRefreshMembership(qc: QueryClient, err: unknown, failingKey?: QueryKey, now: number = Date.now()): boolean {
   if (!isForbidden(err) || isMembershipKey(failingKey)) return false;
+  if (now - lastForbiddenRefresh < FORBIDDEN_REFRESH_GAP_MS) return false;
+  lastForbiddenRefresh = now;
   void invalidateMembership(qc);
   return true;
+}
+
+/** Tests only. */
+export function resetForbiddenRefreshThrottle(): void {
+  lastForbiddenRefresh = -Infinity;
 }

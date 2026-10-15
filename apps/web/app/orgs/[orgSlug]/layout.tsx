@@ -18,6 +18,7 @@ import { orgShellFor } from "@/lib/app-shell";
 import { MvpFrame } from "@/components/mvp/MvpFrame";
 import { OrgLoadError } from "@/components/org/OrgNotices";
 import { orgLoadErrorMessage } from "@/lib/org-access";
+import { useForgetGone } from "@/lib/use-forget-gone";
 
 export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
@@ -81,7 +82,9 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
   // A failed org fetch shows an error with retry in place of the page. It used to go to /home,
   // which then opened orgs[0]'s Ask: a silent jump to another org.
   const orgLoadFailed = isFetched && isError && !org;
-  const content = orgLoadFailed ? (
+  // 403/404: the org is gone (erased, deleted, or we were removed). Forget it and go to /home once.
+  const leavingGoneOrg = useForgetGone({ failed: orgLoadFailed, error: orgLoadError, orgSlug });
+  const content = leavingGoneOrg ? null : orgLoadFailed ? (
     <OrgLoadError message={orgLoadErrorMessage(orgLoadError)} onRetry={() => void refetchOrg()} retrying={orgFetching} />
   ) : (
     children
