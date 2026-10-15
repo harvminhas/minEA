@@ -56,7 +56,7 @@ test("the link-only CTA opens the wizard at 'Where each one lives' with saved ap
   // after links are saved the catalogue is refetched so the card goes away without a reload
   const link = flow.slice(flow.indexOf("const linkServers"), flow.indexOf("const finish"));
   assert.match(link, /invalidateQueries\(\{ queryKey: catalogQueryKey/);
-  assert.match(link, /whereBatch\(planned\.servers, planned\.links, apps, existing/);
+  assert.match(link, /whereBatch\(planned\.servers, planned\.links, whereApps, existing/);
 });
 
 test("Reports no longer latches the card after setup is met", () => {

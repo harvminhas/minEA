@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import type { MinEAObject } from "@minea/types";
+import type { MinEAObject, Relationship } from "@minea/types";
 import { addApi } from "@/lib/api-client";
 import { serverIdsAfter, whereBatch } from "@/lib/setup/where-batch";
 import { useAuth } from "@/lib/auth-context";
@@ -33,6 +33,7 @@ import { SETUP_MIN, setupMeter, setupState } from "@/lib/setup/setupMin";
 import { LocationChips } from "@/components/hosting/LocationChips";
 import { CLOUD_PROVIDERS, EMPTY_DETAIL, suggestsOwnCloud, type HostingDetail } from "@/lib/hosting/cloud";
 import { useCloudPicker } from "@/lib/hosting/use-cloud-regions";
+import { whereStepKeys } from "@/lib/setup/where-needed";
 import { collectPendingTenants } from "@/lib/hosting/pending-tenants";
 import type { LocationChoice } from "@/lib/setup/hosting-choice";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
@@ -169,6 +170,10 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   const [error, setError] = useState("");
 
   const apps = drafts.filter(isApp);
+  // Step 3 lists only the apps the add cards left open (see where-needed.ts); null = all of them.
+  const [whereKeys, setWhereKeys] = useState<string[] | null>(null);
+  const [whereSkipped, setWhereSkipped] = useState(false);
+  const whereApps = whereKeys ? apps.filter((app) => whereKeys.includes(app.key)) : apps;
   const serverOptions = useMemo(() => {
     const names = new Map<string, string>();
     for (const object of catalog.data?.objects ?? []) {
@@ -183,7 +188,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   const { tenants: tenantList, custom: customRegions, addRegion } = useCloudPicker();
   const pendingTenants = collectPendingTenants(apps.map((app) => (app.choice === "own_cloud" || app.choice === "saas" ? app.detail : null)), tenantList);
   const planned = planHosting(
-    apps.map((app) => ({ key: app.key, name: app.input, choice: app.choice, serverName: app.serverName })),
+    whereApps.map((app) => ({ key: app.key, name: app.input, choice: app.choice, serverName: app.serverName })),
     whereByServer,
   );
   // Owner picks: workspace teams/people plus whatever was typed on another row (immediately).
@@ -210,6 +215,8 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     const seed = whereStepSeed(catalog.data.objects, catalog.data.relationships);
     setDrafts(seed.drafts.map((item) => ({ ...toDrafts([{ input: item.name, status: "custom", tool: null, options: [], customBuilt: false }])[0], objectId: item.id, choice: "unknown" })));
     setServerIds(seed.serverIds);
+    setWhereKeys(null);
+    setWhereSkipped(false);
     setStep(3);
     setSeeded(true);
   }, [startAt, seeded, catalog.data]);
@@ -291,6 +298,17 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object });
   };
 
+  // Into step 3, or straight past it when every app's location was answered on the add cards.
+  const goWhere = (list: Draft[] = apps, fresh: MinEAObject[] = []) => {
+    const cached = orgSlug && workspaceSlug ? queryClient.getQueryData<{ objects?: MinEAObject[]; relationships?: Relationship[] }>(catalogQueryKey(orgSlug, workspaceSlug)) : undefined;
+    const objects = [...fresh, ...(cached?.objects ?? catalog.data?.objects ?? [])];
+    const relationships = cached?.relationships ?? catalog.data?.relationships ?? [];
+    const keys = whereStepKeys(list, objects, relationships);
+    setWhereKeys(keys);
+    setWhereSkipped(keys.length === 0);
+    setStep(keys.length === 0 ? 4 : 3);
+  };
+
   const createApps = async (source: Draft[] = drafts) => {
     setDrafts(source);
     const token = await auth();
@@ -337,7 +355,8 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     );
     setAiRows(rows);
     setAiPicks(Object.fromEntries(rows.map((row) => [row.key, startPick(row)])));
-    setStep(rows.length > 0 ? 2 : 3);
+    if (rows.length > 0) setStep(2);
+    else goWhere(created.filter(isApp), Object.values(stored));
   };
 
   const aiSave = useRef<Promise<void> | null>(null);
@@ -361,7 +380,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     });
     const updates = aiStepPatch(choices, person).map((change) => ({ id: change.objectId, properties: change.properties, overwrite: true as const }));
     if (updates.length === 0) {
-      setStep(3);
+      goWhere();
       return;
     }
     // One batch for every app's AI answers; step 3 opens now and its save waits for this one.
@@ -389,7 +408,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     })();
     aiSave.current = save;
     save.catch(() => undefined);
-    setStep(3);
+    goWhere();
   };
 
   // Step 3 saves as ONE batch (servers, locations, links and hosting in one transaction), then one
@@ -404,10 +423,10 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     const existing = { ...catalogServers, ...serverIds };
     const currentHosting = Object.fromEntries((catalog.data?.objects ?? []).map((object) => [object.id, (object.properties as Record<string, unknown> | undefined)?.hosting_model]));
     const tenantLinked = new Set((catalog.data?.relationships ?? []).filter((rel) => rel.type === "runs_on" && rel.to_type === "cloud_service").map((rel) => rel.from_object_id));
-    const batch = whereBatch(planned.servers, planned.links, apps, existing, currentHosting, {
+    const batch = whereBatch(planned.servers, planned.links, whereApps, existing, currentHosting, {
       tenants: tenantList,
       tenantLinked,
-      vendorOf: (app) => apps.find((item) => item.key === app.key)?.tool?.vendor ?? "",
+      vendorOf: (app) => whereApps.find((item) => item.key === app.key)?.tool?.vendor ?? "",
     });
     const writes = batch.creates.length + batch.updates.length + batch.relationships.length;
     if (writes === 0) {
@@ -415,7 +434,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
       setStep(4);
       return;
     }
-    setWhereSaving(`Saving where ${apps.length === 1 ? "1 app lives" : `${apps.length} apps live`}…`);
+    setWhereSaving(`Saving where ${whereApps.length === 1 ? "1 app lives" : `${whereApps.length} apps live`}…`);
     const save = (async () => {
       try {
         const result = await addApi.save(orgSlug!, workspaceSlug!, batch, token);
@@ -643,7 +662,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
             <button type="button" disabled={busy} onClick={() => void run(saveAi)} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50">
               {busy ? "Saving…" : "Next: where each one lives →"}
             </button>
-            <button type="button" disabled={busy} onClick={() => setStep(3)} className="rounded-lg px-3 py-1.5 text-[13px] text-[#6b7289]">Skip for now</button>
+            <button type="button" disabled={busy} onClick={() => goWhere()} className="rounded-lg px-3 py-1.5 text-[13px] text-[#6b7289]">Skip for now</button>
           </div>
         </>
       )}
@@ -653,8 +672,11 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
           <Stepper step={3} />
           <h2 className="text-[18px] font-semibold text-[#1c2230]">Where does each one live?</h2>
           <p className="mt-1 text-[13px] text-[#6b7289]">{meter}. Aim for {SETUP_MIN.apps} apps, and say where at least {SETUP_MIN.located} runs.</p>
+          <p className="mt-1 text-[12px] text-[#8b90a0]" data-testid="where-filter-note">
+            {whereApps.length === apps.length ? "" : `Only the ${whereApps.length === 1 ? "app" : `${whereApps.length} apps`} you didn't place on the cards. The other ${apps.length - whereApps.length} ${apps.length - whereApps.length === 1 ? "is" : "are"} done.`}
+          </p>
           <ul className="mt-3 space-y-3">
-            {apps.map((app) => (
+            {whereApps.map((app) => (
               <li key={app.key} className="rounded-xl border border-[#e6e8ee] px-3 py-2">
                 <div className="text-[13px] font-medium text-[#1c2230]">{displayName(app)}</div>
                 <div className="mt-2">
@@ -703,7 +725,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
 
       {step === 4 && (
         <>
-          <Stepper step={4} />
+          <Stepper step={4} whereSkipped={whereSkipped} />
           <h2 className="text-[18px] font-semibold text-[#1c2230]">Owners and renewals</h2>
           <p className="mt-1 text-[13px] text-[#6b7289]">All optional. Empty cells are the ones still open.</p>
           <OwnerDatalists teams={ownerPickLists.teams} people={ownerPickLists.people} />
@@ -772,7 +794,7 @@ function aiOthers(drafts: Draft[], rows: AiStepRow[]): string[] {
 
 
 
-function Stepper({ step }: { step: number }) {
+function Stepper({ step, whereSkipped = false }: { step: number; whereSkipped?: boolean }) {
   const labels = ["What you use", "AI turned on? (optional)", "Where each one lives", "Owners & renewals (optional)"];
   return (
     <ol data-testid="setup-stepper" className="-mx-1 mb-4 flex items-center gap-x-2 overflow-x-auto whitespace-nowrap px-1 pb-1 text-[12px] sm:text-[13px] [scrollbar-width:none]">
@@ -783,6 +805,7 @@ function Stepper({ step }: { step: number }) {
           <li key={label} aria-current={step === n ? "step" : undefined} className={"shrink-0 " + (step === n ? "font-semibold text-[#1c2230]" : "text-[#6b7289]")}>
             {index > 0 && <span className="mr-2 text-[#c5c8d4]">—</span>}
             {done ? <span className="text-[#047857]">✓</span> : n} {label}
+            {n === 3 && whereSkipped && done && <span className="ml-1 text-[#8b90a0]" data-testid="where-skipped">(answered on the cards)</span>}
           </li>
         );
       })}
