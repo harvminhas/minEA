@@ -1,3 +1,4 @@
+import { tenantCreateKey } from "@/lib/hosting/pending-tenants";
 import type { AiCatalogEntry, AiFeature, AiFeatureAudience } from "@minea/types";
 import type { CostLine } from "@/lib/cost/math";
 import { readCostLines } from "@/lib/cost/math";
@@ -115,6 +116,8 @@ export type AddRow = {
   tenantName?: string;
   tenantId?: string;
   regionKey?: string | null;
+  /** Picked a new tenant typed on another card: same name, so the save makes one record. */
+  tenantShared?: boolean;
 };
 
 export function objectTypeFor(kind: AddKind): string {
@@ -525,7 +528,8 @@ export function tenantLinks(rows: PlanInput[], estate: EstateItem[], creates: Ba
     if (!(cloud || (row.choice === "saas" && name))) continue;
     if (!name) continue;
     const known = row.tenantId ? estate.find((item) => item.id === row.tenantId) : findTenant(estate.filter((item) => item.type === "cloud_service"), name);
-    const key = `tenant:${dedupeKey(name)}`;
+    // One record per provider + name, however many cards named it (typed or picked as "(new)").
+    const key = tenantCreateKey(provider, name);
     if (!known && !creates.some((item) => item.key === key)) {
       creates.push({ key, type: "cloud_service", name, properties: tenantProperties(provider, cloud ? "own_cloud" : "saas") });
     }

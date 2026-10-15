@@ -1,3 +1,4 @@
+import { tenantCreateKey } from "@/lib/hosting/pending-tenants";
 import { defaultTenantName, findTenant, providerForVendor, regionAttributes, tenantProperties, type HostingDetail, type TenantOption } from "@/lib/hosting/cloud";
 import { normalizeTerm, type HostingChoice } from "@/lib/setup/match-tools";
 
@@ -68,7 +69,7 @@ export function whereBatch(
     const provider = app.detail?.provider ?? (app.choice === "saas" ? providerForVendor(cloud.vendorOf?.(app)) ?? "other" : "other");
     const name = typed || defaultTenantName(provider);
     const known = (app.detail?.tenantId && cloud.tenants.find((tenant) => tenant.id === app.detail?.tenantId)) || findTenant(cloud.tenants, name);
-    const key = `tenant:${normalizeTerm(name)}`;
+    const key = tenantCreateKey(provider, name);
     if (!known && !creates.some((item) => item.key === key)) {
       creates.push({ key, type: "cloud_service", name, properties: tenantProperties(provider, app.choice === "own_cloud" ? "own_cloud" : "saas") });
     }

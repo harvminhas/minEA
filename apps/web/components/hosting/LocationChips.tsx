@@ -11,6 +11,7 @@ import {
   type ServerOption,
 } from "@/lib/setup/hosting-choice";
 import { CloudPicker } from "@/components/hosting/CloudPicker";
+import type { PendingTenant } from "@/lib/hosting/pending-tenants";
 import { providerForVendor, type CloudProvider, type CustomRegion, type HostingDetail, type TenantOption } from "@/lib/hosting/cloud";
 
 /**
@@ -29,6 +30,7 @@ export function LocationChips({
   firstChipProps,
   detail,
   tenants = [],
+  pendingTenants = [],
   custom,
   onAddRegion,
   vendor,
@@ -45,6 +47,8 @@ export function LocationChips({
   firstChipProps?: Record<string, string>;
   detail?: HostingDetail;
   tenants?: TenantOption[];
+  /** New tenants typed on other rows of this batch. */
+  pendingTenants?: PendingTenant[];
   custom?: CustomRegion[];
   onAddRegion?: (provider: CloudProvider, name: string) => Promise<string>;
   /** Catalogue vendor: the SaaS provider (Microsoft → Microsoft 365). */
@@ -91,11 +95,11 @@ export function LocationChips({
         <p className="mt-1 text-[11px] text-[#6b7289]">Suggested: {LOCATION_CHOICES.find((item) => item.choice === suggest)?.label}</p>
       )}
       {onDetail && detail && value === "own_cloud" && (
-        <CloudPicker mode="own_cloud" value={detail} tenants={tenants} custom={custom} onAddRegion={onAddRegion} onChange={onDetail} disabled={disabled} />
+        <CloudPicker mode="own_cloud" value={detail} tenants={tenants} pending={pendingTenants} custom={custom} onAddRegion={onAddRegion} onChange={onDetail} disabled={disabled} />
       )}
       {onDetail && detail && value === "saas" && (
         saasOpen ? (
-          <CloudPicker mode="saas" value={detail} tenants={tenants} custom={custom} onAddRegion={onAddRegion} onChange={onDetail} disabled={disabled} />
+          <CloudPicker mode="saas" value={detail} tenants={tenants} pending={pendingTenants} custom={custom} onAddRegion={onAddRegion} onChange={onDetail} disabled={disabled} />
         ) : (
           <button
             type="button"

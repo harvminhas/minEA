@@ -36,6 +36,7 @@ import { buildBatch, catalogLists, planInputs, prepareRows, todoLines, type AddR
 import { choiceForTool } from "@/lib/setup/match-tools";
 import { CLOUD_PROVIDERS, SAAS_PROVIDERS, defaultTenantName, providerForVendor, suggestsOwnCloud, type CloudProvider } from "@/lib/hosting/cloud";
 import { useCloudPicker } from "@/lib/hosting/use-cloud-regions";
+import { collectPendingTenants, type PendingTenant } from "@/lib/hosting/pending-tenants";
 import { CloudPicker } from "@/components/hosting/CloudPicker";
 import { setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
@@ -183,10 +184,20 @@ export function choicePatch(row: AddRow, choice: AddRow["choice"], azureTenants:
 }
 
 /** The five "Where does it run?" chips on an app card, with provider / tenant / region for Our cloud and SaaS. */
-function CardWhere({ row, onChange }: { row: AddRow; onChange: (patch: Partial<AddRow>) => void }) {
+/** A card's hosting as the picker sees it. */
+export function cardDetail(row: AddRow, saasProvider: CloudProvider) {
+  return { provider: row.cloudProvider ?? (row.choice === "saas" ? saasProvider : null), tenantName: row.tenantName ?? "", tenantId: row.tenantId, regionKey: row.regionKey ?? null, tenantShared: row.tenantShared };
+}
+
+/** New tenants typed on any card, offered on every card. */
+export function cardPendingTenants(rows: AddRow[], tenants: { id: string; name: string; provider: CloudProvider; regionKeys: string[] }[]): PendingTenant[] {
+  return collectPendingTenants(rows.map((row) => (row.choice === "own_cloud" || row.choice === "saas" ? cardDetail(row, providerForVendor(row.tool?.vendor) ?? "other") : null)), tenants);
+}
+
+function CardWhere({ row, onChange, pending }: { row: AddRow; onChange: (patch: Partial<AddRow>) => void; pending: PendingTenant[] }) {
   const { tenants, custom, addRegion } = useCloudPicker();
   const saasProvider = providerForVendor(row.tool?.vendor) ?? "other";
-  const detail = { provider: row.cloudProvider ?? (row.choice === "saas" ? saasProvider : null), tenantName: row.tenantName ?? "", tenantId: row.tenantId, regionKey: row.regionKey ?? null };
+  const detail = cardDetail(row, saasProvider);
   return (
     <div data-testid="card-where">
       <p className="mb-1">Where does it run?</p>
@@ -206,16 +217,17 @@ function CardWhere({ row, onChange }: { row: AddRow; onChange: (patch: Partial<A
           mode={row.choice === "own_cloud" ? "own_cloud" : "saas"}
           value={detail}
           tenants={tenants}
+          pending={pending}
           custom={custom}
           onAddRegion={addRegion}
-          onChange={(next) => onChange({ cloudProvider: next.provider, tenantName: next.tenantName, tenantId: next.tenantId, regionKey: next.regionKey })}
+          onChange={(next) => onChange({ cloudProvider: next.provider, tenantName: next.tenantName, tenantId: next.tenantId, regionKey: next.regionKey, tenantShared: next.tenantShared })}
         />
       )}
     </div>
   );
 }
 
-export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: AddRow; index: number; dim: boolean; motion: boolean; onRemove: () => void; onChange: (patch: Partial<AddRow>) => void }) {
+export function AddCard({ row, index, dim, motion, onRemove, onChange, pendingTenants = [] }: { row: AddRow; index: number; dim: boolean; motion: boolean; onRemove: () => void; onChange: (patch: Partial<AddRow>) => void; pendingTenants?: PendingTenant[] }) {
   const question = cardQuestion(row);
   const [open, setOpen] = useState(false);
   const hosting = catalogHostingLine(row);
@@ -259,7 +271,7 @@ export function AddCard({ row, index, dim, motion, onRemove, onChange }: { row: 
           </div>
         )}
         {row.kind === "app" && (question === "hosting" || (question === "none" && open)) && (
-          <CardWhere row={row} onChange={onChange} />
+          <CardWhere row={row} onChange={onChange} pending={pendingTenants} />
         )}
         {row.kind === "app" && question === "none" && hosting && !open && (
           <button type="button" data-testid="card-where-change" className="mt-1 text-[12px] font-medium text-[#5b4ce6]" onClick={() => setOpen(true)}>Change, or add tenant &amp; region</button>
@@ -340,6 +352,8 @@ export function AddResult({
 }) {
   const view = viewFromRows(rows, phase, reduced);
   const byId = useMemo(() => new Map(objects.map((object) => [object.id, object])), [objects]);
+  const { tenants: cloudTenants } = useCloudPicker();
+  const pendingTenants = view.mode === "cards" ? cardPendingTenants(view.addCards, cloudTenants) : [];
   if (view.mode === "closed" || (view.mode === "saved" && !snapshot)) return null;
   return (
     <section className="max-w-full overflow-x-hidden">
@@ -373,7 +387,7 @@ export function AddResult({
             <>
               <div className="mt-3 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
                 {view.addCards.map((row, index) => (
-                  <AddCard key={row.key} row={row} index={index} dim={phase === "saving"} motion={view.motion} onRemove={() => onRemove(row.key)} onChange={(patch) => onChange(row.key, patch)} />
+                  <AddCard key={row.key} row={row} index={index} dim={phase === "saving"} motion={view.motion} onRemove={() => onRemove(row.key)} onChange={(patch) => onChange(row.key, patch)} pendingTenants={pendingTenants} />
                 ))}
               </div>
               {view.alreadyLines.length > 0 && (

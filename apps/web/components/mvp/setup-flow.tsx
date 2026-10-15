@@ -33,6 +33,7 @@ import { SETUP_MIN, setupMeter, setupState } from "@/lib/setup/setupMin";
 import { LocationChips } from "@/components/hosting/LocationChips";
 import { CLOUD_PROVIDERS, EMPTY_DETAIL, suggestsOwnCloud, type HostingDetail } from "@/lib/hosting/cloud";
 import { useCloudPicker } from "@/lib/hosting/use-cloud-regions";
+import { collectPendingTenants } from "@/lib/hosting/pending-tenants";
 import type { LocationChoice } from "@/lib/setup/hosting-choice";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
@@ -180,6 +181,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   }, [catalog.data?.objects, drafts]);
 
   const { tenants: tenantList, custom: customRegions, addRegion } = useCloudPicker();
+  const pendingTenants = collectPendingTenants(apps.map((app) => (app.choice === "own_cloud" || app.choice === "saas" ? app.detail : null)), tenantList);
   const planned = planHosting(
     apps.map((app) => ({ key: app.key, name: app.input, choice: app.choice, serverName: app.serverName })),
     whereByServer,
@@ -668,6 +670,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
                     onPickServer={(name) => patch(app.key, { choice: "own", serverName: name })}
                     detail={app.detail ?? EMPTY_DETAIL}
                     tenants={tenantList}
+                    pendingTenants={pendingTenants}
                     custom={customRegions}
                     onAddRegion={addRegion}
                     vendor={app.tool?.vendor || undefined}

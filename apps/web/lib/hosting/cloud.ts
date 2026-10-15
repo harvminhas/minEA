@@ -188,7 +188,14 @@ export function suggestsOwnCloud(row: { customBuilt?: boolean; tool?: { hosting?
   return Boolean(row.customBuilt) || row.tool?.hosting === "either";
 }
 
-export type HostingDetail = { provider: CloudProvider | null; tenantName: string; tenantId?: string; regionKey: string | null };
+export type HostingDetail = {
+  provider: CloudProvider | null;
+  tenantName: string;
+  tenantId?: string;
+  regionKey: string | null;
+  /** Picked a new tenant typed on another card ("X (new)"): saved as the same one record. */
+  tenantShared?: boolean;
+};
 export const EMPTY_DETAIL: HostingDetail = { provider: null, tenantName: "", regionKey: null };
 
 /**

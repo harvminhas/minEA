@@ -13,6 +13,7 @@ import {
   type Region,
   type TenantOption,
 } from "@/lib/hosting/cloud";
+import { pendingTenantId, type PendingTenant } from "@/lib/hosting/pending-tenants";
 
 const NEW = "__new";
 const CUSTOM = "__custom";
@@ -32,6 +33,7 @@ export function CloudPicker({
   onChange,
   onAddRegion,
   disabled,
+  pending = [],
 }: {
   mode: "own_cloud" | "saas";
   value: HostingDetail;
@@ -41,13 +43,19 @@ export function CloudPicker({
   /** "+ Custom region": returns the region key (a built-in one when the name matches). */
   onAddRegion?: (provider: CloudProvider, name: string) => Promise<string>;
   disabled?: boolean;
+  /** New tenants typed on other cards in this batch, offered as "Name (new)". */
+  pending?: PendingTenant[];
 }) {
   const providers = mode === "own_cloud" ? CLOUD_PROVIDERS : SAAS_PROVIDERS;
   const provider = value.provider;
   const info = providerInfo(provider);
   const shown = tenants.filter((tenant) => tenant.provider === provider);
   const tenant = value.tenantId ? tenants.find((item) => item.id === value.tenantId) : undefined;
-  const typingNew = !value.tenantId && (Boolean(value.tenantName) || shown.length === 0);
+  const ownPendingId = provider && !value.tenantId && value.tenantName.trim() ? pendingTenantId(provider, value.tenantName) : null;
+  const sharedPick = value.tenantShared && ownPendingId ? pending.find((item) => item.id === ownPendingId) : undefined;
+  // Others' new tenants for this provider; not the one this card is typing itself.
+  const pendingShown = pending.filter((item) => item.provider === provider && (sharedPick ? true : item.id !== ownPendingId));
+  const typingNew = !value.tenantId && !sharedPick && (Boolean(value.tenantName) || shown.length + pendingShown.length === 0);
   const regions = regionChoices(provider, tenant, custom);
   const [customName, setCustomName] = useState("");
   const [addingRegion, setAddingRegion] = useState(false);
@@ -57,9 +65,11 @@ export function CloudPicker({
     onChange({ provider: next, ...(first.length === 1 ? { tenantId: first[0]!.id, tenantName: first[0]!.name } : { tenantId: undefined, tenantName: first.length ? "" : defaultTenantName(next) }), regionKey: null });
   };
   const pickTenant = (id: string) => {
-    if (id === NEW) onChange({ ...value, tenantId: undefined, tenantName: defaultTenantName(provider) });
-    else if (!id) onChange({ ...value, tenantId: undefined, tenantName: "" });
-    else onChange({ ...value, tenantId: id, tenantName: tenants.find((item) => item.id === id)?.name ?? "" });
+    const shared = pending.find((item) => item.id === id);
+    if (shared) onChange({ ...value, tenantId: undefined, tenantName: shared.name, tenantShared: true });
+    else if (id === NEW) onChange({ ...value, tenantId: undefined, tenantShared: false, tenantName: pendingShown.length ? "" : defaultTenantName(provider) });
+    else if (!id) onChange({ ...value, tenantId: undefined, tenantShared: false, tenantName: "" });
+    else onChange({ ...value, tenantId: id, tenantShared: false, tenantName: tenants.find((item) => item.id === id)?.name ?? "" });
   };
   const addRegion = async () => {
     if (!provider || !onAddRegion || !customName.trim()) return;
@@ -97,10 +107,11 @@ export function CloudPicker({
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="block">
             {info?.label} {info?.tenantWord}
-            <select aria-label="Tenant / account" data-testid="tenant-select" disabled={disabled} value={value.tenantId ?? (typingNew ? NEW : "")} onChange={(event) => pickTenant(event.target.value)} className={select}>
+            <select aria-label="Tenant / account" data-testid="tenant-select" disabled={disabled} value={value.tenantId ?? sharedPick?.id ?? (typingNew ? NEW : "")} onChange={(event) => pickTenant(event.target.value)} className={select}>
               {mode === "saas" && <option value="">Not recorded</option>}
-              {mode === "own_cloud" && shown.length > 0 && !value.tenantId && !typingNew && <option value="">Pick one</option>}
+              {mode === "own_cloud" && shown.length + pendingShown.length > 0 && !value.tenantId && !typingNew && !sharedPick && <option value="">Pick one</option>}
               {shown.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {pendingShown.map((item) => <option key={item.id} value={item.id} data-pending="1">{item.name} (new)</option>)}
               <option value={NEW}>+ New {info?.tenantWord}…</option>
             </select>
             {typingNew && (
@@ -109,11 +120,12 @@ export function CloudPicker({
                 data-testid="tenant-new"
                 disabled={disabled}
                 value={value.tenantName}
-                onChange={(event) => onChange({ ...value, tenantId: undefined, tenantName: event.target.value })}
+                onChange={(event) => onChange({ ...value, tenantId: undefined, tenantShared: false, tenantName: event.target.value })}
                 className="mt-1 h-8 w-full rounded-lg border border-dashed border-[#a99cf5] bg-white px-2 text-[13px] text-[#1c2230]"
               />
             )}
             {typingNew && <span className="text-[11px]">New platform record</span>}
+            {sharedPick && <span className="text-[11px]" data-testid="tenant-shared">New platform record, shared with other cards</span>}
           </label>
           <label className="block">
             Region (optional)
