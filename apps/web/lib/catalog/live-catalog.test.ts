@@ -38,7 +38,7 @@ test("API down: refresh resolves and the bundled list stays", async () => {
 test("the catalogue admin link shows only for platform admins; the page edits every field", () => {
   const nav = readFileSync(new URL("../../components/nav/TopNav.tsx", import.meta.url), "utf8");
   assert.match(nav, /platformMe\.data\?\.platformAdmin && \(/);
-  assert.match(nav, /href="\/platform\/catalog"/);
+  assert.match(nav, /href="\/platform\/users"/);
   const page = readFileSync(new URL("../../components/platform/CatalogAdmin.tsx", import.meta.url), "utf8");
   for (const label of ["Name", "Vendor", "Aliases", "Category", "Hosting", "Kind", "Typical annual cost", "single sign-on", "Add to catalog", "Delete", "Search"]) {
     assert.match(page, new RegExp(label), label);

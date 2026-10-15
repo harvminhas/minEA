@@ -20,6 +20,7 @@ from app.routers import (
     billing,
     catalog,
     catalog_lookup,
+    platform_admin,
     platform_catalog,
     people_directory,
     clouds,
@@ -107,6 +108,7 @@ app.include_router(relationships.router, prefix="/api/v1")
 app.include_router(catalog.router, prefix="/api/v1")
 app.include_router(catalog_lookup.router, prefix="/api/v1")
 app.include_router(platform_catalog.router, prefix="/api/v1")
+app.include_router(platform_admin.router, prefix="/api/v1")
 app.include_router(people_directory.router, prefix="/api/v1")
 app.include_router(clouds.router, prefix="/api/v1")
 app.include_router(clouds.regions_router, prefix="/api/v1")

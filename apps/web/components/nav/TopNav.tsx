@@ -357,13 +357,13 @@ export function TopNav() {
               )}
               {platformMe.data?.platformAdmin && (
                 <Link
-                  href="/platform/catalog"
+                  href="/platform/users"
                   onClick={() => setUserOpen(false)}
                   data-testid="user-menu-platform-catalog"
                   className="flex items-center gap-2 px-3 py-2 text-sm text-white/60 hover:text-white hover:bg-white/5 transition-colors"
                 >
                   <Settings size={13} className="flex-shrink-0" />
-                  <span className="truncate">App catalogue (platform admin)</span>
+                  <span className="truncate">Platform admin</span>
                 </Link>
               )}
               {orgSlug && (

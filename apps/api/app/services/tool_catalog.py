@@ -30,9 +30,14 @@ def normalize(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
 
 
+# Superuser when PLATFORM_ADMIN_EMAILS is unset or blank. Setting the env var replaces this list.
+DEFAULT_PLATFORM_ADMINS = frozenset({"harvminhas@gmail.com"})
+
+
 def platform_admin_emails() -> set[str]:
     raw = os.getenv("PLATFORM_ADMIN_EMAILS", "")
-    return {item.strip().lower() for item in raw.split(",") if item.strip()}
+    listed = {item.strip().lower() for item in raw.split(",") if item.strip()}
+    return listed or set(DEFAULT_PLATFORM_ADMINS)
 
 
 def is_platform_admin(email: str | None, verified: bool) -> bool:

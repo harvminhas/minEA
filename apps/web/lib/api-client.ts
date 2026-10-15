@@ -335,6 +335,19 @@ export const workspaceSettingsApi = {
 export type CatalogEntry = import("@/lib/setup/match-tools").ToolRecord & { id: string };
 export type CatalogMiss = { key: string; name: string; count: number; lastSeen: string; suggestion: { name?: string; vendor?: string; category?: string; hosting?: string; kind?: string; confidence?: number } | null };
 
+export type AdminUserOrg = { slug: string; name: string; plan: string; role: string; members: number; objects: number; subscription: boolean };
+export type AdminUser = { id: string; email: string; name: string; created_at: string | null; verified: boolean; last_active: string | null; objects_created: number; orgs: AdminUserOrg[] };
+export type ErasePreviewOrg = { id: string; slug: string; name: string; plan: string; role: string | null; members: number; other_admins: number; subscription: boolean; action: "delete" | "leave" | "blocked"; reason: string; workspaces: number; objects: number; relationships: number };
+export type ErasePreview = { user: { id: string; email: string; name: string; created_at: string | null }; orgs: ErasePreviewOrg[]; blockers: string[]; needs_subscription_ack: boolean; counts: Record<string, number>; is_self: boolean; is_platform_admin: boolean };
+
+export const platformAdminApi = {
+  users: (q: string, sort: "newest" | "oldest", token: string) =>
+    apiFetch<{ users: AdminUser[] }>(`/platform/admin/users?q=${encodeURIComponent(q)}&sort=${sort}`, { token }),
+  erasePreview: (userId: string, token: string) => apiFetch<ErasePreview>(`/platform/admin/users/${userId}/erase-preview`, { token }),
+  erase: (userId: string, body: { confirm_email: string; acknowledge_subscriptions: boolean }, token: string) =>
+    apiFetch<{ erased: string; counts: Record<string, number> }>(`/platform/admin/users/${userId}/erase`, { method: "POST", token, body: JSON.stringify(body) }),
+};
+
 export const toolCatalogApi = {
   tools: (token: string) => apiFetch<{ version: string; source: string; tools: unknown }>(`/catalog/tools`, { token }),
   me: (token: string) => apiFetch<{ platformAdmin: boolean }>(`/platform/me`, { token }),

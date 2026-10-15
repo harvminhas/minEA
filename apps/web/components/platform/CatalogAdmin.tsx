@@ -136,14 +136,27 @@ export function CatalogAdmin() {
   );
 
   return (
-    <main className="mx-auto max-w-6xl p-6" data-testid="catalog-admin">
+    <main className="max-w-6xl p-6" data-testid="catalog-admin">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[22px] font-semibold text-[#1c2230]">App catalogue</h1>
           <p className="text-[13px] text-[#6b7289]">{total} entries. These fill in vendor, category and hosting when anyone types an app name. Platform admins only.</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/home" className="rounded-lg px-3 py-1.5 text-[13px] text-[#6b7289]">Back</Link>
+          <button
+            type="button"
+            data-testid="catalog-refresh"
+            title="Re-read the catalogue now (it also refreshes after every save)"
+            onClick={() => void (async () => {
+              setNotice("");
+              await load();
+              await refreshLiveCatalog(async () => toolCatalogApi.tools(await token()), true);
+              setNotice("Catalogue refreshed");
+            })().catch((err) => setError(err instanceof Error ? err.message : "Could not refresh"))}
+            className="rounded-lg border border-[#e6e8ee] px-3 py-1.5 text-[13px] text-[#4b5163]"
+          >
+            Refresh
+          </button>
           <button type="button" onClick={() => { setForm({ ...EMPTY }); setError(""); }} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">Add entry</button>
         </div>
       </div>
