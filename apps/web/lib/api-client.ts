@@ -336,15 +336,17 @@ export type CatalogEntry = import("@/lib/setup/match-tools").ToolRecord & { id: 
 export type CatalogMiss = { key: string; name: string; count: number; lastSeen: string; suggestion: { name?: string; vendor?: string; category?: string; hosting?: string; kind?: string; confidence?: number } | null };
 
 export type AdminUserOrg = { slug: string; name: string; plan: string; role: string; members: number; objects: number; subscription: boolean };
-export type AdminUser = { id: string; email: string; name: string; created_at: string | null; verified: boolean; last_active: string | null; objects_created: number; orgs: AdminUserOrg[] };
+export type AdminUser = { id: string; email: string; name: string; created_at: string | null; verified: boolean; last_active: string | null; objects_created: number; orgs: AdminUserOrg[]; accounts_with_email?: number; firebase_uid_hint?: string };
+export type EraseAccount = { id: string; email: string; name: string; created_at: string | null; firebase_uid_hint: string; orgs: { slug: string; name: string; role: string | null }[] };
 export type ErasePreviewOrg = { id: string; slug: string; name: string; plan: string; role: string | null; members: number; other_admins: number; subscription: boolean; action: "delete" | "leave" | "blocked"; reason: string; workspaces: number; objects: number; relationships: number };
-export type ErasePreview = { user: { id: string; email: string; name: string; created_at: string | null }; orgs: ErasePreviewOrg[]; blockers: string[]; needs_subscription_ack: boolean; counts: Record<string, number>; is_self: boolean; is_platform_admin: boolean };
+export type ErasePreview = { user: { id: string; email: string; name: string; created_at: string | null }; orgs: ErasePreviewOrg[]; blockers: string[]; needs_subscription_ack: boolean; counts: Record<string, number>; is_self: boolean; is_platform_admin: boolean; accounts?: EraseAccount[]; all_accounts?: boolean; accounts_with_email?: number };
 
 export const platformAdminApi = {
   users: (q: string, sort: "newest" | "oldest", token: string) =>
     apiFetch<{ users: AdminUser[] }>(`/platform/admin/users?q=${encodeURIComponent(q)}&sort=${sort}`, { token }),
-  erasePreview: (userId: string, token: string) => apiFetch<ErasePreview>(`/platform/admin/users/${userId}/erase-preview`, { token }),
-  erase: (userId: string, body: { confirm_email: string; acknowledge_subscriptions: boolean }, token: string) =>
+  erasePreview: (userId: string, token: string, allAccounts = true) =>
+    apiFetch<ErasePreview>(`/platform/admin/users/${userId}/erase-preview?all_accounts=${allAccounts}`, { token }),
+  erase: (userId: string, body: { confirm_email: string; acknowledge_subscriptions: boolean; all_accounts?: boolean }, token: string) =>
     apiFetch<{ erased: string; counts: Record<string, number> }>(`/platform/admin/users/${userId}/erase`, { method: "POST", token, body: JSON.stringify(body) }),
 };
 

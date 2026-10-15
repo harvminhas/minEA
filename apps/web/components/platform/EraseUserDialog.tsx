@@ -15,10 +15,12 @@ export function EraseUserDialog({ user, onClose, onErased }: { user: AdminUser; 
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Several accounts with this email: erase them all by default.
+  const [allAccounts, setAllAccounts] = useState(true);
   const preview = useQuery({
-    queryKey: ["erase-preview", user.id],
+    queryKey: ["erase-preview", user.id, allAccounts],
     staleTime: 0,
-    queryFn: async () => platformAdminApi.erasePreview(user.id, (await getToken())!),
+    queryFn: async () => platformAdminApi.erasePreview(user.id, (await getToken())!, allAccounts),
   });
   const data = preview.data ?? null;
   const reason = eraseBlockReason(data, typed, ack);
@@ -28,7 +30,7 @@ export function EraseUserDialog({ user, onClose, onErased }: { user: AdminUser; 
     setBusy(true);
     setError("");
     try {
-      await platformAdminApi.erase(user.id, { confirm_email: typed, acknowledge_subscriptions: ack }, (await getToken())!);
+      await platformAdminApi.erase(user.id, { confirm_email: typed, acknowledge_subscriptions: ack, all_accounts: allAccounts }, (await getToken())!);
       onErased(user.email);
     } catch (err) {
       setError(eraseErrorMessage(err));
@@ -45,6 +47,24 @@ export function EraseUserDialog({ user, onClose, onErased }: { user: AdminUser; 
         <p className="mt-1 text-[13px] text-[#6b7289]">Permanent. There is no undo. Their sign-in (Firebase) account and any Stripe records are not touched.</p>
         {preview.isLoading && <p className="mt-4 text-[13px] text-[#6b7289]">Working out what would be deleted…</p>}
         {preview.isError && <p className="mt-4 text-[13px] text-[#b42318]">{eraseErrorMessage(preview.error)}</p>}
+        {(data?.accounts_with_email ?? user.accounts_with_email ?? 1) > 1 && (
+          <div className="mt-4 rounded-xl border border-[#c7d2fe] bg-[#eef2ff] p-3 text-[13px] text-[#3730a3]" data-testid="erase-accounts">
+            <label className="flex items-start gap-2 font-medium">
+              <input type="checkbox" checked={allAccounts} onChange={(e) => { setAllAccounts(e.target.checked); setAck(false); }} className="mt-0.5" data-testid="erase-all-accounts" />
+              Erase all {data?.accounts_with_email ?? user.accounts_with_email} accounts with this email
+            </label>
+            <p className="ml-5 text-[12px] text-[#4b5163]">{allAccounts ? "Every account below is checked and erased together, in one go." : "Only the account you clicked is erased; the others stay."}</p>
+            {data?.accounts && (
+              <ul className="ml-5 mt-1 space-y-0.5 text-[12px] text-[#1c2230]">
+                {data.accounts.map((a) => (
+                  <li key={a.id} data-account={a.id}>
+                    <span className="font-mono">…{a.firebase_uid_hint}</span> · signed up {a.created_at ? new Date(a.created_at).toLocaleDateString("en-CA") : "—"} · {a.orgs.length ? a.orgs.map((o) => `${o.name} (${o.role ?? "workspace only"})`).join(", ") : "no orgs"}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
         {data && (
           <>
             <div className="mt-4 rounded-xl border border-[#eef0f4]">

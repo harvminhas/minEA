@@ -38,3 +38,13 @@ test("admin link lives only in the user menu and points at /platform", () => {
   assert.match(shell, /\/platform\/users/);
   assert.match(readFileSync("components/platform/CatalogAdmin.tsx", "utf8"), /catalog-refresh/);
 });
+
+test("same-email accounts are grouped together; dialog erases all by default", async () => {
+  const { groupByEmail } = await import("./erase");
+  const g = groupByEmail([{ email: "a@x.com", id: 1 }, { email: "b@x.com", id: 2 }, { email: "A@x.com ", id: 3 }]);
+  assert.deepEqual(g.map((x) => [x.email, x.rows.map((r) => r.id)]), [["a@x.com", [1, 3]], ["b@x.com", [2]]]);
+  const dialog = readFileSync("components/platform/EraseUserDialog.tsx", "utf8");
+  assert.match(dialog, /useState\(true\)/);
+  assert.match(dialog, /all_accounts: allAccounts/);
+  assert.match(readFileSync("components/platform/UsersAdmin.tsx", "utf8"), /\{n\} accounts/);
+});

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { platformAdminApi, type AdminUser } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { EraseUserDialog } from "@/components/platform/EraseUserDialog";
+import { groupByEmail } from "@/lib/platform/erase";
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-CA", { year: "numeric", month: "short", day: "numeric" }) : "—");
 
@@ -43,9 +44,17 @@ export function UsersAdmin() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="border-b border-[#f3f4f8] align-top" data-user={row.email}>
-                <td className="px-2 py-2.5 font-medium text-[#1c2230]">{row.email}{!row.verified && <span className="ml-1 text-[11px] text-[#b45309]">unverified</span>}</td>
+            {groupByEmail(rows).flatMap((group) => group.rows.map((row, i) => {
+              const n = row.accounts_with_email ?? group.rows.length;
+              const multi = n > 1;
+              return (
+              <tr key={row.id} className={`align-top ${multi ? "bg-[#f8f7ff]" : ""} ${multi && i < group.rows.length - 1 ? "" : "border-b border-[#f3f4f8]"}`} data-user={row.email} data-group={multi ? group.email : undefined}>
+                <td className={`px-2 py-2.5 font-medium text-[#1c2230] ${multi ? "border-l-2 border-[#a99cf5]" : ""}`}>
+                  {i === 0 || !multi ? row.email : <span className="text-[#8b90a0]">↳ same email</span>}
+                  {!row.verified && <span className="ml-1 text-[11px] text-[#b45309]">unverified</span>}
+                  {multi && i === 0 && <span className="ml-1.5 rounded-full bg-[#ece9ff] px-1.5 py-0.5 text-[11px] font-semibold text-[#5b4ce6]" data-testid="accounts-badge" title="Several sign-ins (Firebase accounts) use this email">{n} accounts</span>}
+                  {multi && row.firebase_uid_hint && <span className="block font-mono text-[11px] font-normal text-[#8b90a0]">uid …{row.firebase_uid_hint}</span>}
+                </td>
                 <td className="px-2 py-2.5">{row.name || <span className="text-[#c5c8d4]">—</span>}</td>
                 <td className="whitespace-nowrap px-2 py-2.5">{day(row.created_at)}</td>
                 <td className="whitespace-nowrap px-2 py-2.5" title="Last change they made in any workspace">{day(row.last_active)}</td>
@@ -65,7 +74,8 @@ export function UsersAdmin() {
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            }))}
           </tbody>
         </table>
       </div>

@@ -27,3 +27,15 @@ export function eraseErrorMessage(err: unknown): string {
 }
 
 export const ORG_ACTION_LABEL = { delete: "Deleted with everything in it", leave: "Only their membership removed", blocked: "Blocked" } as const;
+
+/** Same-email accounts next to each other (first one's position), so they read as one person. */
+export function groupByEmail<T extends { email: string }>(rows: T[]): { email: string; rows: T[] }[] {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = row.email.trim().toLowerCase();
+    const list = groups.get(key);
+    if (list) list.push(row);
+    else groups.set(key, [row]);
+  }
+  return [...groups.entries()].map(([email, list]) => ({ email, rows: list }));
+}

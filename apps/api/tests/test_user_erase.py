@@ -238,3 +238,95 @@ def test_erased_user_signing_in_again_gets_a_fresh_empty_account(monkeypatch):
         await db.commit()
 
     _run(scenario)
+
+
+def test_outside_members_drive_the_rule_for_several_accounts():
+    # Two accounts with one email are the only members: the org goes.
+    assert ue.decide(org(members=2, outside_members=0)).action == "delete"
+    # Sole admin outside-wise: another person, no other admin outside these accounts → blocked.
+    assert ue.decide(org(members=3, outside_members=1, other_admins=0)).action == "blocked"
+    assert ue.decide(org(members=3, outside_members=1, other_admins=1)).action == "leave"
+
+
+def test_every_account_is_checked(monkeypatch):
+    monkeypatch.delenv("PLATFORM_ADMIN_EMAILS", raising=False)
+    plan = plan_for("harvminhas@gmail.com")
+    plan.accounts = [{"id": "a", "email": "harvminhas@gmail.com"}, {"id": "b", "email": "HarvMinhas@gmail.com"}]
+    # All the superuser's accounts are protected by email, even when someone else is the admin.
+    monkeypatch.setenv("PLATFORM_ADMIN_EMAILS", "harvminhas@gmail.com,ops@example.com")
+    assert code_of(lambda: ue.check_request(plan, admin_email="ops@example.com", confirm_email="harvminhas@gmail.com", acknowledge_subscriptions=True)) == "platform_admin"
+    # The admin's own Firebase uid among the accounts: self.
+    mine = plan_for("t@example.com")
+    mine.firebase_uids = ["uid-1", "admin-uid"]
+    assert code_of(lambda: ue.check_request(mine, admin_email="ops@example.com", admin_uid="admin-uid", confirm_email="t@example.com", acknowledge_subscriptions=True)) == "self"
+
+
+@pg
+def test_erase_all_accounts_with_one_email(monkeypatch):
+    """Two users rows share an email (two Firebase uids). Both go in one transaction, one audit row each;
+    the shared org keeps Bea; a solo org owned by the second account is deleted."""
+    from sqlalchemy import text
+
+    monkeypatch.delenv("PLATFORM_ADMIN_EMAILS", raising=False)
+
+    async def scenario(db):
+        ids, tag = await _seed(db)
+        email = f"target-{tag}@example.com"
+        t2, solo2 = uuid.uuid4(), uuid.uuid4()
+        await db.execute(text("INSERT INTO users (id, firebase_uid, email) VALUES (:id, :fb, :e)"), {"id": t2, "fb": "fb-t2-" + tag, "e": email.upper()})
+        await db.execute(text("INSERT INTO orgs (id, name, slug) VALUES (:id, 'Solo2', :s)"), {"id": solo2, "s": "solo2-" + tag})
+        await db.execute(text("INSERT INTO org_memberships (user_id, org_id, role) VALUES (:u, :o, 'owner'), (:u, :shared, 'member')"), {"u": t2, "o": solo2, "shared": ids["shared"]})
+        await db.commit()
+        listed = await ue.list_users(db, q=f"target-{tag}")
+        assert [u["accounts_with_email"] for u in listed] == [2, 2]
+        await db.rollback()
+        one = (await ue.plan_erase(db, ids["t"])).as_dict()
+        both = (await ue.plan_erase(db, ids["t"], all_accounts=True)).as_dict()
+        await db.rollback()
+        assert len(one["accounts"]) == 1 and len(both["accounts"]) == 2
+        assert {o["name"]: o["action"] for o in both["orgs"]} == {"Shared": "leave", "Solo": "delete", "Solo2": "delete"}
+        assert {a["id"]: [o["name"] for o in a["orgs"]] for a in both["accounts"]} == {str(ids["t"]): ["Shared", "Solo"], str(t2): ["Shared", "Solo2"]}
+        assert "firebase_uid" not in both["accounts"][0]
+        with pytest.raises(ue.EraseError):
+            await ue.execute_erase(db, ids["t"], admin_email="harvminhas@gmail.com", admin_uid="adm", confirm_email="nope@example.com", acknowledge_subscriptions=False, all_accounts=True)
+        assert (await db.execute(text("SELECT count(*) FROM users WHERE lower(email) = :e"), {"e": email})).scalar() == 2
+        out = await ue.execute_erase(db, ids["t"], admin_email="harvminhas@gmail.com", admin_uid="adm", confirm_email=email, acknowledge_subscriptions=False, all_accounts=True)
+        assert out["accounts"] == 2
+        q = lambda sql, **p: db.execute(text(sql), p)
+        assert (await q("SELECT count(*) FROM users WHERE lower(email) = :e", e=email)).scalar() == 0
+        assert (await q("SELECT count(*) FROM orgs WHERE id = ANY(:o)", o=[ids["solo"], solo2])).scalar() == 0
+        assert (await q("SELECT count(*) FROM org_memberships WHERE org_id = :s", s=ids["shared"])).scalar() == 1
+        assert (await q("SELECT count(*) FROM objects WHERE org_id = :s", s=ids["shared"])).scalar() == 2
+        audits = (await q("SELECT erased_user_id FROM platform_erasures WHERE erased_user_id = ANY(:u)", u=[ids["t"], t2])).scalars().all()
+        assert sorted(map(str, audits)) == sorted([str(ids["t"]), str(t2)])
+        await q("DELETE FROM orgs WHERE id = :s", s=ids["shared"])
+        await q("DELETE FROM users WHERE id = :b", b=ids["b"])
+        await db.commit()
+
+    _run(scenario)
+
+
+@pg
+def test_any_account_sole_admin_blocks_the_whole_batch(monkeypatch):
+    from sqlalchemy import text
+
+    monkeypatch.delenv("PLATFORM_ADMIN_EMAILS", raising=False)
+
+    async def scenario(db):
+        ids, tag = await _seed(db)
+        email = f"target-{tag}@example.com"
+        t2, other_org, carl = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        await db.execute(text("INSERT INTO users (id, firebase_uid, email) VALUES (:id, :fb, :e), (:c, :cf, :ce)"),
+                         {"id": t2, "fb": "fb-t2-" + tag, "e": email, "c": carl, "cf": "fb-c-" + tag, "ce": f"carl-{tag}@example.com"})
+        await db.execute(text("INSERT INTO orgs (id, name, slug) VALUES (:id, 'Carl Co', :s)"), {"id": other_org, "s": "carl-" + tag})
+        await db.execute(text("INSERT INTO org_memberships (user_id, org_id, role) VALUES (:u, :o, 'owner'), (:c, :o, 'member')"), {"u": t2, "o": other_org, "c": carl})
+        await db.commit()
+        with pytest.raises(ue.EraseError) as err:
+            await ue.execute_erase(db, ids["t"], admin_email="harvminhas@gmail.com", admin_uid="adm", confirm_email=email, acknowledge_subscriptions=True, all_accounts=True)
+        assert err.value.code == "blocked"
+        assert (await db.execute(text("SELECT count(*) FROM users WHERE lower(email) = :e"), {"e": email})).scalar() == 2
+        await db.execute(text("DELETE FROM orgs WHERE id = ANY(:o)"), {"o": [ids["solo"], ids["shared"], other_org]})
+        await db.execute(text("DELETE FROM users WHERE id = ANY(:u)"), {"u": [ids["t"], ids["b"], t2, carl]})
+        await db.commit()
+
+    _run(scenario)
