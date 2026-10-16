@@ -5,7 +5,6 @@ import {
   choiceLabel,
   classifyIntent,
   isAiDataQuestion,
-  isAiQuestion,
   importanceVerdict,
   inferCriticality,
   resolveSubject,
@@ -19,7 +18,8 @@ import { modelItemPath, modelPath, reportPath, sectionForKind } from "@/lib/mvp-
 import { aiLandscape, dataAccess, type AiLandscape, type LandscapeEdge, type LandscapeFlag, type LandscapeObject } from "@/lib/ai/landscape";
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { agingSummary } from "@/lib/infra/status";
-import { buildFacts, chipValue, FILTER_KEYS, FILTER_LABEL, filterFacts, filtersFromPayload, matchOwner, matchQuestion, ownerSlot, slotFilters, yesNoSlot, type FilterKey, type RecordFacts, type RecordFilters, type Term } from "@/lib/ask/record-filter";
+import { nameSearch } from "@/lib/ask/names";
+import { buildFacts, chipValue, FILTER_KEYS, FILTER_LABEL, filterFacts, filtersFromPayload, matchQuestion, type FilterKey, type RecordFacts, type RecordFilters, type Term } from "@/lib/ask/record-filter";
 
 /**
  * Fixed handlers. The Ask screen uses these when the model is off, times out,
@@ -103,7 +103,9 @@ export type AskAnswer = {
   /** A filtered list (quick answer or the AI's filter_records): editable chips re-run it locally. */
   records?: AskRecords;
   /** A short answer with no list ("No — nothing called Figma"): headline, one line, footer actions. */
-  lean?: { headline: string; sub?: string; name?: string; searched?: number; how?: string; suggest?: string[]; noAdd?: boolean };
+  /** Fallback name search (AI unavailable): how many items matched and any corrected spellings. */
+  nameMatches?: { count: number; corrected: string[] };
+  lean?: { headline: string; sub?: string; name?: string; searched?: number; how?: string; suggest?: { label: string; filters: RecordFilters }[]; noAdd?: boolean };
 };
 
 export type AskRecords = {
@@ -188,7 +190,6 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
   if (payload.source !== "llm" || !payload.answer_text) return null;
   const aiAnswer = payload.intent === "ai" || (payload.tools_used ?? []).includes("ai_landscape");
   // An AI answer to a question with no AI wording ("show me the model") is a misroute: keep the local answer.
-  if (aiAnswer && question !== undefined && !isAiQuestion(question)) return null;
   const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const richTable = tableFromPayload(payload);
   const richChart = chartFromPayload(payload);
@@ -211,8 +212,13 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
       ? HANDLER_INTENTS[intent]
       : "impact";
   const records = payload.unsupported ? null : recordsFromPayload(payload);
+  // The AI found nothing it could cite: a short "No" card with its one-line answer.
+  const lean = payload.unsupported || (payload.yes_no === "no" && !records)
+    ? { headline: (payload.summary || payload.answer_text).replace(/\*\*/g, "").replace(/\s?\[\d+\]/g, "").replace(/\.$/, ""), how: "The AI looked this up in your workspace and found nothing it could cite, so it didn't guess." }
+    : null;
   return {
     ...(records ? { records } : {}),
+    ...(lean ? { lean } : {}),
     handler: handler === "impact" && aiAnswer ? "ai" : handler,
     ...(aiAnswer && !payload.unsupported ? { link: aiReportLink(basePath) } : {}),
     // Vendor rows replace the model's own citations, so its [n] markers would point at the wrong rows.
@@ -337,47 +343,6 @@ export function answerFromRecords(input: {
     return empty("unsupported", "Ask a question about your applications, capabilities, or infrastructure.", today);
   }
   const facts = buildFacts(input.rows, (input.landscape?.objects ?? []) as MinEAObject[], (input.landscape?.relationships ?? []) as never);
-  // "What is owned by Christine?": owner names on items (team, named owner, contact, *_owner) and People.
-  const owner = ownerSlot(question);
-  if (owner) {
-    const match = matchOwner(facts, owner, input.people ?? []);
-    if (match.owners.length) {
-      const key = match.team ? "owner_team" : "owner_person";
-      const filters = { [key]: owner } as RecordFilters;
-      return recordsAnswer({ filters, terms: [{ key, value: owner, label: match.owners.join(", "), text: owner }], source: "quick" }, facts, today);
-    }
-    const sub = match.peopleOnly.length
-      ? `${listNames(match.peopleOnly)} ${match.peopleOnly.length === 1 ? "is" : "are"} in People but not set as the owner of anything.`
-      : match.nearest.length
-        ? `No owner or person called ${owner}. Closest names: ${listNames(match.nearest)}.`
-        : `No owner, team or person called ${owner} in this workspace.`;
-    return {
-      ...empty("unsupported", `Nothing owned by ${owner}. ${sub}`, today),
-      followUps: [],
-      lean: {
-        headline: `Nothing owned by ${owner}`,
-        sub,
-        searched: facts.length,
-        how: `Looked for “${owner}” as a word or start of a word in owner teams, named owners, contacts and People across ${facts.length} items. No AI used.`,
-        suggest: match.nearest.slice(0, 2).map((name) => `What is owned by ${name}?`),
-        noAdd: true,
-      },
-    };
-  }
-  // "Do we use Adobe?": a yes/no from the data (vendor incl. the catalogue's, or a word in a name).
-  const slot = yesNoSlot(question);
-  if (slot) {
-    const hit = slotFilters(slot, facts);
-    if (hit) return recordsAnswer({ filters: hit.filters, terms: hit.terms, source: "quick" }, facts, today, { yesNo: true });
-    if (!FIELD_HELP.some((field) => field.words.test(slot.toLowerCase()))) {
-      return {
-        ...empty("unsupported", `Not that I can see: nothing in this workspace is named “${slot}” or recorded as made by ${slot}.`, today),
-        gaps: [{ text: `If you use ${slot}, add it so it shows up here.`, fillHref: `${input.basePath}/ask` }],
-        followUps: SUGGESTED.slice(0, 3),
-        lean: { headline: `No — nothing called ${slot}`, sub: `No item is named ${slot} or recorded as made by ${slot}.`, name: slot, searched: facts.length },
-      };
-    }
-  }
   const matched = matchQuestion(question, facts);
   if (matched.terms.length && wantsRecords(classifyIntent(question), q, matched.filters)) {
     return recordsAnswer({ filters: matched.filters, terms: matched.terms, source: "quick" }, facts, today);
@@ -498,9 +463,28 @@ export function recordsAnswer(records: AskRecords, facts: RecordFacts[], today: 
 }
 
 /** The AI's filter_records filters as an answer the chips can edit (null when it used none). */
-export function recordsFromPayload(payload: { filters?: Record<string, unknown> } | null | undefined): AskRecords | null {
+export function recordsFromPayload(payload: { filters?: Record<string, unknown>; yes_no?: string } | null | undefined): AskRecords | null {
   const filters = filtersFromPayload(payload?.filters);
-  return Object.keys(filters).length ? { filters, terms: [], source: "ai" } : null;
+  if (!Object.keys(filters).length) return null;
+  return { filters, terms: [], source: "ai", ...(payload?.yes_no === "yes" || payload?.yes_no === "no" ? { yesNo: true } : {}) };
+}
+
+/** When the AI can't answer (unavailable, error, over the monthly allowance): the items whose name,
+ * vendor or owner match a word in the question. No reading of what the question means. */
+export function nameMatchAnswer(question: string, facts: RecordFacts[], people: string[] = []): AskAnswer {
+  const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const { items, hints } = nameSearch(question, facts, people);
+  const corrected = hints.filter((hint, index, all) => hint.how !== "exact" && all.findIndex((other) => other.text === hint.text) === index).slice(0, 3);
+  const text = !facts.length
+    ? "Nothing is recorded in this workspace yet. Add your apps first."
+    : items.length
+      ? `Name matches: ${items.slice(0, 3).map((item) => item.row.name).join(", ")}${items.length > 3 ? ` and ${items.length - 3} more` : ""}.`
+      : "No names in this workspace match words in the question.";
+  return {
+    ...empty("unsupported", text, today),
+    citations: items.map((item, index) => ({ n: index + 1, recordId: item.row.id, relationship: item.row.hostingLabel || "", row: item.row })),
+    nameMatches: { count: items.length, corrected: corrected.map((hint) => `${hint.text} → ${hint.name}`) },
+  };
 }
 
 /** Fields a question can be about, the words for them, and how to tell a row has the value. */

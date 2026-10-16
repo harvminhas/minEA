@@ -162,6 +162,8 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
         rows = [rec for rec in rows if rec.type == "infrastructure"]
     record_filters = clean_filters({key: filters.get(key) for key in FILTER_KEYS if key not in {"criticality", "renewal_within_days", "type"}})
     if record_filters:
+        if not bag.filters:
+            bag.filters = record_filters  # the answer card shows these as chips and re-runs them
         keep = {f.rec.id for f in build_facts(bag.graph) if matches(f, record_filters)}
         rows = [rec for rec in rows if rec.id in keep]
     missing_field = _GAP_FIELDS.get(str(filters.get("missing_field") or "").strip().lower())

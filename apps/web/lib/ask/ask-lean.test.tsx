@@ -23,19 +23,6 @@ const facts = () => buildFacts(rows(), OBJECTS as never, []);
 const render = (answer: ReturnType<typeof ask>, yesNo?: boolean) =>
   renderToStaticMarkup(<AskRecordsBlock answer={answer} facts={facts()} yesNo={yesNo} onFilters={() => {}} onOpen={() => {}} rowHref={(row) => `/w/r/${row.id}`} />);
 
-test("yes: 'Yes — Adobe Photoshop', amber No owner / No cost, Vendor from catalogue, two fixes", () => {
-  const a = ask("do we use Adobe?");
-  assert.equal(a.records?.yesNo, true);
-  const html = render(a);
-  assert.match(html, /data-testid="ask-lean-headline"[^>]*>Yes —/);
-  assert.match(html, /href="\/w\/r\/ps"[^>]*>Adobe Photoshop<\/a>/);
-  assert.match(html, /No owner<\/span>/);
-  assert.match(html, /No cost<\/span>/);
-  assert.match(html, /Vendor from catalogue/);
-  assert.doesNotMatch(html, /None has an annual cost recorded/);
-  assert.match(html, /Set an owner/);
-  assert.match(html, /Add cost/);
-});
 
 test("multi: '7 Microsoft items', kind + gap counts, 5 rows then Show 2 more, ≤2 follow-ups, no row badges", () => {
   const a = ask("What Microsoft products do we own?");
@@ -60,12 +47,6 @@ test("AI answers use the same lean card (records from filter_records)", () => {
   assert.match(html, /Vendor from catalogue/);
 });
 
-test("no: short headline and one line, no list", () => {
-  const a = ask("do we use Figma?");
-  assert.equal(a.lean?.headline, "No — nothing called Figma");
-  assert.match(a.lean!.sub!, /named Figma/);
-  assert.equal(a.records, undefined);
-});
 
 test("earlier conversation is one line of short question chips", () => {
   assert.equal(shortQuestion("What Microsoft products do we own?"), "Microsoft products?");

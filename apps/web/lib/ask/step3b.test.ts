@@ -51,17 +51,6 @@ test("2. the answer card reveals text word by word, closing bold, then shows eve
   assert.match(src, /\{!revealing && answer\.chart/);
 });
 
-test("5. 'What can we cancel?' is answered from the records, never by a vague model line", () => {
-  const answer = records("What can we cancel?");
-  assert.equal(answer.handler, "cancel");
-  assert.equal(localOnly(answer, "What can we cancel?"), true);
-  const byName = Object.fromEntries((answer.table?.rows ?? []).map((row) => [row.label, row.detail]));
-  assert.match(byName["Old CRM"], /marked Retiring/);
-  assert.match(byName["Old CRM"], /another paid Salesforce tool/);
-  assert.match(byName["QuickBooks Online"], /no owner/);
-  assert.equal(byName["SPS Commerce"], undefined); // no cost: nothing to cancel
-  assert.match(answer.answerText, /3 paid items are worth reviewing/);
-});
 
 test("4. table rows: vendor rows open the vendor record, the whole row is clickable", () => {
   assert.match(src, /if \(kind === "vendors"\) return modelItemPath\(basePath, "vendors", target\.label\)/);

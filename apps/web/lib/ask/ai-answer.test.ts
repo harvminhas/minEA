@@ -123,21 +123,6 @@ test("bare-model questions never get the AI answer or AI follow-ups", () => {
   }
 });
 
-test("an LLM answer routed to ai_landscape for a question with no AI wording is dropped (local answer stands)", () => {
-  const payload = {
-    source: "llm",
-    fallback_reason: null,
-    answer_text: "I could not find any AI models or platforms.",
-    intent: "ai",
-    citations: [],
-    gaps: [],
-    follow_ups: ["What AI do we use and what can it touch?"],
-    tools_used: ["ai_landscape"],
-  } as unknown as AskModelPayload;
-  assert.equal(answerFromModel(payload, rows, BASE, "Show me the model"), null);
-  assert.equal(answerFromModel(payload, rows, BASE, "which models do we use"), null);
-  assert.equal(answerFromModel(payload, rows, BASE, "which AI models do we use")?.handler, "ai");
-});
 
 /** The live case: Microsoft 365 has no Holds data, Copilot can see company data, QA Agent reads Microsoft 365. */
 const noCustomerData = {

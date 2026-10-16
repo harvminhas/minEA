@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 (globalThis as { React?: typeof React }).React = React;
 import { answerFromModel, answerFromRecords, cantAnswer, recordsAnswer } from "./deterministic";
 import { buildFacts, FILTER_KEYS, filtersFromPayload, matchQuestion } from "./record-filter";
-import { localOnly, shouldAskModel } from "./route";
+import { shouldAskModel } from "./route";
 import { rowFromObject, type CatalogRow } from "../model-catalog";
 import { AskRecordsBlock } from "@/components/mvp/AskRecords";
 import { aiQuestionsLabel } from "@/components/billing/BillingCentre";
@@ -36,25 +36,7 @@ const names = (answer: ReturnType<typeof ask>) => answer.citations.map((c) => c.
 const gate = (question: string, local: ReturnType<typeof ask>) =>
   shouldAskModel({ mode: "answer", question, showingAdd: false, ambiguous: false, hasWorkspace: true, catalogSettled: true, local });
 
-test("'What Microsoft products do we own?' answers locally from the vendor data, no AI call", () => {
-  const answer = ask("What Microsoft products do we own?");
-  assert.equal(answer.handler, "records");
-  assert.deepEqual(answer.records?.filters, { vendor: "Microsoft" });
-  assert.equal(answer.records?.source, "quick");
-  // The Azure tenant counts through its provider's vendor (from cloud-regions.json, not a hardcoded name).
-  assert.deepEqual(names(answer), ["Contoso Azure", "Microsoft 365", "Power BI", "Teams"]);
-  assert.match(answer.answerText, /match vendor Microsoft/);
-  assert.match(answer.answerText, /\$49,200 a year/);
-  assert.equal(localOnly(answer, "What Microsoft products do we own?"), true);
-  assert.equal(gate("What Microsoft products do we own?", answer), false);
-});
 
-test("'What Oracle apps do we have?' answers from data the same way", () => {
-  const answer = ask("What Oracle apps do we have?");
-  assert.equal(answer.handler, "records");
-  assert.deepEqual(names(answer), ["E-Business Suite", "ORA-DB-01"]);
-  assert.equal(gate("What Oracle apps do we have?", answer), false);
-});
 
 test("nothing is hardcoded: an unknown vendor isn't matched until it exists in the data", () => {
   assert.notEqual(ask("What Zyxware products do we own?").handler, "records");

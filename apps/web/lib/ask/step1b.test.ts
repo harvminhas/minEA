@@ -50,16 +50,6 @@ test("an empty estate never calls the model", () => {
   assert.equal(shouldAskModel({ ...gate, estateEmpty: true }), false);
 });
 
-test("when the local answer wins after a model call, its real lookups are still shown", () => {
-  const shown = pickAnswer(stub("vendors"), stub("vendors", 0), "Which vendors do we spend the most with?", STEPS);
-  assert.equal(shown.handler, "vendors");
-  // Step 2b: every live line is kept (so the count matches what streamed), plus a line saying which answer is shown.
-  assert.deepEqual(shown.steps?.map((s) => s.id), ["estate", "tool-1", "check-1", "local"]);
-  assert.equal(pickAnswer(stub("vendors"), null, "q", undefined).steps, undefined);
-  // A model answer that wins keeps its own steps (set by answerFromModel), untouched here.
-  const model = { ...stub("vendors", 2), steps: STEPS };
-  assert.equal(pickAnswer(stub("vendors"), model, "q", STEPS), model);
-});
 
 test("step keys are unique even if ids repeat", () => {
   const keys = [{ id: "check" }, { id: "check" }].map(stepKey);

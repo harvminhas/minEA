@@ -26,19 +26,6 @@ function stub(handler: AskAnswer["handler"], citations = 0): AskAnswer {
   };
 }
 
-test("questions the browser answers itself never call the model", () => {
-  for (const question of [
-    "What has no owner?",
-    "Which applications have no vendor?",
-    "What is out of support?",
-    "What signs in with Okta?",
-    "Which AI can see customer data?",
-  ]) {
-    const l = local(question);
-    assert.equal(shouldAskModel(gate(question)), false, `${question} -> ${l.handler} must stay local`);
-    assert.ok(localOnly(l, question), question);
-  }
-});
 
 test("questions the model answers still call it once", () => {
   for (const question of ["What renews in the next 90 days?", "Where is our money going?", "Which vendors do we pay?", "What is end of life?"]) {
@@ -46,13 +33,6 @@ test("questions the model answers still call it once", () => {
   }
 });
 
-test("local-only handler set: impact, importance, cost, ownership, gaps, clarify, aging, sign-in, cancel, records (quick list answers)", () => {
-  assert.deepEqual([...LOCAL_ONLY_HANDLERS].sort(), ["aging", "cancel", "clarify", "cost", "gaps", "impact", "importance", "ownership", "records", "sign_in"]);
-  for (const handler of LOCAL_ONLY_HANDLERS) assert.equal(localOnly(stub(handler), "x"), true);
-  for (const handler of ["renewals", "spend", "vendors", "lifecycle", "criticality", "unsupported", "ai"] as const) {
-    assert.equal(localOnly(stub(handler), "What AI do we use?"), false, handler);
-  }
-});
 
 test("no model call before the catalogue settles, for add lists, or without a workspace", () => {
   const q = "What renews in the next 90 days?";
@@ -64,17 +44,6 @@ test("no model call before the catalogue settles, for add lists, or without a wo
   assert.equal(shouldAskModel(gate("", { question: "" })), false);
 });
 
-test("pickAnswer keeps today's rules", () => {
-  const renewals = stub("renewals");
-  const model = stub("renewals", 2);
-  assert.equal(pickAnswer(renewals, model, "q"), model);
-  assert.equal(pickAnswer(renewals, null, "q"), renewals);
-  assert.equal(pickAnswer(renewals, stub("unsupported"), "q"), renewals);
-  const vendorsLocal = stub("vendors");
-  assert.equal(pickAnswer(vendorsLocal, stub("vendors", 0), "q"), vendorsLocal);
-  const gaps = stub("gaps");
-  assert.equal(pickAnswer(gaps, model, "q"), gaps);
-});
 
 test("working line uses the real estate size", () => {
   assert.equal(workingLine(212), "Looking through 212 items in your estate");

@@ -14,8 +14,8 @@ import { catalogStats, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
 import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
-import { answerFromModel, answerFromRecords, recordsAnswer, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
-import { buildFacts, ownerSlot, yesNoSlot, type RecordFilters } from "@/lib/ask/record-filter";
+import { answerFromModel, nameMatchAnswer, recordsAnswer, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
+import { buildFacts, type RecordFilters } from "@/lib/ask/record-filter";
 import { AskRecordsBlock, FollowPill } from "@/components/mvp/AskRecords";
 import { adminTabHref } from "@/lib/billing/admin-centre";
 import { splitSummary } from "@/lib/ask/rich";
@@ -23,7 +23,7 @@ import { REVEAL_MS, latestOnly, revealText, revealTokens } from "@/lib/ask/revea
 import { askQueryFn, askQueryKey } from "@/lib/ask/remote";
 import { addTurn, clearThread, contextFor, earlierTurns, readThread, turnFromAnswer, writeThread, type Thread, type ThreadTurn } from "@/lib/ask/thread";
 import { AskBarChart, AskRichTable } from "@/components/mvp/AskRich";
-import { followUpsFor, localOnly, pickAnswer, shouldAskModel, workingLine } from "@/lib/ask/route";
+import { pickAnswer, shouldAskModel, workingLine } from "@/lib/ask/route";
 import { followUpScope } from "@/lib/ask/followup";
 import { AskLiveSteps, AskSteps } from "@/components/mvp/AskSteps";
 import type { AskStep } from "@/lib/api-client";
@@ -74,7 +74,6 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const question = mode === "answer" ? asked : "";
   const focusId = mode === "answer" ? params.get("focus") ?? undefined : undefined;
 
-  const impactQuery = /break|fail|goes down|is down|outage|depend|impact|important|how critical|live without|who owns|\bsso\b|single sign|sign ?in|sign-in|log ?in|login/i.test(question);
   const impact = useImpactGraph();
   const anywhere = addAnywhereEnabled();
   const [readAs, setReadAs] = useState<"auto" | "add" | "ask">("auto");
@@ -134,53 +133,22 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   useEffect(() => {
     if (orgSlug && workspaceSlug) setThread(readThread(window.sessionStorage, orgSlug, workspaceSlug));
   }, [orgSlug, workspaceSlug]);
-  // Owner questions also match names on the People list (someone listed who owns nothing yet).
-  // Only fetched for an owner question; a viewer without access just gets owner names from items.
-  const ownerQuestion = mode === "answer" && Boolean(ownerSlot(question));
+  // The People list feeds name matching (hints for the fallback list). A viewer without access
+  // just gets owner names from items.
   const directory = useQuery({
     queryKey: ["people-directory", orgSlug, workspaceSlug],
-    enabled: ownerQuestion && Boolean(orgSlug && workspaceSlug),
+    enabled: mode === "answer" && Boolean(orgSlug && workspaceSlug),
     retry: false,
     staleTime: 60_000,
     queryFn: async () => peopleDirectoryApi.get(orgSlug!, workspaceSlug!, (await getToken())!),
   });
   const people = useMemo(() => (directory.data?.people ?? []).map((person) => person.name), [directory.data]);
-  const unscopedLocal = useMemo(
-    () =>
-      answerFromRecords({
-        people,
-        question,
-        rows,
-        graph: { nodes: impact.nodes, edges: impact.edges },
-        basePath,
-        loading: impactQuery && impact.isLoading,
-        focusId,
-        landscape: catalog.data ? { objects: catalog.data.objects, relationships: catalog.data.relationships } : undefined,
-      }),
-    [question, rows, impact.nodes, impact.edges, impact.isLoading, impactQuery, basePath, focusId, catalog.data, people]
+  const facts = useMemo(
+    () => buildFacts(rows, catalog.data?.objects ?? [], catalog.data?.relationships ?? []),
+    [rows, catalog.data?.objects, catalog.data?.relationships]
   );
-
-  // A follow-up that refers back ("which of those…") to the previous turn's items: when the browser
-  // answers it, work it out over just those items (vendor rows = their apps) and say so.
-  const scope = useMemo(
-    () => (mode === "answer" ? followUpScope(question, earlierTurns(thread, question).at(-1)) : null),
-    [mode, question, thread]
-  );
-  const scopedLocal = useMemo(() => {
-    if (!scope) return null;
-    const scopedRows = rows.filter((row) => scope.ids.has(row.id));
-    const scoped = answerFromRecords({
-      question,
-      rows: scopedRows,
-      graph: { nodes: impact.nodes, edges: impact.edges },
-      basePath,
-      loading: impactQuery && impact.isLoading,
-      focusId,
-      landscape: catalog.data ? { objects: catalog.data.objects, relationships: catalog.data.relationships } : undefined,
-    });
-    return scopedRows.length && localOnly(scoped, question) ? { ...scoped, scopeNote: scope.note } : null;
-  }, [scope, rows, question, impact.nodes, impact.edges, impact.isLoading, impactQuery, basePath, focusId, catalog.data]);
-  const local = scopedLocal ?? unscopedLocal;
+  // Shown only when the AI can't answer: items whose name, vendor or owner match words in the question.
+  const local = useMemo(() => nameMatchAnswer(question, facts, people), [question, facts, people]);
 
   // Decide local-or-model BEFORE calling: questions the browser always answers itself never
   // reach Gemini (they used to be asked and the answer thrown away).
@@ -237,22 +205,18 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
       : undefined;
     return pickAnswer(local, fromModel, question, askModel ? remoteData?.steps ?? failed : undefined);
   }, [mode, question, askModel, remoteData, local, rows, basePath, remote.isError, remote.error]);
-  // List answers (quick or the AI's filter_records): chips edit the filters and re-run them here.
-  const facts = useMemo(
-    () => buildFacts(rows, catalog.data?.objects ?? [], catalog.data?.relationships ?? []),
-    [rows, catalog.data?.objects, catalog.data?.relationships]
-  );
   const [edited, setEdited] = useState<{ question: string; filters: RecordFilters } | null>(null);
   const answer = useMemo(() => {
-    if (!edited || edited.question !== question || !baseAnswer.records) return baseAnswer;
+    // Chip edits and suggestion pills are structured filters run here on the catalogue: no AI, no quota.
+    if (!edited || edited.question !== question) return baseAnswer;
     const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return recordsAnswer({ ...baseAnswer.records, filters: edited.filters }, facts, today);
+    return recordsAnswer({ ...(baseAnswer.records ?? { terms: [], source: "quick" as const }), filters: edited.filters }, facts, today);
   }, [baseAnswer, edited, question, facts]);
   // Why the AI's answer isn't shown, when it isn't: unavailable (no key / error / timeout) or the
   // organisation's monthly allowance is used up. Quick answers keep working in both cases.
   const fallbackReason = askModel ? (remoteData?.source === "fallback" ? remoteData.fallback_reason : remote.isError ? "request_failed" : null) : null;
   // Every reason the AI's answer wasn't used gets its own line; none falls back to a bare generic sentence.
-  const aiNote = answer.handler === "unsupported" ? aiFallbackNote(fallbackReason, askModel && remoteData?.source === "llm" && Boolean(remoteData.unsupported)) : null;
+  const aiNote = answer.handler === "unsupported" ? aiFallbackNote(fallbackReason, false) : null;
   const aiUnavailable = Boolean(aiNote?.blocked);
   const quotaHit = fallbackReason === "limit" ? remoteData?.quota ?? null : null;
 
@@ -484,10 +448,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     !answer.lean && !answer.records && answer.handler === "unsupported" && (aiNote || quotaHit)
       ? {
           headline: quotaHit ? "This month's AI questions are used up" : aiNote!.title.replace(/\.$/, ""),
-          sub: answer.gaps[0]?.text ?? (aiNote && !aiNote.blocked ? aiNote.body : "Quick answers still work: name a vendor, owner, team or region from your workspace."),
-          suggest: followUpsFor(answer.followUps, question).slice(0, 2),
+          sub: fallbackSub(answer.nameMatches),
+          noAdd: true,
         }
       : null;
+  const fallbackItems = fallbackLean ? answer.citations.map((item) => item.row) : [];
   const shownLean = answer.lean ?? fallbackLean;
   const leanCard = !thinking && answer.handler !== "clarify" && Boolean(answer.records || shownLean);
   const smallActions = (
@@ -580,7 +545,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               </div>
             )}
             {shownLean && !answer.records && (
-              <LeanAnswer lean={shownLean} basePath={basePath} footerExtra={smallActions} onAdd={(name) => submit(prefixAdd(name))} onAsk={submit} steps={answer.steps} />
+              <LeanAnswer lean={shownLean} basePath={basePath} footerExtra={smallActions} onAdd={(name) => submit(prefixAdd(name))} onPick={(filters) => setEdited({ question, filters })} items={fallbackItems} rowHref={(row) => recordHref(basePath, row)} steps={answer.steps} />
             )}
             {!leanCard && <p className="text-[17px] leading-7 text-[#1c2230]">
               {answer.handler === "clarify" ? (
@@ -641,7 +606,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             {answer.records && (
               <AskRecordsBlock
                 answer={answer}
-                yesNo={answer.records.yesNo ?? Boolean(yesNoSlot(question))}
+                yesNo={Boolean(answer.records.yesNo)}
                 footerExtra={smallActions}
                 facts={facts}
                 onFilters={(filters) => setEdited({ question, filters })}
@@ -649,7 +614,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 rowHref={(row) => recordHref(basePath, row)}
               />
             )}
-            {!revealing && !answer.table && !answer.records && tableCitations(answer).length > 0 && (
+            {!revealing && !leanCard && !answer.table && !answer.records && tableCitations(answer).length > 0 && (
               <table className="mt-6 w-full text-left text-[13px]">
                   <thead>
                     <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
@@ -709,7 +674,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
 
             {!leanCard && answer.gaps.length > 0 && <GapsList key={question} gaps={answer.gaps} />}
 
-            {answer.steps && answer.steps.length > 0 && <AskSteps steps={answer.steps} />}
+            {!(shownLean && !answer.records) && answer.steps && answer.steps.length > 0 && <AskSteps steps={answer.steps} />}
 
             {!leanCard && <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#eef0f4] pt-4">
               <button type="button" onClick={() => { saveAsk(question, answer.answerText); setNote("Saved to Reports › Saved from Ask"); }} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">
@@ -731,18 +696,6 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
       </section>
       )}
 
-      {!showingAdd && !ambiguous && !thinking && !leanCard && answer.handler !== "clarify" && followUpsFor(answer.followUps, question).length > 0 && (
-        <div className="mt-5 rounded-2xl border border-[#e6e8ee] bg-[#fafafb] px-5 py-4">
-          <p className="mb-2 text-[13px] font-medium text-[#1c2230]">Ask next</p>
-          <div className="flex flex-wrap gap-2">
-            {followUpsFor(answer.followUps, question).map((follow) => (
-              <button key={follow} type="button" onClick={() => submit(follow)} className="rounded-full border border-[#e6e8ee] bg-white px-3 py-1.5 text-[13px] text-[#3c4254] hover:border-[#c9c6f5]">
-                {follow}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
       {previewId && (
         <RecordPreview
           id={previewId}
@@ -1149,11 +1102,29 @@ export function shortQuestion(question: string): string {
 }
 
 /** The short "No" card: headline, one line, How I found this and two actions. */
-function LeanAnswer({ lean, basePath, footerExtra, onAdd, onAsk, steps }: { lean: NonNullable<AskAnswer["lean"]>; basePath: string; footerExtra: ReactNode; onAdd: (name: string) => void; onAsk: (question: string) => void; steps?: AskStep[] }) {
+function LeanAnswer({ lean, basePath, footerExtra, onAdd, onPick, items = [], rowHref, steps }: { lean: NonNullable<AskAnswer["lean"]>; basePath: string; footerExtra: ReactNode; onAdd: (name: string) => void; onPick: (filters: RecordFilters) => void; items?: CatalogRow[]; rowHref: (row: CatalogRow) => string; steps?: AskStep[] }) {
   return (
     <div data-testid="ask-lean">
       <h2 data-testid="ask-lean-headline" className="text-[20px] font-bold leading-7 text-[#1c2230]">{lean.headline}</h2>
       {lean.sub && <p data-testid="ask-lean-sub" className="mt-1.5 text-[13px] text-[#6b7289]">{lean.sub}</p>}
+      {items.length > 0 && (
+        <table className="mt-3 w-full text-left text-[13px]" data-testid="ask-name-matches">
+          <thead>
+            <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
+              {["Name", "Kind", "Owner"].map((heading) => <th key={heading} className="h-9 px-2 font-medium">{heading}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {items.slice(0, 5).map((row) => (
+              <tr key={row.id} className="border-b border-[#f3f4f8]">
+                <td className="px-2 py-2"><a href={rowHref(row)} className="font-medium text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-2">{row.name}</a></td>
+                <td className="px-2 py-2">{row.typeLabel}</td>
+                <td className="px-2 py-2">{[row.ownerTeam, row.ownerPerson].filter(Boolean).join(" · ") || <span className="rounded bg-[#fff7ed] px-1.5 py-0.5 text-[11px] text-[#9a3412]">No owner</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       <div className="mt-3 flex flex-wrap items-start gap-2 text-[12px]">
         <details className="group min-w-0 flex-1" data-testid="ask-how">
           <summary className="cursor-pointer list-none font-semibold text-[#5b4ce6] [&::-webkit-details-marker]:hidden"><span className="inline-block transition-transform group-open:rotate-90">▸</span> {lean.how || lean.name ? "How I found this" : `How this was worked out${steps?.length ? ` · ${steps.length} steps` : ""}`}</summary>
@@ -1169,7 +1140,7 @@ function LeanAnswer({ lean, basePath, footerExtra, onAdd, onAsk, steps }: { lean
           )}
         </details>
         <div className="flex flex-wrap items-center gap-1.5">
-          {(lean.suggest ?? []).slice(0, 2).map((q) => <FollowPill key={q} label={q} onClick={() => onAsk(q)} />)}
+          {(lean.suggest ?? []).slice(0, 2).map((item) => <FollowPill key={item.label} label={item.label} onClick={() => onPick(item.filters)} />)}
           {!lean.suggest?.length && lean.name && !lean.noAdd && <FollowPill label={`+ Add ${lean.name}`} onClick={() => onAdd(lean.name!)} />}
           {!lean.suggest?.length && <FollowPill label="See all apps" href={modelPath(basePath, "applications")} />}
         </div>
@@ -1275,4 +1246,13 @@ export function requestError(error: unknown): string {
   const status = (error as { status?: number } | null)?.status;
   const text = message.replace(/(AIza[0-9A-Za-z_-]{10,}|Bearer\s+\S+)/g, "[redacted]").replace(/\s+/g, " ").slice(0, 120);
   return [status ? `HTTP ${status}` : "", text].filter(Boolean).join(" ") || "unknown error";
+}
+
+/** The grey line under a fallback headline: what the name search found instead. */
+export function fallbackSub(matches: AskAnswer["nameMatches"]): string {
+  if (!matches) return "No names in this workspace match words in the question.";
+  const fixed = matches.corrected.length ? ` (${matches.corrected.join(", ")})` : "";
+  return matches.count
+    ? `Showing ${matches.count} name match${matches.count === 1 ? "" : "es"} from your workspace instead${fixed}.`
+    : "No names in this workspace match words in the question.";
 }

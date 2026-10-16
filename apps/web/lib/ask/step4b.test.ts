@@ -34,23 +34,7 @@ test("a vendor answer's turn keeps every app under each vendor, and the scope sa
   assert.equal(followUpScope("Which of those has no owner?", { ...turn, items: [] }), null);
 });
 
-test("'Which of those has no owner?' after the vendor answer leaves out items with no vendor", () => {
-  const row = (id: string, name: string, type: string, vendor: string | null) =>
-    rowFromObject({ id, type, name, properties: { ...(vendor ? { vendor } : {}), ...(type === "cloud_service" ? { compute_runtime_kind: "on_prem" } : {}) } } as never)!;
-  const all = [row("m1", "Microsoft 365", "application", "Microsoft"), row("m2", "Teams", "application", "Microsoft"), row("b1", "BarTender", "application", "Seagull"), row("oe", "Order Entry", "application", null), row("as", "AS400", "cloud_service", null)];
-  const scope = followUpScope("Which of those has no owner?", turnFromAnswer("Which vendors?", vendorAnswer, 1))!;
-  const scoped = answerFromRecords({ question: "Which of those has no owner?", rows: all.filter((r: { id: string }) => scope.ids.has(r.id)), graph: { nodes: [], edges: [] }, basePath: "/b" } as never);
-  assert.equal(localOnly(scoped, "Which of those has no owner?"), true);
-  assert.doesNotMatch(scoped.answerText, /Order Entry|AS400|On-prem/);
-  assert.match(scoped.answerText, /3 Applications have no owner/);
-});
 
-test("AskScreen scopes local follow-ups and shows the note", () => {
-  const src = readFileSync(new URL("../../components/mvp/AskScreen.tsx", import.meta.url), "utf8");
-  assert.match(src, /followUpScope\(question, earlierTurns\(thread, question\)\.at\(-1\)\)/);
-  assert.match(src, /localOnly\(scoped, question\) \? \{ \.\.\.scoped, scopeNote: scope\.note \}/);
-  assert.match(src, /data-testid="ask-scope-note"/);
-});
 
 test("table cells carry a full-cell link under their content, so empty space opens the row", () => {
   const rich = readFileSync(new URL("../../components/mvp/AskRich.tsx", import.meta.url), "utf8");

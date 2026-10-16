@@ -1,38 +1,9 @@
 /**
- * Local-or-model routing for Ask, decided BEFORE any model call.
- *
- * The browser answers some questions itself from the catalogue (answerFromRecords). For those the
- * local answer always wins, so calling Gemini would be paid for and thrown away (the old "wasted
- * Gemini call"). shouldAskModel says whether the model is needed at all; pickAnswer chooses what
- * to show once both are in.
+ * Ask routing: AI-first. Every typed question goes to the AI (/ai/ask/stream). The browser keeps
+ * only name matching as a helper (lib/ask/names.ts) for the fallback list when the AI can't run.
  */
-import { isAiDataQuestion } from "./answerStrategies";
 import type { AskAnswer } from "./deterministic";
 import type { AskStep } from "@/lib/api-client";
-
-/** Handlers whose local answer is always shown, so the model is never asked. */
-export const LOCAL_ONLY_HANDLERS: ReadonlySet<AskAnswer["handler"]> = new Set([
-  "gaps",
-  "impact",
-  "importance",
-  "cost",
-  "ownership",
-  "clarify",
-  "aging",
-  "sign_in",
-  "cancel",
-  "records",
-]);
-
-/** True when the local answer will be shown whatever the model says. */
-export function localOnly(local: Pick<AskAnswer, "handler"> & Partial<Pick<AskAnswer, "lean">>, question: string): boolean {
-  if (LOCAL_ONLY_HANDLERS.has(local.handler)) return true;
-  // A short "No" worked out from the data (nothing named X, nothing owned by Y) is final.
-  if (local.lean) return true;
-  // Customer / financial / personal data: the F1 rule (each app's Holds data) answers, not the model.
-  if (local.handler === "ai" && isAiDataQuestion(question)) return true;
-  return false;
-}
 
 export type ModelGate = {
   mode: "home" | "answer";
@@ -41,41 +12,34 @@ export type ModelGate = {
   showingAdd: boolean;
   ambiguous: boolean;
   hasWorkspace: boolean;
-  /** The catalogue has loaded (or failed), so the local handler is final. */
+  /** The catalogue has loaded (or failed). */
   catalogSettled: boolean;
-  local: Pick<AskAnswer, "handler"> & Partial<Pick<AskAnswer, "lean">>;
+  /** Ignored for routing (kept so callers can pass the fallback answer). */
+  local?: Pick<AskAnswer, "handler">;
   /** The catalogue loaded and holds no applications or infrastructure: there is nothing to look up. */
   estateEmpty?: boolean;
 };
 
 export function shouldAskModel(gate: ModelGate): boolean {
-  if (gate.mode !== "answer" || !gate.question || gate.showingAdd || gate.ambiguous || !gate.hasWorkspace) return false;
-  // Wait for the catalogue: until then the local handler can still change (AI, clarify), and a
-  // call started early could be one we then throw away.
+  // AI-first: every typed question goes to the AI. The browser never reads the question's wording to
+  // decide; it only waits for the catalogue (so name hints and the fallback list are ready).
+  if (gate.mode !== "answer" || !gate.question.trim() || gate.showingAdd || gate.ambiguous || !gate.hasWorkspace) return false;
   if (!gate.catalogSettled) return false;
-  // Empty estate: the local answer already says nothing is recorded; a model call would find nothing.
+  // Empty estate: there is nothing to look up, and the card says so without spending an AI question.
   if (gate.estateEmpty) return false;
-  return !localOnly(gate.local, gate.question);
+  return true;
 }
 
-/** What the answer card shows. Same rules as before, now in one tested place. */
-export const LOCAL_ANSWER_STEP = "Showed the answer worked out from your catalogue; the model's answer wasn't used";
+/** What the card shows when the AI didn't answer (unavailable, error, timeout, over the allowance). */
+export const LOCAL_ANSWER_STEP = "Showed name matches from your catalogue; the AI's answer wasn't available";
 
-export function pickAnswer(
-  local: AskAnswer,
-  fromModel: AskAnswer | null,
-  question: string,
-  modelSteps?: AskStep[]
-): AskAnswer {
-  if (localOnly(local, question)) return local;
-  if (fromModel && fromModel.handler !== "unsupported" && !(local.handler === "vendors" && fromModel.citations.length === 0)) {
-    return fromModel;
-  }
-  // The model was asked but its answer isn't shown (no answer, unsupported, or a vendor list without
-  // sources). Keep every line the person saw live (so the count matches), and say which answer is shown.
+/** The AI's answer when there is one (including its "found nothing"); else the name-match fallback,
+ * keeping every step the person saw live plus the reason line. */
+export function pickAnswer(fallback: AskAnswer, fromModel: AskAnswer | null, _question: string, modelSteps?: AskStep[]): AskAnswer {
+  if (fromModel) return fromModel;
   const seen = modelSteps ?? [];
-  if (!seen.length) return local;
-  return { ...local, steps: [...seen, { id: "local", status: "done", label: LOCAL_ANSWER_STEP }] };
+  if (!seen.length) return fallback;
+  return { ...fallback, steps: [...seen, { id: "local", status: "done", label: LOCAL_ANSWER_STEP }] };
 }
 
 export function sameQuestion(a: string, b: string): boolean {
