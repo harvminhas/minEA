@@ -88,7 +88,10 @@ export function AskRecordsBlock({
   rowHref,
   yesNo,
   footerExtra,
+  animate,
 }: {
+  /** A just-arrived answer: the headline streams in word by word and rows fill in. */
+  animate?: boolean;
   answer: AskAnswer;
   /** Lead with Yes/No (asked as "do we use X?"); defaults to the quick answer's own flag. */
   yesNo?: boolean;
@@ -142,6 +145,12 @@ export function AskRecordsBlock({
                 </span>
               ))}
             </>
+          ) : animate && lean.title ? (
+            <span data-testid="ask-headline-words">
+              {lean.title.split(" ").map((word, index) => (
+                <span key={index} className="ask-word" style={{ animationDelay: `${index * 90}ms` }}>{word}{" "}</span>
+              ))}
+            </span>
           ) : lean.title}
         </h2>
         {kept.length > 1 && lean.costTotal > 0 && <span className="text-[14px] text-[#8b90a0]">{moneyLabel(lean.costTotal)} / yr recorded</span>}
@@ -226,12 +235,12 @@ export function AskRecordsBlock({
             </tr>
           </thead>
           <tbody>
-            {shown.map((item) => {
+            {shown.map((item, index) => {
               const row = item.row;
               const owner = [row.ownerTeam, row.ownerPerson].filter(Boolean).join(" · ");
               const where = [item.hosting && HOSTING[item.hosting] ? HOSTING[item.hosting].label : row.hostingLabel, ...item.tenants, ...item.regions.map((key) => regionName(key))].filter(Boolean);
               return (
-                <tr key={row.id} className="cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]" onClick={() => onOpen(row)}>
+                <tr key={row.id} className={`cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb] ${animate ? "ask-row-in" : ""}`} style={animate ? { animationDelay: `${300 + index * 80}ms` } : undefined} onClick={() => onOpen(row)}>
                   <td className="px-2 py-2.5 font-medium">
                     <a href={rowHref(row)} onClick={(event) => event.stopPropagation()} className="text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-2 hover:decoration-[#4c3fd1]">{row.name}</a>
                   </td>

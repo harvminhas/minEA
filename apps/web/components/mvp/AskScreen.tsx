@@ -17,6 +17,7 @@ import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, nameMatchAnswer, recordsAnswer, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
 import { buildFacts, type RecordFilters } from "@/lib/ask/record-filter";
 import { AskRecordsBlock, FollowPill } from "@/components/mvp/AskRecords";
+import { AskBuilding, AskOwl } from "@/components/mvp/AskBuilding";
 import { adminTabHref } from "@/lib/billing/admin-centre";
 import { splitSummary } from "@/lib/ask/rich";
 import { REVEAL_MS, latestOnly, revealText, revealTokens } from "@/lib/ask/reveal";
@@ -186,6 +187,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     }),
   });
   const remoteData = latestOnly(remote.data, question)?.payload;
+  const [buildStatus, setBuildStatus] = useState("Working it out…");
+  // A just-arrived AI answer animates in (headline word by word, rows filling in); a cached one doesn't.
+  const freshAt = useMemo(() => (remote.dataUpdatedAt && Date.now() - remote.dataUpdatedAt < 3000 ? remote.dataUpdatedAt : 0), [remote.dataUpdatedAt]);
   const liveNow = live.question === question ? live : { steps: [], text: "" };
 
 
@@ -514,20 +518,12 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
       <section className="overflow-hidden rounded-2xl border border-[#e4e0ff] bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-[#efeaff] bg-[#f7f6ff] px-5 py-3">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.14em] text-[#5b4ce6]">
-            <Sparkles size={12} /> ANSWER
+            <AskOwl size={16} /> ANSWER
           </p>
-          {thinking && <span className="max-w-[70%] truncate text-[12px] font-medium text-[#5b4ce6]">Working on “{question}”</span>}
+          {thinking && <span data-testid="ask-status" className="max-w-[70%] truncate text-[12px] font-medium text-[#8a80e0]">{buildStatus}</span>}
         </div>
         {thinking ? (
-          <div className="px-5 py-6">
-            <div className="h-1.5 overflow-hidden rounded-full bg-[#ece9ff]">
-              <div className="diagram-saving-bar-indeterminate h-full w-2/5 rounded-full bg-[#5b4ce6]" />
-            </div>
-            <p data-testid="ask-working" className="mt-4 text-[15px] font-medium text-[#1c2230]">
-              {catalogSettled ? workingLine(rows.length) : "Loading your estate"}
-            </p>
-            <AskLiveSteps steps={liveNow.steps} text="" />
-          </div>
+          <AskBuilding steps={liveNow.steps} streaming={askModel && askStreamEnabled()} estateCount={catalogSettled ? rows.length : null} onStatus={setBuildStatus} />
         ) : (
           <div className="px-5 py-5">
             {quotaHit && !fallbackLean && (
@@ -607,6 +603,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               <AskRecordsBlock
                 answer={answer}
                 yesNo={Boolean(answer.records.yesNo)}
+                animate={Boolean(freshAt) && !edited}
                 footerExtra={smallActions}
                 facts={facts}
                 onFilters={(filters) => setEdited({ question, filters })}

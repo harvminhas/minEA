@@ -72,3 +72,13 @@ test("labels file matches the API copy", () => {
   const web = JSON.parse(readFileSync("lib/ask/ask-labels.json", "utf8"));
   assert.deepEqual(web, api);
 });
+
+test("a fresh answer animates: headline word by word, rows fill in; without animate it renders plain", () => {
+  const ai = answerFromModel(payload({ headline: "Yes — MuleSoft (Salesforce)", answer_text: "Yes.", yes_no: "yes", item_ids: ["crm"], items: [] }), ROWS, "/w", "q")!;
+  const props = { answer: ai, facts: FACTS, onFilters: () => {}, onOpen: () => {}, rowHref: (row: CatalogRow) => `/w/r/${row.id}` };
+  const animated = renderToStaticMarkup(<AskRecordsBlock {...props} animate />);
+  assert.equal(animated.match(/class="ask-word"/g)!.length, 4);
+  assert.match(animated, /ask-row-in/);
+  const plain = renderToStaticMarkup(<AskRecordsBlock {...props} />);
+  assert.doesNotMatch(plain, /ask-word|ask-row-in/);
+});
