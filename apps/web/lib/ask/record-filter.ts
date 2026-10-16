@@ -60,6 +60,8 @@ export type RecordFacts = {
   regions: string[]; // region keys
   servers: string[];
   aiOn: boolean;
+  /** The vendor came from the tool catalogue, not the item's own vendor field. */
+  vendorInferred?: boolean;
 };
 
 type Rel = { from_object_id: string; to_object_id: string; type: string; attributes?: Record<string, unknown> | null };
@@ -94,7 +96,8 @@ export function buildFacts(rows: CatalogRow[], objects: readonly MinEAObject[] =
       const inferred = catalogVendor(row.name, String(props.catalog_tool ?? ""));
       if (inferred) vendors.push(inferred);
     }
-    const facts: RecordFacts = { row, vendors, hosting: hostingKey(String(props.hosting_model ?? "")), tenants: [], providers: [], regions: [], servers: [], aiOn: false };
+    const vendorInferred = vendors.length > 0 && !row.vendor && !(row.vendorKeys ?? []).length;
+    const facts: RecordFacts = { row, vendors, vendorInferred, hosting: hostingKey(String(props.hosting_model ?? "")), tenants: [], providers: [], regions: [], servers: [], aiOn: false };
     if (row.object?.type === "cloud_service") {
       const pid = tenantProvider(props, row.name);
       facts.providers.push(pid);

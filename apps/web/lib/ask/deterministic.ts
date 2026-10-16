@@ -102,6 +102,8 @@ export type AskAnswer = {
   loading?: boolean;
   /** A filtered list (quick answer or the AI's filter_records): editable chips re-run it locally. */
   records?: AskRecords;
+  /** A short answer with no list ("No — nothing called Figma"): headline, one line, footer actions. */
+  lean?: { headline: string; sub?: string; name?: string; searched?: number };
 };
 
 export type AskRecords = {
@@ -109,6 +111,8 @@ export type AskRecords = {
   /** Names from the workspace found in the question (quick answers). */
   terms: Term[];
   source: "quick" | "ai";
+  /** Asked as "do we use X?": the card leads with Yes — names. */
+  yesNo?: boolean;
 };
 
 export type AskGraph = {
@@ -341,6 +345,7 @@ export function answerFromRecords(input: {
         ...empty("unsupported", `Not that I can see: nothing in this workspace is named “${slot}” or recorded as made by ${slot}.`, today),
         gaps: [{ text: `If you use ${slot}, add it so it shows up here.`, fillHref: `${input.basePath}/ask` }],
         followUps: SUGGESTED.slice(0, 3),
+        lean: { headline: `No — nothing called ${slot}`, sub: `No item is named ${slot} or recorded as made by ${slot}.`, name: slot, searched: facts.length },
       };
     }
   }
@@ -450,7 +455,7 @@ export function recordsAnswer(records: AskRecords, facts: RecordFacts[], today: 
     handler: "records",
     answerText,
     summary: answerText.split(/(?<=\.)\s/)[0],
-    records,
+    records: options.yesNo ? { ...records, yesNo: true } : records,
     citations: kept.map((item, index) => ({
       n: index + 1,
       recordId: item.row.id,

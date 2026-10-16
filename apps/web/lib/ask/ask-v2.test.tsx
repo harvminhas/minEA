@@ -131,7 +131,7 @@ test("records block renders chips, a linked table and How I found this", () => {
   assert.match(html, /How I found this/);
   assert.match(html, /“microsoft” \(vendor in your data\)/i);
   assert.match(html, /with no AI used/);
-  assert.match(html, /Which of these renew in the next 90 days\?/);
+  assert.match(html, /Renewing in 90 days\?/);
 });
 
 test("filter keys match the API's filter_records", () => {

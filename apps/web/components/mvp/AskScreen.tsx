@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState, useRef } from "react";
+import { Fragment, useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -15,8 +15,8 @@ import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
 import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, recordsAnswer, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
-import { buildFacts, type RecordFilters } from "@/lib/ask/record-filter";
-import { AskRecordsBlock } from "@/components/mvp/AskRecords";
+import { buildFacts, yesNoSlot, type RecordFilters } from "@/lib/ask/record-filter";
+import { AskRecordsBlock, FollowPill } from "@/components/mvp/AskRecords";
 import { adminTabHref } from "@/lib/billing/admin-centre";
 import { splitSummary } from "@/lib/ask/rich";
 import { REVEAL_MS, latestOnly, revealText, revealTokens } from "@/lib/ask/reveal";
@@ -466,6 +466,19 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     );
   }
 
+  // Lean card: a filtered list (quick or AI) or a short "No". Headline + chips + table + footer, no prose.
+  const leanCard = !thinking && answer.handler !== "clarify" && Boolean(answer.records || answer.lean);
+  const smallActions = (
+    <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[#f3f4f8] pt-2.5 text-[12px] text-[#8b90a0]" data-testid="ask-small-actions">
+      <button type="button" className="hover:text-[#5b4ce6]" onClick={() => { saveAsk(question, answer.answerText); setNote("Saved to Reports › Saved from Ask"); }}>Save as report</button>
+      <button type="button" className="hover:text-[#5b4ce6]" onClick={() => { downloadCsv(answer); setNote("Exported the answer and its sources to CSV"); }}>Export</button>
+      <button type="button" className="hover:text-[#5b4ce6]" onClick={() => { navigator.clipboard.writeText(window.location.href); setNote("Share link copied"); }}>Share</button>
+      <span className="ml-auto">Was this right?</span>
+      <button type="button" className="hover:text-[#5b4ce6]" onClick={() => setNote("Thanks for the feedback")}>Yes</button>
+      <button type="button" className="hover:text-[#5b4ce6]" onClick={() => setNote("Thanks. Tell us what was wrong.")}>No</button>
+    </div>
+  );
+
   return (
     <div
       className="mx-auto max-w-4xl px-6 py-6"
@@ -544,7 +557,10 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 <b>{aiNote.title}</b> {aiNote.body}
               </div>
             )}
-            <p className="text-[17px] leading-7 text-[#1c2230]">
+            {answer.lean && !answer.records && (
+              <LeanAnswer lean={answer.lean} basePath={basePath} footerExtra={smallActions} onAdd={(name) => submit(prefixAdd(name))} />
+            )}
+            {!leanCard && <p className="text-[17px] leading-7 text-[#1c2230]">
               {answer.handler === "clarify" ? (
                 <ClarifyChoices
                   citations={answer.citations}
@@ -564,7 +580,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               {answer.verdict?.inferred && (
                 <span className="ml-2 inline-flex rounded bg-[#fff7ed] px-1.5 py-0.5 align-middle text-[11px] font-semibold text-[#c2410c]">Inferred</span>
               )}
-            </p>
+            </p>}
             {answer.evidence && answer.evidence.length > 0 && (
               <ul className="mt-3 list-disc space-y-1 pl-5 text-[14px] text-[#3c4254]">
                 {answer.evidence.map((item, index) => (
@@ -600,9 +616,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 }}
               />
             )}
-            {!revealing && answer.records && (
+            {answer.records && (
               <AskRecordsBlock
                 answer={answer}
+                yesNo={answer.records.yesNo ?? Boolean(yesNoSlot(question))}
+                footerExtra={smallActions}
                 facts={facts}
                 onFilters={(filters) => setEdited({ question, filters })}
                 onOpen={(row) => router.push(recordHref(basePath, row))}
@@ -667,11 +685,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 </table>
             )}
 
-            {answer.gaps.length > 0 && <GapsList key={question} gaps={answer.gaps} />}
+            {!leanCard && answer.gaps.length > 0 && <GapsList key={question} gaps={answer.gaps} />}
 
             {answer.steps && answer.steps.length > 0 && <AskSteps steps={answer.steps} />}
 
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#eef0f4] pt-4">
+            {!leanCard && <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#eef0f4] pt-4">
               <button type="button" onClick={() => { saveAsk(question, answer.answerText); setNote("Saved to Reports › Saved from Ask"); }} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">
                 Save as report
               </button>
@@ -684,14 +702,14 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               <span className="ml-auto text-[13px] text-[#6b7289]">Was this right?</span>
               <button type="button" onClick={() => setNote("Thanks for the feedback")} className="rounded-lg border border-[#e6e8ee] px-2.5 py-1 text-[13px]">Yes</button>
               <button type="button" onClick={() => setNote("Thanks. Tell us what was wrong.")} className="rounded-lg border border-[#e6e8ee] px-2.5 py-1 text-[13px]">No</button>
-            </div>
+            </div>}
             {note && <p className="mt-2 text-[12px] text-[#5b4ce6]">{note}</p>}
           </div>
         )}
       </section>
       )}
 
-      {!showingAdd && !ambiguous && !thinking && answer.handler !== "clarify" && followUpsFor(answer.followUps, question).length > 0 && (
+      {!showingAdd && !ambiguous && !thinking && !leanCard && answer.handler !== "clarify" && followUpsFor(answer.followUps, question).length > 0 && (
         <div className="mt-5 rounded-2xl border border-[#e6e8ee] bg-[#fafafb] px-5 py-4">
           <p className="mb-2 text-[13px] font-medium text-[#1c2230]">Ask next</p>
           <div className="flex flex-wrap gap-2">
@@ -1065,54 +1083,68 @@ function SummaryAndRest({ text, nodes, onOpen }: { text: string; nodes: Paramete
   );
 }
 
-/** Earlier turns of this tab's conversation, oldest first, scrolled to the newest. */
+/** Earlier turns of this tab's conversation as one line of question chips (click to ask again). */
 function ConversationThread({
   turns,
-  hrefFor,
   onAsk,
   onNew,
 }: {
   turns: ThreadTurn[];
-  hrefFor: (id: string) => string | null;
+  hrefFor?: (id: string) => string | null;
   onAsk: (question: string) => void;
   onNew: () => void;
 }) {
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (box.current) box.current.scrollTop = box.current.scrollHeight;
-  }, [turns.length]);
   return (
-    <div data-testid="ask-thread" className="mb-4 rounded-2xl border border-[#e6e8ee] bg-[#fafafb]">
-      <div className="flex items-center justify-between border-b border-[#eef0f4] px-4 py-2">
-        <p className="text-[12px] font-medium text-[#6b7289]">Earlier in this conversation · {turns.length}</p>
-        <button type="button" onClick={onNew} className="text-[12px] font-medium text-[#5b4ce6] hover:underline">
-          New conversation
-        </button>
-      </div>
-      <div ref={box} className="max-h-[40vh] space-y-3 overflow-y-auto px-4 py-3">
-        {turns.map((turn, index) => (
-          <div key={`${index}-${turn.at}`} data-testid="ask-thread-turn" className="text-[13px]">
-            <button type="button" onClick={() => onAsk(turn.question)} className="font-semibold text-[#1c2230] hover:text-[#5b4ce6]">
-              {turn.question}
-            </button>
-            {turn.summary && <p className="mt-0.5 text-[#3c4254]">{turn.summary}</p>}
-            {turn.items.length > 0 && (
-              <p className="mt-0.5 text-[12px] text-[#8b90a0]">
-                {turn.items.slice(0, 6).map((item, itemIndex) => {
-                  const href = hrefFor(item.id);
-                  return (
-                    <span key={`${itemIndex}-${item.id}`}>
-                      {itemIndex > 0 && ", "}
-                      {href ? <Link href={href} className="hover:text-[#5b4ce6] hover:underline">{item.name}</Link> : item.name}
-                    </span>
-                  );
-                })}
-                {turn.items.length > 6 && ` +${turn.items.length - 6} more`}
-              </p>
-            )}
-          </div>
+    <div data-testid="ask-thread" className="-mt-3 mb-4 flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-[12px] text-[#6b7289]">
+      <span className="shrink-0">Earlier ·</span>
+      <div className="flex min-w-0 flex-1 gap-1.5 overflow-hidden">
+        {turns.slice(-6).map((turn, index) => (
+          <button
+            key={`${index}-${turn.at}`}
+            type="button"
+            data-testid="ask-thread-turn"
+            title={turn.summary || turn.question}
+            onClick={() => onAsk(turn.question)}
+            className="max-w-[220px] shrink-0 truncate rounded-full border border-[#e6e8ee] bg-white px-2.5 py-0.5 text-[#3c4254] hover:border-[#c9c6f5]"
+          >
+            {shortQuestion(turn.question)}
+          </button>
         ))}
       </div>
+      <button type="button" onClick={onNew} className="shrink-0 font-medium text-[#5b4ce6] hover:underline">
+        New conversation
+      </button>
+    </div>
+  );
+}
+
+/** "What Microsoft products do we own?" -> "Microsoft products?" for a chip. */
+export function shortQuestion(question: string): string {
+  const q = question.trim().replace(/\s+/g, " ");
+  const cut = q.replace(/^(what|which|show me|list)\s+(?=\S+\s+(products|apps|applications|items|tools|platforms))/i, "").replace(/\s+(do|does|did|are|is)\s+(we|you|our company)\s+(own|have|use|run)\??$/i, "?");
+  const out = cut === q ? q : cut.charAt(0).toUpperCase() + cut.slice(1);
+  return out.length > 40 ? `${out.slice(0, 38)}…` : out;
+}
+
+/** The short "No" card: headline, one line, How I found this and two actions. */
+function LeanAnswer({ lean, basePath, footerExtra, onAdd }: { lean: NonNullable<AskAnswer["lean"]>; basePath: string; footerExtra: ReactNode; onAdd: (name: string) => void }) {
+  return (
+    <div data-testid="ask-lean">
+      <h2 data-testid="ask-lean-headline" className="text-[20px] font-bold leading-7 text-[#1c2230]">{lean.headline}</h2>
+      {lean.sub && <p className="mt-1.5 text-[13px] text-[#6b7289]">{lean.sub}</p>}
+      <div className="mt-3 flex flex-wrap items-start gap-2 text-[12px]">
+        <details className="group min-w-0 flex-1" data-testid="ask-how">
+          <summary className="cursor-pointer list-none font-semibold text-[#5b4ce6] [&::-webkit-details-marker]:hidden"><span className="inline-block transition-transform group-open:rotate-90">▸</span> How I found this</summary>
+          <p className="mt-2 text-[13px] text-[#4a5068]">
+            Looked for “{lean.name}” as a whole word in item names, in vendor fields and in the tool catalogue{lean.searched != null ? ` across ${lean.searched} items` : ""}. Nothing matched. No AI used.
+          </p>
+        </details>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {lean.name && <FollowPill label={`+ Add ${lean.name}`} onClick={() => onAdd(lean.name!)} />}
+          <FollowPill label="See all apps" href={modelPath(basePath, "applications")} />
+        </div>
+      </div>
+      {footerExtra}
     </div>
   );
 }
