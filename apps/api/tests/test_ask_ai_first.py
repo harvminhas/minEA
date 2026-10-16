@@ -86,7 +86,7 @@ def test_every_typed_question_counts_once(monkeypatch):
 
     asked = []
 
-    async def fake_stream(db, ctx, question, graph=None, context=None):
+    async def fake_stream(db, ctx, question, graph=None, context=None, timing=None):
         asked.append(question)
         yield "event: final\ndata: " + json.dumps({"source": "llm", "answer_text": "ok"}) + "\n\n"
 

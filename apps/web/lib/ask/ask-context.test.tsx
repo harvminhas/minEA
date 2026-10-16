@@ -122,3 +122,16 @@ test("item-card answers: headline, summary line, table; the AI's prose is folded
   assert.match(open, /4 Applications from Microsoft/);
   assert.doesNotMatch(renderToStaticMarkup(<AskRecordsBlock {...props} prose={null} />), /ask-prose/);
 });
+
+test("the server's timing summary reaches the answer", () => {
+  const ai = answerFromModel(payload({ headline: "h", answer_text: "x", item_ids: ["crm"], items: [], timing: { summary: "Took 1.0s: AI 1 call 0.9s" } } as never), ROWS, "/w", "q")!;
+  assert.equal(ai.timingLine, "Took 1.0s: AI 1 call 0.9s");
+});
+
+test("How this was worked out shows the server's timing line under the steps", async () => {
+  const { AskSteps } = await import("../../components/mvp/AskSteps");
+  const steps = [{ id: "estate", status: "done" as const, label: "Read your estate" }];
+  const html = renderToStaticMarkup(<AskSteps steps={steps} timing="Took 6.2s: workspace 0.3s · AI 2 calls 5.1s · lookups 0.2s · check 0.1s" />);
+  assert.match(html, /data-testid="ask-timing"[^>]*>Took 6\.2s: workspace 0\.3s · AI 2 calls 5\.1s · lookups 0\.2s · check 0\.1s</);
+  assert.doesNotMatch(renderToStaticMarkup(<AskSteps steps={steps} />), /ask-timing/);
+});

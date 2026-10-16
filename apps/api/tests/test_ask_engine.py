@@ -367,3 +367,34 @@ def test_load_graph_survives_a_catalogue_rollback(monkeypatch):
             await engine.dispose()
 
     asyncio.run(run())
+
+
+def test_timing_on_the_final_and_one_log_line(engine, caplog):
+    import logging
+    from app.ai.ask.timing import AskTiming
+    bad = {**GOOD, "answer_markdown": "99 Applications renew [1]."}
+    engine([_call_response("aggregate", {"filters": {"renewal_within_days": 90}}), _text_response(bad), _text_response(GOOD)])
+    timing = AskTiming()
+    timing.add("auth", 0.05)
+    with caplog.at_level(logging.INFO, logger="app.ai.ask.timing"):
+        result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?", timing=timing))
+    t = result["timing"]
+    assert t["ai_calls"] == 3 and len(t["calls"]) == 3 and t["calls"][-1].get("correction") is True
+    assert t["corrected"] is True and t["lookups"] == 1 and t["tools"][0]["name"] == "aggregate"
+    assert t["context_chars"] > 0 and t["context_tokens_est"] == t["context_chars"] // 4
+    assert {"auth_s", "context_s", "check_s", "total_s"} <= set(t) and t["outcome"] == "llm"
+    assert t["summary"].startswith("Took ") and "AI 3 calls" in t["summary"] and "lookups" in t["summary"] and "check" in t["summary"]
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("ask timing ")]
+    assert len(lines) == 1 and "ai_calls=3" in lines[0] and "corrected=True" in lines[0]
+    # No behaviour change: the steps are the same as without timing.
+    assert all(s["id"] != "timing" for s in result["steps"])
+
+
+def test_timing_summary_format():
+    from app.ai.ask.timing import AskTiming
+    ticks = iter([0.0, 6.2])
+    t = AskTiming(clock=lambda: next(ticks))
+    t.phases = {"workspace": 0.2, "context": 0.1, "check": 0.1}
+    t.calls = [{"s": 2.0, "in": 1, "out": 1, "think": 0, "finish": "STOP"}, {"s": 3.1, "in": 1, "out": 1, "think": 0, "finish": "STOP"}]
+    t.tools = [{"name": "aggregate", "s": 0.2}]
+    assert t.summary() == "Took 6.2s: workspace 0.3s · AI 2 calls 5.1s · lookups 0.2s · check 0.1s"

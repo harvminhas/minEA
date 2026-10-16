@@ -97,6 +97,8 @@ export type AskAnswer = {
   chart?: AskChart;
   /** Model answers: the server's working steps (lookups and checks), shown under the answer. */
   steps?: AskStep[];
+  /** "Took 6.2s: workspace 0.3s · AI 2 calls 5.1s · …" from the server, shown under the steps. */
+  timingLine?: string;
   /** A report that holds the full answer, shown under it. */
   link?: { href: string; label: string };
   loading?: boolean;
@@ -259,6 +261,7 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
       extra: "checked against the lookup results",
     },
     ...(payload.steps?.length ? { steps: payload.steps } : {}),
+    ...(payload.timing?.summary ? { timingLine: String(payload.timing.summary) } : {}),
   };
 }
 

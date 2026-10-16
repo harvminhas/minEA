@@ -1,3 +1,4 @@
+import React from "react";
 import { AlertCircle, Check } from "lucide-react";
 import type { AskStep } from "@/lib/api-client";
 import { stepKey } from "@/lib/ask/route";
@@ -6,7 +7,7 @@ import { stepKey } from "@/lib/ask/route";
  * "How this was worked out": the server's real working steps for a model answer, each built from
  * a lookup result ("6 Applications renew in the next 90 days, $210,000 a year"). Collapsed by default.
  */
-export function AskSteps({ steps }: { steps: AskStep[] }) {
+export function AskSteps({ steps, timing }: { steps: AskStep[]; timing?: string }) {
   return (
     <details data-testid="ask-steps" className="mt-4 rounded-lg border border-[#eef0f4] bg-[#fafafb] px-3 py-2 text-[13px] text-[#3c4254]">
       <summary className="cursor-pointer select-none text-[12px] font-medium text-[#6b7289]">
@@ -24,6 +25,7 @@ export function AskSteps({ steps }: { steps: AskStep[] }) {
           </li>
         ))}
       </ol>
+      {timing && <p data-testid="ask-timing" className="mt-2 border-t border-[#eef0f4] pt-1.5 text-[11px] tabular-nums text-[#8b90a0]">{timing}</p>}
     </details>
   );
 }

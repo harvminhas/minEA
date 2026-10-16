@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.ask.graph import load_graph
 from app.ai.ask.loop import _fallback, answer_with_model, error_detail, reason_step
 from app.ai.ask.stream import ask_events, stream_ask
+from app.ai.ask.timing import AskTiming
 from app.ai.gemini_client import is_configured
 from app.services.ask_quota import take_question
 from app.ai.chat import stream_chat
@@ -73,12 +74,14 @@ async def ask(
     When the model is off, times out, or fails the citation check, the response
     is source=fallback so the screen can answer from the fixed handlers.
     """
+    timing = AskTiming()
     await ctx.require_read(db)
     try:
         over = await _take_ai_question(db, ctx, body.question)
+        timing.add("auth", timing.total)
         if over is not None:
             return over
-        return await answer_with_model(db, ctx, body.question, context=[turn.model_dump() for turn in body.context])
+        return await answer_with_model(db, ctx, body.question, context=[turn.model_dump() for turn in body.context], timing=timing)
     except Exception as exc:  # a 500 here used to show as a bare "AI unavailable" in the browser
         return _server_error(exc)
 
@@ -121,18 +124,22 @@ async def ask_stream(
     """POST /ask as Server-Sent Events: live working steps, then checked text, then the same final
     payload. See app/ai/ask/stream.py for the frames. The workspace graph is read here, before the
     response starts, because the request's DB session is closed once the streaming body runs."""
+    timing = AskTiming()
     await ctx.require_read(db)
     headers = {"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"}
     try:
         over = await _take_ai_question(db, ctx, body.question)
+        timing.add("auth", timing.total)
         if over is not None:
             return StreamingResponse(ask_events(_one_final(over)), media_type="text/event-stream", headers=headers)
+        loaded = timing.clock()
         graph = await load_graph(db, ctx.workspace.id, ctx.org_id) if ctx.workspace and body.question.strip() else None
+        timing.add("workspace", timing.clock() - loaded)
     except Exception as exc:
         payload = _server_error(exc)
         return StreamingResponse(ask_events(_steps_then_final(payload)), media_type="text/event-stream", headers=headers)
     return StreamingResponse(
-        stream_ask(None, ctx, body.question, graph=graph, context=[turn.model_dump() for turn in body.context]),
+        stream_ask(None, ctx, body.question, graph=graph, context=[turn.model_dump() for turn in body.context], timing=timing),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )

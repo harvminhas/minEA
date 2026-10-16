@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.ask.ai_landscape import is_ai_question
 from app.ai.ask.graph import load_graph
 from app.ai.ask.context import build_context, log_size
+from app.ai.ask.timing import AskTiming
 from app.ai.ask.grounding import graph_numbers, harvest, is_grounded, ungrounded
 from app.ai.ask.steps import checking_step, estate_step, same_step, step, tool_step
 from app.ai.ask.tools import ToolBag, run_tool, tool_specs
@@ -418,11 +419,11 @@ def reason_step(reason: str, detail: str | None = None) -> dict:
     return step("ai-reason", f"{words}{f': {detail}' if detail else ''} [reason: {reason}]", status="error")
 
 
-async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str, context: list[dict] | None = None) -> dict:
+async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str, context: list[dict] | None = None, timing: AskTiming | None = None) -> dict:
     """JSON contract of POST /ai/ask: the final answer, plus `steps` (what the server did)."""
     steps: list[dict] = []
     final: dict | None = None
-    async for event in run_ask(db, ctx, question, context=context):
+    async for event in run_ask(db, ctx, question, context=context, timing=timing):
         if event["event"] == "step":
             steps.append(event["data"])
         elif event["event"] == "final":
@@ -440,6 +441,29 @@ async def run_ask(
     clock=time.monotonic,
     graph=None,
     context: list[dict] | None = None,
+    timing: AskTiming | None = None,
+) -> AsyncIterator[dict]:
+    """run_ask_inner plus timing: one `ask timing` log line, and `timing` (with a compact `summary`) on the final."""
+    timing = timing or AskTiming()
+    async for event in run_ask_inner(db, ctx, question, clock=clock, graph=graph, context=context, timing=timing):
+        if event.get("event") == "final":
+            data = event["data"]
+            timing.outcome = str(data.get("source") or "") + (f":{data.get('fallback_reason')}" if data.get("fallback_reason") else "")
+            timing.emit()
+            if timing.calls:  # only requests that reached the model carry the line ("How this was worked out")
+                event = {"event": "final", "data": {**data, "timing": {"summary": timing.summary(), **timing.as_dict()}}}
+        yield event
+
+
+async def run_ask_inner(
+    db: AsyncSession | None,
+    ctx: TenancyContext,
+    question: str,
+    *,
+    clock=time.monotonic,
+    graph=None,
+    context: list[dict] | None = None,
+    timing: AskTiming,
 ) -> AsyncIterator[dict]:
     """The Ask engine as a stream of events: {"event": "step"|"final", "data": {...}}.
 
@@ -461,10 +485,14 @@ async def run_ask(
         return
 
     started = clock()
+    tick = time.perf_counter  # timing only; `clock` (injectable) drives the budget
     # The stream endpoint loads the graph before its response starts (the request's DB session is
     # closed by the time a streaming body runs), so it can pass it in.
     if graph is None:
+        loaded = tick()
         graph = await load_graph(db, ctx.workspace.id, ctx.org_id)
+        timing.add("workspace", tick() - loaded)
+    built = tick()
     estate = estate_step(graph)
     bag = ToolBag(graph=graph, seen_ids=set(), numbers=set())
     graph_numbers(graph, bag.numbers)  # the counts the estate step shows
@@ -478,6 +506,8 @@ async def run_ask(
     prompt = f"{workspace}\n\n{prompt}"
     bag.seen_ids.update(graph.records)  # every item is in the context, so any can be cited
     harvest(_UUID.sub(" ", workspace), bag.numbers)  # numbers the context shows (costs, licences, team counts)
+    timing.context_chars = len(prompt)
+    timing.add("context", tick() - built)
     yield {"event": "step", "data": {**estate, "label": f"{estate['label']} (all of it sent to the AI)"}}
     for rec in earlier:
         bag.note_record(rec)  # items from earlier turns, re-checked against this workspace, may be named again
@@ -491,6 +521,7 @@ async def run_ask(
         **({"thinking_config": types.ThinkingConfig(thinking_budget=THINKING_BUDGET)} if model_name().startswith("gemini-2.5") else {}),
     )
     corrected = False
+    correcting = False  # the next model call is the correction round
     nudged = False
     checks = 0
     last_tool_step: dict | None = None
@@ -512,11 +543,14 @@ async def run_ask(
                     yield event
                 return
             call_started = clock()
+            call_tick = tick()
             response = await asyncio.wait_for(
                 get_client().aio.models.generate_content(model=model_name(), contents=contents, config=config),
                 timeout=min(CALL_TIMEOUT_SECONDS, remaining),
             )
             finish, finish_detail = finish_info(response)
+            timing.model_call(tick() - call_tick, response, finish, correction=correcting)
+            correcting = False
             log.info("ask model reply round=%s %s in %.1fs", _round + 1, finish_detail, clock() - call_started)
             calls = _calls(response)
             if not calls:
@@ -533,10 +567,14 @@ async def run_ask(
                     for event in give_up(code, finish_detail):
                         yield event
                     return
+                checking = tick()
                 parsed = _parse_answer(text)
                 problem = "not_json" if not parsed else _validate(parsed, bag, question)
+                timing.add("check", tick() - checking)
                 if problem and not corrected:
                     corrected = True
+                    correcting = True
+                    timing.corrected = True
                     checks += 1
                     yield {"event": "step", "data": checking_step(problem, checks)}
                     contents.append(types.Content(role="model", parts=[types.Part.from_text(text=text or "{}")]))
@@ -556,7 +594,9 @@ async def run_ask(
                     )
                     continue
                 if problem == "ungrounded_number" and parsed:
+                    checking = tick()
                     softened, dropped = soften_numbers(parsed, bag, question)
+                    timing.add("check", tick() - checking)
                     if softened is not None:
                         log.warning("ask softened answer: dropped %s ungrounded number(s): %s", len(dropped), ", ".join(dropped)[:200])
                         checks += 1
@@ -584,6 +624,7 @@ async def run_ask(
                         yield event
                     return
                 tools_used.append(name)
+                tool_started = tick()
                 try:
                     raw = run_tool(bag, name, args) if ai_question or name != "ai_landscape" else NOT_AI
                     result = json.loads(json.dumps(raw, default=str))
@@ -593,6 +634,7 @@ async def run_ask(
                     log.exception("ask tool failed: %s(%s): %s", name, json.dumps(args, default=str)[:300], detail)
                     result = {"error": "lookup_failed", "message": detail[:200]}
                     yield {"event": "step", "data": step(f"tool-error-{len(tools_used)}", f"Lookup {name} failed: {detail}", status="error")}
+                timing.tool(name, tick() - tool_started)
                 line = tool_step(len(tools_used), name, args, result)
                 # The model sometimes repeats a lookup (same filters, same result). Show it once.
                 if not same_step(last_tool_step, line):

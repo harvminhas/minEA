@@ -1271,6 +1271,8 @@ export type AskModelPayload = {
   items?: AskItem[];
   /** What the server actually did, built from the lookup results (newer APIs only). */
   steps?: AskStep[];
+  /** Server timing (measurement only); `summary` is the compact line for "How this was worked out". */
+  timing?: { summary?: string } & Record<string, unknown>;
   /** Vendor answers: every named vendor (same definition as the Ask header), built by the server. */
   /** Step 3 rich blocks, built by the server from lookup results. */
   summary?: string;

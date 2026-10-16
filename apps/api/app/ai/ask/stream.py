@@ -93,6 +93,6 @@ async def ask_events(
         yield frame("done", {})
 
 
-async def stream_ask(db, ctx, question: str, graph=None, context: list[dict] | None = None) -> AsyncIterator[str]:
-    async for piece in ask_events(run_ask(db, ctx, question, graph=graph, context=context)):
+async def stream_ask(db, ctx, question: str, graph=None, context: list[dict] | None = None, timing=None) -> AsyncIterator[str]:
+    async for piece in ask_events(run_ask(db, ctx, question, graph=graph, context=context, timing=timing)):
         yield piece
