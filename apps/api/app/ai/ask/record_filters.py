@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from app.ai.ask.graph import Rec, WorkspaceGraph, fold
+from app.ai.ask.labels import hosting_label, vendor_key
 from app.services.cloud_regions import CATALOG, STANDARD, tenant_provider
 
 PROVIDERS = {p["id"]: p for p in CATALOG["providers"]}
@@ -79,8 +80,8 @@ def build_facts(graph: WorkspaceGraph) -> list[Facts]:
     raw = {obj["id"]: obj for obj in graph.objects}
     out: list[Facts] = []
     for rec in graph.records.values():
-        if rec.type not in {"application", "infrastructure"}:
-            continue
+        # Every kind of item (apps, infrastructure, tools, flows, APIs, agents, ...): what the AI sees in
+        # its context is what the lookup can return.
         obj = raw.get(rec.id) or {}
         props = obj.get("properties") or {}
         facts = Facts(rec=rec, vendors=list(rec.vendor_names) or ([rec.catalog_vendor] if rec.catalog_vendor else []), hosting=hosting_key(str(props.get("hosting_model") or "")))
@@ -190,6 +191,10 @@ def _values(f: Facts, key: str) -> list[str]:
 
 
 def _is(key: str, wanted: str, values: list[str]) -> bool:
+    if key == "vendor":
+        # One vendor identity: "sfdc", "SALESFORCE", "salesforce" all resolve to Salesforce; exact, not substring.
+        want = vendor_key(wanted)
+        return bool(want) and any(vendor_key(v) == want for v in values if v)
     if key == "hosting":
         return bool(values and values[0]) and values[0] == hosting_key(wanted)
     if key in {"lifecycle", "criticality"}:
@@ -218,9 +223,13 @@ def matches(f: Facts, filters: dict, today: date | None = None) -> bool:
     rec = f.rec
     if "type" in filters:
         t = filters["type"].lower()
-        if t in {"application", "applications", "app", "apps"} and rec.type != "application":
-            return False
-        if t in {"infrastructure", "platform", "platforms", "server", "servers"} and rec.type != "infrastructure":
+        if t in {"application", "applications", "app", "apps"}:
+            if rec.type != "application":
+                return False
+        elif t in {"infrastructure", "platform", "platforms", "server", "servers"}:
+            if rec.type != "infrastructure":
+                return False
+        elif fold(t).rstrip("s") not in {fold(rec.raw_type).rstrip("s"), fold(rec.type).rstrip("s"), fold(rec.type_label()).rstrip("s"), fold(rec.kind or "").rstrip("s")}:
             return False
     if "owner" in filters and filters["owner"].lower() in {"none", "no", "missing"} and (rec.owner_team or rec.owner_person):
         return False
@@ -249,7 +258,7 @@ def row(f: Facts) -> dict:
     return {
         **f.rec.summary(),
         "vendors": f.vendors,
-        "hosting": f.hosting or None,
+        "hosting": hosting_label(f.hosting) if f.hosting else None,
         "tenants": sorted(set(f.tenants)),
         "providers": sorted({provider_label(p) for p in f.providers}),
         "regions": sorted({region_label(k) for k in f.regions}),

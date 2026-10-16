@@ -95,21 +95,21 @@ Answer rules:
 - Gaps: missing fields. Zero calls edges: no integrations are recorded, so this may be understated. No relationships: no relationships are recorded.
 - fix_actions only when the verdict is inferred. field is "criticality" or "owner". suggested_value is the inferred value, such as "high". record_id must be one of the citations. Do not claim the value was saved.
 
-When you are finished requesting lookups, return ONLY a JSON object:
+When you are ready, return ONLY a JSON object (also include headline, item_ids, and yes_no for a yes/no question):
 {
   "answer_markdown": "one-line verdict",
   "intent": "importance",
   "verdict": {"text": "Likely high", "inferred": true, "basis": ["4 direct dependents"]},
-  "evidence": [{"text": "short fact", "citation_ids": ["id from a lookup"]}],
+  "evidence": [{"text": "short fact", "citation_ids": ["id from the workspace"]}],
   "fix_actions": [{"record_id": "id from a citation", "field": "criticality", "suggested_value": "high"}],
-  "citations": [{"n": 1, "record_id": "id from a lookup", "relationship": "short phrase"}],
+  "citations": [{"n": 1, "record_id": "id from the workspace", "relationship": "short phrase"}],
   "gaps": [{"record_id": "id", "field": "criticality", "message": "short sentence"}],
   "follow_ups": ["question", "question", "question"],
   "unsupported": false
 }
 Every evidence citation id must appear in citations. An inferred verdict must have evidence. A fix action record_id must appear in citations.
-Every [n] must have a citation, and every citation id must be an id a lookup returned.
-Every number in the answer must appear in a lookup result.
+Every [n] must have a citation, and every citation id must be an id from the workspace or a lookup.
+Every number in the answer must come from the workspace or a lookup result.
 `;
 
 export function answerStrategyArtifact(): { thresholds: typeof criticalityThresholds; strategyPrompt: string } {

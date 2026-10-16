@@ -1227,6 +1227,20 @@ export const dataApi = {
 
 // ─── AI ──────────────────────────────────────────────────────────────────────
 
+export type AskItem = {
+  id: string;
+  name: string;
+  type: string;
+  type_label: string;
+  vendor: string;
+  product: string;
+  owner_team: string;
+  owner_person: string;
+  annual_cost: number | null;
+  hosting: string;
+  renewal_date: string;
+};
+
 export type AskModelPayload = {
   source: "llm" | "fallback";
   fallback_reason: string | null;
@@ -1252,6 +1266,9 @@ export type AskModelPayload = {
   /** Yes/no questions: the model's yes or no (the card leads with it). */
   yes_no?: "yes" | "no";
   headline?: string;
+  /** Every item the AI's answer is about, and those items as real data (labels only). */
+  item_ids?: string[];
+  items?: AskItem[];
   /** What the server actually did, built from the lookup results (newer APIs only). */
   steps?: AskStep[];
   /** Vendor answers: every named vendor (same definition as the Ask header), built by the server. */

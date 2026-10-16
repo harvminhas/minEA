@@ -210,7 +210,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     // Chip edits and suggestion pills are structured filters run here on the catalogue: no AI, no quota.
     if (!edited || edited.question !== question) return baseAnswer;
     const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return recordsAnswer({ ...(baseAnswer.records ?? { terms: [], source: "quick" as const }), filters: edited.filters, headline: undefined }, facts, today);
+    return recordsAnswer({ ...(baseAnswer.records ?? { terms: [], source: "quick" as const }), filters: edited.filters, headline: undefined, ids: undefined, items: undefined }, facts, today);
   }, [baseAnswer, edited, question, facts]);
   // Why the AI's answer isn't shown, when it isn't: unavailable (no key / error / timeout) or the
   // organisation's monthly allowance is used up. Quick answers keep working in both cases.
@@ -1180,6 +1180,7 @@ function richRowHref(basePath: string, kind: string, target: { recordId: string 
 function recordHref(basePath: string, row: { id: string; kind: string; object?: { type?: string } }): string {
   if (row.object?.type === "agent") return modelItemPath(basePath, "agents", row.id);
   if (row.object?.type === "ai_model") return modelItemPath(basePath, "ai-models", row.id);
+  if (row.object?.type === "tool") return modelItemPath(basePath, "infrastructure", row.id);
   return modelItemPath(basePath, row.kind === "application" ? "applications" : row.kind === "platform" ? "platforms" : "servers", row.id);
 }
 

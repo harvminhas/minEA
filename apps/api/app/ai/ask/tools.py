@@ -637,10 +637,10 @@ TOOLS: list[AskTool] = [
     AskTool(
         name="filter_records",
         description=(
-            "List applications and infrastructure matching filters (all optional, combined with AND). Use it for any "
+            "List items of every kind (applications, infrastructure, tools, flows, APIs, agents, ...) matching filters (all optional, combined with AND). type narrows to one kind. Use it for any "
             "'which/what … do we have' question naming a vendor, owner, hosting, cloud provider, tenant, region, server, "
             "AI, renewal window, cost range, lifecycle or criticality, and for compound questions. "
-            "vendor matches the vendor field, the catalogue vendor, cost-line vendors and a tenant's provider (Azure tenant -> Microsoft). "
+            "vendor is one resolved vendor name, matched exactly (aliases and stored codes resolve to it); it covers the vendor field, the catalogue vendor, cost-line vendors and a tenant's provider (Azure tenant -> Microsoft). "
             "hosting is saas, own_cloud (our cloud), on_premise (our server) or desktop. owner 'none' = no owner. "
             "ai_on true = an AI feature is turned on. Matching is loose (case, spaces). "
             "ops sets an operator per text filter (is, is_not, is_empty, is_not_empty, contains, any_of). "

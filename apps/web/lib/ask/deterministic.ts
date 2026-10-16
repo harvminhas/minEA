@@ -1,6 +1,6 @@
 import { chartFromPayload, renewalBlocks, tableFromPayload, vendorBlocks, type AskChart, type AskTable } from "@/lib/ask/rich";
 import type { MinEAObject, Relationship } from "@minea/types";
-import type { AskModelPayload, AskStep } from "@/lib/api-client";
+import type { AskItem, AskModelPayload, AskStep } from "@/lib/api-client";
 import {
   choiceLabel,
   classifyIntent,
@@ -117,6 +117,9 @@ export type AskRecords = {
   yesNo?: boolean;
   /** The AI's own one-line headline (numbers checked server-side). Dropped once a chip is edited. */
   headline?: string;
+  /** The AI's answer names exactly these items (context path); the table shows them, not a filter. */
+  ids?: string[];
+  items?: AskItem[];
 };
 
 export type AskGraph = {
@@ -466,11 +469,19 @@ export function recordsAnswer(records: AskRecords, facts: RecordFacts[], today: 
 }
 
 /** The AI's filter_records filters as an answer the chips can edit (null when it used none). */
-export function recordsFromPayload(payload: { filters?: Record<string, unknown>; yes_no?: string; headline?: string } | null | undefined): AskRecords | null {
+export function recordsFromPayload(payload: { filters?: Record<string, unknown>; yes_no?: string; headline?: string; item_ids?: string[]; items?: AskItem[] } | null | undefined): AskRecords | null {
   const filters = filtersFromPayload(payload?.filters);
-  if (!Object.keys(filters).length) return null;
+  const ids = Array.isArray(payload?.item_ids) ? payload!.item_ids!.map(String) : null;
+  if (!Object.keys(filters).length && !ids) return null;
   const headline = typeof payload?.headline === "string" ? payload.headline.trim() : "";
-  return { filters, terms: [], source: "ai", ...(payload?.yes_no === "yes" || payload?.yes_no === "no" ? { yesNo: true } : {}), ...(headline ? { headline } : {}) };
+  return {
+    filters,
+    terms: [],
+    source: "ai",
+    ...(payload?.yes_no === "yes" || payload?.yes_no === "no" ? { yesNo: true } : {}),
+    ...(headline ? { headline } : {}),
+    ...(ids ? { ids, items: payload?.items ?? [] } : {}),
+  };
 }
 
 /** When the AI can't answer (unavailable, error, over the monthly allowance): the items whose name,

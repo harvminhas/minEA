@@ -195,7 +195,7 @@ def test_llm_answer_keeps_contract_and_adds_real_steps(engine):
     assert result["citations"][0]["record_id"] == "a0"
     labels = [s["label"] for s in result["steps"]]
     assert labels == [
-        "Read your estate: 16 Applications and 1 On-prem server",
+        "Read your estate: 16 Applications and 1 On-prem server (all of it sent to the AI)",
         "Found 14 with renewal dates; 6 Applications renew in the next 90 days, $210,000 a year",
         "Checked every name and number against the lookups",
     ]

@@ -8,6 +8,7 @@
  * provider list in cloud-regions.json, only those in use) and regions on tenant links.
  */
 import type { MinEAObject } from "@minea/types";
+import { vendorKey } from "@/lib/ask/labels";
 import { displayVendor, type CatalogRow } from "@/lib/model-catalog";
 import { PROVIDERS, regionByKey, tenantProvider, type CustomRegion } from "@/lib/hosting/cloud";
 import { exactCatalogTool, TOOL_CATALOG } from "@/lib/setup/match-tools";
@@ -204,6 +205,11 @@ function valuesFor(facts: RecordFacts, key: FilterKey, custom: CustomRegion[]): 
 }
 
 function isMatch(key: FilterKey, wanted: string, values: string[]): boolean {
+  if (key === "vendor") {
+    // One vendor identity, exact (mirrors _is in record_filters.py): "sfdc" = "Salesforce", "Sales" matches nothing.
+    const want = vendorKey(wanted);
+    return Boolean(want) && values.some((value) => value && vendorKey(value) === want);
+  }
   if (key === "hosting") return Boolean(values[0]) && values[0] === hostingKey(wanted);
   if (key === "lifecycle" || key === "criticality") return values.some((v) => v && fold(v) === fold(wanted));
   if (key === "name") return fold(values[0] ?? "").includes(fold(wanted));
@@ -419,4 +425,52 @@ function uniq(values: string[]): string[] {
     seen.add(key);
     return true;
   });
+}
+
+/** The AI's item ids as facts, in the AI's order: catalogue facts when the item is in the catalogue,
+ * else a row built from the server's item (tools, flows, APIs... aren't catalogue rows). Real data only. */
+export function factsForIds(ids: string[], items: AskItemLike[], all: RecordFacts[]): RecordFacts[] {
+  const known = new Map(all.map((facts) => [facts.row.id, facts]));
+  const served = new Map(items.map((item) => [item.id, item]));
+  const out: RecordFacts[] = [];
+  for (const id of ids) {
+    const facts = known.get(id);
+    if (facts) out.push(facts);
+    else if (served.has(id)) out.push(factsFromItem(served.get(id)!));
+  }
+  return out;
+}
+
+export type AskItemLike = { id: string; name: string; type: string; type_label: string; vendor: string; product: string; owner_team: string; owner_person: string; annual_cost: number | null; hosting: string; renewal_date: string };
+
+function factsFromItem(item: AskItemLike): RecordFacts {
+  const kind = item.type === "application" || item.type === "solution" || item.type === "technical_capability" ? "application" : item.type === "cloud_service" ? "platform" : "runtime";
+  const row = {
+    id: item.id,
+    object: { id: item.id, type: item.type, name: item.name, properties: {} },
+    kind,
+    name: item.name,
+    typeLabel: item.type_label,
+    subtitle: "",
+    ownerTeam: item.owner_team,
+    ownerPerson: item.owner_person,
+    vendor: item.vendor,
+    vendorKey: item.vendor.toLowerCase(),
+    annualCostLabel: "",
+    annualCostNumber: item.annual_cost,
+    renewalLabel: item.renewal_date,
+    renewalDate: item.renewal_date ? new Date(item.renewal_date) : null,
+    renewalSoon: false,
+    lifecycle: "",
+    lifecycleLabel: "",
+    criticality: "",
+    criticalityLabel: "",
+    costModelLabel: "",
+    hostingLabel: item.hosting,
+    slaLabel: "",
+    suggestion: null,
+    missing: {},
+    missingCount: 0,
+  } as unknown as CatalogRow;
+  return { row, vendors: item.vendor ? item.vendor.split(/,\s*/) : [], hosting: "", tenants: [], providers: [], regions: [], servers: [], aiOn: false };
 }

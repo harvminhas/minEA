@@ -19,8 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.ask.ai_landscape import is_ai_question
 from app.ai.ask.graph import load_graph
+from app.ai.ask.context import build_context, log_size
 from app.ai.ask.grounding import graph_numbers, harvest, is_grounded, ungrounded
-from app.ai.ask.names import hint_prompt, name_hints
 from app.ai.ask.steps import checking_step, estate_step, same_step, step, tool_step
 from app.ai.ask.tools import ToolBag, run_tool, tool_specs
 from app.ai.gemini_client import build_gemini_tools, get_client, is_configured, model_name
@@ -63,10 +63,13 @@ def _load_strategy() -> dict:
 _STRATEGY = _load_strategy()
 
 SYSTEM = """You are BuboMap Ask. You answer questions about ONE company's IT estate.
-You know nothing except what the lookups return in this conversation.
+The user message contains the WHOLE workspace (every item of every kind, its fields, relationships, teams and people), then the question.
+Answer from that workspace. You know nothing else about this company.
 Never invent applications, capabilities, infrastructure, names, numbers, dates, owners, vendors, or relationships.
-Always request a lookup before answering. Use search_records to turn names into ids.
-Use filter_records to list items by vendor (including catalogue vendor and a tenant's cloud provider), owner team or person, no owner, hosting (SaaS, our cloud, our server, people's computers), cloud provider, tenant, region, server, AI turned on, renewal window, cost range, lifecycle or criticality, and for questions that combine several of these. "What Microsoft products do we own?" is filter_records with vendor Microsoft. "Do we use Adobe?" is filter_records with vendor Adobe (catalog_vendor counts), then with name Adobe if nothing matched; answer yes or no.
+Vendors are already resolved to one name each; "product" names the product a vendor sells (MuleSoft is a Salesforce product). Spelling in the question may be off; match it to the workspace names.
+Return "item_ids": the id of every item your answer is about (the screen builds its table from these, with real data). For a "no" answer, item_ids is empty.
+Lookups are optional helpers: use them when they save you counting or tracing (aggregate for totals and shares, impact_of for what depends on what, filter_records for exact filters). Use search_records to turn names into ids if needed.
+filter_records filters every kind of item by vendor (one resolved vendor name, exact match), owner, hosting, cloud provider, tenant, region, server, AI turned on, renewal window, cost range, lifecycle, criticality or name, with an optional operator per text filter.
 Use impact_of for what breaks, what depends on an item, or how important an item is.
 Use aggregate for any count, total, share, renewal window, or list of vendors. A vendor list is aggregate with group_by vendor, and only when the question asks which vendors are named or who is paid. Vendors with no annual cost still count. Do not do arithmetic.
 Use find_gaps when the question asks what is missing: without a vendor, no owner, no cost, no renewal, no criticality, or no lifecycle. Pass field and scope. That is not a vendor list. Do not do arithmetic.
@@ -226,6 +229,10 @@ def _validate(answer: dict, bag: ToolBag, question: str) -> str | None:
         if isinstance(gap, dict) and str(gap.get("record_id")) not in bag.seen_ids:
             return "unknown_gap"
     allowed = set(bag.numbers)
+    picked = [bag.graph.get(str(i)) for i in (answer.get("item_ids") or []) if isinstance(answer.get("item_ids"), list)]
+    picked = [r for r in picked if r is not None]
+    if picked:  # "3 items", "2 Applications and 1 Tool", their total cost
+        harvest([{"kind": r.type_label(), "vendor": r.vendor, "owner": r.owner_team, "annual_cost": r.annual} for r in picked], allowed)
     for token in re.findall(r"\d[\d,]*(?:\.\d+)?", question):
         allowed.add(_normalize_number(token))
     body = re.sub(r"\[\d+\]", "", markdown)
@@ -364,7 +371,7 @@ def conversation_prompt(question: str, context: list[dict], graph) -> tuple[str,
     turns = [turn for turn in context if isinstance(turn, dict) and str(turn.get("question") or "").strip()][-MAX_CONTEXT_TURNS:]
     if not turns:
         return question, []
-    lines = ["Earlier in this conversation (context only; use the lookups for every name and number):"]
+    lines = ["Earlier in this conversation (context only; the workspace above is the source of every name and number):"]
     earlier = []
     for index, turn in enumerate(turns, start=1):
         recs = [graph.get(str(rid)) for rid in (turn.get("item_ids") or [])[:20]]
@@ -381,6 +388,7 @@ def conversation_prompt(question: str, context: list[dict], graph) -> tuple[str,
     return "\n".join(lines), earlier
 
 
+_UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
 _SECRETISH = re.compile(r"(AIza[0-9A-Za-z_\-]{10,}|key=[^&\s]+|sk_[a-z]+_[0-9A-Za-z]+|Bearer\s+\S+)")
 
 
@@ -457,22 +465,20 @@ async def run_ask(
     # closed by the time a streaming body runs), so it can pass it in.
     if graph is None:
         graph = await load_graph(db, ctx.workspace.id, ctx.org_id)
-    yield {"event": "step", "data": estate_step(graph)}
+    estate = estate_step(graph)
     bag = ToolBag(graph=graph, seen_ids=set(), numbers=set())
     graph_numbers(graph, bag.numbers)  # the counts the estate step shows
     harvest([turn for turn in (context or []) if isinstance(turn, dict)], bag.numbers)  # earlier answers
     tools_used: list[str] = []
     ai_question = is_ai_question(question)
     prompt, earlier = conversation_prompt(question, context or [], graph)
-    # Hints only: workspace names that match words in the question (typos, first names). The model
-    # still reads the question itself and picks the lookups.
-    hints = name_hints(question, graph)
-    hint_line = hint_prompt(hints)
-    if hint_line:
-        prompt = f"{prompt}\n\n{hint_line}"
-        corrected_names = [h for i, h in enumerate(hints) if h.how != "exact" and all(o.text != h.text for o in hints[:i])]
-        if corrected_names:
-            yield {"event": "step", "data": step("names", "Matched names: " + ", ".join(f"{h.text} → {h.name}" for h in corrected_names[:4]))}
+    # The whole workspace goes with every question (SMB scale; no threshold yet, size logged).
+    workspace = build_context(graph)
+    log_size(workspace, len(graph.records))
+    prompt = f"{workspace}\n\n{prompt}"
+    bag.seen_ids.update(graph.records)  # every item is in the context, so any can be cited
+    harvest(_UUID.sub(" ", workspace), bag.numbers)  # numbers the context shows (costs, licences, team counts)
+    yield {"event": "step", "data": {**estate, "label": f"{estate['label']} (all of it sent to the AI)"}}
     for rec in earlier:
         bag.note_record(rec)  # items from earlier turns, re-checked against this workspace, may be named again
     contents: list[types.Content] = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
@@ -671,6 +677,35 @@ def summary_of(text: str) -> str:
     return (match.group(1) if match else plain)[:240]
 
 
+def _items_payload(answer: dict, bag: ToolBag) -> dict:
+    """The items the AI's answer is about, as real data (labels only). Unknown ids are dropped."""
+    raw = answer.get("item_ids")
+    if not isinstance(raw, list):
+        return {}
+    from app.ai.ask.record_filters import build_facts, row as facts_row
+
+    facts = {f.rec.id: f for f in build_facts(bag.graph)}
+    ids = list(dict.fromkeys(str(i) for i in raw if str(i) in facts))
+    return {"item_ids": ids, "items": [_item(facts_row(facts[i])) for i in ids]}
+
+
+def _item(row: dict) -> dict:
+    vendor = ", ".join(row.get("vendors") or []) or row.get("catalog_vendor") or ""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "type": row.get("raw_type") or row.get("type") or "",
+        "type_label": row["type_label"],
+        "vendor": vendor,
+        "product": row.get("product") or "",
+        "owner_team": row.get("owner_team") or "",
+        "owner_person": row.get("owner_person") or "",
+        "annual_cost": row.get("annual_cost"),
+        "hosting": row.get("hosting") or "",
+        "renewal_date": row.get("renewal_date") or "",
+    }
+
+
 def _present(answer: dict, bag: ToolBag, tools_used: list[str], ai_question: bool = True) -> dict:
     citations = []
     for item in answer.get("citations") or []:
@@ -736,6 +771,7 @@ def _present(answer: dict, bag: ToolBag, tools_used: list[str], ai_question: boo
         "follow_ups": follow,
         "tools_used": tools_used,
         "unsupported": bool(answer.get("unsupported")),
+        **_items_payload(answer, bag),
         **({"yes_no": str(answer.get("yes_no")).lower()} if str(answer.get("yes_no") or "").lower() in {"yes", "no"} else {}),
         # filter_records' filters, shown as editable chips (the browser re-runs them on the catalogue).
         **({"filters": bag.filters} if bag.filters else {}),

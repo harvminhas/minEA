@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight, X } from "lucide-react";
 import type { AskAnswer } from "@/lib/ask/deterministic";
-import { chipOptions, chipValue, FILTER_KEYS, FILTER_LABEL, filterFacts, filterLine, OP_KEYS, OP_LABEL, OPS, opOf, regionName, HOSTING, withFilter, type FilterKey, type FilterOp, type RecordFacts, type RecordFilters } from "@/lib/ask/record-filter";
+import { chipOptions, chipValue, factsForIds, FILTER_KEYS, FILTER_LABEL, filterFacts, filterLine, OP_KEYS, OP_LABEL, OPS, opOf, regionName, HOSTING, withFilter, type FilterKey, type FilterOp, type RecordFacts, type RecordFilters } from "@/lib/ask/record-filter";
 import { moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 
 /** Filters a person can add from the "+ Add filter" menu (each re-runs locally, no AI). */
@@ -101,7 +101,8 @@ export function AskRecordsBlock({
 }) {
   const records = answer.records!;
   const filters = records.filters;
-  const kept = useMemo(() => filterFacts(facts, filters), [facts, filters]);
+  // Context answers name their items (ids); filter answers and chip edits run the filters here.
+  const kept = useMemo(() => (records.ids ? factsForIds(records.ids, records.items ?? [], facts) : filterFacts(facts, filters)), [facts, filters, records.ids, records.items]);
   const keys = FILTER_KEYS.filter((key) => filters[key] !== undefined);
   const set = (key: FilterKey, value: unknown, op: FilterOp = opOf(filters, key)) => onFilters(withFilter(filters, key, value, op));
   const setOp = (key: FilterKey, op: FilterOp) => {
@@ -262,12 +263,21 @@ export function AskRecordsBlock({
               ))} in the question.
             </li>
           )}
-          {records.source === "ai" && <li>The AI looked this up with filters, and every item was checked against your catalogue.</li>}
-          <li>
-            Filters: {keys.length ? keys.map((key) => filterLine(key, filters)).join("; ") : "none"}.
-            {filters.vendor ? " Vendor matches the vendor field, the catalogue vendor, cost-line vendors and a tenant's cloud provider." : ""}
-          </li>
-          <li>Looked through {facts.length} items and kept {kept.length}. Every name and number above comes from your catalogue{records.source === "quick" ? ", with no AI used" : ""}. Changing a filter re-runs it here without the AI.</li>
+          {records.ids ? (
+            <>
+              <li>The AI read your whole workspace and named {kept.length === 1 ? "this item" : `these ${kept.length} items`}.</li>
+              <li>Each row is shown from your data, not from the AI's words. Adding a filter re-runs it here without the AI.</li>
+            </>
+          ) : (
+            <>
+              {records.source === "ai" && <li>The AI looked this up with filters, and every item was checked against your catalogue.</li>}
+              <li>
+                Filters: {keys.length ? keys.map((key) => filterLine(key, filters)).join("; ") : "none"}.
+                {filters.vendor ? " Vendor matches the vendor field, the catalogue vendor, cost-line vendors and a tenant's cloud provider." : ""}
+              </li>
+              <li>Looked through {facts.length} items and kept {kept.length}. Every name and number above comes from your catalogue{records.source === "quick" ? ", with no AI used" : ""}. Changing a filter re-runs it here without the AI.</li>
+            </>
+          )}
         </ol>
       </details>
 

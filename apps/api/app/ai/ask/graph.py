@@ -85,6 +85,8 @@ class Rec:
     # No vendor recorded: the tool catalogue's vendor for this name (Adobe Photoshop -> Adobe). Used for
     # matching (filter_records, aggregate filters, search_records); the vendor field and gaps don't change.
     catalog_vendor: str | None = None
+    # A product named by a vendor code ("salesforce_mulesoft" -> MuleSoft), kept apart from the vendor.
+    product: str | None = None
 
     def type_label(self) -> str:
         if self.raw_type == "technical_capability":
@@ -101,6 +103,7 @@ class Rec:
         return {
             "id": self.id,
             "type": self.type,
+            "raw_type": self.raw_type,
             "type_label": self.type_label(),
             "name": self.name,
             "kind": self.kind or None,
@@ -108,6 +111,7 @@ class Rec:
             "owner_person": self.owner_person,
             "vendor": self.vendor,
             **({"catalog_vendor": self.catalog_vendor} if self.catalog_vendor else {}),
+            **({"product": self.product} if self.product else {}),
             "annual_cost": self.annual,
             "cost_note": self.cost_note,
             "renewal_date": self.renewal,
@@ -162,19 +166,33 @@ def _kind(obj: MinEAObject, props: dict) -> str:
 
 
 def _vendor_names(props: dict) -> list[str]:
-    """Object vendor, then any vendor named on a cost line. Hosting words are not vendors."""
+    """Object vendor, then any vendor named on a cost line, each resolved to one display name
+    (form codes, aliases, catalogue casing; see labels.resolve_vendor). Hosting words are not vendors."""
+    return _vendors_and_product(props)[0]
+
+
+def _vendors_and_product(props: dict) -> tuple[list[str], str | None]:
+    from app.ai.ask.labels import resolve_vendor
+
     found: list[str] = []
     seen: set[str] = set()
+    product: str | None = None
 
     def add(raw: object) -> None:
+        nonlocal product
         text = str(raw or "").strip()
         if not text or text in HOSTING_NOT_VENDOR:
             return
-        key = text.lower()
+        vendor, prod = resolve_vendor(text)
+        if prod and not product:
+            product = prod
+        if not vendor:
+            return
+        key = vendor.lower()
         if key in seen:
             return
         seen.add(key)
-        found.append(text)
+        found.append(vendor)
 
     add(props.get("vendor"))
     lines = props.get("cost_lines")
@@ -182,7 +200,7 @@ def _vendor_names(props: dict) -> list[str]:
         for line in lines:
             if isinstance(line, dict) and line.get("type") != "internal_estimate":
                 add(line.get("vendor"))
-    return found
+    return found, product
 
 
 def _record(obj: MinEAObject, team_names: dict[str, str]) -> Rec | None:
@@ -200,7 +218,7 @@ def _record(obj: MinEAObject, team_names: dict[str, str]) -> Rec | None:
     else:
         record_type = "other"
 
-    vendor_names = _vendor_names(props)
+    vendor_names, product = _vendors_and_product(props)
     vendor = vendor_names[0] if vendor_names else None
     annual = object_annual_dollars(props)
     cost_model = str(props.get("cost_model") or "")
@@ -253,6 +271,7 @@ def _record(obj: MinEAObject, team_names: dict[str, str]) -> Rec | None:
         criticality=criticality,
         blank=blank,
         description=description,
+        product=product,
     )
 
 

@@ -1,0 +1,62 @@
+{
+  "_comment": "Ask: one vendor identity and plain labels for stored codes. The web has a copy at apps/web/lib/ask/ask-labels.json (parity tests on both sides). Codes from form selects (integration infra Vendor, platform Vendor) resolve here; a product is kept apart from its vendor.",
+  "vendor_codes": {
+    "salesforce_mulesoft": {"vendor": "Salesforce", "product": "MuleSoft"},
+    "confluent": {"vendor": "Confluent"},
+    "google": {"vendor": "Google"},
+    "microsoft": {"vendor": "Microsoft"},
+    "salesforce": {"vendor": "Salesforce"},
+    "servicenow": {"vendor": "ServiceNow"},
+    "sap": {"vendor": "SAP"},
+    "oracle": {"vendor": "Oracle"},
+    "amazon": {"vendor": "Amazon"},
+    "other": null
+  },
+  "vendor_aliases": {
+    "msft": "Microsoft",
+    "ms": "Microsoft",
+    "sfdc": "Salesforce",
+    "aws": "Amazon",
+    "amazon web services": "Amazon",
+    "gcp": "Google",
+    "google cloud": "Google",
+    "alphabet": "Google"
+  },
+  "not_vendor": ["on_premise", "on_prem", "self_hosted", "public_cloud", "private_cloud", "hybrid", "saas", "paas", "cloud", "other", "n/a", "none", "unknown"],
+  "hosting": {
+    "saas": "SaaS",
+    "paas": "PaaS",
+    "own_cloud": "Our cloud",
+    "public_cloud": "Our cloud",
+    "private_cloud": "Our cloud",
+    "on_premise": "Our server",
+    "on_prem": "Our server",
+    "self_hosted": "Self-hosted",
+    "hybrid": "Hybrid",
+    "desktop": "On people's computers"
+  },
+  "codes": {
+    "ipaas": "iPaaS",
+    "etl_elt": "ETL / ELT",
+    "mcp_server": "MCP server",
+    "saas_suite": "SaaS suite",
+    "cloud_account": "Cloud account",
+    "physical_server": "Physical server",
+    "virtual_machine": "Virtual machine",
+    "on_prem": "On-prem",
+    "tier1": "Critical",
+    "end_of_life": "End of life",
+    "m365": "Microsoft 365",
+    "google_workspace": "Google Workspace",
+    "azure": "Azure",
+    "aws": "AWS",
+    "gcp": "Google Cloud",
+    "low_code": "Low-code / no-code",
+    "itsm": "ITSM",
+    "crm": "CRM",
+    "erp": "ERP",
+    "bpm": "BPM / workflow",
+    "ai_platform": "AI / agent platform",
+    "data_platform": "Data platform"
+  }
+}

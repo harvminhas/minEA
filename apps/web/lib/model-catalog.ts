@@ -1,3 +1,4 @@
+import { resolveVendor } from "@/lib/ask/labels";
 import type { MinEAObject } from "@minea/types";
 import { annualCost, vendorAmounts } from "@/lib/cost/service";
 import { PLATFORM_VENDOR_LABEL } from "@/lib/platform-utils";
@@ -111,7 +112,8 @@ function vendorSuggestion(name: string): string | null {
 export function displayVendor(raw?: string | null): string {
   const trimmed = raw?.trim() ?? "";
   if (!trimmed || HOSTING_NOT_VENDOR.has(trimmed)) return "";
-  return PLATFORM_VENDOR_LABEL[trimmed] ?? trimmed;
+  // One vendor identity (lib/ask/labels): form codes ("salesforce_mulesoft", "microsoft"), aliases, catalogue casing.
+  return resolveVendor(trimmed).vendor ?? "";
 }
 
 type Props = Record<string, unknown>;

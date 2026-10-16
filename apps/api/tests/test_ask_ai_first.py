@@ -59,8 +59,9 @@ def test_hints_reach_the_prompt_and_yes_no_reaches_the_payload(monkeypatch):
         return [e async for e in loop.run_ask(None, ctx, "do we use Adboe?", graph=_graph())]
 
     events = asyncio.run(collect())
-    assert "“adboe” → vendor “Adobe” (spelling corrected)" in seen[0]
-    assert any(e["event"] == "step" and e["data"]["label"].startswith("Matched names: adboe → Adobe") for e in events)
+    # No name-hint injection: the whole workspace goes with the question, labels only.
+    assert "Workspace names matching" not in seen[0] and "Adobe Photoshop | Application | vendor Adobe (from the tool catalogue)" in seen[0]
+    assert seen[0].rstrip().endswith("do we use Adboe?")
     final = events[-1]["data"]
     assert final["source"] == "llm" and final["yes_no"] == "yes" and final["filters"] == {"vendor": "Adobe"}
 

@@ -82,7 +82,7 @@ def test_filter_records_is_offered_to_the_model():
     from app.ai.ask.tools import tool_specs
 
     assert "filter_records" in [t["name"] for t in tool_specs(include_ai=False)]
-    assert "filter_records with vendor Microsoft" in SYSTEM
+    assert "filter_records filters every kind of item by vendor" in SYSTEM
 
 
 def test_month_is_eastern_and_limits_come_from_plans_json():
