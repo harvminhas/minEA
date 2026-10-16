@@ -105,3 +105,20 @@ test("compact summary: one line with kinds, cost and gaps; chips + filters only 
   assert.match(open, /ask-filter-chips/);
   assert.match(open, /Hide details/);
 });
+
+test("item-card answers: headline, summary line, table; the AI's prose is folded under Show summary", () => {
+  const ai = answerFromModel(payload({ headline: "Microsoft items", answer_text: "x", filters: { vendor: "Microsoft" } }), ROWS, "/w", "q")!;
+  const props = { answer: ai, facts: FACTS, onFilters: () => {}, onOpen: () => {}, rowHref: (row: CatalogRow) => `/w/r/${row.id}`, prose: <ul><li>4 Applications from Microsoft</li></ul> };
+  const closed = renderToStaticMarkup(<AskRecordsBlock {...props} />);
+  const at = (html: string, id: string) => html.indexOf(`data-testid="${id}"`);
+  assert.ok(at(closed, "ask-lean-headline") < at(closed, "ask-summary"));
+  assert.ok(at(closed, "ask-summary") < at(closed, "ask-prose-toggle"));
+  assert.ok(at(closed, "ask-prose-toggle") < at(closed, "ask-records-table"));
+  assert.match(closed, /Show summary/);
+  assert.doesNotMatch(closed, /4 Applications from Microsoft/);
+  const open = renderToStaticMarkup(<AskRecordsBlock {...props} defaultProse />);
+  assert.match(open, /Hide summary/);
+  assert.ok(at(open, "ask-prose-body") < at(open, "ask-records-table"));
+  assert.match(open, /4 Applications from Microsoft/);
+  assert.doesNotMatch(renderToStaticMarkup(<AskRecordsBlock {...props} prose={null} />), /ask-prose/);
+});

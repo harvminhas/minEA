@@ -458,6 +458,21 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
       : null;
   const fallbackItems = fallbackLean ? answer.citations.map((item) => item.row) : [];
   const shownLean = answer.lean ?? fallbackLean;
+  // The AI's bullets/context. With the item card they fold under "Show summary" below the summary line.
+  const proseBlock = (answer.evidence?.length || answer.context) ? (
+    <>
+              {answer.evidence && answer.evidence.length > 0 && (
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-[14px] text-[#3c4254]">
+                    {answer.evidence.map((item, index) => (
+                    <li key={`${index}-${item.text}`}>
+                      <LinkedNames text={item.text} nodes={impact.nodes} onOpen={setPreviewId} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {answer.context && <p className="mt-2 text-[13px] text-[#6b7289]">{answer.context}</p>}
+    </>
+  ) : null;
   const leanCard = !thinking && answer.handler !== "clarify" && Boolean(answer.records || shownLean);
   const smallActions = (
     <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[#f3f4f8] pt-2.5 text-[12px] text-[#8b90a0]" data-testid="ask-small-actions">
@@ -564,16 +579,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 <span className="ml-2 inline-flex rounded bg-[#fff7ed] px-1.5 py-0.5 align-middle text-[11px] font-semibold text-[#c2410c]">Inferred</span>
               )}
             </p>}
-            {answer.evidence && answer.evidence.length > 0 && (
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-[14px] text-[#3c4254]">
-                {answer.evidence.map((item, index) => (
-                  <li key={`${index}-${item.text}`}>
-                    <LinkedNames text={item.text} nodes={impact.nodes} onOpen={setPreviewId} />
-                  </li>
-                ))}
-              </ul>
-            )}
-            {answer.context && <p className="mt-2 text-[13px] text-[#6b7289]">{answer.context}</p>}
+            {!answer.records && proseBlock}
             {answer.link && (
               <Link href={answer.link.href} className="mt-2 inline-block text-[13px] font-medium text-[#5b4ce6]">{answer.link.label} →</Link>
             )}
@@ -606,6 +612,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 answer={answer}
                 yesNo={Boolean(answer.records.yesNo)}
                 animate={Boolean(freshAt) && !edited}
+                prose={proseBlock}
                 extraSummary={answer.table?.kind === "vendors" ? [`${answer.table.rows.length} ${answer.table.rows.length === 1 ? "vendor" : "vendors"}`] : undefined}
                 footerExtra={smallActions}
                 facts={facts}

@@ -66,14 +66,20 @@ export function buildingView(input: { steps: AskStep[]; streaming: boolean; elap
 export function AskOwl({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden data-testid="ask-owl">
-      <path d="M4 6l3 2h10l3-2v9a8 8 0 01-16 0z" fill="#5b4ce6" />
+      {/* Owl, not cat: short tufts, egg body, pale facial discs, wing edges and a hooked beak. */}
+      <path d="M6.2 6.4 5.6 2.8 9 5.2zM17.8 6.4l.6-3.6L15 5.2z" fill="#5b4ce6" />
+      <path d="M12 4c-4.6 0-7.6 3.3-7.6 8.2 0 5 3.3 9.3 7.6 9.3s7.6-4.3 7.6-9.3C19.6 7.3 16.6 4 12 4z" fill="#5b4ce6" />
+      <path d="M5 13.5c.6 3.4 2.4 6 4.6 7.2M19 13.5c-.6 3.4-2.4 6-4.6 7.2" stroke="#4436c4" strokeWidth="1.1" fill="none" strokeLinecap="round" />
+      <circle cx="9.1" cy="10.6" r="3.3" fill="#a59cf5" />
+      <circle cx="14.9" cy="10.6" r="3.3" fill="#a59cf5" />
       <g className="ask-owl-eyes">
-        <circle cx="9" cy="12" r="2.6" fill="#fff" />
-        <circle cx="15" cy="12" r="2.6" fill="#fff" />
-        <circle cx="9" cy="12" r="1.1" fill="#1c2230" />
-        <circle cx="15" cy="12" r="1.1" fill="#1c2230" />
+        <circle cx="9.1" cy="10.6" r="2.2" fill="#fff" />
+        <circle cx="14.9" cy="10.6" r="2.2" fill="#fff" />
+        <circle cx="9.1" cy="10.6" r="1.1" fill="#1c2230" />
+        <circle cx="14.9" cy="10.6" r="1.1" fill="#1c2230" />
       </g>
-      <path d="M11 15l1 1.4 1-1.4z" fill="#f5b544" />
+      <path d="M10.9 13h2.2L12 15.6z" fill="#f5b544" />
+      <path d="M10 17.6l.8.7.8-.7M12.4 17.6l.8.7.8-.7" stroke="#a59cf5" strokeWidth=".8" fill="none" strokeLinecap="round" />
     </svg>
   );
 }

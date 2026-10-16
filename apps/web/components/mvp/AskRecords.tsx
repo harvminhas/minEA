@@ -104,7 +104,12 @@ export function AskRecordsBlock({
   animate,
   extraSummary,
   defaultDetails,
+  prose,
+  defaultProse,
 }: {
+  /** The AI's prose/bullets: folded under "Show summary" (closed by default) so the card leads with the headline. */
+  prose?: React.ReactNode;
+  defaultProse?: boolean;
   /** Start with Details open (tests, and future "always expanded" preference). */
   defaultDetails?: boolean;
   /** Extra facts for the summary line, e.g. "5 vendors" from a vendor lookup. */
@@ -140,6 +145,7 @@ export function AskRecordsBlock({
   }
   const shown = all ? kept : kept.slice(0, LEAN_ROWS);
   const [details, setDetails] = useState(Boolean(defaultDetails));
+  const [proseOpen, setProseOpen] = useState(Boolean(defaultProse));
   const summaryParts = summaryLine(lean, kept.length, keys.length, extraSummary);
   const single = kept.length === 1 ? kept[0].row : null;
   const follow: { label: string; onClick?: () => void; href?: string }[] = single
@@ -153,7 +159,7 @@ export function AskRecordsBlock({
   const addable = ADDABLE.filter((key) => filters[key] === undefined && (key === "ai_on" || key === "owner" || key === "renewal_within_days" || chipOptions(key, facts).length > 0));
 
   return (
-    <div data-testid="ask-records">
+    <div data-testid="ask-records" className="[&:not(:first-child)]:mt-4">
       <h2 data-testid="ask-lean-headline" title={lean.title ?? undefined} className="truncate text-[17px] font-semibold leading-6 text-[#1c2230]">
         {lean.names.length ? (
           <>
@@ -189,6 +195,15 @@ export function AskRecordsBlock({
           {details ? "Hide details" : "Details"} <span aria-hidden>{details ? "▴" : "▾"}</span>
         </button>
       </div>
+      {prose && (
+        <div data-testid="ask-prose" className="mt-1.5">
+          <button type="button" data-testid="ask-prose-toggle" aria-expanded={proseOpen} onClick={() => setProseOpen(!proseOpen)} className="text-[12px] font-medium text-[#5b4ce6] hover:underline">
+            <span aria-hidden className={`mr-1 inline-block transition-transform ${proseOpen ? "rotate-90" : ""}`}>▸</span>
+            {proseOpen ? "Hide summary" : "Show summary"}
+          </button>
+          {proseOpen && <div data-testid="ask-prose-body" className="mt-1 [&>ul]:mt-1">{prose}</div>}
+        </div>
+      )}
       {details && (
         <div data-testid="ask-details" className="mt-2">
       {(lean.kinds.length > 0 || lean.gaps.length > 0 || lean.inferredVendor) && (
