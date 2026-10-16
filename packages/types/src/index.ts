@@ -1009,6 +1009,9 @@ export interface BillingStatus {
   has_billing_account?: boolean;
   /** Org owner/admin with a verified email. */
   can_manage_billing?: boolean;
+  /** Ask: AI questions used this calendar month (ET) and the monthly allowance. */
+  ai_questions_used?: number;
+  ai_questions_limit?: number | null;
 }
 
 export interface SoloCheckoutResponse {

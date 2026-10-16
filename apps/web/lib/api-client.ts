@@ -1257,6 +1257,10 @@ export type AskModelPayload = {
   table?: import("@/lib/ask/rich").RichPayload["table"];
   chart?: import("@/lib/ask/rich").RichPayload["chart"];
   vendor_table?: { vendor: string; annual_cost: number | null; share_pct: number | null; record_ids: string[]; names: string[] }[];
+  /** filter_records' filters (same keys as lib/ask/record-filter.ts), shown as editable chips. */
+  filters?: Record<string, string | number | boolean>;
+  /** fallback_reason "limit": the org's AI questions this month. */
+  quota?: { plan: string; used: number; limit: number; month: string };
 };
 
 /** One working step of an Ask answer, e.g. "6 Applications renew in the next 90 days, $210,000 a year". */

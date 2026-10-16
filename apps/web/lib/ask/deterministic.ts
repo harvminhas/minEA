@@ -19,6 +19,7 @@ import { modelItemPath, modelPath, reportPath, sectionForKind } from "@/lib/mvp-
 import { aiLandscape, dataAccess, type AiLandscape, type LandscapeEdge, type LandscapeFlag, type LandscapeObject } from "@/lib/ai/landscape";
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { agingSummary } from "@/lib/infra/status";
+import { buildFacts, chipValue, FILTER_KEYS, FILTER_LABEL, filterFacts, filtersFromPayload, matchQuestion, type FilterKey, type RecordFacts, type RecordFilters, type Term } from "@/lib/ask/record-filter";
 
 /**
  * Fixed handlers. The Ask screen uses these when the model is off, times out,
@@ -71,6 +72,7 @@ export type AskAnswer = {
     | "sign_in"
     | "cancel"
     | "clarify"
+    | "records"
     | "unsupported";
   answerText: string;
   citations: AskCitation[];
@@ -98,6 +100,15 @@ export type AskAnswer = {
   /** A report that holds the full answer, shown under it. */
   link?: { href: string; label: string };
   loading?: boolean;
+  /** A filtered list (quick answer or the AI's filter_records): editable chips re-run it locally. */
+  records?: AskRecords;
+};
+
+export type AskRecords = {
+  filters: RecordFilters;
+  /** Names from the workspace found in the question (quick answers). */
+  terms: Term[];
+  source: "quick" | "ai";
 };
 
 export type AskGraph = {
@@ -195,7 +206,9 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
       : intent && intent in HANDLER_INTENTS
       ? HANDLER_INTENTS[intent]
       : "impact";
+  const records = payload.unsupported ? null : recordsFromPayload(payload);
   return {
+    ...(records ? { records } : {}),
     handler: handler === "impact" && aiAnswer ? "ai" : handler,
     ...(aiAnswer && !payload.unsupported ? { link: aiReportLink(basePath) } : {}),
     // Vendor rows replace the model's own citations, so its [n] markers would point at the wrong rows.
@@ -317,6 +330,11 @@ export function answerFromRecords(input: {
   if (!question) {
     return empty("unsupported", "Ask a question about your applications, capabilities, or infrastructure.", today);
   }
+  const facts = buildFacts(input.rows, (input.landscape?.objects ?? []) as MinEAObject[], (input.landscape?.relationships ?? []) as never);
+  const matched = matchQuestion(question, facts);
+  if (matched.terms.length && wantsRecords(classifyIntent(question), q, matched.filters)) {
+    return recordsAnswer({ filters: matched.filters, terms: matched.terms, source: "quick" }, facts, today);
+  }
   if (input.landscape && classifyIntent(question) === "ai") {
     const result = aiLandscape(input.landscape);
     if (isAiDataQuestion(question)) return aiDataAnswer(result, input.landscape, input.rows, input.basePath, today);
@@ -378,14 +396,97 @@ export function answerFromRecords(input: {
   if (intent === "spend") return spendAnswer(input.rows, input.basePath, today);
   if (intent === "vendors") return vendorsAnswer(input.rows, today);
 
+  return cantAnswer(question, input.rows, facts, input.basePath, today);
+}
+
+/** Quick (local) list answers: only when a workspace name was found and no fixed handler owns the question. */
+function wantsRecords(intent: ReturnType<typeof classifyIntent>, q: string, filters: RecordFilters): boolean {
+  if (intent === "unknown" || intent === "vendors" || intent === "renewals" || intent === "spend") return true;
+  if (intent === "ownership") return !/who owns/.test(q);
+  if (intent === "ai") return filters.ai_on === true;
+  return false;
+}
+
+const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+
+export function filterPhrase(filters: RecordFilters): string {
+  const parts = FILTER_KEYS.filter((key) => filters[key] !== undefined).map((key) => {
+    const value = chipValue(key, filters);
+    if (key === "ai_on") return filters.ai_on ? "AI turned on" : "AI off";
+    if (key === "owner") return "no owner";
+    return `${FILTER_LABEL[key].toLowerCase()} ${value}`;
+  });
+  return parts.join(", ");
+}
+
+/** The answer sentence and citations for a filtered list. Shared by quick answers and chip edits. */
+export function recordsAnswer(records: AskRecords, facts: RecordFacts[], today: string): AskAnswer {
+  const kept = filterFacts(facts, records.filters);
+  const rows = kept.map((item) => item.row);
+  const total = rows.reduce((sum, row) => sum + (row.annualCostNumber ?? 0), 0);
+  const owned = rows.filter((row) => row.ownerTeam || row.ownerPerson).length;
+  const phrase = filterPhrase(records.filters);
+  const counted = describeTypes(typeLabels(rows));
+  const answerText = rows.length
+    ? `**${counted}** ${rows.length === 1 ? "matches" : "match"} ${phrase}.` +
+      (total > 0 ? ` Together they cost **${money(total)} a year**.` : " None has an annual cost recorded.") +
+      (records.filters.owner ? "" : ` ${owned === rows.length ? (rows.length === 1 ? "It has an owner." : "All have an owner.") : `${owned} of ${rows.length} ${owned === 1 ? "has" : "have"} an owner.`}`)
+    : `Nothing in this workspace matches ${phrase}. Change or remove a filter below.`;
   return {
-    ...empty(
-      "unsupported",
-      "I can't answer that yet. Try renewals, spend, owners, end of life, or what breaks if a named system goes down.",
-      today
-    ),
-    followUps: SUGGESTED.slice(0, 3),
+    handler: "records",
+    answerText,
+    summary: answerText.split(/(?<=\.)\s/)[0],
+    records,
+    citations: kept.map((item, index) => ({
+      n: index + 1,
+      recordId: item.row.id,
+      relationship: item.row.hostingLabel || "",
+      row: item.row,
+    })),
+    gaps: [],
+    followUps: [],
+    caption: { generatedAt: today, recordCount: rows.length, gapCount: rows.length - owned, extra: records.source === "quick" ? "worked out from your catalogue, no AI used" : "the AI's filters, re-checked against your catalogue" },
   };
+}
+
+/** The AI's filter_records filters as an answer the chips can edit (null when it used none). */
+export function recordsFromPayload(payload: { filters?: Record<string, unknown> } | null | undefined): AskRecords | null {
+  const filters = filtersFromPayload(payload?.filters);
+  return Object.keys(filters).length ? { filters, terms: [], source: "ai" } : null;
+}
+
+/** Fields a question can be about, the words for them, and how to tell a row has the value. */
+const FIELD_HELP: { words: RegExp; label: string; has: (facts: RecordFacts) => boolean }[] = [
+  { words: /renew|contract|expir/, label: "renewal dates", has: (f) => Boolean(f.row.renewalDate) },
+  { words: /\bcost|spend|pay|price|money|budget/, label: "annual costs", has: (f) => f.row.annualCostNumber != null },
+  { words: /\bown(er|s|ed)?\b|responsible/, label: "owners", has: (f) => Boolean(f.row.ownerTeam || f.row.ownerPerson) },
+  { words: /vendor|supplier|bought from|buy from/, label: "vendors", has: (f) => f.vendors.length > 0 },
+  { words: /region|data cent|location/, label: "regions on cloud tenants", has: (f) => f.regions.length > 0 },
+  { words: /tenant|subscription|account|cloud/, label: "cloud tenants", has: (f) => f.tenants.length > 0 },
+  { words: /\bai\b|copilot|assistant/, label: "AI features", has: (f) => f.aiOn },
+  { words: /end of life|lifecycle|retir/, label: "lifecycle", has: (f) => Boolean(f.row.lifecycle) },
+  { words: /critical|tier/, label: "criticality", has: (f) => Boolean(f.row.criticality) },
+];
+
+/** "Can't answer" that says what it understood and what data is missing, with links to add it. */
+export function cantAnswer(question: string, rows: CatalogRow[], facts: RecordFacts[], basePath: string, today: string): AskAnswer {
+  const q = question.toLowerCase();
+  const apps = modelPath(basePath, "applications");
+  const about = FIELD_HELP.filter((field) => field.words.test(q));
+  const missing = about.filter((field) => facts.length > 0 && !facts.some(field.has));
+  const gaps = missing.map((field) => ({ text: `No item has ${field.label} yet. Add them to answer this.`, fillHref: apps }));
+  let answerText: string;
+  if (!rows.length) {
+    answerText = "I can't answer that yet: nothing is recorded in this workspace. Add your apps first.";
+    gaps.push({ text: "Add apps and where they run.", fillHref: `${basePath}/ask` });
+  } else if (missing.length) {
+    answerText = `I can't answer that yet: I understood it as a question about ${missing.map((f) => f.label).join(" and ")}, and none of your ${rows.length} items has ${missing.length === 1 ? "that" : "those"} recorded.`;
+  } else if (about.length) {
+    answerText = `I can't answer that yet. I understood it as a question about ${about.map((f) => f.label).join(" and ")}, but couldn't tell which items you mean. Name a vendor, owner, tenant or region from your workspace, or try one below.`;
+  } else {
+    answerText = "I can't answer that yet. It doesn't name a vendor, owner, tenant, provider or region in this workspace, or a field BuboMap records. Try one of the questions below.";
+  }
+  return { ...empty("unsupported", answerText, today), gaps, followUps: SUGGESTED.slice(0, 3) };
 }
 
 function aiReportLink(basePath: string): { href: string; label: string } {

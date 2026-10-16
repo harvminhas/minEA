@@ -119,6 +119,7 @@ class Edge:
     to_id: str
     relation: str
     label: str
+    attributes: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -276,7 +277,7 @@ async def load_graph(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUI
             records[rec.id] = rec
         raw.append(_raw(obj, team_names))
     for rel in relationships:
-        edges.append(Edge(str(rel.from_object_id), str(rel.to_object_id), rel.type, ""))
+        edges.append(Edge(str(rel.from_object_id), str(rel.to_object_id), rel.type, "", dict(getattr(rel, "attributes", None) or {})))
     return WorkspaceGraph(records=records, edges=edges, objects=raw)
 
 

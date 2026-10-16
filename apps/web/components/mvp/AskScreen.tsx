@@ -14,7 +14,10 @@ import { catalogStats, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
 import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
-import { answerFromModel, answerFromRecords, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
+import { answerFromModel, answerFromRecords, recordsAnswer, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
+import { buildFacts, type RecordFilters } from "@/lib/ask/record-filter";
+import { AskRecordsBlock } from "@/components/mvp/AskRecords";
+import { adminTabHref } from "@/lib/billing/admin-centre";
 import { splitSummary } from "@/lib/ask/rich";
 import { REVEAL_MS, latestOnly, revealText, revealTokens } from "@/lib/ask/reveal";
 import { askQueryFn, askQueryKey } from "@/lib/ask/remote";
@@ -213,11 +216,32 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     setDraft(question);
   }, [question]);
 
-  const answer = useMemo(() => {
+  const baseAnswer = useMemo(() => {
     if (mode !== "answer" || !question) return local;
     const fromModel = askModel && remoteData ? answerFromModel(remoteData, rows, basePath, question) : null;
     return pickAnswer(local, fromModel, question, askModel ? remoteData?.steps : undefined);
   }, [mode, question, askModel, remoteData, local, rows, basePath]);
+  // List answers (quick or the AI's filter_records): chips edit the filters and re-run them here.
+  const facts = useMemo(
+    () => buildFacts(rows, catalog.data?.objects ?? [], catalog.data?.relationships ?? []),
+    [rows, catalog.data?.objects, catalog.data?.relationships]
+  );
+  const [edited, setEdited] = useState<{ question: string; filters: RecordFilters } | null>(null);
+  const answer = useMemo(() => {
+    if (!edited || edited.question !== question || !baseAnswer.records) return baseAnswer;
+    const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return recordsAnswer({ ...baseAnswer.records, filters: edited.filters }, facts, today);
+  }, [baseAnswer, edited, question, facts]);
+  // Why the AI's answer isn't shown, when it isn't: unavailable (no key / error / timeout) or the
+  // organisation's monthly allowance is used up. Quick answers keep working in both cases.
+  const fallbackReason = askModel ? (remoteData?.source === "fallback" ? remoteData.fallback_reason : remote.isError ? "model_error" : null) : null;
+  const aiUnavailable = answer.handler === "unsupported" && !!fallbackReason && ["model_unavailable", "model_error", "timeout", "stream_failed"].includes(fallbackReason);
+  const quotaHit = fallbackReason === "limit" ? remoteData?.quota ?? null : null;
+  // The local "can't answer" sentence is about the catalogue alone; when the AI couldn't be asked, say that.
+  const blockedText =
+    answer.handler === "unsupported" && answer.gaps.length === 0 && (aiUnavailable || quotaHit)
+      ? "This question needs an AI answer, and the AI couldn't be used for it. Quick answers still work: name a vendor, owner, tenant or region from your workspace."
+      : null;
 
   // Reveal a freshly streamed answer word by word in the card (cached answers show at once).
   const [revealed, setRevealed] = useState<{ question: string; at: number; n: number } | null>(null);
@@ -236,7 +260,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remote.dataUpdatedAt, question]);
   const revealing = revealed && revealed.question === question && revealed.at === remote.dataUpdatedAt && revealed.n < revealTokens(answer.answerText).length;
-  const shownText = revealing ? revealText(answer.answerText, revealed!.n) : answer.answerText;
+  const shownText = blockedText ?? (revealing ? revealText(answer.answerText, revealed!.n) : answer.answerText);
 
   // Keep each settled answer as a turn of the conversation (this tab only).
   useEffect(() => {
@@ -504,6 +528,20 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
           </div>
         ) : (
           <div className="px-5 py-5">
+            {quotaHit && (
+              <p data-testid="ask-limit" className="mb-3 flex flex-wrap items-center gap-1.5 text-[12px] text-[#6b7289]">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#f59e0b]" />
+                Your organisation has used its {quotaHit.limit.toLocaleString("en-US")} AI questions for this month. Quick answers (vendors, owners, renewals, spend, impact) still work.
+                {quotaHit.plan === "free" && orgSlug && (
+                  <Link href={adminTabHref(orgSlug, "billing")} className="font-medium text-[#5b4ce6]">Upgrade to Starter →</Link>
+                )}
+              </p>
+            )}
+            {aiUnavailable && (
+              <div data-testid="ask-ai-unavailable" className="mb-3 rounded-xl border border-[#e6e8ee] bg-[#f3f4f8] px-4 py-3 text-[13px] text-[#3c4254]">
+                <b>The AI is unavailable right now.</b> Try again in a few minutes; quick answers below still work.
+              </div>
+            )}
             <p className="text-[17px] leading-7 text-[#1c2230]">
               {answer.handler === "clarify" ? (
                 <ClarifyChoices
@@ -560,7 +598,16 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 }}
               />
             )}
-            {!revealing && !answer.table && tableCitations(answer).length > 0 && (
+            {!revealing && answer.records && (
+              <AskRecordsBlock
+                answer={answer}
+                facts={facts}
+                onFilters={(filters) => setEdited({ question, filters })}
+                onOpen={(row) => router.push(recordHref(basePath, row))}
+                rowHref={(row) => recordHref(basePath, row)}
+              />
+            )}
+            {!revealing && !answer.table && !answer.records && tableCitations(answer).length > 0 && (
               <table className="mt-6 w-full text-left text-[13px]">
                   <thead>
                     <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">

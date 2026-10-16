@@ -65,6 +65,7 @@ MIGRATION_FILES = [
     "050_people_directory.sql",
     "051_cloud_regions.sql",
     "052_platform_erasures.sql",
+    "053_ai_question_usage.sql",
 ]
 
 

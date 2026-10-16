@@ -21,6 +21,7 @@ export const LOCAL_ONLY_HANDLERS: ReadonlySet<AskAnswer["handler"]> = new Set([
   "aging",
   "sign_in",
   "cancel",
+  "records",
 ]);
 
 /** True when the local answer will be shown whatever the model says. */

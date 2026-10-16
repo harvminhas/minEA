@@ -15,6 +15,7 @@ from typing import Callable
 from app.ai.ask.ai_landscape import JOB_LABELS, ai_landscape as build_landscape, data_access
 from app.ai.ask.graph import Rec, WorkspaceGraph, fold
 from app.ai.ask.impact import ImpactEdge, impact_of as traverse_impact
+from app.ai.ask.record_filters import FILTER_KEYS, build_facts, clean_filters, filter_facts, matches, row as facts_row
 
 ToolFn = Callable[["ToolBag", dict], dict]
 
@@ -37,6 +38,8 @@ class ToolBag:
     vendor_groups: list[dict] | None = None
     # Set by a renewal-window lookup: the items renewing in the window, soonest first.
     renewal_rows: list | None = None
+    # Set by filter_records: the filters it used (cleaned), sent with the answer as editable chips.
+    filters: dict | None = None
 
     def note_record(self, rec: Rec) -> None:
         self.seen_ids.add(rec.id)
@@ -67,7 +70,7 @@ def _estate(graph: WorkspaceGraph) -> list[Rec]:
 def search_records(bag: ToolBag, args: dict) -> dict:
     text = fold(str(args.get("text") or ""))
     limit = min(int(args.get("limit") or 8), 20)
-    matches = []
+    matches: list[dict] = []
     for rec in bag.graph.records.values():
         if rec.type == "other":
             continue
@@ -75,6 +78,10 @@ def search_records(bag: ToolBag, args: dict) -> dict:
         if text and text in hay:
             bag.note_record(rec)
             matches.append({**rec.summary(), "score": len(text) / max(len(hay), 1)})
+        elif text and len(text) >= 3 and any(text in fold(name) for name in rec.vendor_names):
+            # "microsoft" finds items whose vendor (or catalogue vendor / cost-line vendor) is Microsoft.
+            bag.note_record(rec)
+            matches.append({**rec.summary(), "score": 0.01, "matched": "vendor"})
     matches.sort(key=lambda item: (-item["score"], item["name"]))
     bag.note_number(len(matches[:limit]))
     return {"matches": matches[:limit], "total": len(matches)}
@@ -153,6 +160,10 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
         rows = [rec for rec in rows if rec.type == "application"]
     elif wanted == "infrastructure":
         rows = [rec for rec in rows if rec.type == "infrastructure"]
+    record_filters = clean_filters({key: filters.get(key) for key in FILTER_KEYS if key not in {"criticality", "renewal_within_days", "type"}})
+    if record_filters:
+        keep = {f.rec.id for f in build_facts(bag.graph) if matches(f, record_filters)}
+        rows = [rec for rec in rows if rec.id in keep]
     missing_field = _GAP_FIELDS.get(str(filters.get("missing_field") or "").strip().lower())
     if missing_field:
         rows = [rec for rec in rows if missing_field in rec.blank]
@@ -259,6 +270,28 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
         **({"with_renewal_date": with_renewal_date} if with_renewal_date is not None else {}),
         **({"window": window} if window else {}),
         **(vendor_summary if args.get("group_by") == "vendor" else {}),
+    }
+
+
+def filter_records(bag: ToolBag, args: dict) -> dict:
+    filters = clean_filters(args)
+    bag.filters = filters
+    kept = filter_facts(bag.graph, filters)
+    limit = min(int(args.get("limit") or 50), 50)
+    total = sum(f.rec.annual or 0 for f in kept)
+    for f in kept[:limit]:
+        bag.note_record(f.rec)
+    bag.note_number(len(kept))
+    bag.note_number(int(total))
+    with_owner = sum(1 for f in kept if f.rec.owner_team or f.rec.owner_person)
+    bag.note_number(with_owner)
+    bag.note_number(len(kept) - with_owner)
+    return {
+        "filters_applied": filters,
+        "total": len(kept),
+        "annual_cost_total": int(total),
+        "with_owner": with_owner,
+        "items": [facts_row(f) for f in kept[:limit]],
     }
 
 
@@ -600,6 +633,42 @@ TOOLS: list[AskTool] = [
         run=search_records,
     ),
     AskTool(
+        name="filter_records",
+        description=(
+            "List applications and infrastructure matching filters (all optional, combined with AND). Use it for any "
+            "'which/what … do we have' question naming a vendor, owner, hosting, cloud provider, tenant, region, server, "
+            "AI, renewal window, cost range, lifecycle or criticality, and for compound questions. "
+            "vendor matches the vendor field, the catalogue vendor, cost-line vendors and a tenant's provider (Azure tenant -> Microsoft). "
+            "hosting is saas, own_cloud (our cloud), on_premise (our server) or desktop. owner 'none' = no owner. "
+            "ai_on true = an AI feature is turned on. Matching is loose (case, spaces). "
+            "total, annual_cost_total and with_owner are the numbers to write; name only the items returned."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "description": "application or infrastructure"},
+                "vendor": {"type": "string"},
+                "owner_team": {"type": "string"},
+                "owner_person": {"type": "string"},
+                "owner": {"type": "string", "description": "'none' for items with no owner"},
+                "hosting": {"type": "string"},
+                "provider": {"type": "string"},
+                "tenant": {"type": "string"},
+                "region": {"type": "string"},
+                "server": {"type": "string"},
+                "ai_on": {"type": "boolean"},
+                "renewal_within_days": {"type": "integer"},
+                "cost_min": {"type": "integer"},
+                "cost_max": {"type": "integer"},
+                "lifecycle": {"type": "string"},
+                "criticality": {"type": "string"},
+                "name": {"type": "string"},
+                "limit": {"type": "integer"},
+            },
+        },
+        run=filter_records,
+    ),
+    AskTool(
         name="impact_of",
         description="What is affected if this item fails. Each result includes type_label, severity direct, loses_sign_in (people can't sign in to it; it is still running), degraded, or loses_support, indirect true when it is more than one step away, and a path of labels. by_type counts each type. Use those counts. Do not add items the lookup did not return.",
         parameters={
@@ -611,7 +680,7 @@ TOOLS: list[AskTool] = [
     ),
     AskTool(
         name="aggregate",
-        description="Count applications, capabilities, or infrastructure, or sum annual cost. Use for any total, share, renewal window, or criticality question such as the most critical system. A list of vendors is group_by vendor: it always covers applications and infrastructure together, and every named vendor is returned (vendor_count). When you say how many vendors there are, use vendor_count; vendors with no annual cost still count. vendor_spend_total is the total spend, including vendors with no annual cost. An empty groups list means no vendor is named. filters.criticality is Critical, High, Medium, or Low. by_type counts each type_label. Do not add numbers yourself.",
+        description="Count applications, capabilities, or infrastructure, or sum annual cost. Use for any total, share, renewal window, or criticality question such as the most critical system. A list of vendors is group_by vendor: it always covers applications and infrastructure together, and every named vendor is returned (vendor_count). When you say how many vendors there are, use vendor_count; vendors with no annual cost still count. vendor_spend_total is the total spend, including vendors with no annual cost. An empty groups list means no vendor is named. filters.criticality is Critical, High, Medium, or Low. filters.vendor (and owner_team, hosting, provider, tenant, region, ai_on, same meaning as filter_records) narrow the items first, e.g. total cost of one vendor's products. by_type counts each type_label. Do not add numbers yourself.",
         parameters={
             "type": "object",
             "properties": {
@@ -625,6 +694,13 @@ TOOLS: list[AskTool] = [
                         "criticality": {"type": "string"},
                         "missing_field": {"type": "string"},
                         "renewal_within_days": {"type": "integer"},
+                        "vendor": {"type": "string"},
+                        "owner_team": {"type": "string"},
+                        "hosting": {"type": "string"},
+                        "provider": {"type": "string"},
+                        "tenant": {"type": "string"},
+                        "region": {"type": "string"},
+                        "ai_on": {"type": "boolean"},
                     },
                 },
             },

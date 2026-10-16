@@ -46,3 +46,6 @@ class BillingStatusResponse(BaseModel):
     over_licence_cap: bool = False
     has_billing_account: bool = False
     can_manage_billing: bool = False
+    # Ask: AI questions this calendar month (America/Toronto) and the org's monthly allowance.
+    ai_questions_used: int = 0
+    ai_questions_limit: int | None = None

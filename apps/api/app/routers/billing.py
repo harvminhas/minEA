@@ -13,6 +13,7 @@ from app.schemas.billing import (
     PortalResponse,
     SoloCheckoutResponse,
 )
+from app.services.ask_quota import read_quota
 from app.services.authorization import get_org_limit
 from app.services.licences import licence_cap, load_usage
 from app.services.plan_features import (
@@ -100,6 +101,13 @@ async def billing_status(
     has_subscription, live_plan = await subscription_state(ctx.org)
     checkout_on = checkout_available(ctx.org)
     paid_open = checkout_on and paid_plans_open_for(ctx.org)
+    try:
+        ai_quota = await read_quota(db, ctx.org_id, ctx.org.plan)
+    except Exception:  # usage table not migrated yet (or a test double): plan & billing still loads
+        ai_quota = None
+        rollback = getattr(db, "rollback", None)
+        if rollback:
+            await rollback()
 
     return BillingStatusResponse(
         plan=plan,
@@ -126,6 +134,8 @@ async def billing_status(
         over_licence_cap=cap is not None and usage.used > cap,
         has_billing_account=bool(ctx.org.stripe_customer_id),
         can_manage_billing=can_manage_billing(ctx),
+        ai_questions_used=ai_quota.used if ai_quota else 0,
+        ai_questions_limit=ai_quota.limit if ai_quota else None,
     )
 
 

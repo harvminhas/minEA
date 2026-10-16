@@ -8,8 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.ask.graph import load_graph
-from app.ai.ask.loop import answer_with_model
-from app.ai.ask.stream import stream_ask
+from app.ai.ask.loop import _fallback, answer_with_model
+from app.ai.ask.stream import ask_events, stream_ask
+from app.ai.gemini_client import is_configured
+from app.services.ask_quota import take_question
 from app.ai.chat import stream_chat
 from app.ai.ingestion import extract_from_text
 from app.ai.insights import generate_insights, insight_to_dict
@@ -70,7 +72,27 @@ async def ask(
     is source=fallback so the screen can answer from the fixed handlers.
     """
     await ctx.require_read(db)
+    over = await _take_ai_question(db, ctx, body.question)
+    if over is not None:
+        return over
     return await answer_with_model(db, ctx, body.question, context=[turn.model_dump() for turn in body.context])
+
+
+async def _take_ai_question(db: AsyncSession, ctx: TenancyContext, question: str) -> dict[str, Any] | None:
+    """Count this AI question against the org's monthly allowance (server-side, before any model call).
+    Returns the "limit" fallback payload when the month is used up; None to go ahead. Questions the
+    model never sees (blank, no workspace, no model configured) are not counted."""
+    if not question.strip() or not ctx.workspace or not is_configured():
+        return None
+    quota = await take_question(db, ctx.org_id, ctx.org.plan)
+    await db.commit()  # the streaming body runs after this session is closed
+    if quota.allowed:
+        return None
+    return {**_fallback("limit", []), "quota": quota.as_dict(), "steps": []}
+
+
+async def _one_final(payload: dict[str, Any]):
+    yield {"event": "final", "data": payload}
 
 
 @router.post("/ask/stream")
@@ -83,6 +105,9 @@ async def ask_stream(
     payload. See app/ai/ask/stream.py for the frames. The workspace graph is read here, before the
     response starts, because the request's DB session is closed once the streaming body runs."""
     await ctx.require_read(db)
+    over = await _take_ai_question(db, ctx, body.question)
+    if over is not None:
+        return StreamingResponse(ask_events(_one_final(over)), media_type="text/event-stream", headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"})
     graph = await load_graph(db, ctx.workspace.id, ctx.org_id) if ctx.workspace and body.question.strip() else None
     return StreamingResponse(
         stream_ask(None, ctx, body.question, graph=graph, context=[turn.model_dump() for turn in body.context]),

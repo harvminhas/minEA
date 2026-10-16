@@ -289,6 +289,11 @@ function LoadedBillingCentre({
                 ? "Unchanged"
                 : `${formatCount(current.aiAnswersPerMonth)} / month`}
             </dd>
+            {!previewing && billingStatus?.ai_questions_limit != null && (
+              <dd className="text-xs text-gray-500" data-testid="ai-questions-used">
+                {aiQuestionsLabel(billingStatus.ai_questions_used ?? 0, billingStatus.ai_questions_limit)}
+              </dd>
+            )}
           </div>
           <div>
             <dt className="text-xs text-gray-400">Apps &amp; platforms</dt>
@@ -475,4 +480,9 @@ function LoadedBillingCentre({
       )}
     </section>
   );
+}
+
+/** Ask's AI questions this calendar month (ET), counted per organisation. Quick answers are free. */
+export function aiQuestionsLabel(used: number, limit: number): string {
+  return `${formatCount(used)} of ${formatCount(limit)} used this month`;
 }

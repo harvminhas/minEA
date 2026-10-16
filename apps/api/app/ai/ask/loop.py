@@ -56,6 +56,7 @@ SYSTEM = """You are BuboMap Ask. You answer questions about ONE company's IT est
 You know nothing except what the lookups return in this conversation.
 Never invent applications, capabilities, infrastructure, names, numbers, dates, owners, vendors, or relationships.
 Always request a lookup before answering. Use search_records to turn names into ids.
+Use filter_records to list items by vendor (including catalogue vendor and a tenant's cloud provider), owner team or person, no owner, hosting (SaaS, our cloud, our server, people's computers), cloud provider, tenant, region, server, AI turned on, renewal window, cost range, lifecycle or criticality, and for questions that combine several of these. "What Microsoft products do we own?" is filter_records with vendor Microsoft.
 Use impact_of for what breaks, what depends on an item, or how important an item is.
 Use aggregate for any count, total, share, renewal window, or list of vendors. A vendor list is aggregate with group_by vendor, and only when the question asks which vendors are named or who is paid. Vendors with no annual cost still count. Do not do arithmetic.
 Use find_gaps when the question asks what is missing: without a vendor, no owner, no cost, no renewal, no criticality, or no lifecycle. Pass field and scope. That is not a vendor list. Do not do arithmetic.
@@ -84,6 +85,8 @@ NOT_AI = {
 
 
 def _fallback(reason: str, tools_used: list[str]) -> dict:
+    # Server-side record of why the model's answer wasn't used (no key, timeout, limit, ...).
+    logging.getLogger(__name__).info("ask fallback reason=%s tools=%s", reason, ",".join(tools_used))
     return {
         "source": "fallback",
         "fallback_reason": reason,
@@ -529,6 +532,8 @@ def _present(answer: dict, bag: ToolBag, tools_used: list[str], ai_question: boo
         "follow_ups": follow,
         "tools_used": tools_used,
         "unsupported": bool(answer.get("unsupported")),
+        # filter_records' filters, shown as editable chips (the browser re-runs them on the catalogue).
+        **({"filters": bag.filters} if bag.filters else {}),
         # Vendor answers: the table is every vendor (vendor names, spend, the items under each), built
         # by the server from the lookup, so its rows always equal the stated vendor count.
         **(
