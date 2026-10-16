@@ -143,9 +143,11 @@ class FakeModels:
         self.script = list(script)
         self.calls = 0
         self.delay = delay
+        self.configs = []
 
     async def generate_content(self, **kwargs):
         self.calls += 1
+        self.configs.append(kwargs.get("config"))
         if self.delay:
             await asyncio.sleep(self.delay)
         item = self.script.pop(0)
@@ -216,7 +218,7 @@ def test_run_ask_yields_steps_then_exactly_one_final(engine):
 
 
 def test_correction_round_shows_a_step(engine):
-    bad = {**GOOD, "answer_markdown": "99 Applications renew [1]."}  # 99 is not from a lookup
+    bad = {**GOOD, "citations": [{"n": 1, "record_id": "nope", "relationship": "x"}]}  # unknown id: structural, still corrected
     engine([_call_response("aggregate", {"filters": {"renewal_within_days": 90}}), _text_response(bad), _text_response(GOOD)])
     result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
     assert result["source"] == "llm"
@@ -372,7 +374,7 @@ def test_load_graph_survives_a_catalogue_rollback(monkeypatch):
 def test_timing_on_the_final_and_one_log_line(engine, caplog):
     import logging
     from app.ai.ask.timing import AskTiming
-    bad = {**GOOD, "answer_markdown": "99 Applications renew [1]."}
+    bad = {**GOOD, "citations": [{"n": 1, "record_id": "nope", "relationship": "x"}]}
     engine([_call_response("aggregate", {"filters": {"renewal_within_days": 90}}), _text_response(bad), _text_response(GOOD)])
     timing = AskTiming()
     timing.add("auth", 0.05)
@@ -398,3 +400,102 @@ def test_timing_summary_format():
     t.calls = [{"s": 2.0, "in": 1, "out": 1, "think": 0, "finish": "STOP"}, {"s": 3.1, "in": 1, "out": 1, "think": 0, "finish": "STOP"}]
     t.tools = [{"name": "aggregate", "s": 0.2}]
     assert t.summary() == "Took 6.2s: workspace 0.3s · AI 2 calls 5.1s · lookups 0.2s · check 0.1s"
+
+
+def test_ungrounded_number_is_softened_without_a_second_call(engine):
+    bad = {**GOOD, "answer_markdown": "6 Applications renew in the next 90 days [1]. 99 of them are critical."}
+    models = engine([_text_response(bad), _text_response(GOOD)])
+    result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
+    assert result["source"] == "llm" and "99" not in result["answer_text"]
+    assert result["timing"]["ai_calls"] == 1 and result["timing"]["corrected"] is False
+    assert len(models.script) == 1  # the second scripted reply was never requested
+
+
+def test_empty_reply_retry_turns_lookups_off(engine):
+    from google.genai import types as t
+    empty = t.GenerateContentResponse(candidates=[t.Candidate(content=t.Content(role="model", parts=[]), finish_reason="MALFORMED_FUNCTION_CALL")])
+    models = engine([empty, _text_response(GOOD)])
+    result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
+    assert result["source"] == "llm"
+    assert models.configs[-1].tool_config.function_calling_config.mode == "NONE"
+
+
+def test_prompt_asks_for_one_direct_reply_and_headline_first():
+    assert "Answer in ONE reply, straight from the workspace" in loop.SYSTEM
+    assert 'Write "headline" as the FIRST key' in loop.SYSTEM
+    assert "Use aggregate for any count" not in loop.SYSTEM
+
+
+def test_partial_headline_and_early_check():
+    assert loop.partial_headline('{"headline": "We have 6 Applications') is None
+    assert loop.partial_headline('{"headline": "We have 6 \\"core\\" apps", "answer_markdown": "x') == 'We have 6 "core" apps'
+    b = bag()
+    assert loop.headline_grounded("6 Applications renew soon", b, "q") is (("6" in b.numbers) or loop.is_grounded("6", b.numbers))
+    assert loop.headline_grounded("4321 Applications renew", b, "q") is False
+
+
+def test_stream_sends_the_checked_headline_before_the_final(engine):
+    """With a streaming client, the headline event arrives before the final and matches it."""
+    reply = json.dumps({"headline": "Renewals coming up", **GOOD})
+    chunks = [reply[:30], reply[30:70], reply[70:]]
+
+    class StreamModels:
+        configs: list = []
+
+        async def generate_content_stream(self, model, contents, config):
+            async def gen():
+                for i, piece in enumerate(chunks):
+                    yield types.GenerateContentResponse(candidates=[types.Candidate(content=types.Content(role="model", parts=[types.Part.from_text(text=piece)]), finish_reason="STOP" if i == len(chunks) - 1 else None)])
+            return gen()
+
+    engine([])
+    loop.get_client = lambda: SimpleNamespace(aio=SimpleNamespace(models=StreamModels()))  # restored by monkeypatch of the fixture
+
+    async def collect():
+        return [e async for e in loop.run_ask(None, CTX, "What renews in the next 90 days?", stream_headline=True)]
+
+    events = asyncio.run(collect())
+    kinds = [e["event"] for e in events]
+    assert "headline" in kinds and kinds.index("headline") < kinds.index("final")
+    assert events[kinds.index("headline")]["data"]["text"] == "Renewals coming up"
+    assert events[-1]["data"]["source"] == "llm" and events[-1]["data"]["headline"] == "Renewals coming up"
+
+
+def test_graph_cache_reuses_until_the_fingerprint_changes():
+    from app.ai.ask import graph as g
+    g._GRAPH_CACHE.clear()
+    state = {"fp": "3/x|0/|0/", "loads": 0}
+
+    class DB:
+        async def execute(self, *a, **k):
+            return SimpleNamespace(scalar=lambda: state["fp"])
+
+    async def loader(db, w, o):
+        state["loads"] += 1
+        return renewal_graph()
+
+    async def run():
+        w, o = uuid.uuid4(), uuid.uuid4()
+        a, hit_a = await g.load_graph_cached(DB(), w, o, loader=loader)
+        b, hit_b = await g.load_graph_cached(DB(), w, o, loader=loader)
+        state["fp"] = "4/y|0/|0/"
+        c, hit_c = await g.load_graph_cached(DB(), w, o, loader=loader)
+        return (hit_a, hit_b, hit_c, a is b, b is c)
+
+    assert asyncio.run(run()) == (False, True, False, True, False)
+    assert state["loads"] == 2
+
+
+def test_stream_frames_include_the_headline():
+    from app.ai.ask import stream
+
+    async def events():
+        yield {"event": "headline", "data": {"text": "Hi"}}
+        yield {"event": "final", "data": {"source": "llm", "answer_text": "x"}}
+
+    async def collect():
+        return [f async for f in stream.ask_events(events(), ping_seconds=5, delta_pause=0)]
+
+    frames = asyncio.run(collect())
+    assert any(f.startswith("event: headline") for f in frames)
+    assert [f.split("\n")[0] for f in frames if f.startswith("event:")].index("event: headline") == 1  # right after meta

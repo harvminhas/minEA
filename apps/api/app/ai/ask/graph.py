@@ -6,7 +6,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.objects import MinEAObject
@@ -362,3 +362,49 @@ def catalog_vendor_for(index: dict[str, str], name: str, catalog_key: str = "") 
     from app.services.tool_catalog import normalize
 
     return index.get(normalize(catalog_key)) or index.get(normalize(name)) or None
+
+
+# --- Per-workspace cache (Ask latency) ------------------------------------------------------------
+# Ask reads the whole workspace on every question. One cheap fingerprint query (counts, last
+# change, relationship attributes digest) decides whether the graph (and the context text built
+# from it) can be reused in this process. Entries also expire after GRAPH_TTL_S as a safety net.
+GRAPH_TTL_S = 300.0
+_GRAPH_CACHE: dict[tuple[str, str], tuple[str, float, WorkspaceGraph]] = {}
+_FINGERPRINT_SQL = text(
+    """
+    SELECT
+      (SELECT count(*)::text || '/' || coalesce(max(updated_at)::text, '') FROM objects WHERE workspace_id = :ws AND org_id = :org)
+      || '|' || (SELECT count(*)::text || '/' || coalesce(max(updated_at)::text, '') FROM teams WHERE workspace_id = :ws AND org_id = :org)
+      || '|' || (SELECT count(*)::text || '/' || coalesce(md5(string_agg(id::text || type || coalesce(attributes::text, ''), ',' ORDER BY id)), '')
+                 FROM relationships WHERE workspace_id = :ws AND org_id = :org)
+    """
+)
+
+
+async def workspace_fingerprint(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID) -> str | None:
+    try:
+        return str((await db.execute(_FINGERPRINT_SQL, {"ws": workspace_id, "org": org_id})).scalar() or "")
+    except Exception:  # never let the cache break Ask: load normally
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        return None
+
+
+async def load_graph_cached(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID, *, clock=None, loader=None) -> tuple[WorkspaceGraph, bool]:
+    """(graph, hit). A hit costs one small query instead of the catalogue + three table reads."""
+    import time as _time
+
+    now = (clock or _time.monotonic)()
+    key = (str(org_id), str(workspace_id))
+    fingerprint = await workspace_fingerprint(db, workspace_id, org_id)
+    cached = _GRAPH_CACHE.get(key)
+    if fingerprint and cached and cached[0] == fingerprint and now - cached[1] < GRAPH_TTL_S:
+        return cached[2], True
+    graph = await (loader or load_graph)(db, workspace_id, org_id)
+    if fingerprint:
+        _GRAPH_CACHE[key] = (fingerprint, now, graph)
+        if len(_GRAPH_CACHE) > 64:  # bounded: drop the oldest
+            _GRAPH_CACHE.pop(min(_GRAPH_CACHE, key=lambda k: _GRAPH_CACHE[k][1]), None)
+    return graph, False

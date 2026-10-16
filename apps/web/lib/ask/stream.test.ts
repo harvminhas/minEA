@@ -105,3 +105,11 @@ test("Ask header never shows zero counts while the catalogue loads; setup refetc
   const open = setup.slice(setup.indexOf("const openReadyMap"), setup.indexOf("router.push", setup.indexOf("const openReadyMap")));
   assert.match(open, /invalidateQueries\(\{ queryKey: catalogQueryKey/);
 });
+
+test("headline frame reaches onHeadline before the final", async () => {
+  const seen: string[] = [];
+  const body = frame("meta", { version: 1 }) + frame("headline", { text: "Two renew soon" }) + frame("final", FINAL) + frame("done", {});
+  const out = await readAskStream(new Response(body), { onHeadline: (t) => seen.push(`h:${t}`), onStep: () => seen.push("step") });
+  assert.deepEqual(seen, ["h:Two renew soon"]);
+  assert.ok(out);
+});

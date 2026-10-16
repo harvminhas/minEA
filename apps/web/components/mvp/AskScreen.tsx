@@ -166,7 +166,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   });
   // Live working for the question being streamed (flag ask.stream.v1). Keyed by question so a
   // late event from an earlier question never shows under a new one.
-  const [live, setLive] = useState<{ question: string; steps: AskStep[]; text: string }>({ question: "", steps: [], text: "" });
+  const [live, setLive] = useState<{ question: string; steps: AskStep[]; text: string; headline?: string }>({ question: "", steps: [], text: "" });
   const remote = useQuery({
     queryKey: askQueryKey(orgSlug, workspaceSlug, question),
     enabled: askModel,
@@ -183,6 +183,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         signal,
         context,
         onStep: (step) => setLive((cur) => (cur.question === asked ? { ...cur, steps: [...cur.steps, step] } : cur)),
+        onHeadline: (text) => setLive((cur) => (cur.question === asked ? { ...cur, headline: text } : cur)),
       });
     }),
   });
@@ -190,7 +191,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const [buildStatus, setBuildStatus] = useState("Working it out…");
   // A just-arrived AI answer animates in (headline word by word, rows filling in); a cached one doesn't.
   const freshAt = useMemo(() => (remote.dataUpdatedAt && Date.now() - remote.dataUpdatedAt < 3000 ? remote.dataUpdatedAt : 0), [remote.dataUpdatedAt]);
-  const liveNow = live.question === question ? live : { steps: [], text: "" };
+  const liveNow: { steps: AskStep[]; text: string; headline?: string } = live.question === question ? live : { steps: [], text: "" };
 
 
   // A disabled query stays "pending" in react-query v5, so only a model we actually asked counts.
@@ -538,7 +539,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
           {thinking && <span data-testid="ask-status" className="max-w-[70%] truncate text-[12px] font-medium text-[#8a80e0]">{buildStatus}</span>}
         </div>
         {thinking ? (
-          <AskBuilding steps={liveNow.steps} streaming={askModel && askStreamEnabled()} estateCount={catalogSettled ? rows.length : null} onStatus={setBuildStatus} />
+          <AskBuilding steps={liveNow.steps} headline={liveNow.headline} streaming={askModel && askStreamEnabled()} estateCount={catalogSettled ? rows.length : null} onStatus={setBuildStatus} />
         ) : (
           <div className="px-5 py-5">
             {quotaHit && !fallbackLean && (

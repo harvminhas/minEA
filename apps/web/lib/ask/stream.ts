@@ -52,6 +52,8 @@ function parseBlock(block: string): SseEvent | null {
 
 export type StreamHandlers = {
   onStep?: (step: AskStep) => void;
+  /** The checked headline, as soon as the model has written it (before the rest of the answer). */
+  onHeadline?: (text: string) => void;
   /** Called with the checked text so far, growing chunk by chunk. */
   onText?: (text: string) => void;
   /**
@@ -92,6 +94,7 @@ export async function readAskStream(response: Response, handlers: StreamHandlers
         continue;
       }
       if (item.event === "step") handlers.onStep?.(data as AskStep);
+      else if (item.event === "headline") handlers.onHeadline?.(String((data as { text?: string }).text ?? ""));
       else if (item.event === "delta") {
         const piece = String((data as { text?: string }).text ?? "");
         if (!handlers.revealMs) {

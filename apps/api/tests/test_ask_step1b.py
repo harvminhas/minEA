@@ -26,7 +26,7 @@ def test_repeated_identical_lookup_is_shown_once(engine):  # noqa: F811
 
 
 def test_step_ids_are_unique_through_a_correction(engine):  # noqa: F811
-    bad = {**GOOD, "answer_markdown": "99 Applications renew [1]."}
+    bad = {**GOOD, "citations": [{"n": 1, "record_id": "nope", "relationship": "x"}]}  # structural: still one correction
     engine([_call_response("aggregate", RENEW), _text_response(bad), _text_response(GOOD)])
     result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
     ids = [s["id"] for s in result["steps"]]

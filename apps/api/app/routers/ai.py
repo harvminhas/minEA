@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.ask.graph import load_graph
+from app.ai.ask.graph import load_graph_cached
 from app.ai.ask.loop import _fallback, answer_with_model, error_detail, reason_step
 from app.ai.ask.stream import ask_events, stream_ask
 from app.ai.ask.timing import AskTiming
@@ -133,7 +133,9 @@ async def ask_stream(
         if over is not None:
             return StreamingResponse(ask_events(_one_final(over)), media_type="text/event-stream", headers=headers)
         loaded = timing.clock()
-        graph = await load_graph(db, ctx.workspace.id, ctx.org_id) if ctx.workspace and body.question.strip() else None
+        graph = None
+        if ctx.workspace and body.question.strip():
+            graph, timing.cache_hit = await load_graph_cached(db, ctx.workspace.id, ctx.org_id)
         timing.add("workspace", timing.clock() - loaded)
     except Exception as exc:
         payload = _server_error(exc)

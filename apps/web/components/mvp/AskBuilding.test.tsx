@@ -67,3 +67,11 @@ test("animations respect prefers-reduced-motion", () => {
   const block = css.slice(css.lastIndexOf("@media (prefers-reduced-motion: reduce)"));
   for (const cls of ["ask-shimmer", "ask-spin", "ask-word", "ask-row-in", "ask-owl-eyes"]) assert.match(block, new RegExp(`\\.${cls}`));
 });
+
+test("an early streamed headline replaces the headline skeleton", () => {
+  const view = buildingView({ steps: [], streaming: true, elapsedMs: 500, quietMs: 0, estateCount: 3 });
+  const html = renderToStaticMarkup(<AskBuildingView view={view} headline="We have 10 Applications from 5 vendors." />);
+  assert.match(html, /data-testid="ask-early-headline"[^>]*>We have 10 Applications from 5 vendors\.</);
+  assert.doesNotMatch(html, /ask-skel-headline/);
+  assert.match(renderToStaticMarkup(<AskBuildingView view={view} />), /ask-skel-headline/);
+});

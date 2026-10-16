@@ -23,6 +23,7 @@ class AskTiming:
     context_chars: int = 0
     calls: list[dict] = field(default_factory=list)
     tools: list[dict] = field(default_factory=list)
+    cache_hit: bool | None = None  # workspace graph reused from the in-process cache
     corrected: bool = False
     correction_s: float = 0.0
     outcome: str = ""
@@ -61,6 +62,7 @@ class AskTiming:
             "total_s": round(self.total, 3),
             **{f"{k}_s": round(v, 3) for k, v in self.phases.items()},
             "context_chars": self.context_chars,
+            "cache_hit": self.cache_hit,
             "context_tokens_est": self.context_chars // 4,
             "ai_calls": len(self.calls),
             "ai_s": round(ai, 3),
@@ -87,7 +89,7 @@ class AskTiming:
         parts = []
         workspace = self.phases.get("workspace", 0.0) + self.phases.get("context", 0.0)
         if "workspace" in self.phases or "context" in self.phases:
-            parts.append(f"workspace {workspace:.1f}s")
+            parts.append(f"workspace {workspace:.1f}s" + (" (cached)" if self.cache_hit else ""))
         if self.calls:
             parts.append(f"AI {len(self.calls)} call{'s' if len(self.calls) != 1 else ''} {d['ai_s']:.1f}s")
         if self.tools:

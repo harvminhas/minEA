@@ -97,17 +97,22 @@ function useClock(eventCount: number) {
   return { elapsedMs: now - start, quietMs: now - lastEvent };
 }
 
-export function AskBuilding({ steps, streaming, estateCount, onStatus }: { steps: AskStep[]; streaming: boolean; estateCount: number | null; onStatus?: (text: string) => void }) {
+export function AskBuilding({ steps, streaming, estateCount, onStatus, headline }: { steps: AskStep[]; streaming: boolean; estateCount: number | null; onStatus?: (text: string) => void; headline?: string }) {
   const { elapsedMs, quietMs } = useClock(steps.length);
   const view = buildingView({ steps, streaming, elapsedMs, quietMs, estateCount });
   useEffect(() => onStatus?.(view.status), [view.status, onStatus]);
-  return <AskBuildingView view={view} />;
+  return <AskBuildingView view={view} headline={headline} />;
 }
 
-export function AskBuildingView({ view }: { view: BuildingView }) {
+export function AskBuildingView({ view, headline }: { view: BuildingView; headline?: string }) {
   return (
     <div data-testid="ask-building" className="px-5 py-5" aria-busy="true" aria-live="polite">
-      <div className="ask-shimmer h-[22px] w-[58%] rounded-md" data-testid="ask-skel-headline" />
+      {headline ? (
+        // The checked headline arrives first (streamed); the rest of the card keeps building under it.
+        <h2 data-testid="ask-early-headline" className="ask-in truncate text-[17px] font-semibold leading-6 text-[#1c2230]">{headline}</h2>
+      ) : (
+        <div className="ask-shimmer h-[22px] w-[58%] rounded-md" data-testid="ask-skel-headline" />
+      )}
       <div className="mt-3 space-y-2" data-testid="ask-skel-lines">
         <div className="ask-shimmer h-3 w-[92%] rounded" />
         <div className="ask-shimmer h-3 w-[80%] rounded" />

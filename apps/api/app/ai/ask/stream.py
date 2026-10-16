@@ -72,6 +72,8 @@ async def ask_events(
             if event.get("event") == "step":
                 steps.append(event["data"])
                 yield frame("step", event["data"])
+            elif event.get("event") == "headline":
+                yield frame("headline", event["data"])  # checked numbers; shown before the rest arrives
             elif event.get("event") == "final":
                 final = event["data"]
         if final is None:
@@ -94,5 +96,5 @@ async def ask_events(
 
 
 async def stream_ask(db, ctx, question: str, graph=None, context: list[dict] | None = None, timing=None) -> AsyncIterator[str]:
-    async for piece in ask_events(run_ask(db, ctx, question, graph=graph, context=context, timing=timing)):
+    async for piece in ask_events(run_ask(db, ctx, question, graph=graph, context=context, timing=timing, stream_headline=True)):
         yield piece
