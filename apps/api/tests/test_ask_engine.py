@@ -226,10 +226,12 @@ def test_model_error_falls_back_with_steps(engine):
     assert result["steps"][0]["id"] == "estate"
 
 
-def test_unconfigured_or_empty_returns_fallback_without_steps(monkeypatch):
+def test_unconfigured_or_empty_returns_fallback_with_reason_step(monkeypatch):
     monkeypatch.setattr(loop, "is_configured", lambda: False)
     result = asyncio.run(loop.answer_with_model(None, CTX, "anything"))
-    assert result["fallback_reason"] == "model_unavailable" and result["steps"] == []
+    assert result["fallback_reason"] == "model_unavailable"
+    assert [s["id"] for s in result["steps"]] == ["ai-reason"]
+    assert "GOOGLE_API_KEY" in result["steps"][0]["label"] and "[reason: model_unavailable]" in result["steps"][0]["label"]
     assert asyncio.run(loop.answer_with_model(None, CTX, "   "))["fallback_reason"] == "empty"
 
 
@@ -282,3 +284,81 @@ def test_each_call_gets_at_most_the_remaining_time(engine, monkeypatch):
     asyncio.run(collect())
     assert seen[0] == loop.CALL_TIMEOUT_SECONDS
     assert seen[1] == pytest.approx(loop.TOTAL_BUDGET_SECONDS - 15.0)
+
+
+def test_model_error_logs_and_shows_the_exact_exception(engine, caplog):
+    class ClientError(Exception):
+        code = 404
+
+    engine([ClientError("models/gemini-x is not found for API version v1beta key=AIzaSyFAKEFAKEFAKEFAKE")])
+    with caplog.at_level("ERROR"):
+        result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
+    assert result["fallback_reason"] == "model_error"
+    assert result["fallback_detail"].startswith("ClientError 404: models/gemini-x is not found")
+    assert "AIza" not in json.dumps(result) and "[redacted]" in result["fallback_detail"]
+    step = result["steps"][-1]
+    assert step["id"] == "ai-reason" and step["status"] == "error" and "[reason: model_error]" in step["label"]
+    assert any("ask model call failed" in r.message for r in caplog.records)
+
+
+def test_timeout_has_reason_step(engine):
+    engine([asyncio.TimeoutError()])
+    result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
+    assert result["fallback_reason"] == "timeout"
+    assert "[reason: timeout]" in result["steps"][-1]["label"]
+
+
+def test_router_turns_a_crash_into_a_server_error_fallback():
+    from app.routers import ai as ai_router
+
+    payload = ai_router._server_error(RuntimeError("MissingGreenlet: greenlet_spawn has not been called"))
+    assert payload["source"] == "fallback" and payload["fallback_reason"] == "server_error"
+    assert "RuntimeError" in payload["fallback_detail"]
+    assert "[reason: server_error]" in payload["steps"][0]["label"]
+
+
+def test_owner_person_filter_matches_any_owner_name():
+    from app.ai.ask.graph import Rec, WorkspaceGraph
+    from app.ai.ask.tools import ToolBag, run_tool
+
+    rec = Rec(id="a", raw_type="application", type="application", name="Payroll", kind="", owner_team="Finance", owner_person=None,
+              vendor=None, vendor_names=[], annual=None, cost_note=None, renewal=None, lifecycle=None, criticality=None)
+    graph = WorkspaceGraph(records={"a": rec}, edges=[], objects=[{"id": "a", "type": "application", "name": "Payroll", "owner": "Christine Wong", "properties": {"business_owner": "Sam Lee"}}])
+    bag = ToolBag(graph=graph, seen_ids=set(), numbers=set())
+    assert run_tool(bag, "filter_records", {"owner_person": "Christine"})["total"] == 1
+    assert run_tool(bag, "filter_records", {"owner_person": "Sam"})["total"] == 1
+    assert run_tool(bag, "filter_records", {"owner_person": "Zed"})["total"] == 0
+
+
+def test_load_graph_survives_a_catalogue_rollback(monkeypatch):
+    """load_tools rolls back when tool_catalog_entries is unreadable; that used to expire the rows
+    already loaded, and reading them raised MissingGreenlet (a 500, shown as "AI unavailable")."""
+    import os
+
+    url = os.getenv("ERASE_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("needs ERASE_TEST_DATABASE_URL")
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    from app.ai.ask import graph as graph_mod
+
+    async def broken(db):
+        await db.rollback()
+        return {}
+
+    monkeypatch.setattr(graph_mod, "catalogue_vendors", broken)
+
+    async def run():
+        engine = create_async_engine(url)
+        try:
+            async with AsyncSession(engine, expire_on_commit=False) as db:
+                row = (await db.execute(text("SELECT workspace_id, org_id FROM objects LIMIT 1"))).first()
+                if not row:
+                    pytest.skip("no objects in the test database")
+                graph = await graph_mod.load_graph(db, row[0], row[1])
+                assert graph.objects
+        finally:
+            await engine.dispose()
+
+    asyncio.run(run())

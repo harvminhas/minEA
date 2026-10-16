@@ -1,3 +1,4 @@
+import logging
 import uuid
 from typing import Any
 
@@ -8,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.ask.graph import load_graph
-from app.ai.ask.loop import _fallback, answer_with_model
+from app.ai.ask.loop import _fallback, answer_with_model, error_detail, reason_step
 from app.ai.ask.stream import ask_events, stream_ask
 from app.ai.gemini_client import is_configured
 from app.services.ask_quota import take_question
@@ -27,6 +28,7 @@ from app.services.authorization import require_limit
 from app.services.plan_features import assert_plan_allows_ai_chat
 from app.services.tenancy import TenancyContext, get_workspace_context
 
+logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/orgs/{org_slug}/workspaces/{workspace_slug}/ai",
     tags=["ai"],
@@ -72,10 +74,19 @@ async def ask(
     is source=fallback so the screen can answer from the fixed handlers.
     """
     await ctx.require_read(db)
-    over = await _take_ai_question(db, ctx, body.question)
-    if over is not None:
-        return over
-    return await answer_with_model(db, ctx, body.question, context=[turn.model_dump() for turn in body.context])
+    try:
+        over = await _take_ai_question(db, ctx, body.question)
+        if over is not None:
+            return over
+        return await answer_with_model(db, ctx, body.question, context=[turn.model_dump() for turn in body.context])
+    except Exception as exc:  # a 500 here used to show as a bare "AI unavailable" in the browser
+        return _server_error(exc)
+
+
+def _server_error(exc: BaseException) -> dict[str, Any]:
+    detail = error_detail(exc)
+    logger.exception("ask failed before/around the model call: %s", detail)
+    return {**_fallback("server_error", [], detail), "steps": [reason_step("server_error", detail)]}
 
 
 async def _take_ai_question(db: AsyncSession, ctx: TenancyContext, question: str) -> dict[str, Any] | None:
@@ -95,6 +106,12 @@ async def _one_final(payload: dict[str, Any]):
     yield {"event": "final", "data": payload}
 
 
+async def _steps_then_final(payload: dict[str, Any]):
+    for item in payload.get("steps") or []:
+        yield {"event": "step", "data": item}
+    yield {"event": "final", "data": {k: v for k, v in payload.items() if k != "steps"}}
+
+
 @router.post("/ask/stream")
 async def ask_stream(
     body: AskRequest,
@@ -105,10 +122,15 @@ async def ask_stream(
     payload. See app/ai/ask/stream.py for the frames. The workspace graph is read here, before the
     response starts, because the request's DB session is closed once the streaming body runs."""
     await ctx.require_read(db)
-    over = await _take_ai_question(db, ctx, body.question)
-    if over is not None:
-        return StreamingResponse(ask_events(_one_final(over)), media_type="text/event-stream", headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"})
-    graph = await load_graph(db, ctx.workspace.id, ctx.org_id) if ctx.workspace and body.question.strip() else None
+    headers = {"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"}
+    try:
+        over = await _take_ai_question(db, ctx, body.question)
+        if over is not None:
+            return StreamingResponse(ask_events(_one_final(over)), media_type="text/event-stream", headers=headers)
+        graph = await load_graph(db, ctx.workspace.id, ctx.org_id) if ctx.workspace and body.question.strip() else None
+    except Exception as exc:
+        payload = _server_error(exc)
+        return StreamingResponse(ask_events(_steps_then_final(payload)), media_type="text/event-stream", headers=headers)
     return StreamingResponse(
         stream_ask(None, ctx, body.question, graph=graph, context=[turn.model_dump() for turn in body.context]),
         media_type="text/event-stream",

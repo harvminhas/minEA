@@ -19,7 +19,7 @@ import { modelItemPath, modelPath, reportPath, sectionForKind } from "@/lib/mvp-
 import { aiLandscape, dataAccess, type AiLandscape, type LandscapeEdge, type LandscapeFlag, type LandscapeObject } from "@/lib/ai/landscape";
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { agingSummary } from "@/lib/infra/status";
-import { buildFacts, chipValue, FILTER_KEYS, FILTER_LABEL, filterFacts, filtersFromPayload, matchQuestion, slotFilters, yesNoSlot, type FilterKey, type RecordFacts, type RecordFilters, type Term } from "@/lib/ask/record-filter";
+import { buildFacts, chipValue, FILTER_KEYS, FILTER_LABEL, filterFacts, filtersFromPayload, matchOwner, matchQuestion, ownerSlot, slotFilters, yesNoSlot, type FilterKey, type RecordFacts, type RecordFilters, type Term } from "@/lib/ask/record-filter";
 
 /**
  * Fixed handlers. The Ask screen uses these when the model is off, times out,
@@ -103,7 +103,7 @@ export type AskAnswer = {
   /** A filtered list (quick answer or the AI's filter_records): editable chips re-run it locally. */
   records?: AskRecords;
   /** A short answer with no list ("No — nothing called Figma"): headline, one line, footer actions. */
-  lean?: { headline: string; sub?: string; name?: string; searched?: number };
+  lean?: { headline: string; sub?: string; name?: string; searched?: number; how?: string; suggest?: string[]; noAdd?: boolean };
 };
 
 export type AskRecords = {
@@ -326,6 +326,8 @@ export function answerFromRecords(input: {
   focusId?: string;
   /** Catalog objects and relationships for the AI answer (agents and AI models aren't rows). */
   landscape?: { objects: readonly LandscapeObject[]; relationships: readonly LandscapeEdge[] };
+  /** Names from the People list (owner questions also match people who own nothing yet). */
+  people?: string[];
 }): AskAnswer {
   const question = input.question.trim();
   const q = question.toLowerCase();
@@ -335,6 +337,33 @@ export function answerFromRecords(input: {
     return empty("unsupported", "Ask a question about your applications, capabilities, or infrastructure.", today);
   }
   const facts = buildFacts(input.rows, (input.landscape?.objects ?? []) as MinEAObject[], (input.landscape?.relationships ?? []) as never);
+  // "What is owned by Christine?": owner names on items (team, named owner, contact, *_owner) and People.
+  const owner = ownerSlot(question);
+  if (owner) {
+    const match = matchOwner(facts, owner, input.people ?? []);
+    if (match.owners.length) {
+      const key = match.team ? "owner_team" : "owner_person";
+      const filters = { [key]: owner } as RecordFilters;
+      return recordsAnswer({ filters, terms: [{ key, value: owner, label: match.owners.join(", "), text: owner }], source: "quick" }, facts, today);
+    }
+    const sub = match.peopleOnly.length
+      ? `${listNames(match.peopleOnly)} ${match.peopleOnly.length === 1 ? "is" : "are"} in People but not set as the owner of anything.`
+      : match.nearest.length
+        ? `No owner or person called ${owner}. Closest names: ${listNames(match.nearest)}.`
+        : `No owner, team or person called ${owner} in this workspace.`;
+    return {
+      ...empty("unsupported", `Nothing owned by ${owner}. ${sub}`, today),
+      followUps: [],
+      lean: {
+        headline: `Nothing owned by ${owner}`,
+        sub,
+        searched: facts.length,
+        how: `Looked for “${owner}” as a word or start of a word in owner teams, named owners, contacts and People across ${facts.length} items. No AI used.`,
+        suggest: match.nearest.slice(0, 2).map((name) => `What is owned by ${name}?`),
+        noAdd: true,
+      },
+    };
+  }
   // "Do we use Adobe?": a yes/no from the data (vendor incl. the catalogue's, or a word in a name).
   const slot = yesNoSlot(question);
   if (slot) {
@@ -1530,4 +1559,8 @@ function signInAnswer(question: string, rows: CatalogRow[], graph: AskGraph, bas
       : ["What doesn't use single sign-on?", "What has no owner?", "Where is our money going?"],
     caption: { generatedAt: today, recordCount: citations.length, gapCount: notRecorded.length ? 1 : 0 },
   };
+}
+
+function listNames(names: string[]): string {
+  return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
 }

@@ -5,6 +5,8 @@ regions all come from the workspace data (and the fixed provider list in data/cl
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
@@ -36,6 +38,8 @@ class Facts:
     regions: list[str] = field(default_factory=list)  # region keys
     servers: list[str] = field(default_factory=list)
     ai_on: bool = False
+    # Every owner name on the item: team, named owner, contact, free-text owner, any *_owner property.
+    owners: list[str] = field(default_factory=list)
 
 
 def region_label(key: str) -> str:
@@ -87,6 +91,7 @@ def build_facts(graph: WorkspaceGraph) -> list[Facts]:
         features = props.get("ai_features")
         facts.ai_on = isinstance(features, list) and any(isinstance(f, dict) and f.get("status") == "on" for f in features)
         facts.vendors = [v for v in facts.vendors if v]
+        facts.owners = owner_names(rec, obj)
         out.append(facts)
     return out
 
@@ -136,7 +141,7 @@ def matches(f: Facts, filters: dict, today: date | None = None) -> bool:
         return False
     if "owner_team" in filters and not _loose(filters["owner_team"], [rec.owner_team or ""]):
         return False
-    if "owner_person" in filters and not _loose(filters["owner_person"], [rec.owner_person or ""]):
+    if "owner_person" in filters and not _loose(filters["owner_person"], f.owners or [rec.owner_person or ""]):
         return False
     if "hosting" in filters and f.hosting != filters["hosting"]:
         return False
@@ -188,3 +193,15 @@ def filter_facts(graph: WorkspaceGraph, filters: dict) -> list[Facts]:
     kept = [f for f in build_facts(graph) if matches(f, filters)]
     kept.sort(key=lambda f: (-(f.rec.annual or 0), f.rec.name.lower()))
     return kept
+
+
+def owner_names(rec: Rec, obj: dict) -> list[str]:
+    props = obj.get("properties") or {}
+    names = [rec.owner_team, rec.owner_person, obj.get("owner"), obj.get("point_of_contact_name")]
+    names += [v for k, v in props.items() if isinstance(v, str) and re.search(r"(^|_)owner(_name)?$", k)]
+    out: list[str] = []
+    for name in names:
+        name = (name or "").strip() if isinstance(name, str) else ""
+        if name and fold(name) not in {fold(n) for n in out}:
+            out.append(name)
+    return out

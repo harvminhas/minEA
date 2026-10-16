@@ -164,7 +164,7 @@ export function matchesFilters(facts: RecordFacts, filters: RecordFilters, today
   if (filters.vendor && !loose(filters.vendor, facts.vendors)) return false;
   if (filters.owner && /^(none|no|missing)$/i.test(filters.owner) && (row.ownerTeam || row.ownerPerson)) return false;
   if (filters.owner_team && !loose(filters.owner_team, [row.ownerTeam])) return false;
-  if (filters.owner_person && !loose(filters.owner_person, [row.ownerPerson])) return false;
+  if (filters.owner_person && !loose(filters.owner_person, ownerNames(row))) return false;
   if (filters.hosting && facts.hosting !== hostingKey(filters.hosting)) return false;
   if (filters.provider && !loose(filters.provider, [...facts.providers, ...facts.providers.map(providerLabel)])) return false;
   if (filters.tenant && !loose(filters.tenant, facts.tenants)) return false;
@@ -342,4 +342,107 @@ export function slotFilters(slot: string, all: RecordFacts[], custom: CustomRegi
   if (viaData.terms.length) return viaData;
   if (nameWordMatches(all, slot).length) return { filters: { name: slot }, terms: [{ key: "name", value: slot, label: slot, text: slot }] };
   return null;
+}
+
+
+/** Every person or team recorded as owning this item: owner team, named owner, point of contact,
+ * the free-text owner and any "*_owner" property (business_owner, technical_owner, ...). */
+export function ownerNames(row: CatalogRow): string[] {
+  const object = (row.object ?? {}) as unknown as Record<string, unknown>;
+  const props = (object.properties ?? {}) as Record<string, unknown>;
+  const out = [row.ownerTeam, row.ownerPerson, object.owner, object.point_of_contact_name, object.owner_team_name];
+  for (const [key, value] of Object.entries(props)) {
+    if (/(^|_)owner(_name)?$/.test(key) && typeof value === "string") out.push(value);
+  }
+  return uniq(out.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim()));
+}
+
+function uniq(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const key = norm(value);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+const OWNED_WORDS = "apps|applications|systems|items|tools|platforms|services|software|stuff|things|products";
+
+/** The person/team in an ownership question ("what is owned by Christine?", "what does Christine own?",
+ * "Christine's apps"), or null. At most 5 words. */
+export function ownerSlot(question: string): string | null {
+  const q = question.trim().replace(/\s+/g, " ").replace(/[?.!]+$/, "");
+  const patterns = [
+    /\bowned by (.+)$/i,
+    /\b(?:what|which)(?: \w+)? (?:does|do) (.+?) own\b/i,
+    /\b(?:what|which) (?:does|do) (.+?) own\b/i,
+    new RegExp(`^(?:(?:show|list|find)(?: me)? |what are |which are )?(?:all )?(.+?)['’]s (?:${OWNED_WORDS})$`, "i"),
+    new RegExp(`\\b(?:${OWNED_WORDS}) (?:that |which )?(.+?) owns?$`, "i"),
+  ];
+  for (const pattern of patterns) {
+    const hit = q.match(pattern);
+    if (!hit) continue;
+    const slot = hit[1].replace(/^(the|our|my) /i, "").replace(/ (team|group)$/i, (m) => m).trim();
+    if (!slot || slot.split(" ").length > 5) continue;
+    if (/^it\b/.test(slot) || /^(do|does|did|we|us|you|i|they|nobody|no one|anyone|someone|who|everyone|the company)\b/i.test(slot)) continue;
+    return slot;
+  }
+  return null;
+}
+
+/** Word match for a name: every word of the slot is a whole word or a word prefix (3+ letters) of the name. */
+export function nameMatches(name: string, slot: string): boolean {
+  const words = norm(name).split(" ").filter(Boolean);
+  const want = norm(slot).split(" ").filter(Boolean);
+  if (!want.length) return false;
+  return want.every((w) => words.some((word) => word === w || (w.length >= 3 && word.startsWith(w))));
+}
+
+export type OwnerMatch = {
+  /** Owner names on items that matched. */
+  owners: string[];
+  /** The matched name was a team. */
+  team: boolean;
+  /** People-list names that matched but own nothing. */
+  peopleOnly: string[];
+  /** Closest owner/people names, when nothing matched. */
+  nearest: string[];
+};
+
+/** Match an owner slot against the workspace's owner names and the People list (generic, no hardcoding). */
+export function matchOwner(all: RecordFacts[], slot: string, people: string[] = []): OwnerMatch {
+  const owners = uniq(all.flatMap((facts) => ownerNames(facts.row)));
+  const teams = new Set(all.map((facts) => norm(facts.row.ownerTeam)).filter(Boolean));
+  const hit = owners.filter((name) => nameMatches(name, slot));
+  const peopleHit = uniq(people).filter((name) => nameMatches(name, slot) && !hit.some((owner) => norm(owner) === norm(name)));
+  const pool = uniq([...owners, ...people]);
+  const nearest = hit.length ? [] : pool
+    .map((name) => ({ name, d: nameDistance(name, slot) }))
+    .filter((item) => item.d <= Math.max(2, Math.floor(norm(slot).length / 3)))
+    .sort((a, b) => a.d - b.d || a.name.localeCompare(b.name))
+    .slice(0, 3)
+    .map((item) => item.name);
+  return { owners: hit, team: hit.length > 0 && hit.every((name) => teams.has(norm(name))), peopleOnly: peopleHit, nearest };
+}
+
+/** Smallest edit distance between the slot and any word (or the whole) of a name. */
+function nameDistance(name: string, slot: string): number {
+  const s = norm(slot);
+  const parts = [norm(name), ...norm(name).split(" ")];
+  return Math.min(...parts.map((part) => editDistance(part.slice(0, s.length + 2), s)));
+}
+
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return row[b.length];
 }

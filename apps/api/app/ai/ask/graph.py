@@ -257,6 +257,9 @@ def _record(obj: MinEAObject, team_names: dict[str, str]) -> Rec | None:
 
 
 async def load_graph(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID) -> WorkspaceGraph:
+    # Catalogue first: when its table is missing, load_tools rolls the session back, which would
+    # expire ORM rows loaded before it (then reading obj.properties fails with MissingGreenlet).
+    vendor_by_name = await catalogue_vendors(db)
     objects = (
         await db.execute(
             select(MinEAObject).where(MinEAObject.workspace_id == workspace_id, MinEAObject.org_id == org_id)
@@ -272,7 +275,6 @@ async def load_graph(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUI
     ).scalars().all()
 
     team_names = {str(team.id): team.name for team in teams}
-    vendor_by_name = await catalogue_vendors(db)
     records: dict[str, Rec] = {}
     edges: list[Edge] = []
     raw: list[dict] = []

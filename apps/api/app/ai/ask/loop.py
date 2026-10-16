@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.ask.ai_landscape import is_ai_question
 from app.ai.ask.graph import load_graph
-from app.ai.ask.steps import checking_step, estate_step, same_step, tool_step
+from app.ai.ask.steps import checking_step, estate_step, same_step, step, tool_step
 from app.ai.ask.tools import ToolBag, run_tool, tool_specs
 from app.ai.gemini_client import build_gemini_tools, get_client, is_configured, model_name
 from app.services.tenancy import TenancyContext
@@ -84,12 +84,13 @@ NOT_AI = {
 }
 
 
-def _fallback(reason: str, tools_used: list[str]) -> dict:
+def _fallback(reason: str, tools_used: list[str], detail: str | None = None) -> dict:
     # Server-side record of why the model's answer wasn't used (no key, timeout, limit, ...).
-    logging.getLogger(__name__).info("ask fallback reason=%s tools=%s", reason, ",".join(tools_used))
+    logging.getLogger(__name__).info("ask fallback reason=%s detail=%s tools=%s", reason, detail or "", ",".join(tools_used))
     return {
         "source": "fallback",
         "fallback_reason": reason,
+        **({"fallback_detail": detail} if detail else {}),
         "answer_text": None,
         "citations": [],
         "gaps": [],
@@ -269,6 +270,28 @@ def conversation_prompt(question: str, context: list[dict], graph) -> tuple[str,
     return "\n".join(lines), earlier
 
 
+_SECRETISH = re.compile(r"(AIza[0-9A-Za-z_\-]{10,}|key=[^&\s]+|sk_[a-z]+_[0-9A-Za-z]+|Bearer\s+\S+)")
+
+
+def error_detail(exc: BaseException) -> str:
+    """Short, secret-free reason for logs and the UI: "ClientError 404: models/x is not found"."""
+    code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+    message = _SECRETISH.sub("[redacted]", " ".join(str(exc).split()))[:140]
+    head = type(exc).__name__ + (f" {code}" if code else "")
+    return f"{head}: {message}" if message else head
+
+
+def reason_step(reason: str, detail: str | None = None) -> dict:
+    """A line in "How this was worked out" saying why the AI's answer wasn't used."""
+    words = {
+        "model_unavailable": "AI not set up on the server (GOOGLE_API_KEY is empty)",
+        "timeout": "AI call ran out of time",
+        "model_error": "AI call failed",
+        "server_error": "Server error before the AI was asked",
+    }.get(reason, f"AI answer not used ({reason})")
+    return step("ai-reason", f"{words}{f': {detail}' if detail else ''} [reason: {reason}]", status="error")
+
+
 async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str, context: list[dict] | None = None) -> dict:
     """JSON contract of POST /ai/ask: the final answer, plus `steps` (what the server did)."""
     steps: list[dict] = []
@@ -304,6 +327,7 @@ async def run_ask(
     # Chat stays on the business plan. Ask uses the configured model on any plan
     # and falls back to the fixed handlers when the model is missing or fails.
     if not is_configured():
+        yield {"event": "step", "data": reason_step("model_unavailable")}
         yield {"event": "final", "data": _fallback("model_unavailable", [])}
         return
     if not ctx.workspace:
@@ -338,7 +362,9 @@ async def run_ask(
         for _round in range(MAX_ROUNDS):
             remaining = TOTAL_BUDGET_SECONDS - (clock() - started)
             if remaining < MIN_CALL_WINDOW_SECONDS:
-                yield {"event": "final", "data": _fallback("timeout", tools_used)}
+                detail = f"{TOTAL_BUDGET_SECONDS - remaining:.0f}s used of {TOTAL_BUDGET_SECONDS:.0f}s, model {model_name()}"
+                yield {"event": "step", "data": reason_step("timeout", detail)}
+                yield {"event": "final", "data": _fallback("timeout", tools_used, detail)}
                 return
             response = await asyncio.wait_for(
                 get_client().aio.models.generate_content(
@@ -400,10 +426,17 @@ async def run_ask(
                 parts.append(types.Part.from_function_response(name=name, response={"result": result}))
             contents.append(types.Content(role="user", parts=parts))
     except TimeoutError:
-        yield {"event": "final", "data": _fallback("timeout", tools_used)}
+        detail = f"no reply within {CALL_TIMEOUT_SECONDS:.0f}s, model {model_name()}"
+        logging.getLogger(__name__).warning("ask model timeout: %s", detail)
+        yield {"event": "step", "data": reason_step("timeout", detail)}
+        yield {"event": "final", "data": _fallback("timeout", tools_used, detail)}
         return
-    except Exception:
-        yield {"event": "final", "data": _fallback("model_error", tools_used)}
+    except Exception as exc:
+        # Log the exact exception (type, status, message, traceback) so prod logs show the cause.
+        detail = error_detail(exc)
+        logging.getLogger(__name__).exception("ask model call failed (model=%s): %s", model_name(), detail)
+        yield {"event": "step", "data": reason_step("model_error", detail)}
+        yield {"event": "final", "data": _fallback("model_error", tools_used, detail)}
         return
     yield {"event": "final", "data": _fallback("round_budget", tools_used)}
 

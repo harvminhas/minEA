@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ChevronRight, Sparkles, X } from "lucide-react";
-import { addApi, aiApi, objectsApi } from "@/lib/api-client";
+import { addApi, aiApi, objectsApi, peopleDirectoryApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, modelItemPath, modelPath, reportPath } from "@/lib/mvp-paths";
@@ -15,7 +15,7 @@ import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
 import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, answerFromRecords, recordsAnswer, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
-import { buildFacts, yesNoSlot, type RecordFilters } from "@/lib/ask/record-filter";
+import { buildFacts, ownerSlot, yesNoSlot, type RecordFilters } from "@/lib/ask/record-filter";
 import { AskRecordsBlock, FollowPill } from "@/components/mvp/AskRecords";
 import { adminTabHref } from "@/lib/billing/admin-centre";
 import { splitSummary } from "@/lib/ask/rich";
@@ -134,9 +134,21 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   useEffect(() => {
     if (orgSlug && workspaceSlug) setThread(readThread(window.sessionStorage, orgSlug, workspaceSlug));
   }, [orgSlug, workspaceSlug]);
+  // Owner questions also match names on the People list (someone listed who owns nothing yet).
+  // Only fetched for an owner question; a viewer without access just gets owner names from items.
+  const ownerQuestion = mode === "answer" && Boolean(ownerSlot(question));
+  const directory = useQuery({
+    queryKey: ["people-directory", orgSlug, workspaceSlug],
+    enabled: ownerQuestion && Boolean(orgSlug && workspaceSlug),
+    retry: false,
+    staleTime: 60_000,
+    queryFn: async () => peopleDirectoryApi.get(orgSlug!, workspaceSlug!, (await getToken())!),
+  });
+  const people = useMemo(() => (directory.data?.people ?? []).map((person) => person.name), [directory.data]);
   const unscopedLocal = useMemo(
     () =>
       answerFromRecords({
+        people,
         question,
         rows,
         graph: { nodes: impact.nodes, edges: impact.edges },
@@ -145,7 +157,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
         focusId,
         landscape: catalog.data ? { objects: catalog.data.objects, relationships: catalog.data.relationships } : undefined,
       }),
-    [question, rows, impact.nodes, impact.edges, impact.isLoading, impactQuery, basePath, focusId, catalog.data]
+    [question, rows, impact.nodes, impact.edges, impact.isLoading, impactQuery, basePath, focusId, catalog.data, people]
   );
 
   // A follow-up that refers back ("which of those…") to the previous turn's items: when the browser
@@ -219,8 +231,12 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const baseAnswer = useMemo(() => {
     if (mode !== "answer" || !question) return local;
     const fromModel = askModel && remoteData ? answerFromModel(remoteData, rows, basePath, question) : null;
-    return pickAnswer(local, fromModel, question, askModel ? remoteData?.steps : undefined);
-  }, [mode, question, askModel, remoteData, local, rows, basePath]);
+    // The request itself failed (network, proxy timeout, 5xx): say so in the steps with a reason code.
+    const failed: AskStep[] | undefined = askModel && remote.isError
+      ? [{ id: "ai-reason", status: "error", label: `AI request failed before an answer came back: ${requestError(remote.error)} [reason: request_failed]` }]
+      : undefined;
+    return pickAnswer(local, fromModel, question, askModel ? remoteData?.steps ?? failed : undefined);
+  }, [mode, question, askModel, remoteData, local, rows, basePath, remote.isError, remote.error]);
   // List answers (quick or the AI's filter_records): chips edit the filters and re-run them here.
   const facts = useMemo(
     () => buildFacts(rows, catalog.data?.objects ?? [], catalog.data?.relationships ?? []),
@@ -234,16 +250,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   }, [baseAnswer, edited, question, facts]);
   // Why the AI's answer isn't shown, when it isn't: unavailable (no key / error / timeout) or the
   // organisation's monthly allowance is used up. Quick answers keep working in both cases.
-  const fallbackReason = askModel ? (remoteData?.source === "fallback" ? remoteData.fallback_reason : remote.isError ? "model_error" : null) : null;
+  const fallbackReason = askModel ? (remoteData?.source === "fallback" ? remoteData.fallback_reason : remote.isError ? "request_failed" : null) : null;
   // Every reason the AI's answer wasn't used gets its own line; none falls back to a bare generic sentence.
   const aiNote = answer.handler === "unsupported" ? aiFallbackNote(fallbackReason, askModel && remoteData?.source === "llm" && Boolean(remoteData.unsupported)) : null;
   const aiUnavailable = Boolean(aiNote?.blocked);
   const quotaHit = fallbackReason === "limit" ? remoteData?.quota ?? null : null;
-  // The local "can't answer" sentence is about the catalogue alone; when the AI couldn't be asked, say that.
-  const blockedText =
-    answer.handler === "unsupported" && answer.gaps.length === 0 && (aiUnavailable || quotaHit)
-      ? "This question needs an AI answer, and the AI couldn't be used for it. Quick answers still work: name a vendor, owner, tenant or region from your workspace."
-      : null;
 
   // Reveal a freshly streamed answer word by word in the card (cached answers show at once).
   const [revealed, setRevealed] = useState<{ question: string; at: number; n: number } | null>(null);
@@ -262,7 +273,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remote.dataUpdatedAt, question]);
   const revealing = revealed && revealed.question === question && revealed.at === remote.dataUpdatedAt && revealed.n < revealTokens(answer.answerText).length;
-  const shownText = blockedText ?? (revealing ? revealText(answer.answerText, revealed!.n) : answer.answerText);
+  const shownText = revealing ? revealText(answer.answerText, revealed!.n) : answer.answerText;
 
   // Keep each settled answer as a turn of the conversation (this tab only).
   useEffect(() => {
@@ -467,7 +478,18 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   }
 
   // Lean card: a filtered list (quick or AI) or a short "No". Headline + chips + table + footer, no prose.
-  const leanCard = !thinking && answer.handler !== "clarify" && Boolean(answer.records || answer.lean);
+  // The AI couldn't be used (error, timeout, not set up, monthly limit): the same lean card, its
+  // headline says why, one grey line says what still works, the steps carry the reason code.
+  const fallbackLean: AskAnswer["lean"] | null =
+    !answer.lean && !answer.records && answer.handler === "unsupported" && (aiNote || quotaHit)
+      ? {
+          headline: quotaHit ? "This month's AI questions are used up" : aiNote!.title.replace(/\.$/, ""),
+          sub: answer.gaps[0]?.text ?? (aiNote && !aiNote.blocked ? aiNote.body : "Quick answers still work: name a vendor, owner, team or region from your workspace."),
+          suggest: followUpsFor(answer.followUps, question).slice(0, 2),
+        }
+      : null;
+  const shownLean = answer.lean ?? fallbackLean;
+  const leanCard = !thinking && answer.handler !== "clarify" && Boolean(answer.records || shownLean);
   const smallActions = (
     <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-[#f3f4f8] pt-2.5 text-[12px] text-[#8b90a0]" data-testid="ask-small-actions">
       <button type="button" className="hover:text-[#5b4ce6]" onClick={() => { saveAsk(question, answer.answerText); setNote("Saved to Reports › Saved from Ask"); }}>Save as report</button>
@@ -543,7 +565,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
           </div>
         ) : (
           <div className="px-5 py-5">
-            {quotaHit && (
+            {quotaHit && !fallbackLean && (
               <p data-testid="ask-limit" className="mb-3 flex flex-wrap items-center gap-1.5 text-[12px] text-[#6b7289]">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#f59e0b]" />
                 Your organisation has used its {quotaHit.limit.toLocaleString("en-US")} AI questions for this month. Quick answers (vendors, owners, renewals, spend, impact) still work.
@@ -552,13 +574,13 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 )}
               </p>
             )}
-            {aiNote && (
+            {aiNote && !fallbackLean && (
               <div data-testid={aiNote.blocked ? "ask-ai-unavailable" : "ask-ai-note"} data-reason={fallbackReason ?? "unsupported"} className="mb-3 rounded-xl border border-[#e6e8ee] bg-[#f3f4f8] px-4 py-3 text-[13px] text-[#3c4254]">
                 <b>{aiNote.title}</b> {aiNote.body}
               </div>
             )}
-            {answer.lean && !answer.records && (
-              <LeanAnswer lean={answer.lean} basePath={basePath} footerExtra={smallActions} onAdd={(name) => submit(prefixAdd(name))} />
+            {shownLean && !answer.records && (
+              <LeanAnswer lean={shownLean} basePath={basePath} footerExtra={smallActions} onAdd={(name) => submit(prefixAdd(name))} onAsk={submit} steps={answer.steps} />
             )}
             {!leanCard && <p className="text-[17px] leading-7 text-[#1c2230]">
               {answer.handler === "clarify" ? (
@@ -1127,21 +1149,29 @@ export function shortQuestion(question: string): string {
 }
 
 /** The short "No" card: headline, one line, How I found this and two actions. */
-function LeanAnswer({ lean, basePath, footerExtra, onAdd }: { lean: NonNullable<AskAnswer["lean"]>; basePath: string; footerExtra: ReactNode; onAdd: (name: string) => void }) {
+function LeanAnswer({ lean, basePath, footerExtra, onAdd, onAsk, steps }: { lean: NonNullable<AskAnswer["lean"]>; basePath: string; footerExtra: ReactNode; onAdd: (name: string) => void; onAsk: (question: string) => void; steps?: AskStep[] }) {
   return (
     <div data-testid="ask-lean">
       <h2 data-testid="ask-lean-headline" className="text-[20px] font-bold leading-7 text-[#1c2230]">{lean.headline}</h2>
-      {lean.sub && <p className="mt-1.5 text-[13px] text-[#6b7289]">{lean.sub}</p>}
+      {lean.sub && <p data-testid="ask-lean-sub" className="mt-1.5 text-[13px] text-[#6b7289]">{lean.sub}</p>}
       <div className="mt-3 flex flex-wrap items-start gap-2 text-[12px]">
         <details className="group min-w-0 flex-1" data-testid="ask-how">
-          <summary className="cursor-pointer list-none font-semibold text-[#5b4ce6] [&::-webkit-details-marker]:hidden"><span className="inline-block transition-transform group-open:rotate-90">▸</span> How I found this</summary>
-          <p className="mt-2 text-[13px] text-[#4a5068]">
-            Looked for “{lean.name}” as a whole word in item names, in vendor fields and in the tool catalogue{lean.searched != null ? ` across ${lean.searched} items` : ""}. Nothing matched. No AI used.
-          </p>
+          <summary className="cursor-pointer list-none font-semibold text-[#5b4ce6] [&::-webkit-details-marker]:hidden"><span className="inline-block transition-transform group-open:rotate-90">▸</span> {lean.how || lean.name ? "How I found this" : `How this was worked out${steps?.length ? ` · ${steps.length} steps` : ""}`}</summary>
+          {(lean.how || lean.name) && (
+            <p className="mt-2 text-[13px] text-[#4a5068]">
+              {lean.how ?? `Looked for “${lean.name}” as a whole word in item names, in vendor fields and in the tool catalogue${lean.searched != null ? ` across ${lean.searched} items` : ""}. Nothing matched. No AI used.`}
+            </p>
+          )}
+          {(steps?.length ?? 0) > 0 && (
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-[13px] text-[#4a5068]" data-testid="ask-lean-steps">
+              {steps!.map((item) => <li key={item.id} className={item.status === "error" ? "text-[#a35a00]" : ""}>{item.label}</li>)}
+            </ol>
+          )}
         </details>
         <div className="flex flex-wrap items-center gap-1.5">
-          {lean.name && <FollowPill label={`+ Add ${lean.name}`} onClick={() => onAdd(lean.name!)} />}
-          <FollowPill label="See all apps" href={modelPath(basePath, "applications")} />
+          {(lean.suggest ?? []).slice(0, 2).map((q) => <FollowPill key={q} label={q} onClick={() => onAsk(q)} />)}
+          {!lean.suggest?.length && lean.name && !lean.noAdd && <FollowPill label={`+ Add ${lean.name}`} onClick={() => onAdd(lean.name!)} />}
+          {!lean.suggest?.length && <FollowPill label="See all apps" href={modelPath(basePath, "applications")} />}
         </div>
       </div>
       {footerExtra}
@@ -1237,4 +1267,12 @@ export function aiFallbackNote(reason: string | null | undefined, modelSaidUnsup
     default: // model_error, timeout, stream_failed, anything new
       return { title: "The AI is unavailable right now.", body: "Try again in a few minutes; quick answers below still work.", blocked: true };
   }
+}
+
+/** Short, secret-free text for a failed Ask request ("HTTP 504", "Failed to fetch"). */
+export function requestError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const status = (error as { status?: number } | null)?.status;
+  const text = message.replace(/(AIza[0-9A-Za-z_-]{10,}|Bearer\s+\S+)/g, "[redacted]").replace(/\s+/g, " ").slice(0, 120);
+  return [status ? `HTTP ${status}` : "", text].filter(Boolean).join(" ") || "unknown error";
 }

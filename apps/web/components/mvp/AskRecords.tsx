@@ -41,9 +41,10 @@ export function leanSummary(kept: RecordFacts[], filters: RecordFilters, yesNo: 
   const kinds = new Map<string, number>();
   for (const row of rows) kinds.set(row.typeLabel, (kinds.get(row.typeLabel) ?? 0) + 1);
   const vendor = filters.vendor ? chipValue("vendor", filters) : "";
+  const owner = filters.owner_person || filters.owner_team || "";
   const names = yesNo && rows.length > 0 && rows.length <= 3 ? rows : [];
   const noun = rows.length === 1 ? "item" : "items";
-  const title = names.length ? null : rows.length ? `${yesNo ? "Yes — " : ""}${rows.length} ${vendor ? `${vendor} ` : ""}${noun}` : yesNo ? `No — nothing matches${vendor ? ` ${vendor}` : ""}` : "Nothing matches these filters";
+  const title = names.length ? null : rows.length && owner && !vendor ? `${rows.length} ${noun} owned by ${owner}` : rows.length ? `${yesNo ? "Yes — " : ""}${rows.length} ${vendor ? `${vendor} ` : ""}${noun}` : owner ? `Nothing owned by ${owner}` : yesNo ? `No — nothing matches${vendor ? ` ${vendor}` : ""}` : "Nothing matches these filters";
   return {
     yes: yesNo && rows.length > 0,
     names,

@@ -25,8 +25,10 @@ export const LOCAL_ONLY_HANDLERS: ReadonlySet<AskAnswer["handler"]> = new Set([
 ]);
 
 /** True when the local answer will be shown whatever the model says. */
-export function localOnly(local: Pick<AskAnswer, "handler">, question: string): boolean {
+export function localOnly(local: Pick<AskAnswer, "handler"> & Partial<Pick<AskAnswer, "lean">>, question: string): boolean {
   if (LOCAL_ONLY_HANDLERS.has(local.handler)) return true;
+  // A short "No" worked out from the data (nothing named X, nothing owned by Y) is final.
+  if (local.lean) return true;
   // Customer / financial / personal data: the F1 rule (each app's Holds data) answers, not the model.
   if (local.handler === "ai" && isAiDataQuestion(question)) return true;
   return false;
@@ -41,7 +43,7 @@ export type ModelGate = {
   hasWorkspace: boolean;
   /** The catalogue has loaded (or failed), so the local handler is final. */
   catalogSettled: boolean;
-  local: Pick<AskAnswer, "handler">;
+  local: Pick<AskAnswer, "handler"> & Partial<Pick<AskAnswer, "lean">>;
   /** The catalogue loaded and holds no applications or infrastructure: there is nothing to look up. */
   estateEmpty?: boolean;
 };
