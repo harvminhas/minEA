@@ -10,6 +10,7 @@
 import type { MinEAObject } from "@minea/types";
 import { displayVendor, type CatalogRow } from "@/lib/model-catalog";
 import { PROVIDERS, regionByKey, tenantProvider, type CustomRegion } from "@/lib/hosting/cloud";
+import { exactCatalogTool, TOOL_CATALOG } from "@/lib/setup/match-tools";
 
 export type RecordFilters = {
   type?: string;
@@ -88,6 +89,11 @@ export function buildFacts(rows: CatalogRow[], objects: readonly MinEAObject[] =
   return rows.map((row) => {
     const props = (row.object?.properties ?? {}) as Record<string, unknown>;
     const vendors = [row.vendor, ...(row.vendorKeys ?? [])].map((v) => displayVendor(v)).filter(Boolean);
+    // No vendor recorded: the tool catalogue's vendor for this name (Adobe Photoshop -> Adobe).
+    if (!vendors.length) {
+      const inferred = catalogVendor(row.name, String(props.catalog_tool ?? ""));
+      if (inferred) vendors.push(inferred);
+    }
     const facts: RecordFacts = { row, vendors, hosting: hostingKey(String(props.hosting_model ?? "")), tenants: [], providers: [], regions: [], servers: [], aiOn: false };
     if (row.object?.type === "cloud_service") {
       const pid = tenantProvider(props, row.name);
@@ -114,6 +120,12 @@ export function buildFacts(rows: CatalogRow[], objects: readonly MinEAObject[] =
     facts.vendors = unique(facts.vendors.map(titleVendor));
     return facts;
   });
+}
+
+/** The catalogue vendor for an item's name (or its catalog_tool key), when exactly one tool matches. */
+export function catalogVendor(name: string, catalogKey = ""): string {
+  const byKey = catalogKey ? TOOL_CATALOG.find((tool) => fold(tool.name) === fold(catalogKey)) : undefined;
+  return (byKey ?? exactCatalogTool(name))?.vendor ?? "";
 }
 
 function titleVendor(value: string): string {
@@ -300,4 +312,31 @@ export function matchQuestion(question: string, all: RecordFacts[], custom: Cust
   }
   if (!found.length) return { filters: {}, terms: [] };
   return { filters: { ...filters, ...modifiers(question) }, terms: found };
+}
+
+// ─── "Do we use X?" ────────────────────────────────────────────────────────
+
+const YES_NO = /^\s*(?:do|does|are|is)\s+(?:we|you|our (?:company|team|business)|the company|anyone|anybody)\s+(?:still\s+|currently\s+|already\s+)?(?:use|using|have|own|run|running|pay for|paying for|license|licence|subscribe to)\s+(?:any(?:thing)?\s+(?:from\s+)?|an?\s+|the\s+)?(.+?)\s*(?:products?|apps?|applications?|tools?|software|licen[cs]es?|subscriptions?)?\s*\??\s*$/i;
+
+/** The thing asked about in "do we use X?" / "do we have X?" (null when the question isn't that shape). */
+export function yesNoSlot(question: string): string | null {
+  const m = question.match(YES_NO);
+  const slot = m?.[1]?.trim().replace(/[?.!]+$/, "") ?? "";
+  if (!slot || slot.split(/\s+/).length > 4) return null;
+  return slot;
+}
+
+/** Items whose name has the slot as a whole word or word prefix ("Adobe" in "Adobe Photoshop"). */
+export function nameWordMatches(all: RecordFacts[], slot: string): RecordFacts[] {
+  const wanted = norm(slot);
+  if (wanted.replace(/ /g, "").length < 3) return [];
+  return all.filter((facts) => (` ${norm(facts.row.name)} `).includes(` ${wanted} `));
+}
+
+/** Filters for a yes/no slot: a vendor/tenant/owner name from the data first, else a name word. */
+export function slotFilters(slot: string, all: RecordFacts[], custom: CustomRegion[] = []): QuestionMatch | null {
+  const viaData = matchQuestion(slot, all, custom);
+  if (viaData.terms.length) return viaData;
+  if (nameWordMatches(all, slot).length) return { filters: { name: slot }, terms: [{ key: "name", value: slot, label: slot, text: slot }] };
+  return null;
 }

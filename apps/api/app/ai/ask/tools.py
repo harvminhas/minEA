@@ -78,7 +78,7 @@ def search_records(bag: ToolBag, args: dict) -> dict:
         if text and text in hay:
             bag.note_record(rec)
             matches.append({**rec.summary(), "score": len(text) / max(len(hay), 1)})
-        elif text and len(text) >= 3 and any(text in fold(name) for name in rec.vendor_names):
+        elif text and len(text) >= 3 and any(text in fold(name) for name in [*rec.vendor_names, rec.catalog_vendor or ""] if name):
             # "microsoft" finds items whose vendor (or catalogue vendor / cost-line vendor) is Microsoft.
             bag.note_record(rec)
             matches.append({**rec.summary(), "score": 0.01, "matched": "vendor"})

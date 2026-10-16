@@ -63,7 +63,7 @@ def build_facts(graph: WorkspaceGraph) -> list[Facts]:
             continue
         obj = raw.get(rec.id) or {}
         props = obj.get("properties") or {}
-        facts = Facts(rec=rec, vendors=list(rec.vendor_names), hosting=hosting_key(str(props.get("hosting_model") or "")))
+        facts = Facts(rec=rec, vendors=list(rec.vendor_names) or ([rec.catalog_vendor] if rec.catalog_vendor else []), hosting=hosting_key(str(props.get("hosting_model") or "")))
         if obj.get("type") == "cloud_service":
             pid = tenant_provider(props, rec.name)
             facts.providers.append(pid)

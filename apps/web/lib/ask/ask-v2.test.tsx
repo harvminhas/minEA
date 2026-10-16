@@ -108,12 +108,12 @@ test("can't answer says what it understood and what data is missing, with a link
   const facts = buildFacts(ROWS, OBJECTS as never, RELS as never);
   const renew = cantAnswer("When do our contracts come up for renewal?", ROWS, facts, "/w", "Oct 16");
   assert.equal(renew.handler, "unsupported");
-  assert.match(renew.answerText, /understood it as a question about renewal dates/);
+  assert.match(renew.answerText, /To answer this I need renewal dates/);
   assert.deepEqual(renew.gaps, [{ text: "No item has renewal dates yet. Add them to answer this.", fillHref: "/w/model/applications" }]);
   const vague = ask("Tell me a joke about our estate");
   assert.equal(vague.handler, "unsupported");
-  assert.match(vague.answerText, /doesn't name a vendor, owner, tenant, provider or region in this workspace/);
-  assert.match(cantAnswer("anything", [], [], "/w", "Oct 16").answerText, /nothing is recorded/);
+  assert.match(vague.answerText, /couldn't match this to anything in your workspace/);
+  assert.match(cantAnswer("anything", [], [], "/w", "Oct 16").answerText, /Nothing is recorded/);
 });
 
 test("fixed handlers keep their questions (impact, who owns, renewals without a name)", () => {

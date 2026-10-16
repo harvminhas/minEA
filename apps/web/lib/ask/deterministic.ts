@@ -19,7 +19,7 @@ import { modelItemPath, modelPath, reportPath, sectionForKind } from "@/lib/mvp-
 import { aiLandscape, dataAccess, type AiLandscape, type LandscapeEdge, type LandscapeFlag, type LandscapeObject } from "@/lib/ai/landscape";
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { agingSummary } from "@/lib/infra/status";
-import { buildFacts, chipValue, FILTER_KEYS, FILTER_LABEL, filterFacts, filtersFromPayload, matchQuestion, type FilterKey, type RecordFacts, type RecordFilters, type Term } from "@/lib/ask/record-filter";
+import { buildFacts, chipValue, FILTER_KEYS, FILTER_LABEL, filterFacts, filtersFromPayload, matchQuestion, slotFilters, yesNoSlot, type FilterKey, type RecordFacts, type RecordFilters, type Term } from "@/lib/ask/record-filter";
 
 /**
  * Fixed handlers. The Ask screen uses these when the model is off, times out,
@@ -331,6 +331,19 @@ export function answerFromRecords(input: {
     return empty("unsupported", "Ask a question about your applications, capabilities, or infrastructure.", today);
   }
   const facts = buildFacts(input.rows, (input.landscape?.objects ?? []) as MinEAObject[], (input.landscape?.relationships ?? []) as never);
+  // "Do we use Adobe?": a yes/no from the data (vendor incl. the catalogue's, or a word in a name).
+  const slot = yesNoSlot(question);
+  if (slot) {
+    const hit = slotFilters(slot, facts);
+    if (hit) return recordsAnswer({ filters: hit.filters, terms: hit.terms, source: "quick" }, facts, today, { yesNo: true });
+    if (!FIELD_HELP.some((field) => field.words.test(slot.toLowerCase()))) {
+      return {
+        ...empty("unsupported", `Not that I can see: nothing in this workspace is named “${slot}” or recorded as made by ${slot}.`, today),
+        gaps: [{ text: `If you use ${slot}, add it so it shows up here.`, fillHref: `${input.basePath}/ask` }],
+        followUps: SUGGESTED.slice(0, 3),
+      };
+    }
+  }
   const matched = matchQuestion(question, facts);
   if (matched.terms.length && wantsRecords(classifyIntent(question), q, matched.filters)) {
     return recordsAnswer({ filters: matched.filters, terms: matched.terms, source: "quick" }, facts, today);
@@ -341,12 +354,9 @@ export function answerFromRecords(input: {
     return aiAnswer(result, input.landscape.objects, input.rows, input.basePath, today);
   }
   if (/uptime|invoice|ticket|forecast|opinion/.test(q) || /customer data|sensitive|personal data/.test(q)) {
+    const what = q.match(/uptime|invoices?|tickets?|forecasts?|opinions?|customer data|sensitive data|personal data/)?.[0] ?? "that";
     return {
-      ...empty(
-        "unsupported",
-        "I can't answer that yet. This workspace doesn't have that, so nothing here is guessed. Try one of the questions below.",
-        today
-      ),
+      ...empty("unsupported", `BuboMap doesn't record ${what} for your apps, so I won't guess. Each app's Holds data and AI features are recorded; try one of the questions below.`, today),
       followUps: SUGGESTED.slice(0, 3),
     };
   }
@@ -420,18 +430,22 @@ export function filterPhrase(filters: RecordFilters): string {
 }
 
 /** The answer sentence and citations for a filtered list. Shared by quick answers and chip edits. */
-export function recordsAnswer(records: AskRecords, facts: RecordFacts[], today: string): AskAnswer {
+export function recordsAnswer(records: AskRecords, facts: RecordFacts[], today: string, options: { yesNo?: boolean } = {}): AskAnswer {
   const kept = filterFacts(facts, records.filters);
   const rows = kept.map((item) => item.row);
   const total = rows.reduce((sum, row) => sum + (row.annualCostNumber ?? 0), 0);
   const owned = rows.filter((row) => row.ownerTeam || row.ownerPerson).length;
   const phrase = filterPhrase(records.filters);
   const counted = describeTypes(typeLabels(rows));
-  const answerText = rows.length
+  let answerText = rows.length
     ? `**${counted}** ${rows.length === 1 ? "matches" : "match"} ${phrase}.` +
       (total > 0 ? ` Together they cost **${money(total)} a year**.` : " None has an annual cost recorded.") +
       (records.filters.owner ? "" : ` ${owned === rows.length ? (rows.length === 1 ? "It has an owner." : "All have an owner.") : `${owned} of ${rows.length} ${owned === 1 ? "has" : "have"} an owner.`}`)
     : `Nothing in this workspace matches ${phrase}. Change or remove a filter below.`;
+  if (options.yesNo && rows.length) {
+    const listed = rows.length <= 3 ? `: ${rows.map((row) => row.name).join(", ")}` : "";
+    answerText = `Yes — **${counted}** ${rows.length === 1 ? "matches" : "match"} ${phrase}${listed}.` + answerText.slice(answerText.indexOf(".") + 1);
+  }
   return {
     handler: "records",
     answerText,
@@ -477,14 +491,14 @@ export function cantAnswer(question: string, rows: CatalogRow[], facts: RecordFa
   const gaps = missing.map((field) => ({ text: `No item has ${field.label} yet. Add them to answer this.`, fillHref: apps }));
   let answerText: string;
   if (!rows.length) {
-    answerText = "I can't answer that yet: nothing is recorded in this workspace. Add your apps first.";
+    answerText = "Nothing is recorded in this workspace yet, so there's nothing to answer from. Add your apps first.";
     gaps.push({ text: "Add apps and where they run.", fillHref: `${basePath}/ask` });
   } else if (missing.length) {
-    answerText = `I can't answer that yet: I understood it as a question about ${missing.map((f) => f.label).join(" and ")}, and none of your ${rows.length} items has ${missing.length === 1 ? "that" : "those"} recorded.`;
+    answerText = `To answer this I need ${missing.map((f) => f.label).join(" and ")}, and none of your ${rows.length} items has ${missing.length === 1 ? "that" : "those"} recorded yet.`;
   } else if (about.length) {
-    answerText = `I can't answer that yet. I understood it as a question about ${about.map((f) => f.label).join(" and ")}, but couldn't tell which items you mean. Name a vendor, owner, tenant or region from your workspace, or try one below.`;
+    answerText = `I read this as a question about ${about.map((f) => f.label).join(" and ")}, but couldn't tell which items you mean. Name a vendor, product, owner, tenant or region from your workspace, or try one below.`;
   } else {
-    answerText = "I can't answer that yet. It doesn't name a vendor, owner, tenant, provider or region in this workspace, or a field BuboMap records. Try one of the questions below.";
+    answerText = "I couldn't match this to anything in your workspace: it doesn't name a vendor, product, owner, tenant, provider or region recorded here, or a field BuboMap keeps. Try one of the questions below.";
   }
   return { ...empty("unsupported", answerText, today), gaps, followUps: SUGGESTED.slice(0, 3) };
 }

@@ -82,6 +82,9 @@ class Rec:
     criticality: str | None
     blank: list[str] = field(default_factory=list)
     description: str = ""
+    # No vendor recorded: the tool catalogue's vendor for this name (Adobe Photoshop -> Adobe). Used for
+    # matching (filter_records, aggregate filters, search_records); the vendor field and gaps don't change.
+    catalog_vendor: str | None = None
 
     def type_label(self) -> str:
         if self.raw_type == "technical_capability":
@@ -104,6 +107,7 @@ class Rec:
             "owner_team": self.owner_team,
             "owner_person": self.owner_person,
             "vendor": self.vendor,
+            **({"catalog_vendor": self.catalog_vendor} if self.catalog_vendor else {}),
             "annual_cost": self.annual,
             "cost_note": self.cost_note,
             "renewal_date": self.renewal,
@@ -268,12 +272,15 @@ async def load_graph(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUI
     ).scalars().all()
 
     team_names = {str(team.id): team.name for team in teams}
+    vendor_by_name = await catalogue_vendors(db)
     records: dict[str, Rec] = {}
     edges: list[Edge] = []
     raw: list[dict] = []
     for obj in objects:
         rec = _record(obj, team_names)
         if rec:
+            if not rec.vendor_names:
+                rec.catalog_vendor = catalog_vendor_for(vendor_by_name, rec.name, str((obj.properties or {}).get("catalog_tool") or ""))
             records[rec.id] = rec
         raw.append(_raw(obj, team_names))
     for rel in relationships:
@@ -295,3 +302,42 @@ def _raw(obj: MinEAObject, team_names: dict[str, str]) -> dict:
         "point_of_contact_name": obj.point_of_contact_name,
         "properties": obj.properties or {},
     }
+
+
+async def catalogue_vendors(db: AsyncSession) -> dict[str, str]:
+    """Normalized tool name/alias -> vendor from the tool catalogue (DB, else bundled tools.json).
+    A name two tools share with different vendors is left out (no guessing)."""
+    from app.services.tool_catalog import load_tools
+
+    try:
+        tools, _, _ = await load_tools(db)
+    except Exception:
+        return {}
+    return vendor_index(tools)
+
+
+def vendor_index(tools: list[dict]) -> dict[str, str]:
+    from app.services.tool_catalog import normalize
+
+    out: dict[str, str] = {}
+    clash: set[str] = set()
+    for tool in tools:
+        vendor = str(tool.get("vendor") or "").strip()
+        if not vendor:
+            continue
+        for name in [tool.get("name") or "", *(tool.get("aliases") or [])]:
+            key = normalize(str(name))
+            if not key:
+                continue
+            if key in out and out[key] != vendor:
+                clash.add(key)
+            out.setdefault(key, vendor)
+    for key in clash:
+        out.pop(key, None)
+    return out
+
+
+def catalog_vendor_for(index: dict[str, str], name: str, catalog_key: str = "") -> str | None:
+    from app.services.tool_catalog import normalize
+
+    return index.get(normalize(catalog_key)) or index.get(normalize(name)) or None

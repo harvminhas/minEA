@@ -235,7 +235,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   // Why the AI's answer isn't shown, when it isn't: unavailable (no key / error / timeout) or the
   // organisation's monthly allowance is used up. Quick answers keep working in both cases.
   const fallbackReason = askModel ? (remoteData?.source === "fallback" ? remoteData.fallback_reason : remote.isError ? "model_error" : null) : null;
-  const aiUnavailable = answer.handler === "unsupported" && !!fallbackReason && ["model_unavailable", "model_error", "timeout", "stream_failed"].includes(fallbackReason);
+  // Every reason the AI's answer wasn't used gets its own line; none falls back to a bare generic sentence.
+  const aiNote = answer.handler === "unsupported" ? aiFallbackNote(fallbackReason, askModel && remoteData?.source === "llm" && Boolean(remoteData.unsupported)) : null;
+  const aiUnavailable = Boolean(aiNote?.blocked);
   const quotaHit = fallbackReason === "limit" ? remoteData?.quota ?? null : null;
   // The local "can't answer" sentence is about the catalogue alone; when the AI couldn't be asked, say that.
   const blockedText =
@@ -537,9 +539,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 )}
               </p>
             )}
-            {aiUnavailable && (
-              <div data-testid="ask-ai-unavailable" className="mb-3 rounded-xl border border-[#e6e8ee] bg-[#f3f4f8] px-4 py-3 text-[13px] text-[#3c4254]">
-                <b>The AI is unavailable right now.</b> Try again in a few minutes; quick answers below still work.
+            {aiNote && (
+              <div data-testid={aiNote.blocked ? "ask-ai-unavailable" : "ask-ai-note"} data-reason={fallbackReason ?? "unsupported"} className="mb-3 rounded-xl border border-[#e6e8ee] bg-[#f3f4f8] px-4 py-3 text-[13px] text-[#3c4254]">
+                <b>{aiNote.title}</b> {aiNote.body}
               </div>
             )}
             <p className="text-[17px] leading-7 text-[#1c2230]">
@@ -1183,4 +1185,24 @@ function downloadCsv(answer: AskAnswer) {
   link.download = "ask-answer.csv";
   link.click();
   URL.revokeObjectURL(url);
+}
+
+/** What to say when the AI's answer isn't shown, by the server's fallback reason. */
+export function aiFallbackNote(reason: string | null | undefined, modelSaidUnsupported: boolean): { title: string; body: string; blocked: boolean } | null {
+  if (modelSaidUnsupported) return { title: "The AI looked too.", body: "It found nothing in your workspace it could cite, so it didn't guess.", blocked: false };
+  switch (reason) {
+    case null:
+    case undefined:
+    case "empty":
+    case "no_workspace":
+    case "limit": // its own notice
+      return null;
+    case "model_unavailable":
+      return { title: "The AI isn't available for this workspace.", body: "Quick answers below still work.", blocked: true };
+    case "too_many_lookups":
+    case "round_budget":
+      return { title: "The AI couldn't finish a checked answer.", body: "It needed more lookups than allowed. Try a narrower question.", blocked: false };
+    default: // model_error, timeout, stream_failed, anything new
+      return { title: "The AI is unavailable right now.", body: "Try again in a few minutes; quick answers below still work.", blocked: true };
+  }
 }
