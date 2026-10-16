@@ -97,7 +97,8 @@ def name_hints(question: str, graph: WorkspaceGraph, extra_people: list[str] | N
             if len(word) >= 4 and any(abs(len(word) - len(w)) <= limit and distance(word, w) <= limit and w not in STOP for w in name_words):
                 hints.setdefault((name, kind), Hint(word, name, kind, "typo"))
                 break
-    ranked = sorted(hints.values(), key=lambda h: ({"exact": 0, "typo": 1, "partial": 2}[h.how], KIND_ORDER.get(h.kind, 9), h.name))
+    # An exact owner-team name ("CRM") is the team, even if a vendor or item shares the word.
+    ranked = sorted(hints.values(), key=lambda h: ({"exact": 0, "typo": 1, "partial": 2}[h.how], -1 if (h.how == "exact" and h.kind == "team") else KIND_ORDER.get(h.kind, 9), h.name))
     return ranked[:MAX_HINTS]
 
 
@@ -106,5 +107,6 @@ def hint_prompt(hints: list[Hint]) -> str:
     useful = [h for h in hints if h.how != "exact" or h.kind in {"vendor", "person", "team"}]
     if not useful:
         return ""
-    parts = [f"“{h.text}” → {h.kind} “{h.name}”" + (" (spelling corrected)" if h.how == "typo" else "") for h in useful]
+    field = {"team": " (filter owner_team)"}
+    parts = [f"“{h.text}” → {'owner team' if h.kind == 'team' else h.kind} “{h.name}”{field.get(h.kind, '')}" + (" (spelling corrected)" if h.how == "typo" else "") for h in useful]
     return "Workspace names matching words in the question (hints, not facts; use these exact names in lookups): " + "; ".join(parts) + "."

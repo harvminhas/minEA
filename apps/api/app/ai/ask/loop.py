@@ -85,6 +85,7 @@ Never write the word "record" or "records".
 When a count mixes types, name each type: "2 Applications and 1 Capability".
 record_id is an internal id. Do not pronounce it as the word record.
 
+Also return "headline": one short line (under 80 characters) that answers the question, shown at the top of the answer card. Numbers and names in it are checked like answer_markdown.
 The screen already lists every citation. answer_markdown is the one-line verdict. Do not list the same names again.
 
 """ + _STRATEGY["strategyPrompt"]
@@ -233,6 +234,8 @@ def _validate(answer: dict, bag: ToolBag, question: str) -> str | None:
             body += " " + str(item.get("text") or "")
     if verdict.get("text"):
         body += " " + str(verdict.get("text"))
+    if answer.get("headline"):
+        body += " " + str(answer.get("headline"))
     if ungrounded(body, allowed):
         return "ungrounded_number"
     for word, number in WORDS.items():
@@ -284,6 +287,8 @@ def soften_numbers(answer: dict, bag: ToolBag, question: str) -> tuple[dict | No
 
     out = dict(answer)
     out["answer_markdown"] = clean(str(answer.get("answer_markdown") or ""))
+    if answer.get("headline"):
+        out["headline"] = clean(str(answer["headline"]))
     verdict = answer.get("verdict") if isinstance(answer.get("verdict"), dict) else None
     if verdict and verdict.get("text"):
         out["verdict"] = {**verdict, "text": clean(str(verdict["text"]))}
@@ -714,6 +719,8 @@ def _present(answer: dict, bag: ToolBag, tools_used: list[str], ai_question: boo
         "source": "llm",
         "fallback_reason": None,
         "answer_text": str(answer.get("answer_markdown") or ""),
+        # The AI's own one-line headline (checked like the answer); the card shows it as written.
+        **({"headline": str(answer.get("headline")).strip()[:120]} if str(answer.get("headline") or "").strip() else {}),
         "summary": summary_of(str(answer.get("answer_markdown") or "")),
         **rich_blocks(bag),
         "intent": "" if not ai_question and answer.get("intent") == "ai" else str(answer.get("intent") or ""),

@@ -60,6 +60,8 @@ function vocabulary(all: RecordFacts[], people: string[]): Entry[] {
 
 const HOW_ORDER = { exact: 0, typo: 1, partial: 2 } as const;
 const KIND_ORDER: Record<NameKind, number> = { vendor: 0, person: 1, team: 2, tenant: 3, item: 4 };
+/** An exact owner-team name ("CRM") is the team, even if a vendor or item shares the word. */
+const kindRank = (hint: { kind: NameKind; how: string }) => (hint.how === "exact" && hint.kind === "team" ? -1 : KIND_ORDER[hint.kind]);
 
 function matchEntries(question: string, all: RecordFacts[], people: string[]): { hint: NameHint; ids: Set<string> }[] {
   const q = ` ${normName(question)} `;
@@ -84,7 +86,7 @@ function matchEntries(question: string, all: RecordFacts[], people: string[]): {
       }
     }
   }
-  return out.sort((a, b) => HOW_ORDER[a.hint.how] - HOW_ORDER[b.hint.how] || KIND_ORDER[a.hint.kind] - KIND_ORDER[b.hint.kind] || a.hint.name.localeCompare(b.hint.name));
+  return out.sort((a, b) => HOW_ORDER[a.hint.how] - HOW_ORDER[b.hint.how] || kindRank(a.hint) - kindRank(b.hint) || a.hint.name.localeCompare(b.hint.name));
 }
 
 /** Workspace names that match words in the question (at most 8). */

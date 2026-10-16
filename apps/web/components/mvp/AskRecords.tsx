@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight, X } from "lucide-react";
 import type { AskAnswer } from "@/lib/ask/deterministic";
-import { chipOptions, chipValue, FILTER_KEYS, FILTER_LABEL, filterFacts, providerLabel, regionName, HOSTING, type FilterKey, type RecordFacts, type RecordFilters } from "@/lib/ask/record-filter";
+import { chipOptions, chipValue, FILTER_KEYS, FILTER_LABEL, filterFacts, filterLine, OP_KEYS, OP_LABEL, OPS, opOf, regionName, HOSTING, withFilter, type FilterKey, type FilterOp, type RecordFacts, type RecordFilters } from "@/lib/ask/record-filter";
 import { moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 
 /** Filters a person can add from the "+ Add filter" menu (each re-runs locally, no AI). */
@@ -40,11 +40,11 @@ export function leanSummary(kept: RecordFacts[], filters: RecordFilters, yesNo: 
   const noCost = rows.filter((row) => row.annualCostNumber == null).length;
   const kinds = new Map<string, number>();
   for (const row of rows) kinds.set(row.typeLabel, (kinds.get(row.typeLabel) ?? 0) + 1);
-  const vendor = filters.vendor ? chipValue("vendor", filters) : "";
-  const owner = filters.owner_person || filters.owner_team || "";
+  // No reading of the question here: the AI writes its own headline (records.headline). This is only
+  // the neutral count shown for quick answers and after a chip edit.
   const names = yesNo && rows.length > 0 && rows.length <= 3 ? rows : [];
   const noun = rows.length === 1 ? "item" : "items";
-  const title = names.length ? null : rows.length && owner && !vendor ? `${rows.length} ${noun} owned by ${owner}` : rows.length ? `${yesNo ? "Yes — " : ""}${rows.length} ${vendor ? `${vendor} ` : ""}${noun}` : owner ? `Nothing owned by ${owner}` : yesNo ? `No — nothing matches${vendor ? ` ${vendor}` : ""}` : "Nothing matches these filters";
+  const title = names.length ? null : rows.length ? `${yesNo ? "Yes — " : ""}${rows.length} ${noun}` : yesNo ? "No — nothing matches" : "Nothing matches these filters";
   return {
     yes: yesNo && rows.length > 0,
     names,
@@ -52,7 +52,7 @@ export function leanSummary(kept: RecordFacts[], filters: RecordFilters, yesNo: 
     costTotal: rows.reduce((sum, row) => sum + (row.annualCostNumber ?? 0), 0),
     kinds: rows.length > 1 ? [...kinds].map(([label, count]) => ({ label: count === 1 ? label : pluralKind(label), count })) : [],
     gaps: [
-      ...(noOwner && !filters.owner ? [one ? "No owner" : `${noOwner} no owner`] : []),
+      ...(noOwner && !filters.owner && opOf(filters, "owner_team") !== "is_empty" ? [one ? "No owner" : `${noOwner} no owner`] : []),
       ...(noCost ? [one ? "No cost" : `${noCost} no cost`] : []),
     ],
     inferredVendor: Boolean(filters.vendor) && kept.some((item) => item.vendorInferred),
@@ -103,14 +103,18 @@ export function AskRecordsBlock({
   const filters = records.filters;
   const kept = useMemo(() => filterFacts(facts, filters), [facts, filters]);
   const keys = FILTER_KEYS.filter((key) => filters[key] !== undefined);
-  const set = (key: FilterKey, value: unknown) => {
-    const next = { ...filters } as Record<string, unknown>;
-    if (value === undefined || value === "") delete next[key];
-    else next[key] = value;
-    onFilters(next as RecordFilters);
+  const set = (key: FilterKey, value: unknown, op: FilterOp = opOf(filters, key)) => onFilters(withFilter(filters, key, value, op));
+  const setOp = (key: FilterKey, op: FilterOp) => {
+    const current = String(filters[key] ?? "");
+    const value = op === "is_empty" || op === "is_not_empty" ? "" : current || chipOptions(key, facts)[0]?.value || "";
+    onFilters(withFilter(filters, key, value, op));
   };
   const [all, setAll] = useState(false);
   const lean = leanSummary(kept, filters, yesNo ?? Boolean(records.yesNo));
+  if (records.headline) {
+    lean.title = records.headline; // the AI's own words, shown as written
+    lean.names = [];
+  }
   const shown = all ? kept : kept.slice(0, LEAN_ROWS);
   const single = kept.length === 1 ? kept[0].row : null;
   const follow: { label: string; onClick?: () => void; href?: string }[] = single
@@ -151,11 +155,24 @@ export function AskRecordsBlock({
       <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid="ask-filter-chips">
         {keys.map((key) => {
           const options = chipOptions(key, facts);
+          const op = opOf(filters, key);
+          const valueless = op === "is_empty" || op === "is_not_empty";
           const editable = options.length > 1 && key !== "ai_on" && key !== "owner";
           return (
-            <span key={key} data-filter={key} className="inline-flex items-center gap-1 rounded-lg bg-[#ece9ff] py-0.5 pl-2 pr-1 text-[12px] font-medium text-[#3d2fc0]">
+            <span key={key} data-filter={key} data-op={op} className="inline-flex items-center gap-1 rounded-lg bg-[#ece9ff] py-0.5 pl-2 pr-1 text-[12px] font-medium text-[#3d2fc0]">
               <span className="font-normal text-[#6b5fd6]">{FILTER_LABEL[key]}</span>
-              {editable ? (
+              {OP_KEYS.includes(key) ? (
+                <select
+                  aria-label={`${FILTER_LABEL[key]} operator`}
+                  data-testid="ask-filter-op"
+                  value={op}
+                  onChange={(event) => setOp(key, event.target.value as FilterOp)}
+                  className="cursor-pointer bg-transparent font-normal text-[#6b5fd6] outline-none"
+                >
+                  {OPS.map((item) => <option key={item} value={item}>{OP_LABEL[item]}</option>)}
+                </select>
+              ) : null}
+              {valueless ? null : editable ? (
                 <select
                   aria-label={FILTER_LABEL[key]}
                   value={String(filters[key])}
@@ -247,7 +264,7 @@ export function AskRecordsBlock({
           )}
           {records.source === "ai" && <li>The AI looked this up with filters, and every item was checked against your catalogue.</li>}
           <li>
-            Filters: {keys.length ? keys.map((key) => `${FILTER_LABEL[key]} = ${key === "provider" ? providerLabel(String(filters[key])) : chipValue(key, filters)}`).join("; ") : "none"}.
+            Filters: {keys.length ? keys.map((key) => filterLine(key, filters)).join("; ") : "none"}.
             {filters.vendor ? " Vendor matches the vendor field, the catalogue vendor, cost-line vendors and a tenant's cloud provider." : ""}
           </li>
           <li>Looked through {facts.length} items and kept {kept.length}. Every name and number above comes from your catalogue{records.source === "quick" ? ", with no AI used" : ""}. Changing a filter re-runs it here without the AI.</li>

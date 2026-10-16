@@ -27,6 +27,22 @@ FILTER_KEYS = (
     "server", "ai_on", "renewal_within_days", "cost_min", "cost_max", "lifecycle", "criticality", "name",
 )
 
+# Text fields that take an operator: is (default), is_not, is_empty, is_not_empty, contains, any_of.
+OP_KEYS = ("vendor", "owner_team", "owner_person", "hosting", "provider", "tenant", "region", "server", "lifecycle", "criticality", "name")
+OPS = ("is", "is_not", "is_empty", "is_not_empty", "contains", "any_of")
+_OP_WORDS = {
+    "is": "is", "eq": "is", "equals": "is", "=": "is",
+    "is_not": "is_not", "not": "is_not", "isnot": "is_not", "not_equals": "is_not", "ne": "is_not", "!=": "is_not", "exclude": "is_not",
+    "is_empty": "is_empty", "empty": "is_empty",
+    "is_not_empty": "is_not_empty", "not_empty": "is_not_empty",
+    "contains": "contains", "has": "contains", "like": "contains",
+    "any_of": "any_of", "in": "any_of", "one_of": "any_of",
+}
+
+
+def op_of(value: object) -> str:
+    return _OP_WORDS.get(str(value or "").strip().lower().replace(" ", "_"), "is")
+
 
 @dataclass
 class Facts:
@@ -108,10 +124,20 @@ def _loose(wanted: str, values: list[str]) -> bool:
 
 
 def clean_filters(raw: dict | None) -> dict:
+    """Known keys only, typed, plus "ops" for any text key whose operator isn't plain "is".
+    Values are used as given: the model picks the operator."""
+    raw = raw or {}
+    given = raw.get("ops") if isinstance(raw.get("ops"), dict) else {}
     out: dict = {}
+    ops: dict = {}
     for key in FILTER_KEYS:
-        value = (raw or {}).get(key)
-        if value is None or value == "":
+        value = raw.get(key)
+        op = op_of(given.get(key)) if key in OP_KEYS and key in given else "is"
+        if key in OP_KEYS and op in {"is_empty", "is_not_empty"}:
+            out[key] = ""
+            ops[key] = op
+            continue
+        if value is None or value == "" or value == []:
             continue
         if key == "ai_on":
             out[key] = value if isinstance(value, bool) else str(value).lower() in {"true", "yes", "1", "on"}
@@ -120,11 +146,72 @@ def clean_filters(raw: dict | None) -> dict:
                 out[key] = int(float(value))
             except (TypeError, ValueError):
                 continue
-        elif key == "hosting":
-            out[key] = hosting_key(str(value))
+        elif key in OP_KEYS:
+            text = ", ".join(str(v).strip() for v in value if str(v).strip()) if isinstance(value, list) else str(value).strip()
+            if isinstance(value, list) and len(value) > 1 and op == "is":
+                op = "any_of"
+            if key == "hosting" and text:
+                text = hosting_key(text) if op != "any_of" else ", ".join(hosting_key(t) for t in text.split(","))
+            out[key] = text
+            if op != "is":
+                ops[key] = op
         else:
             out[key] = str(value).strip()
+    if ops:
+        out["ops"] = ops
     return out
+
+
+def _values(f: Facts, key: str) -> list[str]:
+    rec = f.rec
+    if key == "vendor":
+        return f.vendors
+    if key == "owner_team":
+        return [rec.owner_team or ""]
+    if key == "owner_person":
+        return f.owners or [rec.owner_person or ""]
+    if key == "hosting":
+        return [f.hosting]
+    if key == "provider":
+        return [*f.providers, *(provider_label(p) for p in f.providers)]
+    if key == "tenant":
+        return f.tenants
+    if key == "region":
+        return [*f.regions, *(region_label(k) for k in f.regions)]
+    if key == "server":
+        return f.servers
+    if key == "lifecycle":
+        return [rec.lifecycle or ""]
+    if key == "criticality":
+        return [rec.criticality or ""]
+    if key == "name":
+        return [rec.name]
+    return []
+
+
+def _is(key: str, wanted: str, values: list[str]) -> bool:
+    if key == "hosting":
+        return bool(values and values[0]) and values[0] == hosting_key(wanted)
+    if key in {"lifecycle", "criticality"}:
+        return any(fold(v) == fold(wanted) for v in values if v)
+    if key == "name":
+        return fold(wanted) in fold(values[0])
+    return _loose(wanted, [v for v in values if v]) if fold(wanted) else True
+
+
+def text_match(key: str, op: str, wanted: str, values: list[str]) -> bool:
+    present = [v for v in values if fold(v)]
+    if op == "is_empty":
+        return not present
+    if op == "is_not_empty":
+        return bool(present)
+    if op == "contains":
+        w = fold(wanted)
+        return any(w in fold(v) for v in present)
+    if op == "any_of":
+        return any(_is(key, part.strip(), values) for part in re.split(r"[,|]", wanted) if part.strip())
+    hit = bool(present) and _is(key, wanted, values)
+    return not hit if op == "is_not" else hit
 
 
 def matches(f: Facts, filters: dict, today: date | None = None) -> bool:
@@ -135,24 +222,12 @@ def matches(f: Facts, filters: dict, today: date | None = None) -> bool:
             return False
         if t in {"infrastructure", "platform", "platforms", "server", "servers"} and rec.type != "infrastructure":
             return False
-    if "vendor" in filters and not _loose(filters["vendor"], f.vendors):
-        return False
     if "owner" in filters and filters["owner"].lower() in {"none", "no", "missing"} and (rec.owner_team or rec.owner_person):
         return False
-    if "owner_team" in filters and not _loose(filters["owner_team"], [rec.owner_team or ""]):
-        return False
-    if "owner_person" in filters and not _loose(filters["owner_person"], f.owners or [rec.owner_person or ""]):
-        return False
-    if "hosting" in filters and f.hosting != filters["hosting"]:
-        return False
-    if "provider" in filters and not _loose(filters["provider"], [*f.providers, *(provider_label(p) for p in f.providers)]):
-        return False
-    if "tenant" in filters and not _loose(filters["tenant"], f.tenants):
-        return False
-    if "region" in filters and not _loose(filters["region"], [*f.regions, *(region_label(k) for k in f.regions)]):
-        return False
-    if "server" in filters and not _loose(filters["server"], f.servers):
-        return False
+    ops = filters.get("ops") or {}
+    for key in OP_KEYS:
+        if key in filters and not text_match(key, ops.get(key, "is"), str(filters[key]), _values(f, key)):
+            return False
     if "ai_on" in filters and f.ai_on != bool(filters["ai_on"]):
         return False
     if "renewal_within_days" in filters:
@@ -166,12 +241,6 @@ def matches(f: Facts, filters: dict, today: date | None = None) -> bool:
     if "cost_min" in filters and (rec.annual is None or rec.annual < filters["cost_min"]):
         return False
     if "cost_max" in filters and (rec.annual is None or rec.annual > filters["cost_max"]):
-        return False
-    if "lifecycle" in filters and fold(rec.lifecycle or "") != fold(filters["lifecycle"]):
-        return False
-    if "criticality" in filters and fold(rec.criticality or "") != fold(filters["criticality"]):
-        return False
-    if "name" in filters and fold(filters["name"]) not in fold(rec.name):
         return False
     return True
 

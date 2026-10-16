@@ -15,7 +15,7 @@ from typing import Callable
 from app.ai.ask.ai_landscape import JOB_LABELS, ai_landscape as build_landscape, data_access
 from app.ai.ask.graph import Rec, WorkspaceGraph, fold
 from app.ai.ask.impact import ImpactEdge, impact_of as traverse_impact
-from app.ai.ask.record_filters import FILTER_KEYS, build_facts, clean_filters, filter_facts, matches, row as facts_row
+from app.ai.ask.record_filters import FILTER_KEYS, OP_KEYS as OP_FIELDS, build_facts, clean_filters, filter_facts, matches, row as facts_row
 
 ToolFn = Callable[["ToolBag", dict], dict]
 
@@ -160,7 +160,7 @@ def aggregate(bag: ToolBag, args: dict) -> dict:
         rows = [rec for rec in rows if rec.type == "application"]
     elif wanted == "infrastructure":
         rows = [rec for rec in rows if rec.type == "infrastructure"]
-    record_filters = clean_filters({key: filters.get(key) for key in FILTER_KEYS if key not in {"criticality", "renewal_within_days", "type"}})
+    record_filters = clean_filters({**{key: filters.get(key) for key in FILTER_KEYS if key not in {"criticality", "renewal_within_days", "type"}}, "ops": filters.get("ops")})
     if record_filters:
         if not bag.filters:
             bag.filters = record_filters  # the answer card shows these as chips and re-runs them
@@ -643,6 +643,7 @@ TOOLS: list[AskTool] = [
             "vendor matches the vendor field, the catalogue vendor, cost-line vendors and a tenant's provider (Azure tenant -> Microsoft). "
             "hosting is saas, own_cloud (our cloud), on_premise (our server) or desktop. owner 'none' = no owner. "
             "ai_on true = an AI feature is turned on. Matching is loose (case, spaces). "
+            "ops sets an operator per text filter (is, is_not, is_empty, is_not_empty, contains, any_of). "
             "total, annual_cost_total and with_owner are the numbers to write; name only the items returned."
         ),
         parameters={
@@ -665,6 +666,11 @@ TOOLS: list[AskTool] = [
                 "lifecycle": {"type": "string"},
                 "criticality": {"type": "string"},
                 "name": {"type": "string"},
+                "ops": {
+                    "type": "object",
+                    "description": "Optional operator per text filter, keyed by filter name: is (default), is_not, is_empty (no value; the filter's own value is ignored), is_not_empty, contains, any_of (value is a comma-separated list).",
+                    "properties": {key: {"type": "string", "enum": ["is", "is_not", "is_empty", "is_not_empty", "contains", "any_of"]} for key in OP_FIELDS},
+                },
                 "limit": {"type": "integer"},
             },
         },
@@ -703,6 +709,11 @@ TOOLS: list[AskTool] = [
                         "tenant": {"type": "string"},
                         "region": {"type": "string"},
                         "ai_on": {"type": "boolean"},
+                        "ops": {
+                            "type": "object",
+                            "description": "Optional operator per text filter, keyed by filter name: is (default), is_not, is_empty (no value; the filter's own value is ignored), is_not_empty, contains, any_of (value is a comma-separated list).",
+                            "properties": {key: {"type": "string", "enum": ["is", "is_not", "is_empty", "is_not_empty", "contains", "any_of"]} for key in OP_FIELDS},
+                        },
                     },
                 },
             },

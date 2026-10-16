@@ -210,7 +210,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
     // Chip edits and suggestion pills are structured filters run here on the catalogue: no AI, no quota.
     if (!edited || edited.question !== question) return baseAnswer;
     const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return recordsAnswer({ ...(baseAnswer.records ?? { terms: [], source: "quick" as const }), filters: edited.filters }, facts, today);
+    return recordsAnswer({ ...(baseAnswer.records ?? { terms: [], source: "quick" as const }), filters: edited.filters, headline: undefined }, facts, today);
   }, [baseAnswer, edited, question, facts]);
   // Why the AI's answer isn't shown, when it isn't: unavailable (no key / error / timeout) or the
   // organisation's monthly allowance is used up. Quick answers keep working in both cases.

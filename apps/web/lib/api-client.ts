@@ -1251,6 +1251,7 @@ export type AskModelPayload = {
   unsupported?: boolean;
   /** Yes/no questions: the model's yes or no (the card leads with it). */
   yes_no?: "yes" | "no";
+  headline?: string;
   /** What the server actually did, built from the lookup results (newer APIs only). */
   steps?: AskStep[];
   /** Vendor answers: every named vendor (same definition as the Ask header), built by the server. */

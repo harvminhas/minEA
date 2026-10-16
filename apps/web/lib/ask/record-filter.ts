@@ -30,8 +30,39 @@ export type RecordFilters = {
   lifecycle?: string;
   criticality?: string;
   name?: string;
+  /** Operator per text filter; a key that isn't here is "is". */
+  ops?: Partial<Record<FilterKey, FilterOp>>;
 };
-export type FilterKey = keyof RecordFilters;
+export type FilterOp = "is" | "is_not" | "is_empty" | "is_not_empty" | "contains" | "any_of";
+export type FilterKey = Exclude<keyof RecordFilters, "ops">;
+/** Text filters that take an operator (mirrors OP_KEYS in record_filters.py). */
+export const OP_KEYS: FilterKey[] = ["vendor", "owner_team", "owner_person", "hosting", "provider", "tenant", "region", "server", "lifecycle", "criticality", "name"];
+export const OPS: FilterOp[] = ["is", "is_not", "is_empty", "is_not_empty", "contains", "any_of"];
+export const OP_LABEL: Record<FilterOp, string> = { is: "is", is_not: "is not", is_empty: "is empty", is_not_empty: "is not empty", contains: "contains", any_of: "is any of" };
+const OP_WORDS: Record<string, FilterOp> = {
+  is: "is", eq: "is", equals: "is", is_not: "is_not", not: "is_not", isnot: "is_not", ne: "is_not", not_equals: "is_not", exclude: "is_not",
+  is_empty: "is_empty", empty: "is_empty", is_not_empty: "is_not_empty", not_empty: "is_not_empty",
+  contains: "contains", has: "contains", like: "contains", any_of: "any_of", in: "any_of", one_of: "any_of",
+};
+
+export function opOf(filters: RecordFilters, key: FilterKey): FilterOp {
+  return (OP_KEYS.includes(key) && filters.ops?.[key]) || "is";
+}
+
+/** Set one key's value and operator (operator "is" is stored as no entry). */
+export function withFilter(filters: RecordFilters, key: FilterKey, value: unknown, op: FilterOp = "is"): RecordFilters {
+  const next = { ...filters } as Record<string, unknown>;
+  const ops = { ...(filters.ops ?? {}) } as Record<string, FilterOp>;
+  delete ops[key];
+  if (value === undefined || (value === "" && op !== "is_empty" && op !== "is_not_empty")) delete next[key];
+  else {
+    next[key] = op === "is_empty" || op === "is_not_empty" ? "" : value;
+    if (op !== "is") ops[key] = op;
+  }
+  if (Object.keys(ops).length) next.ops = ops;
+  else delete next.ops;
+  return next as RecordFilters;
+}
 export const FILTER_KEYS: FilterKey[] = [
   "type", "vendor", "owner_team", "owner_person", "owner", "hosting", "provider", "tenant", "region",
   "server", "ai_on", "renewal_within_days", "cost_min", "cost_max", "lifecycle", "criticality", "name",
@@ -154,6 +185,42 @@ function loose(wanted: string, values: string[]): boolean {
   });
 }
 
+function valuesFor(facts: RecordFacts, key: FilterKey, custom: CustomRegion[]): string[] {
+  const row = facts.row;
+  switch (key) {
+    case "vendor": return facts.vendors;
+    case "owner_team": return [row.ownerTeam ?? ""];
+    case "owner_person": return ownerNames(row);
+    case "hosting": return [facts.hosting];
+    case "provider": return [...facts.providers, ...facts.providers.map(providerLabel)];
+    case "tenant": return facts.tenants;
+    case "region": return [...facts.regions, ...facts.regions.map((k) => regionName(k, custom))];
+    case "server": return facts.servers;
+    case "lifecycle": return [row.lifecycleLabel || row.lifecycle || ""];
+    case "criticality": return [row.criticalityLabel ?? ""];
+    case "name": return [row.name];
+    default: return [];
+  }
+}
+
+function isMatch(key: FilterKey, wanted: string, values: string[]): boolean {
+  if (key === "hosting") return Boolean(values[0]) && values[0] === hostingKey(wanted);
+  if (key === "lifecycle" || key === "criticality") return values.some((v) => v && fold(v) === fold(wanted));
+  if (key === "name") return fold(values[0] ?? "").includes(fold(wanted));
+  return fold(wanted) ? loose(wanted, values.filter(Boolean)) : true;
+}
+
+/** One text filter with its operator (same rules as text_match in record_filters.py). */
+export function textMatch(key: FilterKey, op: FilterOp, wanted: string, values: string[]): boolean {
+  const present = values.filter((v) => fold(v ?? ""));
+  if (op === "is_empty") return present.length === 0;
+  if (op === "is_not_empty") return present.length > 0;
+  if (op === "contains") return present.some((v) => fold(v).includes(fold(wanted)));
+  if (op === "any_of") return wanted.split(/[,|]/).map((part) => part.trim()).filter(Boolean).some((part) => isMatch(key, part, values));
+  const hit = present.length > 0 && isMatch(key, wanted, values);
+  return op === "is_not" ? !hit : hit;
+}
+
 export function matchesFilters(facts: RecordFacts, filters: RecordFilters, today: Date = new Date(), custom: CustomRegion[] = []): boolean {
   const row = facts.row;
   if (filters.type) {
@@ -161,15 +228,11 @@ export function matchesFilters(facts: RecordFacts, filters: RecordFilters, today
     if (/^app/.test(t) && row.kind !== "application") return false;
     if (/^(infra|platform|server)/.test(t) && row.kind === "application") return false;
   }
-  if (filters.vendor && !loose(filters.vendor, facts.vendors)) return false;
   if (filters.owner && /^(none|no|missing)$/i.test(filters.owner) && (row.ownerTeam || row.ownerPerson)) return false;
-  if (filters.owner_team && !loose(filters.owner_team, [row.ownerTeam])) return false;
-  if (filters.owner_person && !loose(filters.owner_person, ownerNames(row))) return false;
-  if (filters.hosting && facts.hosting !== hostingKey(filters.hosting)) return false;
-  if (filters.provider && !loose(filters.provider, [...facts.providers, ...facts.providers.map(providerLabel)])) return false;
-  if (filters.tenant && !loose(filters.tenant, facts.tenants)) return false;
-  if (filters.region && !loose(filters.region, [...facts.regions, ...facts.regions.map((key) => regionName(key, custom))])) return false;
-  if (filters.server && !loose(filters.server, facts.servers)) return false;
+  for (const key of OP_KEYS) {
+    if (filters[key] === undefined) continue;
+    if (!textMatch(key, opOf(filters, key), String(filters[key]), valuesFor(facts, key, custom))) return false;
+  }
   if (filters.ai_on !== undefined && facts.aiOn !== filters.ai_on) return false;
   if (filters.renewal_within_days !== undefined) {
     const renews = row.renewalDate;
@@ -179,9 +242,6 @@ export function matchesFilters(facts: RecordFacts, filters: RecordFilters, today
   }
   if (filters.cost_min !== undefined && (row.annualCostNumber == null || row.annualCostNumber < filters.cost_min)) return false;
   if (filters.cost_max !== undefined && (row.annualCostNumber == null || row.annualCostNumber > filters.cost_max)) return false;
-  if (filters.lifecycle && fold(row.lifecycleLabel || row.lifecycle) !== fold(filters.lifecycle)) return false;
-  if (filters.criticality && fold(row.criticalityLabel) !== fold(filters.criticality)) return false;
-  if (filters.name && !fold(row.name).includes(fold(filters.name))) return false;
   return true;
 }
 
@@ -193,17 +253,35 @@ export function filterFacts(all: RecordFacts[], filters: RecordFilters, today?: 
 
 /** The API's filters (filter_records args) as RecordFilters; unknown keys and blanks dropped. */
 export function filtersFromPayload(raw: Record<string, unknown> | null | undefined): RecordFilters {
-  const out: RecordFilters = {};
+  let out: RecordFilters = {};
+  const given = (raw?.ops && typeof raw.ops === "object" ? raw.ops : {}) as Record<string, unknown>;
   for (const key of FILTER_KEYS) {
     const value = raw?.[key];
+    let op: FilterOp = OP_KEYS.includes(key) && given[key] !== undefined ? OP_WORDS[String(given[key]).trim().toLowerCase().replace(/ /g, "_")] ?? "is" : "is";
+    if (op === "is_empty" || op === "is_not_empty") {
+      out = withFilter(out, key, "", op);
+      continue;
+    }
     if (value === undefined || value === null || value === "") continue;
     if (key === "ai_on") out.ai_on = value === true || /^(true|yes|1|on)$/i.test(String(value));
     else if (key === "renewal_within_days" || key === "cost_min" || key === "cost_max") {
       const n = Number(value);
       if (Number.isFinite(n)) out[key] = Math.round(n);
+    } else if (OP_KEYS.includes(key)) {
+      // Values are used as given; the AI picks the operator.
+      const text = Array.isArray(value) ? value.map(String).join(", ") : String(value).trim();
+      if (Array.isArray(value) && value.length > 1 && op === "is") op = "any_of";
+      out = withFilter(out, key, text, op);
     } else (out as Record<string, unknown>)[key] = String(value);
   }
   return out;
+}
+
+/** "Owner team is not CRM", "Vendor is empty": the chip and the How-I-found-this line. */
+export function filterLine(key: FilterKey, filters: RecordFilters, custom: CustomRegion[] = []): string {
+  const op = opOf(filters, key);
+  if (!OP_KEYS.includes(key)) return `${FILTER_LABEL[key]} = ${chipValue(key, filters, custom)}`;
+  return op === "is_empty" || op === "is_not_empty" ? `${FILTER_LABEL[key]} ${OP_LABEL[op]}` : `${FILTER_LABEL[key]} ${OP_LABEL[op]} ${chipValue(key, filters, custom)}`;
 }
 
 export function chipValue(key: FilterKey, filters: RecordFilters, custom: CustomRegion[] = []): string {

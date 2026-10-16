@@ -65,10 +65,13 @@ test("yes (AI filter_records vendor Adobe + yes_no) renders the lean card: 'Yes 
   assert.match(html, /The AI looked this up with filters/);
 });
 
-test("owner (AI filter_records owner_person Christine) renders '2 items owned by Christine'", () => {
-  const ai = answerFromModel(payload({ answer_text: "Christine Wong owns 2 Applications.", filters: { owner_person: "Christine" } }), ROWS, "/w", "what is owned by Christine?")!;
-  const html = render(ai);
-  assert.match(html, /2 items owned by Christine/);
+test("owner: the AI's own headline shows as written; without one, a neutral count (no templated owner phrase)", () => {
+  const ai = answerFromModel(payload({ answer_text: "Christine Wong owns 2 Applications.", headline: "Christine Wong owns 2 apps", filters: { owner_person: "Christine" } }), ROWS, "/w", "what is owned by Christine?")!;
+  assert.match(render(ai), /data-testid="ask-lean-headline"[^>]*>Christine Wong owns 2 apps</);
+  const plain = answerFromModel(payload({ answer_text: "Christine Wong owns 2 Applications.", filters: { owner_person: "Christine" } }), ROWS, "/w", "what is owned by Christine?")!;
+  const html = render(plain);
+  assert.match(html, /data-testid="ask-lean-headline"[^>]*>2 items</);
+  assert.doesNotMatch(html, /owned by/);
 });
 
 test("names are hints: typos and first names resolve to workspace names", () => {

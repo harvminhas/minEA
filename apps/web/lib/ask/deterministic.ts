@@ -19,7 +19,7 @@ import { aiLandscape, dataAccess, type AiLandscape, type LandscapeEdge, type Lan
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { agingSummary } from "@/lib/infra/status";
 import { nameSearch } from "@/lib/ask/names";
-import { buildFacts, chipValue, FILTER_KEYS, FILTER_LABEL, filterFacts, filtersFromPayload, matchQuestion, type FilterKey, type RecordFacts, type RecordFilters, type Term } from "@/lib/ask/record-filter";
+import { buildFacts, chipValue, FILTER_KEYS, FILTER_LABEL, filterFacts, filterLine, filtersFromPayload, OP_KEYS, opOf, matchQuestion, type FilterKey, type RecordFacts, type RecordFilters, type Term } from "@/lib/ask/record-filter";
 
 /**
  * Fixed handlers. The Ask screen uses these when the model is off, times out,
@@ -115,6 +115,8 @@ export type AskRecords = {
   source: "quick" | "ai";
   /** Asked as "do we use X?": the card leads with Yes — names. */
   yesNo?: boolean;
+  /** The AI's own one-line headline (numbers checked server-side). Dropped once a chip is edited. */
+  headline?: string;
 };
 
 export type AskGraph = {
@@ -423,6 +425,7 @@ export function filterPhrase(filters: RecordFilters): string {
     const value = chipValue(key, filters);
     if (key === "ai_on") return filters.ai_on ? "AI turned on" : "AI off";
     if (key === "owner") return "no owner";
+    if (OP_KEYS.includes(key) && opOf(filters, key) !== "is") return filterLine(key, filters).toLowerCase();
     return `${FILTER_LABEL[key].toLowerCase()} ${value}`;
   });
   return parts.join(", ");
@@ -463,10 +466,11 @@ export function recordsAnswer(records: AskRecords, facts: RecordFacts[], today: 
 }
 
 /** The AI's filter_records filters as an answer the chips can edit (null when it used none). */
-export function recordsFromPayload(payload: { filters?: Record<string, unknown>; yes_no?: string } | null | undefined): AskRecords | null {
+export function recordsFromPayload(payload: { filters?: Record<string, unknown>; yes_no?: string; headline?: string } | null | undefined): AskRecords | null {
   const filters = filtersFromPayload(payload?.filters);
   if (!Object.keys(filters).length) return null;
-  return { filters, terms: [], source: "ai", ...(payload?.yes_no === "yes" || payload?.yes_no === "no" ? { yesNo: true } : {}) };
+  const headline = typeof payload?.headline === "string" ? payload.headline.trim() : "";
+  return { filters, terms: [], source: "ai", ...(payload?.yes_no === "yes" || payload?.yes_no === "no" ? { yesNo: true } : {}), ...(headline ? { headline } : {}) };
 }
 
 /** When the AI can't answer (unavailable, error, over the monthly allowance): the items whose name,

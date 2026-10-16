@@ -24,10 +24,10 @@ const render = (answer: ReturnType<typeof ask>, yesNo?: boolean) =>
   renderToStaticMarkup(<AskRecordsBlock answer={answer} facts={facts()} yesNo={yesNo} onFilters={() => {}} onOpen={() => {}} rowHref={(row) => `/w/r/${row.id}`} />);
 
 
-test("multi: '7 Microsoft items', kind + gap counts, 5 rows then Show 2 more, ≤2 follow-ups, no row badges", () => {
+test("multi: '7 items', kind + gap counts, 5 rows then Show 2 more, ≤2 follow-ups, no row badges", () => {
   const a = ask("What Microsoft products do we own?");
   const s = leanSummary(filterFacts(facts(), a.records!.filters), a.records!.filters, false);
-  assert.equal(s.title, "7 Microsoft items");
+  assert.equal(s.title, "7 items");
   assert.deepEqual(s.gaps, ["5 no owner", "6 no cost"]);
   assert.equal(s.kinds.reduce((n, k) => n + k.count, 0), 7);
   assert.equal(s.inferredVendor, false);
