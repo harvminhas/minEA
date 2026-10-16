@@ -121,16 +121,21 @@ def test_estate_step_and_plurals():
 # ── engine: events, contract, budget ────────────────────────────────────────
 
 
-def _call_response(name, args):
-    return SimpleNamespace(
-        function_calls=[SimpleNamespace(name=name, args=args)],
-        text=None,
-        candidates=[SimpleNamespace(content=types.Content(role="model", parts=[types.Part.from_text(text="lookup")]))],
+def _reply(parts, finish="STOP"):
+    """A real google-genai response, shaped like gemini-2.5-flash's: a thought part first."""
+    thought = types.Part(text="Thinking about which lookup to use.", thought=True)
+    return types.GenerateContentResponse(
+        candidates=[types.Candidate(content=types.Content(role="model", parts=[thought, *parts]), finish_reason=finish)],
+        usage_metadata=types.GenerateContentResponseUsageMetadata(candidates_token_count=40, thoughts_token_count=12),
     )
 
 
+def _call_response(name, args):
+    return _reply([types.Part(function_call=types.FunctionCall(name=name, args=args), thought_signature=b"sig")])
+
+
 def _text_response(payload):
-    return SimpleNamespace(function_calls=[], text=json.dumps(payload), candidates=[])
+    return _reply([types.Part.from_text(text=json.dumps(payload))])
 
 
 class FakeModels:

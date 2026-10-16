@@ -87,6 +87,10 @@ test("fallback (AI unavailable / over quota): name matches + reason, no intent p
   assert.equal(aiFallbackNote("model_unavailable", false)?.blocked, true);
   assert.match(aiFallbackNote("round_budget", false)!.title, /couldn't finish/);
   assert.match(aiFallbackNote("something_new", false)!.title, /unavailable/);
+  assert.match(aiFallbackNote("max_tokens", false)!.title, /came back empty/);
+  assert.match(aiFallbackNote("ungrounded_number", false)!.title, /didn't pass the check/);
+  assert.match(aiFallbackNote("timeout", false)!.title, /took too long/);
+  assert.match(aiFallbackNote("blocked", false)!.title, /declined/);
   assert.equal(requestError(Object.assign(new Error("Gateway Timeout"), { status: 504 })), "HTTP 504 Gateway Timeout");
 });
 

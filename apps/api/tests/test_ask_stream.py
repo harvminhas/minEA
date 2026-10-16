@@ -47,9 +47,9 @@ def test_text_that_fails_the_check_never_streams(engine):  # noqa: F811
     bad = {**GOOD, "answer_markdown": "99 Applications renew [1]."}
     engine([_call_response("aggregate", RENEW), _text_response(bad), _text_response(bad)])
     events = run(st.stream_ask(None, CTX, "What renews in the next 90 days?"))
-    assert not [k for k, _ in events if k == "delta"]
-    assert dict(events)["final"]["source"] == "fallback"
-    assert "99" not in json.dumps([d for k, d in events if k != "final"])
+    # The unchecked number never streams; only the checked remainder (here, the lookup's table) shows.
+    assert "99" not in json.dumps(events)
+    assert dict(events)["final"]["answer_text"] == "Here is what the lookups returned."
     assert events[-1][0] == "done"
 
 

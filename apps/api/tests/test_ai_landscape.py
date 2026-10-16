@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.test_ask_engine import _call_response, _text_response
+
 from app.ai.ask import loop
 from app.ai.ask.ai_landscape import AI_QUESTION, CATALOG, JOB_LABELS, ai_landscape, data_access, is_ai_question, summarize
 from app.ai.ask.graph import Edge, WorkspaceGraph, _record
@@ -166,7 +168,7 @@ class _FakeModels:
         self.calls += 1
         if self.calls == 1:
             call = SimpleNamespace(name="ai_landscape", args={})
-            return SimpleNamespace(function_calls=[call], text="", candidates=[])
+            return _call_response(call.name, call.args)
         last = contents[-1].parts[0].function_response.response["result"]
         self.seen_tool_result = last
         counts = last["counts"]
@@ -176,7 +178,7 @@ class _FakeModels:
             "citations": [{"n": 1, "record_id": "agent-invoice", "relationship": "Agent has no owner"}],
             "follow_ups": ["Which agents have no owner?"],
         }
-        return SimpleNamespace(function_calls=[], text=json.dumps(body), candidates=[])
+        return _text_response(body)
 
 
 def test_the_ask_loop_calls_ai_landscape_without_a_real_model(monkeypatch):
@@ -293,10 +295,10 @@ class _MisrouteModels:
         self.calls += 1
         if self.calls == 1:
             self.tool_names = [decl.name for tool in config.tools for decl in (tool.function_declarations or [])]
-            return SimpleNamespace(function_calls=[SimpleNamespace(name="ai_landscape", args={})], text="", candidates=[])
+            return _call_response("ai_landscape", {})
         self.seen_tool_result = contents[-1].parts[0].function_response.response["result"]
         body = {"answer_markdown": "I could not find that.", "intent": "ai", "citations": [], "follow_ups": ["What has no owner?"], "unsupported": True}
-        return SimpleNamespace(function_calls=[], text=json.dumps(body), candidates=[])
+        return _text_response(body)
 
 
 @pytest.mark.parametrize("question", ["Show me the model", "open the model", "which models do we use"])

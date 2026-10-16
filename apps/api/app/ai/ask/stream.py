@@ -24,7 +24,7 @@ from app.ai.ask.loop import _fallback, run_ask
 
 logger = logging.getLogger(__name__)
 
-PING_SECONDS = 8.0
+PING_SECONDS = 5.0  # keeps proxies and Vercel from treating a thinking model as idle
 CHUNK_WORDS = 6
 # Pause between text chunks so they reach the screen as separate paints instead of one frame
 # (the whole checked answer exists already; without a pause every chunk lands in the same tick).

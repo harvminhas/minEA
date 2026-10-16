@@ -1235,7 +1235,27 @@ export function aiFallbackNote(reason: string | null | undefined, modelSaidUnsup
     case "too_many_lookups":
     case "round_budget":
       return { title: "The AI couldn't finish a checked answer.", body: "It needed more lookups than allowed. Try a narrower question.", blocked: false };
-    default: // model_error, timeout, stream_failed, anything new
+    case "timeout":
+      return { title: "The AI took too long.", body: "Try again, or ask a narrower question.", blocked: true };
+    case "max_tokens":
+    case "empty_reply":
+    case "malformed_call":
+      return { title: "The AI's reply came back empty.", body: "Try again; the reason is in How this was worked out.", blocked: true };
+    case "blocked":
+      return { title: "The AI declined to answer this.", body: "Try rewording the question.", blocked: false };
+    case "not_json":
+    case "ungrounded_number":
+    case "unknown_record":
+    case "marker_without_citation":
+    case "citations_not_a_list":
+    case "evidence_not_a_list":
+    case "evidence_citation":
+    case "inferred_without_evidence":
+    case "uncited_fix_action":
+    case "unknown_gap":
+    case "vendor_count":
+      return { title: "The AI's answer didn't pass the check.", body: "It used a name or number the lookups didn't return, so it isn't shown.", blocked: false };
+    default: // model_error, stream_failed, request_failed, server_error, anything new
       return { title: "The AI is unavailable right now.", body: "Try again in a few minutes; quick answers below still work.", blocked: true };
   }
 }

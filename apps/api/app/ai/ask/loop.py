@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from datetime import date
 import time
@@ -18,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.ask.ai_landscape import is_ai_question
 from app.ai.ask.graph import load_graph
+from app.ai.ask.grounding import graph_numbers, harvest, is_grounded, ungrounded
 from app.ai.ask.names import hint_prompt, name_hints
 from app.ai.ask.steps import checking_step, estate_step, same_step, step, tool_step
 from app.ai.ask.tools import ToolBag, run_tool, tool_specs
@@ -29,9 +31,16 @@ MAX_TOOL_CALLS = 6
 # Time budget. The web proxy (apps/web/app/api/v1/[...path]/route.ts) cuts requests at 30 s, so
 # the whole answer, including loading the graph, must end well before that: a slow model gives a
 # fallback (the screen answers locally) instead of a proxy timeout.
-TOTAL_BUDGET_SECONDS = 22.0
+TOTAL_BUDGET_SECONDS = 25.0
 CALL_TIMEOUT_SECONDS = 12.0
-MIN_CALL_WINDOW_SECONDS = 4.0  # don't start a model call with less time than this left
+MIN_CALL_WINDOW_SECONDS = 3.0  # don't start a model call with less time than this left
+# gemini-2.5-flash thinks by default, and thinking tokens count against max_output_tokens: with the
+# old cap of 900 a reply could be all thinking, finish_reason MAX_TOKENS and no text (HTTP 200, then
+# "not_json"). Thinking is off for Ask (lookups do the work) and the cap leaves room for the JSON.
+MAX_OUTPUT_TOKENS = 4096
+THINKING_BUDGET = int(os.getenv("ASK_THINKING_BUDGET", "0") or 0)
+# finish reasons that mean the reply was cut or withheld, not a normal stop
+_BLOCKED = {"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY", "LANGUAGE"}
 WORDS = {
     "one": "1",
     "two": "2",
@@ -114,9 +123,51 @@ def _calls(response: Any) -> list[tuple[str, dict]]:
     return calls
 
 
+def _parts(response: Any) -> list:
+    try:
+        candidates = getattr(response, "candidates", None) or []
+        content = getattr(candidates[0], "content", None) if candidates else None
+        return list(getattr(content, "parts", None) or [])
+    except Exception:  # never let an odd response shape raise
+        return []
+
+
 def _text(response: Any) -> str:
-    text = getattr(response, "text", None) or ""
-    return text.strip()
+    """The reply's answer text: text parts that aren't thoughts. Never touches response.text
+    (it warns on function-call parts and returns None for thought-only or empty replies)."""
+    out = []
+    for part in _parts(response):
+        text = getattr(part, "text", None)
+        if isinstance(text, str) and text and not getattr(part, "thought", False):
+            out.append(text)
+    return "".join(out).strip()
+
+
+def finish_info(response: Any) -> tuple[str, str]:
+    """(finish_reason, short detail with token usage) for logs and the reason step."""
+    candidates = getattr(response, "candidates", None) or []
+    raw = getattr(candidates[0], "finish_reason", None) if candidates else None
+    reason = str(getattr(raw, "name", None) or raw or "").upper().replace("FINISHREASON.", "")
+    if not candidates:
+        feedback = getattr(response, "prompt_feedback", None)
+        block = getattr(feedback, "block_reason", None)
+        reason = f"NO_CANDIDATES{f' ({getattr(block, "name", block)})' if block else ''}"
+    usage = getattr(response, "usage_metadata", None)
+    tokens = ""
+    if usage is not None:
+        tokens = f", output {getattr(usage, 'candidates_token_count', None) or 0} tokens, thinking {getattr(usage, 'thoughts_token_count', None) or 0}"
+    return reason or "UNKNOWN", f"finish_reason {reason or 'UNKNOWN'}{tokens}"
+
+
+def empty_reply_reason(finish: str) -> str:
+    """Reason code for a reply with no lookup request and no text."""
+    if finish == "MAX_TOKENS":
+        return "max_tokens"
+    if finish == "MALFORMED_FUNCTION_CALL":
+        return "malformed_call"
+    if finish in _BLOCKED or finish.startswith("NO_CANDIDATES"):
+        return "blocked"
+    return "empty_reply"
 
 
 def _parse_answer(text: str) -> dict | None:
@@ -182,21 +233,73 @@ def _validate(answer: dict, bag: ToolBag, question: str) -> str | None:
             body += " " + str(item.get("text") or "")
     if verdict.get("text"):
         body += " " + str(verdict.get("text"))
-    for token in re.findall(r"\$?\d[\d,]*(?:\.\d+)?%?", body):
-        if _normalize_number(token) not in allowed:
-            return "ungrounded_number"
+    if ungrounded(body, allowed):
+        return "ungrounded_number"
     for word, number in WORDS.items():
         if word == "one":
             continue
-        if re.search(rf"\b{word}\b", body, re.I) and number not in allowed:
+        if re.search(rf"\b{word}\b", body, re.I) and not is_grounded(str(number), allowed):
             return "ungrounded_number"
     vendor_problem = _vendor_count_problem(body, bag)
     if vendor_problem:
         return vendor_problem
-    follow = answer.get("follow_ups") or []
-    if not answer.get("unsupported") and (not isinstance(follow, list) or len(follow) < 1):
-        return "missing_follow_ups"
+    # follow_ups are optional: the screen no longer shows the model's free-text follow-ups.
     return None
+
+
+_SENTENCE = re.compile(r"(?<=[.!?])\s+|\n")
+
+
+def _allowed(bag: ToolBag, question: str) -> set[str]:
+    allowed = set(bag.numbers)
+    harvest(question, allowed)
+    return allowed
+
+
+def soften_numbers(answer: dict, bag: ToolBag, question: str) -> tuple[dict | None, list[str]]:
+    """After a failed correction, drop only the sentences with an ungrounded number.
+
+    The rest of the answer (checked names, citations, the table from tool data) still shows. Returns
+    (None, []) when nothing usable is left or another check still fails.
+    """
+    allowed = _allowed(bag, question)
+    dropped: list[str] = []
+
+    def clean(text: str) -> str:
+        kept = []
+        for line in re.split(r"(\n)", text):
+            if line == "\n":
+                kept.append(line)
+                continue
+            parts = re.split(r"(?<=[.!?])\s+", line)
+            good = []
+            for part in parts:
+                bad = ungrounded(re.sub(r"\[\d+\]", "", part), allowed)
+                if bad:
+                    dropped.extend(bad)
+                else:
+                    good.append(part)
+            kept.append(" ".join(good))
+        return re.sub(r"\n{3,}", "\n\n", "".join(kept)).strip()
+
+    out = dict(answer)
+    out["answer_markdown"] = clean(str(answer.get("answer_markdown") or ""))
+    verdict = answer.get("verdict") if isinstance(answer.get("verdict"), dict) else None
+    if verdict and verdict.get("text"):
+        out["verdict"] = {**verdict, "text": clean(str(verdict["text"]))}
+    if isinstance(answer.get("evidence"), list):
+        out["evidence"] = [
+            {**item, "text": clean(str(item.get("text") or ""))} for item in answer["evidence"] if isinstance(item, dict)
+        ]
+        out["evidence"] = [item for item in out["evidence"] if item["text"]]
+    if not out["answer_markdown"]:
+        if not bag.vendor_groups and not bag.renewal_rows:
+            return None, []
+        out["answer_markdown"] = "Here is what the lookups returned."  # the table below is from tool data
+    # Markers in removed sentences may leave citations unused; that's fine. Anything else must pass.
+    if _validate(out, bag, question):
+        return None, []
+    return out, dropped
 
 
 logger = logging.getLogger(__name__)
@@ -291,6 +394,13 @@ def reason_step(reason: str, detail: str | None = None) -> dict:
         "timeout": "AI call ran out of time",
         "model_error": "AI call failed",
         "server_error": "Server error before the AI was asked",
+        "max_tokens": "AI reply was cut off before any answer (output limit)",
+        "malformed_call": "AI sent a malformed lookup request",
+        "blocked": "AI reply was withheld by the model's safety filter",
+        "empty_reply": "AI sent an empty reply",
+        "not_json": "AI reply wasn't the expected JSON",
+        "too_many_lookups": "AI needed more lookups than allowed",
+        "round_budget": "AI didn't finish within the allowed rounds",
     }.get(reason, f"AI answer not used ({reason})")
     return step("ai-reason", f"{words}{f': {detail}' if detail else ''} [reason: {reason}]", status="error")
 
@@ -344,6 +454,8 @@ async def run_ask(
         graph = await load_graph(db, ctx.workspace.id, ctx.org_id)
     yield {"event": "step", "data": estate_step(graph)}
     bag = ToolBag(graph=graph, seen_ids=set(), numbers=set())
+    graph_numbers(graph, bag.numbers)  # the counts the estate step shows
+    harvest([turn for turn in (context or []) if isinstance(turn, dict)], bag.numbers)  # earlier answers
     tools_used: list[str] = []
     ai_question = is_ai_question(question)
     prompt, earlier = conversation_prompt(question, context or [], graph)
@@ -363,40 +475,60 @@ async def run_ask(
         system_instruction=SYSTEM,
         tools=build_gemini_tools(tool_specs(include_ai=ai_question)),
         temperature=0,
-        max_output_tokens=900,
+        max_output_tokens=MAX_OUTPUT_TOKENS,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        **({"thinking_config": types.ThinkingConfig(thinking_budget=THINKING_BUDGET)} if model_name().startswith("gemini-2.5") else {}),
     )
     corrected = False
+    nudged = False
     checks = 0
     last_tool_step: dict | None = None
+    log = logging.getLogger(__name__)
+
+    def give_up(reason: str, detail: str | None = None):
+        """Every fallback: a warning log line, a reason step, then the final payload."""
+        log.warning("ask gave up reason=%s detail=%s model=%s tools=%s", reason, detail or "", model_name(), ",".join(tools_used))
+        return [
+            {"event": "step", "data": reason_step(reason, detail)},
+            {"event": "final", "data": _fallback(reason, tools_used, detail)},
+        ]
 
     try:
         for _round in range(MAX_ROUNDS):
             remaining = TOTAL_BUDGET_SECONDS - (clock() - started)
             if remaining < MIN_CALL_WINDOW_SECONDS:
-                detail = f"{TOTAL_BUDGET_SECONDS - remaining:.0f}s used of {TOTAL_BUDGET_SECONDS:.0f}s, model {model_name()}"
-                yield {"event": "step", "data": reason_step("timeout", detail)}
-                yield {"event": "final", "data": _fallback("timeout", tools_used, detail)}
+                for event in give_up("timeout", f"{TOTAL_BUDGET_SECONDS - remaining:.0f}s used of {TOTAL_BUDGET_SECONDS:.0f}s after {_round} model calls, model {model_name()}"):
+                    yield event
                 return
+            call_started = clock()
             response = await asyncio.wait_for(
-                get_client().aio.models.generate_content(
-                    model=model_name(),
-                    contents=contents,
-                    config=config,
-                ),
+                get_client().aio.models.generate_content(model=model_name(), contents=contents, config=config),
                 timeout=min(CALL_TIMEOUT_SECONDS, remaining),
             )
+            finish, finish_detail = finish_info(response)
+            log.info("ask model reply round=%s %s in %.1fs", _round + 1, finish_detail, clock() - call_started)
             calls = _calls(response)
             if not calls:
-                parsed = _parse_answer(_text(response))
+                text = _text(response)
+                if not text:
+                    # No lookup request and no text: cut off (MAX_TOKENS), withheld (SAFETY...),
+                    # a malformed function call, or empty. Ask once more, then give up with the reason.
+                    code = empty_reply_reason(finish)
+                    if not nudged and code in {"malformed_call", "empty_reply", "max_tokens"}:
+                        nudged = True
+                        yield {"event": "step", "data": step(f"retry-{_round}", f"The AI's reply was empty ({finish_detail}); asked again", status="error")}
+                        contents.append(types.Content(role="user", parts=[types.Part.from_text(text="Your last reply was empty or malformed. Request a lookup with a valid function call, or reply with the JSON answer only.")]))
+                        continue
+                    for event in give_up(code, finish_detail):
+                        yield event
+                    return
+                parsed = _parse_answer(text)
                 problem = "not_json" if not parsed else _validate(parsed, bag, question)
                 if problem and not corrected:
                     corrected = True
                     checks += 1
                     yield {"event": "step", "data": checking_step(problem, checks)}
-                    contents.append(
-                        types.Content(role="model", parts=[types.Part.from_text(text=_text(response) or "{}")])
-                    )
+                    contents.append(types.Content(role="model", parts=[types.Part.from_text(text=text or "{}")]))
                     contents.append(
                         types.Content(
                             role="user",
@@ -405,31 +537,51 @@ async def run_ask(
                                     text=(
                                         f"That answer failed the check ({problem}). "
                                         + ("Say the vendor count as vendor_count (every named vendor, with or without a cost). " if problem == "vendor_count" else "")
-                                        + 
-                                        "Reply with corrected JSON only. Use only items and numbers from the lookups. Name each item by its type_label. Never say record."
+                                        + "Reply with corrected JSON only. Use only items and numbers from the lookups. Name each item by its type_label. Never say record."
                                     )
                                 )
                             ],
                         )
                     )
                     continue
+                if problem == "ungrounded_number" and parsed:
+                    softened, dropped = soften_numbers(parsed, bag, question)
+                    if softened is not None:
+                        log.warning("ask softened answer: dropped %s ungrounded number(s): %s", len(dropped), ", ".join(dropped)[:200])
+                        checks += 1
+                        yield {"event": "step", "data": step(f"softened-{checks}", f"Checked the answer against the lookups: left out {len(dropped)} number(s) the lookups didn't return", status="done")}
+                        yield {"event": "final", "data": _present(softened, bag, tools_used, ai_question)}
+                        return
                 if problem or not parsed:
-                    yield {"event": "final", "data": _fallback(problem or "not_json", tools_used)}
+                    # Never echo the unchecked reply (it must not reach the screen); its size is enough.
+                    for event in give_up(problem or "not_json", f"{problem or 'not_json'} after a correction; {finish_detail}; reply {len(text)} chars"):
+                        yield event
                     return
                 checks += 1
                 yield {"event": "step", "data": checking_step(None, checks)}
                 yield {"event": "final", "data": _present(parsed, bag, tools_used, ai_question)}
                 return
-            if response.candidates and response.candidates[0].content:
-                contents.append(response.candidates[0].content)
+            content = response.candidates[0].content if response.candidates else None
+            if content is not None and getattr(content, "parts", None):
+                contents.append(content)  # keeps thought signatures, which the next call needs
+            else:
+                contents.append(types.Content(role="model", parts=[types.Part(function_call=types.FunctionCall(name=n, args=a)) for n, a in calls]))
             parts = []
             for name, args in calls:
                 if len(tools_used) >= MAX_TOOL_CALLS:
-                    yield {"event": "final", "data": _fallback("too_many_lookups", tools_used)}
+                    for event in give_up("too_many_lookups", f"{len(tools_used)} lookups: {','.join(tools_used)}"):
+                        yield event
                     return
                 tools_used.append(name)
-                raw = run_tool(bag, name, args) if ai_question or name != "ai_landscape" else NOT_AI
-                result = json.loads(json.dumps(raw, default=str))
+                try:
+                    raw = run_tool(bag, name, args) if ai_question or name != "ai_landscape" else NOT_AI
+                    result = json.loads(json.dumps(raw, default=str))
+                    harvest(result, bag.numbers)  # values, list lengths, sums, counts per kind
+                except Exception as exc:  # a broken lookup goes back to the model as an error, not a crash
+                    detail = error_detail(exc)
+                    log.exception("ask tool failed: %s(%s): %s", name, json.dumps(args, default=str)[:300], detail)
+                    result = {"error": "lookup_failed", "message": detail[:200]}
+                    yield {"event": "step", "data": step(f"tool-error-{len(tools_used)}", f"Lookup {name} failed: {detail}", status="error")}
                 line = tool_step(len(tools_used), name, args, result)
                 # The model sometimes repeats a lookup (same filters, same result). Show it once.
                 if not same_step(last_tool_step, line):
@@ -438,19 +590,19 @@ async def run_ask(
                 parts.append(types.Part.from_function_response(name=name, response={"result": result}))
             contents.append(types.Content(role="user", parts=parts))
     except TimeoutError:
-        detail = f"no reply within {CALL_TIMEOUT_SECONDS:.0f}s, model {model_name()}"
-        logging.getLogger(__name__).warning("ask model timeout: %s", detail)
-        yield {"event": "step", "data": reason_step("timeout", detail)}
-        yield {"event": "final", "data": _fallback("timeout", tools_used, detail)}
+        detail = f"no reply within {CALL_TIMEOUT_SECONDS:.0f}s (call {len(tools_used) and 'after lookups' or 'first'}), model {model_name()}"
+        for event in give_up("timeout", detail):
+            yield event
         return
     except Exception as exc:
         # Log the exact exception (type, status, message, traceback) so prod logs show the cause.
         detail = error_detail(exc)
-        logging.getLogger(__name__).exception("ask model call failed (model=%s): %s", model_name(), detail)
+        log.exception("ask model call failed (model=%s): %s", model_name(), detail)
         yield {"event": "step", "data": reason_step("model_error", detail)}
         yield {"event": "final", "data": _fallback("model_error", tools_used, detail)}
         return
-    yield {"event": "final", "data": _fallback("round_budget", tools_used)}
+    for event in give_up("round_budget", f"{MAX_ROUNDS} model calls without a final answer; lookups: {','.join(tools_used)}"):
+        yield event
 
 
 def _money(n: float) -> str:
@@ -522,7 +674,7 @@ def _present(answer: dict, bag: ToolBag, tools_used: list[str], ai_question: boo
             continue
         citations.append(
             {
-                "n": int(item.get("n")),
+                "n": int(item.get("n")) if str(item.get("n", "")).isdigit() else len(citations) + 1,
                 "record_id": rec.id,
                 "name": rec.name,
                 "type_label": rec.type_label(),
