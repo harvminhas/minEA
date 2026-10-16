@@ -218,7 +218,7 @@ def test_run_ask_yields_steps_then_exactly_one_final(engine):
 
 
 def test_correction_round_shows_a_step(engine):
-    bad = {**GOOD, "citations": [{"n": 1, "record_id": "nope", "relationship": "x"}]}  # unknown id: structural, still corrected
+    bad = {**GOOD, "verdict": {"text": "Likely high", "inferred": True}, "evidence": []}  # unknown id: structural, still corrected
     engine([_call_response("aggregate", {"filters": {"renewal_within_days": 90}}), _text_response(bad), _text_response(GOOD)])
     result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
     assert result["source"] == "llm"
@@ -374,7 +374,7 @@ def test_load_graph_survives_a_catalogue_rollback(monkeypatch):
 def test_timing_on_the_final_and_one_log_line(engine, caplog):
     import logging
     from app.ai.ask.timing import AskTiming
-    bad = {**GOOD, "citations": [{"n": 1, "record_id": "nope", "relationship": "x"}]}
+    bad = {**GOOD, "verdict": {"text": "Likely high", "inferred": True}, "evidence": []}
     engine([_call_response("aggregate", {"filters": {"renewal_within_days": 90}}), _text_response(bad), _text_response(GOOD)])
     timing = AskTiming()
     timing.add("auth", 0.05)
@@ -386,7 +386,7 @@ def test_timing_on_the_final_and_one_log_line(engine, caplog):
     assert t["context_chars"] > 0 and t["context_tokens_est"] == t["context_chars"] // 4
     assert {"auth_s", "context_s", "check_s", "total_s"} <= set(t) and t["outcome"] == "llm"
     assert t["summary"].startswith("Took ") and "AI 3 calls" in t["summary"] and "lookups" in t["summary"] and "check" in t["summary"]
-    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("ask timing ")]
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("ASK_TIMING ")]
     assert len(lines) == 1 and "ai_calls=3" in lines[0] and "corrected=True" in lines[0]
     # No behaviour change: the steps are the same as without timing.
     assert all(s["id"] != "timing" for s in result["steps"])
@@ -499,3 +499,78 @@ def test_stream_frames_include_the_headline():
     frames = asyncio.run(collect())
     assert any(f.startswith("event: headline") for f in frames)
     assert [f.split("\n")[0] for f in frames if f.startswith("event:")].index("event: headline") == 1  # right after meta
+
+
+def test_structural_slips_are_repaired_without_a_correction(engine):
+    bad = {**GOOD, "answer_markdown": GOOD["answer_markdown"] + " See [7].", "citations": GOOD["citations"] + [{"n": 2, "record_id": "ghost"}],
+           "evidence": [{"text": "a fact", "citation_ids": ["a1", "ghost"]}], "gaps": [{"record_id": "ghost", "field": "owner"}]}
+    models = engine([_text_response(bad), _text_response(GOOD)])
+    result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
+    assert result["source"] == "llm" and result["timing"]["ai_calls"] == 1 and len(models.script) == 1
+    assert "[7]" not in result["answer_text"]
+    reps = result["timing"]["repairs"]
+    assert any("ghost" in r for r in reps) and any("added evidence id a1" in r for r in reps) and any("[7]" in r for r in reps)
+
+
+def test_every_call_says_why_it_was_made(engine):
+    bad = {**GOOD, "verdict": {"text": "Likely high", "inferred": True}, "evidence": []}
+    from google.genai import types as t
+    empty = t.GenerateContentResponse(candidates=[t.Candidate(content=t.Content(role="model", parts=[]), finish_reason="MALFORMED_FUNCTION_CALL")])
+    engine([empty, _call_response("aggregate", {"filters": {"renewal_within_days": 90}}), _text_response(bad), _text_response(GOOD)])
+    result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
+    whys = [c["why"] for c in result["timing"]["calls"]]
+    assert whys == ["first", "empty-retry: previous reply empty (finish MALFORMED_FUNCTION_CALL)", "tool follow-up: aggregate", "correction: inferred verdict with no evidence"]
+    assert result["timing"]["cache"]["hit"] is False and result["timing"]["cache"]["why"]
+
+
+def test_cache_info_says_hit_or_why_not():
+    from app.ai.ask import graph as g
+    g._GRAPH_CACHE.clear()
+    fp = {"v": "a"}
+
+    class DB:
+        async def execute(self, *a, **k):
+            return SimpleNamespace(scalar=lambda: fp["v"])
+
+    async def loader(db, w, o):
+        return renewal_graph()
+
+    async def run():
+        w, o = uuid.uuid4(), uuid.uuid4()
+        out = []
+        for v in ["a", "a", "b"]:
+            fp["v"] = v
+            info = {}
+            await g.load_graph_cached(DB(), w, o, loader=loader, info=info)
+            out.append((info["hit"], info["why"]))
+        return out
+
+    assert asyncio.run(run()) == [(False, "not cached in this server instance"), (True, "fingerprint unchanged"), (False, "workspace changed")]
+
+
+def test_app_logger_emits_info_on_stdout():
+    import logging
+    import app.main  # noqa: F401  (configures the "app" logger)
+    lg = logging.getLogger("app")
+    assert lg.level == logging.INFO and lg.handlers
+
+
+def test_headline_streams_even_when_the_first_text_part_has_a_thought_signature(engine):
+    reply = json.dumps({"headline": "Renewals coming up", **GOOD})
+
+    class StreamModels:
+        async def generate_content_stream(self, model, contents, config):
+            async def gen():
+                yield types.GenerateContentResponse(candidates=[types.Candidate(content=types.Content(role="model", parts=[types.Part(text=reply[:40], thought_signature=b"sig")]))])
+                yield types.GenerateContentResponse(candidates=[types.Candidate(content=types.Content(role="model", parts=[types.Part.from_text(text=reply[40:])]), finish_reason="STOP")])
+            return gen()
+
+    engine([])
+    loop.get_client = lambda: SimpleNamespace(aio=SimpleNamespace(models=StreamModels()))
+
+    async def collect():
+        return [e async for e in loop.run_ask(None, CTX, "What renews in the next 90 days?", stream_headline=True)]
+
+    events = asyncio.run(collect())
+    assert [e["event"] for e in events].count("headline") == 1
+    assert events[-1]["data"]["source"] == "llm" and events[-1]["data"]["timing"]["ai_calls"] == 1

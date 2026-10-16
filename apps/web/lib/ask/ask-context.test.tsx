@@ -135,3 +135,27 @@ test("How this was worked out shows the server's timing line under the steps", a
   assert.match(html, /data-testid="ask-timing"[^>]*>Took 6\.2s: workspace 0\.3s · AI 2 calls 5\.1s · lookups 0\.2s · check 0\.1s</);
   assert.doesNotMatch(renderToStaticMarkup(<AskSteps steps={steps} />), /ask-timing/);
 });
+
+test("Timing details list each AI call with why it was made, plus the cache result", async () => {
+  const { AskSteps } = await import("../../components/mvp/AskSteps");
+  const details = {
+    calls: [
+      { s: 0.4, in: 9000, out: 0, think: 0, finish: "MALFORMED_FUNCTION_CALL", why: "first", streamed: true },
+      { s: 2.0, in: 9100, out: 300, think: 0, finish: "STOP", why: "empty-retry: previous reply empty (finish MALFORMED_FUNCTION_CALL)" },
+      { s: 1.8, in: 9500, out: 280, think: 0, finish: "STOP", why: "correction: inferred verdict with no evidence", correction: true },
+    ],
+    cache: { hit: true, why: "fingerprint unchanged", fingerprint_s: 0.02 },
+    repairs: ["dropped citation with unknown id x1"],
+  };
+  const html = renderToStaticMarkup(<AskSteps steps={[{ id: "estate", status: "done", label: "Read" }]} timing="Took 4.2s" details={details} />);
+  assert.equal((html.match(/data-testid="ask-timing-call"/g) ?? []).length, 3);
+  assert.match(html, /Timing details/);
+  assert.match(html, /9,000 \/ 0 \/ 0/);
+  assert.match(html, /MALFORMED_FUNCTION_CALL/);
+  assert.match(html, /0\.4s \(streamed\)/);
+  assert.match(html, /correction: inferred verdict with no evidence/);
+  assert.match(html, /Workspace cache: hit \(fingerprint unchanged\), fingerprint 0\.0s/);
+  assert.match(html, /Fixed without a correction: dropped citation with unknown id x1/);
+  const ai = answerFromModel(payload({ headline: "h", answer_text: "x", item_ids: ["crm"], items: [], timing: { summary: "Took 1s", ...details } } as never), ROWS, "/w", "q")!;
+  assert.equal(ai.timingDetails?.calls.length, 3);
+});

@@ -682,7 +682,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
 
             {!leanCard && answer.gaps.length > 0 && <GapsList key={question} gaps={answer.gaps} />}
 
-            {!(shownLean && !answer.records) && answer.steps && answer.steps.length > 0 && <AskSteps steps={answer.steps} timing={answer.timingLine} />}
+            {!(shownLean && !answer.records) && answer.steps && answer.steps.length > 0 && <AskSteps steps={answer.steps} timing={answer.timingLine} details={answer.timingDetails} />}
 
             {!leanCard && <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#eef0f4] pt-4">
               <button type="button" onClick={() => { saveAsk(question, answer.answerText); setNote("Saved to Reports › Saved from Ask"); }} className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">

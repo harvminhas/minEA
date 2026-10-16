@@ -24,6 +24,8 @@ class AskTiming:
     calls: list[dict] = field(default_factory=list)
     tools: list[dict] = field(default_factory=list)
     cache_hit: bool | None = None  # workspace graph reused from the in-process cache
+    cache: dict = field(default_factory=dict)  # {"hit", "why", "fingerprint_s"}
+    repairs: list[str] = field(default_factory=list)  # structural slips fixed without a model call
     corrected: bool = False
     correction_s: float = 0.0
     outcome: str = ""
@@ -35,7 +37,10 @@ class AskTiming:
     def add(self, phase: str, seconds: float) -> None:
         self.phases[phase] = self.phases.get(phase, 0.0) + max(0.0, seconds)
 
-    def model_call(self, seconds: float, response: Any, finish: str, *, correction: bool = False) -> None:
+    def note_repairs(self, notes: list[str]) -> None:
+        self.repairs.extend(notes)
+
+    def model_call(self, seconds: float, response: Any, finish: str, *, correction: bool = False, why: str = "", streamed: bool = False) -> None:
         usage = getattr(response, "usage_metadata", None)
         tok = lambda name: int(getattr(usage, name, None) or 0) if usage is not None else 0  # noqa: E731
         self.calls.append({
@@ -44,6 +49,8 @@ class AskTiming:
             "out": tok("candidates_token_count"),
             "think": tok("thoughts_token_count"),
             "finish": finish,
+            "why": why or "first",
+            **({"streamed": True} if streamed else {}),
             **({"correction": True} if correction else {}),
         })
         if correction:
@@ -63,6 +70,8 @@ class AskTiming:
             **{f"{k}_s": round(v, 3) for k, v in self.phases.items()},
             "context_chars": self.context_chars,
             "cache_hit": self.cache_hit,
+            "cache": self.cache,
+            "repairs": self.repairs,
             "context_tokens_est": self.context_chars // 4,
             "ai_calls": len(self.calls),
             "ai_s": round(ai, 3),
@@ -80,8 +89,8 @@ class AskTiming:
 
     def log_line(self) -> str:
         d = self.as_dict()
-        flat = " ".join(f"{k}={v}" for k, v in d.items() if k not in {"calls", "tools"})
-        return f"ask timing {flat} calls={json.dumps(d['calls'], separators=(',', ':'))} tools={json.dumps(d['tools'], separators=(',', ':'))}"
+        flat = " ".join(f"{k}={v}" for k, v in d.items() if k not in {"calls", "tools", "cache", "repairs"})
+        return f"ASK_TIMING {flat} cache={json.dumps(self.cache, separators=(',', ':'))} repairs={json.dumps(self.repairs)} calls={json.dumps(d['calls'], separators=(',', ':'))} tools={json.dumps(d['tools'], separators=(',', ':'))}"
 
     def summary(self) -> str:
         """'Took 6.2s: workspace 0.3s · AI 2 calls 5.1s · lookups 0.2s · check 0.1s'."""
@@ -103,5 +112,10 @@ class AskTiming:
     def step(self) -> dict:
         return {"id": "timing", "status": "done", "label": self.summary()}
 
+    def details(self) -> dict:
+        """What the screen's Timing details list shows."""
+        return {"calls": self.calls, "cache": self.cache, "repairs": self.repairs, "phases": {k: round(v, 3) for k, v in self.phases.items()}}
+
     def emit(self) -> None:
-        logger.info(self.log_line())
+        # WARNING so it shows in Vercel's logs whatever the level config; one line, prefix ASK_TIMING.
+        logger.warning(self.log_line())

@@ -392,16 +392,30 @@ async def workspace_fingerprint(db: AsyncSession, workspace_id: uuid.UUID, org_i
         return None
 
 
-async def load_graph_cached(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID, *, clock=None, loader=None) -> tuple[WorkspaceGraph, bool]:
-    """(graph, hit). A hit costs one small query instead of the catalogue + three table reads."""
+async def load_graph_cached(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID, *, clock=None, loader=None, info: dict | None = None) -> tuple[WorkspaceGraph, bool]:
+    """(graph, hit). A hit costs one small query instead of the catalogue + three table reads.
+    `info` (optional) gets {"hit", "why", "fingerprint_s"} for Timing details."""
+    info = info if info is not None else {}
     import time as _time
 
     now = (clock or _time.monotonic)()
     key = (str(org_id), str(workspace_id))
+    started = _time.perf_counter()
     fingerprint = await workspace_fingerprint(db, workspace_id, org_id)
+    info["fingerprint_s"] = round(_time.perf_counter() - started, 3)
     cached = _GRAPH_CACHE.get(key)
     if fingerprint and cached and cached[0] == fingerprint and now - cached[1] < GRAPH_TTL_S:
+        info.update(hit=True, why="fingerprint unchanged")
         return cached[2], True
+    info.update(
+        hit=False,
+        why=(
+            "fingerprint query failed" if not fingerprint
+            else "not cached in this server instance" if not cached
+            else "workspace changed" if cached[0] != fingerprint
+            else f"expired after {GRAPH_TTL_S:.0f}s"
+        ),
+    )
     graph = await (loader or load_graph)(db, workspace_id, org_id)
     if fingerprint:
         _GRAPH_CACHE[key] = (fingerprint, now, graph)

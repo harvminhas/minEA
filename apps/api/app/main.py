@@ -43,6 +43,16 @@ from app.routers import (
 
 logger = logging.getLogger(__name__)
 
+# Our "app.*" loggers emit INFO to stdout (Vercel shows stdout/stderr). Without this, Python's
+# default root level (WARNING, no handler) silently dropped every INFO line, e.g. "ask model reply".
+_app_log = logging.getLogger("app")
+if not _app_log.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    _app_log.addHandler(_handler)
+    _app_log.setLevel(logging.INFO)
+    _app_log.propagate = False
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:

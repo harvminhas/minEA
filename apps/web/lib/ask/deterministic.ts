@@ -55,6 +55,9 @@ export type AskFixAction = {
   suggestedValue: string;
 };
 
+export type AskTimingCall = { s: number; in: number; out: number; think: number; finish: string; why?: string; streamed?: boolean; correction?: boolean };
+export type AskTimingDetails = { calls: AskTimingCall[]; cache?: { hit?: boolean; why?: string; fingerprint_s?: number }; repairs?: string[]; total_s?: number; [key: string]: unknown };
+
 export type AskAnswer = {
   handler:
     | "impact"
@@ -99,6 +102,8 @@ export type AskAnswer = {
   steps?: AskStep[];
   /** "Took 6.2s: workspace 0.3s · AI 2 calls 5.1s · …" from the server, shown under the steps. */
   timingLine?: string;
+  /** Per-call breakdown from the server ("Timing details"). */
+  timingDetails?: AskTimingDetails;
   /** A report that holds the full answer, shown under it. */
   link?: { href: string; label: string };
   loading?: boolean;
@@ -262,6 +267,7 @@ export function answerFromModel(payload: AskModelPayload, rows: CatalogRow[], ba
     },
     ...(payload.steps?.length ? { steps: payload.steps } : {}),
     ...(payload.timing?.summary ? { timingLine: String(payload.timing.summary) } : {}),
+    ...(payload.timing && Array.isArray(payload.timing.calls) ? { timingDetails: payload.timing as AskTimingDetails } : {}),
   };
 }
 

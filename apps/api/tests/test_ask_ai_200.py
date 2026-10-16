@@ -89,9 +89,10 @@ def test_a_failing_lookup_goes_back_to_the_model(monkeypatch):
 
 
 def test_every_fallback_has_a_reason_step(monkeypatch):
-    bad = {"answer_markdown": "99 things [1].", "citations": [{"n": 1, "record_id": "nope"}]}
+    # An unknown id is now repaired without a call; an inferred verdict with no evidence can't be.
+    bad = {"answer_markdown": "99 things [1].", "citations": [{"n": 1, "record_id": "nope"}], "verdict": {"text": "Likely 99", "inferred": True}, "evidence": []}
     _, final, labels, _ = _run(monkeypatch, [_call_response(*AGG), _text_response(bad), _text_response(bad)])
-    assert final["fallback_reason"] == "unknown_record" and labels[-1].endswith("[reason: unknown_record]")
+    assert final["fallback_reason"] == "inferred_without_evidence" and labels[-1].endswith("[reason: inferred_without_evidence]")
     assert "99" not in labels[-1]
 
 

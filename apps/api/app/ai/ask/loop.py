@@ -220,7 +220,9 @@ async def _streamed_reply(models: Any, contents: list, config: Any, queue: "asyn
                 parts[-1] = types.Part.from_text(text=parts[-1].text + piece)
             else:
                 parts.append(part)
-            if plain:
+            if isinstance(piece, str) and not getattr(part, "thought", False):
+                # Any answer text counts for the headline, even a part that carries a thought signature
+                # (Gemini 2.5 can put one on the first text part); before, such a reply never streamed it.
                 text += piece
                 if not sent:
                     headline = partial_headline(text)
@@ -253,6 +255,94 @@ def _parse_answer(text: str) -> dict | None:
 
 def _normalize_number(token: str) -> str:
     return token.replace("$", "").replace(",", "").replace("%", "").strip()
+
+
+def repair_answer(answer: dict, bag: ToolBag) -> list[str]:
+    """Fix structural slips in place, without another model call. Returns what was fixed (for timing).
+
+    - citations whose id is not in the workspace are dropped (with their [n] markers)
+    - [n] markers with no citation are removed from the text
+    - evidence citation ids missing from citations are added when they are workspace items, else dropped
+    - fix actions and gaps that point nowhere are dropped
+    The full check still runs afterwards; nothing unknown is ever shown.
+    """
+    notes: list[str] = []
+    citations = answer.get("citations")
+    if citations is None:
+        citations = answer["citations"] = []
+    if not isinstance(citations, list):
+        return notes
+    kept, dropped_n = [], set()
+    for item in citations:
+        rid = str(item.get("record_id")) if isinstance(item, dict) else ""
+        if isinstance(item, dict) and rid in bag.seen_ids:
+            kept.append(item)
+        else:
+            notes.append(f"dropped citation with unknown id {rid[:40] or '(none)'}")
+            if isinstance(item, dict) and str(item.get("n", "")).isdigit():
+                dropped_n.add(int(item["n"]))
+    answer["citations"] = citations = kept
+    cited_n = {int(c["n"]) for c in citations if str(c.get("n", "")).isdigit()}
+    for key in ("answer_markdown", "headline"):
+        text = answer.get(key)
+        if isinstance(text, str):
+            def strip(m: re.Match) -> str:
+                n = int(m.group(1))
+                if n in cited_n:
+                    return m.group(0)
+                if n not in dropped_n:
+                    notes.append(f"removed marker [{n}] with no citation")
+                return ""
+            answer[key] = re.sub(r"\s?\[(\d+)\]", strip, text)
+    cited_ids = {str(c.get("record_id")) for c in citations}
+    evidence = answer.get("evidence")
+    if isinstance(evidence, list):
+        for item in evidence:
+            if not isinstance(item, dict):
+                continue
+            ids = []
+            for rid in item.get("citation_ids") or []:
+                rid = str(rid)
+                if rid in cited_ids:
+                    ids.append(rid)
+                elif rid in bag.seen_ids:
+                    n = max(cited_n | {0}) + 1
+                    cited_n.add(n)
+                    citations.append({"n": n, "record_id": rid, "relationship": ""})
+                    cited_ids.add(rid)
+                    ids.append(rid)
+                    notes.append(f"added evidence id {rid[:40]} to citations")
+                else:
+                    notes.append(f"dropped evidence id {rid[:40]} not in the workspace")
+            item["citation_ids"] = ids
+    fixes = answer.get("fix_actions")
+    if isinstance(fixes, list):
+        good = [f for f in fixes if isinstance(f, dict) and str(f.get("record_id")) in cited_ids and f.get("field") in {"criticality", "owner"}]
+        if len(good) != len(fixes):
+            notes.append(f"dropped {len(fixes) - len(good)} fix action(s) not tied to a citation")
+        answer["fix_actions"] = good
+    gaps = answer.get("gaps")
+    if isinstance(gaps, list):
+        good = [g for g in gaps if not isinstance(g, dict) or str(g.get("record_id")) in bag.seen_ids]
+        if len(good) != len(gaps):
+            notes.append(f"dropped {len(gaps) - len(good)} gap(s) with unknown ids")
+        answer["gaps"] = good
+    return notes
+
+
+def problem_detail(problem: str, answer: dict | None, bag: ToolBag, text: str, finish: str) -> str:
+    """The exact reason for a correction, safe to show (ids and shapes, never the unchecked text)."""
+    if problem == "not_json":
+        return f"invalid JSON ({len(text)} chars, finish {finish})"
+    if not answer:
+        return problem
+    if problem == "inferred_without_evidence":
+        return "inferred verdict with no evidence"
+    if problem in {"citations_not_a_list", "evidence_not_a_list"}:
+        return f"{problem.split('_')[0]} is not a list"
+    if problem == "vendor_count" and bag.vendor_groups is not None:
+        return f"vendor count differs from the {len(bag.vendor_groups)} vendors looked up"
+    return problem.replace("_", " ")
 
 
 def _validate(answer: dict, bag: ToolBag, question: str) -> str | None:
@@ -480,11 +570,11 @@ def reason_step(reason: str, detail: str | None = None) -> dict:
     return step("ai-reason", f"{words}{f': {detail}' if detail else ''} [reason: {reason}]", status="error")
 
 
-async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str, context: list[dict] | None = None, timing: AskTiming | None = None) -> dict:
+async def answer_with_model(db: AsyncSession, ctx: TenancyContext, question: str, context: list[dict] | None = None, timing: AskTiming | None = None, graph=None) -> dict:
     """JSON contract of POST /ai/ask: the final answer, plus `steps` (what the server did)."""
     steps: list[dict] = []
     final: dict | None = None
-    async for event in run_ask(db, ctx, question, context=context, timing=timing):
+    async for event in run_ask(db, ctx, question, context=context, timing=timing, graph=graph):
         if event["event"] == "step":
             steps.append(event["data"])
         elif event["event"] == "final":
@@ -553,7 +643,7 @@ async def run_ask_inner(
     # closed by the time a streaming body runs), so it can pass it in.
     if graph is None:
         loaded = tick()
-        graph, timing.cache_hit = await load_graph_cached(db, ctx.workspace.id, ctx.org_id, loader=load_graph)
+        graph, timing.cache_hit = await load_graph_cached(db, ctx.workspace.id, ctx.org_id, loader=load_graph, info=timing.cache)
         timing.add("workspace", tick() - loaded)
     built = tick()
     estate = estate_step(graph)
@@ -592,6 +682,7 @@ async def run_ask_inner(
     corrected = False
     headline_sent = False
     correcting = False  # the next model call is the correction round
+    next_why = "first"  # why the next model call is made (Timing details)
     nudged = False
     checks = 0
     last_tool_step: dict | None = None
@@ -640,13 +731,15 @@ async def run_ask_inner(
                     if not task.done():
                         task.cancel()
                 response = task.result()
+                streamed = True
             else:
+                streamed = False
                 response = await asyncio.wait_for(
                     models.generate_content(model=model_name(), contents=contents, config=config),
                     timeout=min(CALL_TIMEOUT_SECONDS, remaining),
                 )
             finish, finish_detail = finish_info(response)
-            timing.model_call(tick() - call_tick, response, finish, correction=correcting)
+            timing.model_call(tick() - call_tick, response, finish, correction=correcting, why=next_why, streamed=streamed)
             correcting = False
             log.info("ask model reply round=%s %s in %.1fs", _round + 1, finish_detail, clock() - call_started)
             calls = _calls(response)
@@ -658,6 +751,7 @@ async def run_ask_inner(
                     code = empty_reply_reason(finish)
                     if not nudged and code in {"malformed_call", "empty_reply", "max_tokens"}:
                         nudged = True
+                        next_why = f"empty-retry: previous reply empty (finish {finish})"
                         yield {"event": "step", "data": step(f"retry-{_round}", f"The AI's reply was empty ({finish_detail}); asked again", status="error")}
                         contents.append(types.Content(role="user", parts=[types.Part.from_text(text="Your last reply was empty or malformed. Reply with the JSON answer only, from the workspace.")]))
                         # The retry answers from the workspace: lookups off, so it can't come back as a broken call again.
@@ -668,6 +762,10 @@ async def run_ask_inner(
                     return
                 checking = tick()
                 parsed = _parse_answer(text)
+                repaired = repair_answer(parsed, bag) if parsed else []
+                if repaired:
+                    timing.note_repairs(repaired)
+                    log.info("ask repaired answer without a correction: %s", "; ".join(repaired)[:300])
                 problem = "not_json" if not parsed else _validate(parsed, bag, question)
                 timing.add("check", tick() - checking)
                 # Numbers: soften now (drop the offending sentences), no second model call.
@@ -675,6 +773,7 @@ async def run_ask_inner(
                 if problem and not corrected and problem != "ungrounded_number":
                     corrected = True
                     correcting = True
+                    next_why = f"correction: {problem_detail(problem, parsed, bag, text, finish)}"
                     timing.corrected = True
                     checks += 1
                     yield {"event": "step", "data": checking_step(problem, checks)}
@@ -743,6 +842,7 @@ async def run_ask_inner(
                 last_tool_step = line
                 parts.append(types.Part.from_function_response(name=name, response={"result": result}))
             contents.append(types.Content(role="user", parts=parts))
+            next_why = f"tool follow-up: {', '.join(name for name, _ in calls)}"
     except TimeoutError:
         detail = f"no reply within {CALL_TIMEOUT_SECONDS:.0f}s (call {len(tools_used) and 'after lookups' or 'first'}), model {model_name()}"
         for event in give_up("timeout", detail):

@@ -77,13 +77,26 @@ async def ask(
     timing = AskTiming()
     await ctx.require_read(db)
     try:
-        over = await _take_ai_question(db, ctx, body.question)
         timing.add("auth", timing.total)
+        graph = await _load_for_ask(db, ctx, body.question, timing)  # before the quota commit (see ask_stream)
+        quota_started = timing.clock()
+        over = await _take_ai_question(db, ctx, body.question)
+        timing.add("quota", timing.clock() - quota_started)
         if over is not None:
             return over
-        return await answer_with_model(db, ctx, body.question, context=[turn.model_dump() for turn in body.context], timing=timing)
+        return await answer_with_model(db, ctx, body.question, context=[turn.model_dump() for turn in body.context], timing=timing, graph=graph)
     except Exception as exc:  # a 500 here used to show as a bare "AI unavailable" in the browser
         return _server_error(exc)
+
+
+async def _load_for_ask(db: AsyncSession, ctx: TenancyContext, question: str, timing: AskTiming):
+    """The workspace graph (cached per revision) for a question the model will see, else None."""
+    if not (ctx.workspace and question.strip() and is_configured()):
+        return None
+    started = timing.clock()
+    graph, timing.cache_hit = await load_graph_cached(db, ctx.workspace.id, ctx.org_id, info=timing.cache)
+    timing.add("workspace", timing.clock() - started)
+    return graph
 
 
 def _server_error(exc: BaseException) -> dict[str, Any]:
@@ -128,15 +141,15 @@ async def ask_stream(
     await ctx.require_read(db)
     headers = {"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"}
     try:
-        over = await _take_ai_question(db, ctx, body.question)
+        # Workspace before the quota commit: on Vercel (NullPool) the commit closes the connection,
+        # and the next query pays a fresh connect (~0.4s), which is what "workspace 0.5s (cached)" was.
         timing.add("auth", timing.total)
+        graph = await _load_for_ask(db, ctx, body.question, timing)
+        quota_started = timing.clock()
+        over = await _take_ai_question(db, ctx, body.question)
+        timing.add("quota", timing.clock() - quota_started)
         if over is not None:
             return StreamingResponse(ask_events(_one_final(over)), media_type="text/event-stream", headers=headers)
-        loaded = timing.clock()
-        graph = None
-        if ctx.workspace and body.question.strip():
-            graph, timing.cache_hit = await load_graph_cached(db, ctx.workspace.id, ctx.org_id)
-        timing.add("workspace", timing.clock() - loaded)
     except Exception as exc:
         payload = _server_error(exc)
         return StreamingResponse(ask_events(_steps_then_final(payload)), media_type="text/event-stream", headers=headers)
