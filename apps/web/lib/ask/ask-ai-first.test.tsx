@@ -28,7 +28,7 @@ const gate = (question: string, extra: Partial<Parameters<typeof route.shouldAsk
 const payload = (extra: Partial<AskModelPayload>): AskModelPayload =>
   ({ source: "llm", fallback_reason: null, answer_text: "", citations: [], gaps: [], follow_ups: [], tools_used: ["filter_records"], ...extra }) as AskModelPayload;
 const render = (answer: NonNullable<ReturnType<typeof answerFromModel>>) =>
-  renderToStaticMarkup(<AskRecordsBlock answer={answer} facts={FACTS} yesNo={Boolean(answer.records?.yesNo)} onFilters={() => {}} onOpen={() => {}} rowHref={(row) => `/w/r/${row.id}`} />);
+  renderToStaticMarkup(<AskRecordsBlock defaultDetails answer={answer} facts={FACTS} yesNo={Boolean(answer.records?.yesNo)} onFilters={() => {}} onOpen={() => {}} rowHref={(row) => `/w/r/${row.id}`} />);
 
 test("every typed question goes to the AI (no phrasing decides)", () => {
   for (const q of ["do we use Adobe?", "what is owned by Christine?", "What Microsoft products do we own?", "What breaks if Payroll goes down?", "What can we cancel?", "hello"]) {

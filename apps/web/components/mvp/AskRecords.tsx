@@ -59,6 +59,19 @@ export function leanSummary(kept: RecordFacts[], filters: RecordFilters, yesNo: 
   };
 }
 
+/** "10 Applications · 1 SaaS platform · $15,000/yr recorded · ⚠ 9 no owner · ⚠ 10 no cost · 1 filter". */
+export function summaryLine(lean: LeanSummary, count: number, filterCount: number, extra: string[] = []): { text: string; warn?: boolean }[] {
+  const parts: { text: string; warn?: boolean }[] = [];
+  if (lean.kinds.length) lean.kinds.forEach((kind) => parts.push({ text: `${kind.count} ${kind.label}` }));
+  else if (count) parts.push({ text: `${count} ${count === 1 ? "item" : "items"}` });
+  extra.forEach((text) => parts.push({ text }));
+  if (lean.costTotal > 0) parts.push({ text: `${moneyLabel(lean.costTotal)}/yr recorded` });
+  lean.gaps.forEach((gap) => parts.push({ text: gap, warn: true }));
+  if (lean.inferredVendor) parts.push({ text: "vendor from catalogue" });
+  if (filterCount) parts.push({ text: `${filterCount} ${filterCount === 1 ? "filter" : "filters"}` });
+  return parts;
+}
+
 function pluralKind(label: string) {
   if (/saas$/i.test(label)) return label;
   if (/y$/.test(label) && !/[aeiou]y$/.test(label)) return `${label.slice(0, -1)}ies`;
@@ -89,7 +102,13 @@ export function AskRecordsBlock({
   yesNo,
   footerExtra,
   animate,
+  extraSummary,
+  defaultDetails,
 }: {
+  /** Start with Details open (tests, and future "always expanded" preference). */
+  defaultDetails?: boolean;
+  /** Extra facts for the summary line, e.g. "5 vendors" from a vendor lookup. */
+  extraSummary?: string[];
   /** A just-arrived answer: the headline streams in word by word and rows fill in. */
   animate?: boolean;
   answer: AskAnswer;
@@ -120,6 +139,8 @@ export function AskRecordsBlock({
     lean.names = [];
   }
   const shown = all ? kept : kept.slice(0, LEAN_ROWS);
+  const [details, setDetails] = useState(Boolean(defaultDetails));
+  const summaryParts = summaryLine(lean, kept.length, keys.length, extraSummary);
   const single = kept.length === 1 ? kept[0].row : null;
   const follow: { label: string; onClick?: () => void; href?: string }[] = single
     ? [
@@ -133,36 +154,51 @@ export function AskRecordsBlock({
 
   return (
     <div data-testid="ask-records">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 data-testid="ask-lean-headline" className="text-[20px] font-bold leading-7 text-[#1c2230]">
-          {lean.names.length ? (
-            <>
-              Yes —{" "}
-              {lean.names.map((row, index) => (
-                <span key={row.id}>
-                  {index > 0 && ", "}
-                  <a href={rowHref(row)} className="text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-[3px] hover:decoration-[#4c3fd1]">{row.name}</a>
-                </span>
-              ))}
-            </>
-          ) : animate && lean.title ? (
-            <span data-testid="ask-headline-words">
-              {lean.title.split(" ").map((word, index) => (
-                <span key={index} className="ask-word" style={{ animationDelay: `${index * 90}ms` }}>{word}{" "}</span>
-              ))}
-            </span>
-          ) : lean.title}
-        </h2>
-        {kept.length > 1 && lean.costTotal > 0 && <span className="text-[14px] text-[#8b90a0]">{moneyLabel(lean.costTotal)} / yr recorded</span>}
+      <h2 data-testid="ask-lean-headline" title={lean.title ?? undefined} className="truncate text-[17px] font-semibold leading-6 text-[#1c2230]">
+        {lean.names.length ? (
+          <>
+            Yes —{" "}
+            {lean.names.map((row, index) => (
+              <span key={row.id}>
+                {index > 0 && ", "}
+                <a href={rowHref(row)} className="text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-[3px] hover:decoration-[#4c3fd1]">{row.name}</a>
+              </span>
+            ))}
+          </>
+        ) : animate && lean.title ? (
+          <span data-testid="ask-headline-words">
+            {/* The space sits between the inline-block words: a trailing space inside an inline-block collapses. */}
+            {lean.title.split(/\s+/).filter(Boolean).map((word, index) => (
+              <React.Fragment key={index}>
+                {index > 0 && " "}
+                <span className="ask-word" style={{ animationDelay: `${index * 90}ms` }}>{word}</span>
+              </React.Fragment>
+            ))}
+          </span>
+        ) : lean.title}
+      </h2>
+      {/* One small summary line; the chips and filters open under Details. */}
+      <div data-testid="ask-summary" className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-[#6b7289]">
+        {summaryParts.map((part, index) => (
+          <React.Fragment key={part.text}>
+            {index > 0 && <span aria-hidden className="text-[#c3c7d2]">·</span>}
+            <span className={part.warn ? "text-[#a35a00]" : undefined}>{part.warn ? "⚠ " : ""}{part.text}</span>
+          </React.Fragment>
+        ))}
+        <button type="button" data-testid="ask-details-toggle" aria-expanded={details} onClick={() => setDetails(!details)} className="ml-1 font-medium text-[#5b4ce6] hover:underline">
+          {details ? "Hide details" : "Details"} <span aria-hidden>{details ? "▴" : "▾"}</span>
+        </button>
       </div>
+      {details && (
+        <div data-testid="ask-details" className="mt-2">
       {(lean.kinds.length > 0 || lean.gaps.length > 0 || lean.inferredVendor) && (
-        <div className="mt-2.5 flex flex-wrap gap-1.5" data-testid="ask-lean-chips">
+        <div className="flex flex-wrap gap-1.5" data-testid="ask-lean-chips">
           {lean.kinds.map((kind) => <MetaChip key={kind.label} text={`${kind.count} ${kind.label}`} />)}
           {lean.gaps.map((gap) => <GapChip key={gap} text={gap} />)}
           {lean.inferredVendor && <MetaChip text="Vendor from catalogue" testId="ask-vendor-inferred" />}
         </div>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid="ask-filter-chips">
+      <div className="mt-2 flex flex-wrap items-center gap-1.5" data-testid="ask-filter-chips">
         {keys.map((key) => {
           const options = chipOptions(key, facts);
           const op = opOf(filters, key);
@@ -224,6 +260,8 @@ export function AskRecordsBlock({
         )}
       </div>
 
+        </div>
+      )}
       {kept.length > 0 && (
         <table className="mt-2 w-full text-left text-[13px]" data-testid="ask-records-table">
           <thead>

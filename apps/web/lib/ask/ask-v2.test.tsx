@@ -107,7 +107,7 @@ test("fixed handlers keep their questions (impact, who owns, renewals without a 
 test("records block renders chips, a linked table and How I found this", () => {
   const answer = ask("What Microsoft products do we own?");
   const facts = buildFacts(ROWS, OBJECTS as never, RELS as never);
-  const html = renderToStaticMarkup(<AskRecordsBlock answer={answer} facts={facts} onFilters={() => {}} onOpen={() => {}} rowHref={(row) => `/w/model/applications/${row.id}`} />);
+  const html = renderToStaticMarkup(<AskRecordsBlock defaultDetails answer={answer} facts={facts} onFilters={() => {}} onOpen={() => {}} rowHref={(row) => `/w/model/applications/${row.id}`} />);
   assert.match(html, /data-filter="vendor"/);
   assert.match(html, /href="\/w\/model\/applications\/m365"/);
   assert.match(html, /How I found this/);

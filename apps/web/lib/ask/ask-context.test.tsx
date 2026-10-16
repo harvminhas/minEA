@@ -82,3 +82,26 @@ test("a fresh answer animates: headline word by word, rows fill in; without anim
   const plain = renderToStaticMarkup(<AskRecordsBlock {...props} />);
   assert.doesNotMatch(plain, /ask-word|ask-row-in/);
 });
+
+test("animated headline keeps its spaces (inline-block words with the space outside)", () => {
+  const ai = answerFromModel(payload({ headline: "We have 10 Applications from 5 vendors.", answer_text: "x", item_ids: ["crm"], items: [] }), ROWS, "/w", "q")!;
+  const html = renderToStaticMarkup(<AskRecordsBlock answer={ai} facts={FACTS} onFilters={() => {}} onOpen={() => {}} rowHref={(row) => `/w/r/${row.id}`} animate />);
+  const h2 = html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/)![1];
+  const textContent = h2.replace(/<[^>]+>/g, "");
+  assert.equal(textContent, "We have 10 Applications from 5 vendors.");
+  assert.doesNotMatch(h2, /<span class="ask-word"[^>]*>[^<]*\s<\/span>/); // no trailing space inside an inline-block
+});
+
+test("compact summary: one line with kinds, cost and gaps; chips + filters only under Details", () => {
+  const ai = answerFromModel(payload({ headline: "Microsoft items", answer_text: "x", filters: { vendor: "Microsoft" } }), ROWS, "/w", "q")!;
+  const props = { answer: ai, facts: FACTS, onFilters: () => {}, onOpen: () => {}, rowHref: (row: CatalogRow) => `/w/r/${row.id}` };
+  const collapsed = renderToStaticMarkup(<AskRecordsBlock {...props} extraSummary={["5 vendors"]} />);
+  const line = collapsed.match(/data-testid="ask-summary"[^>]*>([\s\S]*?)<\/div>/)![1].replace(/<[^>]+>/g, "");
+  assert.match(line, /^1 SaaS platform·1 Application·5 vendors·⚠ 2 no owner·⚠ 2 no cost·1 filterDetails ▾$/);
+  assert.doesNotMatch(collapsed, /ask-lean-chips|ask-filter-chips/);
+  assert.match(collapsed, /ask-records-table/);
+  const open = renderToStaticMarkup(<AskRecordsBlock {...props} defaultDetails />);
+  assert.match(open, /ask-lean-chips/);
+  assert.match(open, /ask-filter-chips/);
+  assert.match(open, /Hide details/);
+});

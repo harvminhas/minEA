@@ -39,7 +39,7 @@ test("values are used as given (no rewriting of 'not X')", () => {
 test("fake model picks is_not: AI headline as written, chip 'Owner team is not CRM' with an operator dropdown", () => {
   const payload = { source: "llm", fallback_reason: null, answer_text: "3 items are not owned by CRM.", headline: "3 items aren't owned by CRM", citations: [], gaps: [], follow_ups: [], tools_used: ["filter_records"], filters: { owner_team: "CRM", ops: { owner_team: "is_not" } } } as unknown as AskModelPayload;
   const ai = answerFromModel(payload, ROWS, "/w", "what is not owned by CRM?")!;
-  const html = renderToStaticMarkup(<AskRecordsBlock answer={ai} facts={FACTS} onFilters={() => {}} onOpen={() => {}} rowHref={(row) => `/w/r/${row.id}`} />);
+  const html = renderToStaticMarkup(<AskRecordsBlock defaultDetails answer={ai} facts={FACTS} onFilters={() => {}} onOpen={() => {}} rowHref={(row) => `/w/r/${row.id}`} />);
   assert.match(html, /data-testid="ask-lean-headline"[^>]*>3 items aren(&#x27;|')t owned by CRM</);
   assert.match(html, /data-op="is_not"/);
   assert.match(html, /<option value="is_not" selected="">is not<\/option>/);

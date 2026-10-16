@@ -21,7 +21,7 @@ const rows = (objects = OBJECTS) => objects.map(rowFromObject).filter(Boolean) a
 const ask = (question: string) => answerFromRecords({ question, rows: rows(), graph: { nodes: [], edges: [] }, basePath: "/w", landscape: { objects: OBJECTS as never, relationships: [] } });
 const facts = () => buildFacts(rows(), OBJECTS as never, []);
 const render = (answer: ReturnType<typeof ask>, yesNo?: boolean) =>
-  renderToStaticMarkup(<AskRecordsBlock answer={answer} facts={facts()} yesNo={yesNo} onFilters={() => {}} onOpen={() => {}} rowHref={(row) => `/w/r/${row.id}`} />);
+  renderToStaticMarkup(<AskRecordsBlock defaultDetails answer={answer} facts={facts()} yesNo={yesNo} onFilters={() => {}} onOpen={() => {}} rowHref={(row) => `/w/r/${row.id}`} />);
 
 
 test("multi: '7 items', kind + gap counts, 5 rows then Show 2 more, ≤2 follow-ups, no row badges", () => {

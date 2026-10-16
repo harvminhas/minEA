@@ -587,8 +587,10 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               />
             )}
 
-            {!revealing && answer.chart && <AskBarChart chart={answer.chart} />}
-            {!revealing && answer.table && (
+            {/* With the records card, a vendor lookup's table/chart would sit above the headline (its "5 vendors"
+                caption looked like a stray label); its count goes into the card's summary line instead. */}
+            {!revealing && answer.chart && !answer.records && <AskBarChart chart={answer.chart} />}
+            {!revealing && answer.table && !answer.records && (
               <AskRichTable
                 table={answer.table}
                 hrefFor={(target) => richRowHref(basePath, answer.table!.kind, target, rows)}
@@ -604,6 +606,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 answer={answer}
                 yesNo={Boolean(answer.records.yesNo)}
                 animate={Boolean(freshAt) && !edited}
+                extraSummary={answer.table?.kind === "vendors" ? [`${answer.table.rows.length} ${answer.table.rows.length === 1 ? "vendor" : "vendors"}`] : undefined}
                 footerExtra={smallActions}
                 facts={facts}
                 onFilters={(filters) => setEdited({ question, filters })}
