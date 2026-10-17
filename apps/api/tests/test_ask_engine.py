@@ -399,7 +399,7 @@ def test_timing_summary_format():
     t.phases = {"workspace": 0.2, "context": 0.1, "check": 0.1}
     t.calls = [{"s": 2.0, "in": 1, "out": 1, "think": 0, "finish": "STOP"}, {"s": 3.1, "in": 1, "out": 1, "think": 0, "finish": "STOP"}]
     t.tools = [{"name": "aggregate", "s": 0.2}]
-    assert t.summary() == "Took 6.2s: workspace 0.3s · AI 2 calls 5.1s · lookups 0.2s · check 0.1s"
+    assert t.summary() == "Took 6.2s: workspace 0.3s · AI 2 calls 5.1s (2 in / 2 out / 0 thinking tokens) · lookups 0.2s · check 0.1s"
 
 
 def test_ungrounded_number_is_softened_without_a_second_call(engine):
@@ -633,3 +633,33 @@ def test_first_call_is_json_mode_without_tools_and_lookups_only_on_need_lookup(e
 def test_schema_puts_headline_first():
     assert loop.ANSWER_SCHEMA.property_ordering[0] == "headline"
     assert {"need_lookup", "item_ids", "citations", "evidence"} <= set(loop.ANSWER_SCHEMA.properties)
+
+
+@pytest.mark.parametrize("name,budget", [("gemini-2.5-flash", 0), ("models/gemini-2.5-flash", 0), ("gemini-flash-latest", 0), ("gemini-2.5-flash-lite", 0), ("gemini-2.5-pro", 128)])
+def test_thinking_is_off_for_every_flash_name(name, budget):
+    assert loop.thinking_config(name)["thinking_config"].thinking_budget == budget
+
+
+def test_json_call_has_thinking_off_and_a_tight_cap(engine):
+    models = engine([_text_response(GOOD)])
+    asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
+    cfg = models.configs[0]
+    assert cfg.thinking_config.thinking_budget == 0 and cfg.max_output_tokens == 1024 and cfg.response_mime_type == "application/json"
+
+
+def test_schema_is_slim_and_prompt_has_no_long_json_example():
+    props = set(loop.ANSWER_SCHEMA.properties)
+    assert props == {"headline", "answer_markdown", "yes_no", "item_ids", "citations", "verdict", "evidence", "unsupported", "need_lookup", "lookup_reason"}
+    assert set(loop.ANSWER_SCHEMA.properties["citations"].items.properties) == {"n", "record_id"}
+    assert "follow_ups" not in loop.SYSTEM and "fix_actions" not in loop.SYSTEM.split("Answer rules")[0]
+    assert "Do not list the items; item_ids carries them" in loop.SYSTEM
+
+
+def test_summary_names_the_cache_miss_reason_and_tokens():
+    from app.ai.ask.timing import AskTiming
+    ticks = iter([0.0, 9.0])
+    t = AskTiming(clock=lambda: next(ticks))
+    t.phases = {"workspace": 0.5}
+    t.cache = {"hit": False, "why": "not cached in this server instance"}
+    t.calls = [{"s": 8.3, "in": 12000, "out": 1152, "think": 0, "finish": "STOP"}]
+    assert t.summary() == "Took 9.0s: workspace 0.5s (not cached: not cached in this server instance) · AI 1 call 8.3s (12,000 in / 1,152 out / 0 thinking tokens)"

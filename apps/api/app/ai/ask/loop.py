@@ -38,8 +38,21 @@ MIN_CALL_WINDOW_SECONDS = 3.0  # don't start a model call with less time than th
 # gemini-2.5-flash thinks by default, and thinking tokens count against max_output_tokens: with the
 # old cap of 900 a reply could be all thinking, finish_reason MAX_TOKENS and no text (HTTP 200, then
 # "not_json"). Thinking is off for Ask (lookups do the work) and the cap leaves room for the JSON.
-MAX_OUTPUT_TOKENS = 4096
+# The answer is short (headline, a sentence or two, item ids); the table comes from the ids. A tight
+# cap keeps a run-away reply from taking seconds (output tokens are most of the call's time).
+MAX_OUTPUT_TOKENS = 1024
 THINKING_BUDGET = int(os.getenv("ASK_THINKING_BUDGET", "0") or 0)
+
+
+def thinking_config(name: str) -> dict:
+    """Thinking off wherever the model allows it. Before, only names starting "gemini-2.5" got the
+    config, so "models/gemini-2.5-flash" or a "-latest" alias ran with dynamic thinking (seconds)."""
+    n = name.lower()
+    if "2.5-pro" in n:
+        return {"thinking_config": types.ThinkingConfig(thinking_budget=max(THINKING_BUDGET, 128))}  # pro can't go to 0
+    if "2.5" in n or "flash" in n or n.startswith(("gemini-3", "models/gemini-3")):
+        return {"thinking_config": types.ThinkingConfig(thinking_budget=THINKING_BUDGET)}
+    return {}
 # finish reasons that mean the reply was cut or withheld, not a normal stop
 _BLOCKED = {"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY", "LANGUAGE"}
 WORDS = {
@@ -93,7 +106,13 @@ record_id is an internal id. Do not pronounce it as the word record.
 Write "headline" as the FIRST key of the JSON object (it is shown while the rest arrives). "headline": one short line (under 80 characters) that answers the question, shown at the top of the answer card. Numbers and names in it are checked like answer_markdown.
 The screen already lists every citation. answer_markdown is the one-line verdict. Do not list the same names again.
 
-""" + _STRATEGY["strategyPrompt"]
+""" + _STRATEGY["strategyPrompt"].split("When you are ready, return ONLY a JSON object")[0] + """Reply in the response schema only. Keep it short:
+- headline: one line under 80 characters. answer_markdown: one or two sentences. Do not list the items; item_ids carries them (the screen shows the table).
+- citations only for items named in answer_markdown with [n] markers; verdict and up to 3 evidence items only for importance, ownership or inferred answers.
+- Every evidence citation id must appear in citations. An inferred verdict must have evidence.
+Every [n] must have a citation, and every citation id must be an id from the workspace or a lookup.
+Every number in the answer must come from the workspace or a lookup result.
+"""
 
 
 NOT_AI = {
@@ -323,6 +342,9 @@ def redacted_sample(text: str, limit: int = 300) -> str:
 
 
 def _schema() -> types.Schema:
+    """Slim on purpose: constrained decoding and output length dominate the call time. The table and
+    chips come from item_ids, so the reply never repeats rows. (intent, basis, fix_actions, gaps,
+    follow_ups and citation relationships are no longer requested.)"""
     S, T = types.Schema, types.Type
     ids = S(type=T.ARRAY, items=S(type=T.STRING))
     return S(
@@ -332,19 +354,15 @@ def _schema() -> types.Schema:
             "answer_markdown": S(type=T.STRING),
             "yes_no": S(type=T.STRING, enum=["yes", "no"]),
             "item_ids": ids,
-            "intent": S(type=T.STRING),
-            "verdict": S(type=T.OBJECT, properties={"text": S(type=T.STRING), "inferred": S(type=T.BOOLEAN), "basis": S(type=T.ARRAY, items=S(type=T.STRING))}),
+            "citations": S(type=T.ARRAY, items=S(type=T.OBJECT, properties={"n": S(type=T.INTEGER), "record_id": S(type=T.STRING)}, required=["n", "record_id"])),
+            "verdict": S(type=T.OBJECT, properties={"text": S(type=T.STRING), "inferred": S(type=T.BOOLEAN)}),
             "evidence": S(type=T.ARRAY, items=S(type=T.OBJECT, properties={"text": S(type=T.STRING), "citation_ids": ids}, required=["text"])),
-            "fix_actions": S(type=T.ARRAY, items=S(type=T.OBJECT, properties={"record_id": S(type=T.STRING), "field": S(type=T.STRING), "suggested_value": S(type=T.STRING)})),
-            "citations": S(type=T.ARRAY, items=S(type=T.OBJECT, properties={"n": S(type=T.INTEGER), "record_id": S(type=T.STRING), "relationship": S(type=T.STRING)}, required=["n", "record_id"])),
-            "gaps": S(type=T.ARRAY, items=S(type=T.OBJECT, properties={"record_id": S(type=T.STRING), "field": S(type=T.STRING), "message": S(type=T.STRING)})),
-            "follow_ups": S(type=T.ARRAY, items=S(type=T.STRING)),
             "unsupported": S(type=T.BOOLEAN),
             "need_lookup": S(type=T.BOOLEAN),
             "lookup_reason": S(type=T.STRING),
         },
         required=["headline", "answer_markdown"],
-        property_ordering=["headline", "answer_markdown", "yes_no", "item_ids", "intent", "verdict", "evidence", "fix_actions", "citations", "gaps", "follow_ups", "unsupported", "need_lookup", "lookup_reason"],
+        property_ordering=["headline", "answer_markdown", "yes_no", "item_ids", "citations", "verdict", "evidence", "unsupported", "need_lookup", "lookup_reason"],
     )
 
 
@@ -773,7 +791,7 @@ async def run_ask_inner(
         system_instruction=SYSTEM,
         temperature=0,
         max_output_tokens=MAX_OUTPUT_TOKENS,
-        **({"thinking_config": types.ThinkingConfig(thinking_budget=THINKING_BUDGET)} if model_name().startswith("gemini-2.5") else {}),
+        **thinking_config(model_name()),
     )
     # Gemini can't combine function calling with JSON mode in one request. So: answer calls are
     # tool-free JSON mode with the schema (the whole workspace is in the prompt); only when the model

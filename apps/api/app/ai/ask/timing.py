@@ -100,9 +100,13 @@ class AskTiming:
         parts = []
         workspace = self.phases.get("workspace", 0.0) + self.phases.get("context", 0.0)
         if "workspace" in self.phases or "context" in self.phases:
-            parts.append(f"workspace {workspace:.1f}s" + (" (cached)" if self.cache_hit else ""))
+            note = " (cached)" if self.cache_hit else (f" (not cached: {self.cache.get('why')})" if self.cache.get("why") else "")
+            parts.append(f"workspace {workspace:.1f}s{note}")
         if self.calls:
-            parts.append(f"AI {len(self.calls)} call{'s' if len(self.calls) != 1 else ''} {d['ai_s']:.1f}s")
+            parts.append(
+                f"AI {len(self.calls)} call{'s' if len(self.calls) != 1 else ''} {d['ai_s']:.1f}s"
+                f" ({d['tokens_in']:,} in / {d['tokens_out']:,} out / {d['tokens_thinking']:,} thinking tokens)"
+            )
         if self.tools:
             parts.append(f"lookups {d['lookups_s']:.1f}s")
         if "check" in self.phases:

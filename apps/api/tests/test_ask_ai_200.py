@@ -44,7 +44,7 @@ AGG = ("aggregate", {"type": "application", "metric": "sum_annual_cost", "filter
 def test_thinking_is_off_and_the_output_cap_leaves_room(monkeypatch):
     _, final, _, configs = _run(monkeypatch, [_call_response(*AGG), _text_response(GOOD)])
     assert final["source"] == "llm"
-    assert configs[0].thinking_config.thinking_budget == 0 and configs[0].max_output_tokens >= 4096
+    assert configs[0].thinking_config.thinking_budget == 0 and configs[0].max_output_tokens == 1024
 
 
 def test_thought_only_max_tokens_reply_is_retried_then_reported(monkeypatch):
