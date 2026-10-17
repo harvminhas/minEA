@@ -663,3 +663,20 @@ def test_summary_names_the_cache_miss_reason_and_tokens():
     t.cache = {"hit": False, "why": "not cached in this server instance"}
     t.calls = [{"s": 8.3, "in": 12000, "out": 1152, "think": 0, "finish": "STOP"}]
     assert t.summary() == "Took 9.0s: workspace 0.5s (not cached: not cached in this server instance) · AI 1 call 8.3s (12,000 in / 1,152 out / 0 thinking tokens)"
+
+
+def test_slim_reply_final_carries_timing_on_stream_and_non_stream(engine):
+    slim = {"headline": "No", "answer_markdown": "No, nothing renews.", "yes_no": "no"}
+    engine([_text_response(slim)])
+    result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
+    assert result["source"] == "llm" and result["timing"]["summary"].startswith("Took ") and result["timing"]["calls"]
+    from app.ai.ask import stream
+
+    engine([_text_response(slim)])
+
+    async def frames():
+        return [f async for f in stream.stream_ask(None, CTX, "What renews in the next 90 days?", graph=renewal_graph())]
+
+    final = [f for f in asyncio.run(frames()) if f.startswith("event: final")][0]
+    data = json.loads(final.split("data: ", 1)[1])
+    assert data["timing"]["summary"].startswith("Took ") and data["timing"]["calls"]

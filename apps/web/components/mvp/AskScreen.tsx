@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState, useRef, type ReactNode } from "react";
+import React, { Fragment, useEffect, useMemo, useState, useRef, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -26,7 +26,8 @@ import { addTurn, clearThread, contextFor, earlierTurns, readThread, turnFromAns
 import { AskBarChart, AskRichTable } from "@/components/mvp/AskRich";
 import { pickAnswer, shouldAskModel, workingLine } from "@/lib/ask/route";
 import { followUpScope } from "@/lib/ask/followup";
-import { AskLiveSteps, AskSteps } from "@/components/mvp/AskSteps";
+import { AskLiveSteps, AskSteps, AskTimingBlock } from "@/components/mvp/AskSteps";
+import type { AskTimingDetails } from "@/lib/ask/deterministic";
 import type { AskStep } from "@/lib/api-client";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { AddSaved } from "@/components/add/AddCards";
@@ -557,7 +558,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               </div>
             )}
             {shownLean && !answer.records && (
-              <LeanAnswer lean={shownLean} basePath={basePath} footerExtra={smallActions} onAdd={(name) => submit(prefixAdd(name))} onPick={(filters) => setEdited({ question, filters })} items={fallbackItems} rowHref={(row) => recordHref(basePath, row)} steps={answer.steps} />
+              <LeanAnswer lean={shownLean} basePath={basePath} footerExtra={smallActions} onAdd={(name) => submit(prefixAdd(name))} onPick={(filters) => setEdited({ question, filters })} items={fallbackItems} rowHref={(row) => recordHref(basePath, row)} steps={answer.steps} timing={answer.timingLine} timingDetails={answer.timingDetails} />
             )}
             {!leanCard && <p className="text-[17px] leading-7 text-[#1c2230]">
               {answer.handler === "clarify" ? (
@@ -1110,7 +1111,7 @@ export function shortQuestion(question: string): string {
 }
 
 /** The short "No" card: headline, one line, How I found this and two actions. */
-function LeanAnswer({ lean, basePath, footerExtra, onAdd, onPick, items = [], rowHref, steps }: { lean: NonNullable<AskAnswer["lean"]>; basePath: string; footerExtra: ReactNode; onAdd: (name: string) => void; onPick: (filters: RecordFilters) => void; items?: CatalogRow[]; rowHref: (row: CatalogRow) => string; steps?: AskStep[] }) {
+export function LeanAnswer({ lean, basePath, footerExtra, onAdd, onPick, items = [], rowHref, steps, timing, timingDetails }: { lean: NonNullable<AskAnswer["lean"]>; basePath: string; footerExtra: ReactNode; onAdd: (name: string) => void; onPick: (filters: RecordFilters) => void; items?: CatalogRow[]; rowHref: (row: CatalogRow) => string; steps?: AskStep[]; timing?: string; timingDetails?: AskTimingDetails }) {
   return (
     <div data-testid="ask-lean">
       <h2 data-testid="ask-lean-headline" className="text-[20px] font-bold leading-7 text-[#1c2230]">{lean.headline}</h2>
@@ -1146,6 +1147,8 @@ function LeanAnswer({ lean, basePath, footerExtra, onAdd, onPick, items = [], ro
               {steps!.map((item) => <li key={item.id} className={item.status === "error" ? "text-[#a35a00]" : ""}>{item.label}</li>)}
             </ol>
           )}
+          {/* The short "No"/unsupported AI card used to drop the timing (only AskSteps carried it). */}
+          <AskTimingBlock timing={timing} details={timingDetails} />
         </details>
         <div className="flex flex-wrap items-center gap-1.5">
           {(lean.suggest ?? []).slice(0, 2).map((item) => <FollowPill key={item.label} label={item.label} onClick={() => onPick(item.filters)} />)}

@@ -26,8 +26,7 @@ export function AskSteps({ steps, timing, details }: { steps: AskStep[]; timing?
           </li>
         ))}
       </ol>
-      {timing && <p data-testid="ask-timing" className="mt-2 border-t border-[#eef0f4] pt-1.5 text-[11px] tabular-nums text-[#8b90a0]">{timing}</p>}
-      {details && details.calls.length > 0 && <TimingDetails details={details} />}
+      <AskTimingBlock timing={timing} details={details} />
     </details>
   );
 }
@@ -105,5 +104,16 @@ export function TimingDetails({ details }: { details: AskTimingDetails }) {
         </div>
       )}
     </details>
+  );
+}
+
+/** The timing line and Timing details: shown under every AI answer's working steps (item card, prose, or the short "No" card). */
+export function AskTimingBlock({ timing, details }: { timing?: string; details?: AskTimingDetails }) {
+  if (!timing && !(details && details.calls.length)) return null;
+  return (
+    <>
+      {timing && <p data-testid="ask-timing" className="mt-2 border-t border-[#eef0f4] pt-1.5 text-[11px] tabular-nums text-[#8b90a0]">{timing}</p>}
+      {details && details.calls.length > 0 && <TimingDetails details={details} />}
+    </>
   );
 }

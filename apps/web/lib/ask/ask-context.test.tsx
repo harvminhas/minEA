@@ -167,3 +167,29 @@ test("Timing details show the redacted bad reply sample", async () => {
   assert.match(html, /data-testid="ask-timing-bad-reply"/);
   assert.match(html, /Sure! Here is &lt;n&gt; things/);
 });
+
+test("slim-schema AI answers always carry the timing line and Timing details (item card, prose, short No card)", async () => {
+  const { AskSteps } = await import("../../components/mvp/AskSteps");
+  const { LeanAnswer } = await import("../../components/mvp/AskScreen");
+  const timing = { summary: "Took 1.4s: workspace 0.0s (cached) · AI 1 call 1.2s (9,000 in / 120 out / 0 thinking tokens)", calls: [{ s: 1.2, in: 9000, out: 120, think: 0, finish: "STOP", why: "first", streamed: true }], cache: { hit: true, why: "fingerprint unchanged" } };
+  const steps = [{ id: "estate", status: "done" as const, label: "Read your estate" }, { id: "check-1", status: "done" as const, label: "Checked every name and number" }];
+  // Exactly the slim schema: no intent, basis, evidence, fix_actions, gaps or follow_ups from the model.
+  const slim = (extra: Record<string, unknown>) =>
+    ({ source: "llm", fallback_reason: null, answer_text: "x", citations: [], gaps: [], follow_ups: [], tools_used: [], steps, timing, ...extra }) as never;
+  for (const extra of [{ headline: "2 items", answer_text: "Two items.", item_ids: ["crm", "erp"] }, { headline: "Prose", answer_text: "Some prose." }]) {
+    const ai = answerFromModel(slim(extra), ROWS, "/w", "q")!;
+    assert.equal(ai.timingLine, timing.summary);
+    const html = renderToStaticMarkup(<AskSteps steps={ai.steps!} timing={ai.timingLine} details={ai.timingDetails} />);
+    assert.match(html, /data-testid="ask-timing"/);
+    assert.match(html, /data-testid="ask-timing-details"/);
+  }
+  const no = answerFromModel(slim({ headline: "No", answer_text: "No, we don't.", yes_no: "no" }), ROWS, "/w", "q")!;
+  assert.ok(no.lean && !no.records); // this is the card that used to lose the timing
+  const html = renderToStaticMarkup(
+    <LeanAnswer lean={no.lean!} basePath="/w" footerExtra={null} onAdd={() => {}} onPick={() => {}} rowHref={() => "#"} steps={no.steps} timing={no.timingLine} timingDetails={no.timingDetails} />,
+  );
+  assert.match(html, /Took 1\.4s/);
+  assert.match(html, /data-testid="ask-timing-details"/);
+  const screen = readFileSync(new URL("../../components/mvp/AskScreen.tsx", import.meta.url), "utf8");
+  assert.match(screen, /steps=\{answer\.steps\} timing=\{answer\.timingLine\} timingDetails=\{answer\.timingDetails\}/);
+});
