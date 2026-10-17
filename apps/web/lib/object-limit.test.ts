@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import {
+  appsAgents,
   cardsThatFit,
+  countedTypes,
+  LIMITED_OBJECT_TYPES,
   limitLink,
   limitOffer,
   limitPanelCopy,
@@ -42,7 +45,7 @@ test("the error message is friendly, never raw JSON", () => {
   const err = new ObjectLimitError({ ...refused, current: 50, adding: 1, remaining: 0 });
   assert.equal(err.status, 403);
   assert.doesNotMatch(err.message, /limit_exceeded|\{/);
-  assert.match(err.message, /^Free includes up to 50 items \(apps, platforms, servers…\) in a workspace\. Upgrade in Settings → Plan & billing to add more\.$/);
+  assert.match(err.message, /^Free includes up to 50 apps & AI agents in a workspace \(everything else is unlimited\)\. Upgrade in Settings → Plan & billing to add more\.$/);
 });
 
 test("offer: owner/admin with checkout open, checkout closed, flag off, member or unverified", () => {
@@ -86,11 +89,18 @@ test("50 stored: the 51st is over; a workspace already over has no room", () => 
   assert.equal(full.fitCards, 0);
   const over = limitState({ plan: "free", catalogCount: 60, adding: 3, offer: "ask-admin", orgSlug: "a" })!;
   assert.equal(over.room, 0);
-  assert.equal(limitPanelCopy(over, "$149/month").title, "This workspace is over the Free limit of 50 items");
+  assert.equal(limitPanelCopy(over, "$149/month").title, "This workspace is over the Free limit of 50 apps & AI agents");
 });
 
-test("cards that bring extra items (a new cloud tenant) fit by items, not by card count", () => {
-  // Card 1 also creates a tenant: 2 items, then 1 per card.
+test("only apps & AI agents count: a card's new tenant or server is free", () => {
+  assert.equal(countedTypes(["application", "cloud_service", "model", "agent", "ai_model", "data_object", "location"]), 2);
+  assert.ok(LIMITED_OBJECT_TYPES.has("agent") && !LIMITED_OBJECT_TYPES.has("cloud_service"));
+  assert.equal(appsAgents(1), "1 app or AI agent");
+  assert.equal(appsAgents(12), "12 apps & AI agents");
+});
+
+test("cards fit by counted items, not by card count", () => {
+  // Card 1 also brings an AI agent: 2 counted, then 1 per card.
   const itemsFor = (k: number) => (k === 0 ? 0 : k + 1);
   assert.equal(cardsThatFit(10, itemsFor, 5), 4);
   assert.equal(cardsThatFit(10, itemsFor, 0), 0);
@@ -102,12 +112,12 @@ test("cards that bring extra items (a new cloud tenant) fit by items, not by car
 test("panel copy: near the cap, full, and the footnote counts cards", () => {
   const near = limitState({ plan: "free", catalogCount: 40, adding: 25, offer: "upgrade", orgSlug: "a" })!;
   const copy = limitPanelCopy(near, "$149/month");
-  assert.equal(copy.title, "Free covers up to 50 items in a workspace");
-  assert.equal(copy.body, "You have 40 and are adding 25, so 10 fit. Starter ($149/month) has no item limit.");
+  assert.equal(copy.title, "Free covers up to 50 apps & AI agents in a workspace");
+  assert.equal(copy.body, "You have 40 and are adding 25, so 10 fit. Starter ($149/month) has no limit. Servers, platforms and data are always unlimited.");
   assert.equal(copy.footnote, "The other 15 stay on the cards, so you can add them after upgrading. Nothing is saved until you choose.");
   const full = limitPanelCopy(limitState({ plan: "free", catalogCount: 50, adding: 70, offer: "upgrade", orgSlug: "a" })!, "$149/month");
-  assert.equal(full.title, "Free is full: 50 of 50 items");
-  assert.match(full.body, /^70 items are waiting on the cards below\./);
+  assert.equal(full.title, "Free is full: 50 of 50 apps & AI agents");
+  assert.match(full.body, /^70 apps & AI agents are waiting on the cards below\./);
   assert.equal(full.footnote, "They stay on the cards, so you can add them after upgrading.");
 });
 
@@ -130,8 +140,8 @@ test("add the first N keeps paste order and takes rows already in the map along"
 test("toast copy per offer; a 403 fills the same state as the pre-check", () => {
   const detail = { ...refused, current: 50, adding: 1, remaining: 0 };
   assert.deepEqual(objectLimitToastCopy(detail, "upgrade"), {
-    title: "Free is full: 50 of 50 items",
-    description: "Free includes up to 50 items (apps, platforms, servers…) in a workspace. Starter has no item limit.",
+    title: "Free is full: 50 of 50 apps & AI agents",
+    description: "Free includes up to 50 apps & AI agents in a workspace; everything else is unlimited. Starter has no limit.",
   });
   assert.match(objectLimitToastCopy(detail, "ask-admin").description, /Ask an owner or admin/);
   assert.match(objectLimitToastCopy({ ...detail, current: 60 }, "upgrade").title, /over the Free limit of 50/);

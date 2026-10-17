@@ -493,7 +493,7 @@ src/repository/
 - **Flag:** `repository.mvp.v1`, workspace-scoped, same helper as `onboarding.day1.v1`. Dogfood on Meridian Fasteners / Default and the Research Sandbox account.
 - **Copy rule:** in Repository UI the nouns are Application, Infrastructure, Connection, Vendor, Owner. API/DB names stay. One glossary tooltip: `Applications used to be called Systems. Same records, new name.` The onboarding spec's "tool" copy is unchanged. Nav labels use `&` to match the mockup (`Vendors & contracts`, `Owners & teams`, `APIs & events`).
 - **Unified Infrastructure list:** a read model that unions Platform and Runtime rows with a `source` discriminator. Do not merge the tables. *(With `infra.split.v1` this is replaced by two per-type lists; see INFRA-SPEC.md.)*
-- **Performance:** Overview queries run server-side on one request; workspaces are small (free plan cap 50 objects), so compute in memory after one fetch per object type rather than adding aggregates.
+- **Performance:** Overview queries run server-side on one request; workspaces are small (free plan caps apps & AI agents at 50, the rest is unlimited), so compute in memory after one fetch per object type rather than adding aggregates.
 - **Reuse:** team/person create-on-save from Quick Add, Category enum, History writer, Tech debt data.
 
 ## 10. Analytics events

@@ -1,6 +1,6 @@
-"""Free covers 50 items of any kind per workspace. The items being added count: 50 stored blocks the
-51st, a batch that would pass the cap is refused whole, and the 403 says how many fit. A workspace
-already over the cap can still edit and delete. Runs against a migrated scratch Postgres when
+"""Free covers 50 apps & AI agents per workspace; every other type is unlimited. The ones being added
+count: 50 stored blocks the 51st, a batch that would pass the cap is refused whole, and the 403 says
+how many fit. A workspace already over the cap can still edit and delete. Runs against a migrated scratch Postgres when
 ERASE_TEST_DATABASE_URL is set."""
 import asyncio
 import json
@@ -20,8 +20,8 @@ def test_plans_json_free_items_match_the_enforced_limit():
 
     plans = json.loads((pathlib.Path(__file__).parents[1] / "app" / "services" / "plans.json").read_text())["plans"]
     for key, plan in plans.items():
-        assert plan["items_per_workspace"] == PLAN_LIMIT_OVERRIDES[key]["max_objects_per_workspace"], key
-    assert plans["free"]["items_per_workspace"] == 50
+        assert plan["apps_agents_per_workspace"] == PLAN_LIMIT_OVERRIDES[key]["max_objects_per_workspace"], key
+    assert plans["free"]["apps_agents_per_workspace"] == 50
 
 
 def _creates(n: int, tag: str) -> dict:
@@ -29,7 +29,7 @@ def _creates(n: int, tag: str) -> dict:
 
 
 @asynccontextmanager
-async def _workspace(cap: int | None = 50, stored: int = 0, plan: str = "free"):
+async def _workspace(cap: int | None = 50, stored: int = 0, plan: str = "free", others: int = 0):
     from httpx import ASGITransport, AsyncClient
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -49,6 +49,9 @@ async def _workspace(cap: int | None = 50, stored: int = 0, plan: str = "free"):
         await db.execute(text("INSERT INTO org_limits (org_id, limit_key, value) VALUES (:o, 'max_objects_per_workspace', :v)"), {"o": org, "v": cap})
         for i in range(stored):
             await db.execute(text("INSERT INTO objects (workspace_id, org_id, type, name) VALUES (:w, :o, 'application', :n)"), {"w": ws, "o": org, "n": f"Stored {i}"})
+        for i in range(others):
+            kind = ("model", "cloud_service", "data_object", "location", "capability")[i % 5]
+            await db.execute(text("INSERT INTO objects (workspace_id, org_id, type, name) VALUES (:w, :o, :t, :n)"), {"w": ws, "o": org, "t": kind, "n": f"Other {i}"})
         await db.commit()
 
     async def scratch_db():
@@ -66,7 +69,7 @@ async def _workspace(cap: int | None = 50, stored: int = 0, plan: str = "free"):
 
     async def count() -> int:
         async with AsyncSession(engine) as db:
-            return (await db.execute(text("SELECT count(*) FROM objects WHERE workspace_id = :w"), {"w": ws})).scalar_one()
+            return (await db.execute(text("SELECT count(*) FROM objects WHERE workspace_id = :w AND type IN ('application', 'agent')"), {"w": ws})).scalar_one()
 
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
@@ -159,10 +162,61 @@ def test_paid_plan_has_no_cap():
 
 
 @pg
-def test_data_layer_creates_are_capped_too():
+def test_only_apps_and_agents_count():
+    """50 apps stored: servers, tenants, data, locations, capabilities still save; another app or AI agent doesn't."""
     async def go():
-        async with _workspace(stored=50) as (client, base, _count):
-            return await client.post(f"{base}/data/entities", json={"name": "Customer"})
+        async with _workspace(stored=50, others=80) as (client, base, count):
+            room = (await client.get(f"{base}/objects/limit")).json()
+            others = await client.post(f"{base}/objects/batch", json={"creates": [
+                {"key": "s", "type": "model", "name": "Back-room server", "properties": {}},
+                {"key": "t", "type": "cloud_service", "name": "Azure tenant", "properties": {}},
+                {"key": "l", "type": "location", "name": "Head office", "properties": {}},
+            ], "updates": [], "relationships": []})
+            single_server = await client.post(f"{base}/objects", json={"type": "model", "name": "Spare server"})
+            entity = await client.post(f"{base}/data/entities", json={"name": "Customer"})
+            agent = await client.post(f"{base}/objects", json={"type": "agent", "name": "Invoice bot"})
+            app = await client.post(f"{base}/objects/batch", json=_creates(1, "One more"))
+            return room, others, single_server, entity, agent, app, await count()
 
-    res = asyncio.run(go())
-    assert res.status_code == 403 and res.json()["detail"]["code"] == "limit_exceeded"
+    room, others, single_server, entity, agent, app, counted = asyncio.run(go())
+    assert room["current"] == 50 and room["remaining"] == 0, room
+    assert others.status_code == 200, others.text
+    assert single_server.status_code == 201, single_server.text
+    assert entity.status_code == 201, entity.text
+    assert agent.status_code == 403 and agent.json()["detail"]["adding"] == 1
+    assert app.status_code == 403
+    assert counted == 50
+
+
+@pg
+def test_a_card_with_a_new_tenant_costs_one():
+    async def go():
+        async with _workspace(stored=49) as (client, base, count):
+            res = await client.post(f"{base}/objects/batch", json={"creates": [
+                {"key": "a", "type": "application", "name": "Fiftieth", "properties": {}},
+                {"key": "t", "type": "cloud_service", "name": "Our AWS", "properties": {}},
+            ], "updates": [], "relationships": [{"type": "runs_on", "from_key": "a", "to_key": "t", "from_type": "application", "to_type": "cloud_service"}]})
+            return res, await count()
+
+    res, counted = asyncio.run(go())
+    assert res.status_code == 200, res.text
+    assert counted == 50
+
+
+@pg
+def test_switching_a_server_into_an_app_needs_room():
+    async def go():
+        async with _workspace(stored=50, others=1) as (client, base, _count):
+            server = (await client.get(f"{base}/objects?type=model")).json()["items"][0]
+            switch = await client.post(f"{base}/objects/{server['id']}/switch-type", json={"type": "application"})
+            return switch
+
+    switch = asyncio.run(go())
+    assert switch.status_code == 403 and switch.json()["detail"]["code"] == "limit_exceeded", switch.text
+
+
+def test_counted_types():
+    from app.services.authorization import LIMITED_OBJECT_TYPES, counted_types
+
+    assert LIMITED_OBJECT_TYPES == {"application", "agent"}
+    assert counted_types(["application", "cloud_service", "model", "agent", "ai_model", "data_object"]) == 2

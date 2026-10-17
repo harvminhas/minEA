@@ -21,7 +21,7 @@ export interface CatalogPlan {
   yearlyUsd: number | null;
   aiAnswersPerMonth: number;
   /** null = unlimited */
-  itemsPerWorkspace: number | null;
+  appsAgentsPerWorkspace: number | null;
   onboardingHours: number;
   highlights: string[];
 }
@@ -38,7 +38,7 @@ export const CATALOG: Record<CatalogPlanId, CatalogPlan> = {
     monthlyUsd: 0,
     yearlyUsd: 0,
     aiAnswersPerMonth: 25,
-    itemsPerWorkspace: 50,
+    appsAgentsPerWorkspace: 50,
     onboardingHours: 0,
     highlights: ["All reports and views", "One workspace, one share link"],
   },
@@ -50,7 +50,7 @@ export const CATALOG: Record<CatalogPlanId, CatalogPlan> = {
     monthlyUsd: 149,
     yearlyUsd: null,
     aiAnswersPerMonth: 500,
-    itemsPerWorkspace: null,
+    appsAgentsPerWorkspace: null,
     onboardingHours: 0,
     highlights: [
       "Unlimited workspaces",
@@ -66,7 +66,7 @@ export const CATALOG: Record<CatalogPlanId, CatalogPlan> = {
     monthlyUsd: 449,
     yearlyUsd: 4490,
     aiAnswersPerMonth: 2500,
-    itemsPerWorkspace: null,
+    appsAgentsPerWorkspace: null,
     onboardingHours: 4,
     highlights: ["Everything in Starter"],
   },
@@ -78,7 +78,7 @@ export const CATALOG: Record<CatalogPlanId, CatalogPlan> = {
     monthlyUsd: 799,
     yearlyUsd: 7990,
     aiAnswersPerMonth: 5000,
-    itemsPerWorkspace: null,
+    appsAgentsPerWorkspace: null,
     onboardingHours: 4,
     highlights: ["Everything in Team"],
   },
@@ -113,7 +113,7 @@ export const BUSINESS_GET_STARTED_LABEL = "Get started";
 export const BUSINESS_DETAILS: readonly string[] = [
   `Starting from ${BUSINESS_MIN_LICENCES} licences`,
   "Unlimited free viewers",
-  "Unlimited items",
+  "Unlimited apps & AI agents",
   "Everything in Starter",
   "4 hours of onboarding consulting included",
   "Pay by invoice or card",
@@ -177,10 +177,12 @@ export function formatCount(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-/** Free's item allowance: records of any kind in a workspace (max_objects_per_workspace). */
-export function freeItemsLine(max: number): string {
-  return `Up to ${max} items (apps, platforms, servers…)`;
+/** Free's allowance: apps and AI agents in a workspace (max_objects_per_workspace). Everything else is unlimited. */
+export function freeAppsLine(max: number): string {
+  return `Up to ${max} apps & AI agents`;
 }
+
+export const EVERYTHING_ELSE_LINE = "Unlimited servers, platforms, data and everything else";
 
 /** "What's included" lines for a pricing card. */
 export function planIncludes(plan: CatalogPlan): string[] {
@@ -192,8 +194,9 @@ export function planIncludes(plan: CatalogPlan): string[] {
   );
   lines.push("Unlimited free viewers");
   lines.push(
-    plan.itemsPerWorkspace == null ? "Unlimited items" : freeItemsLine(plan.itemsPerWorkspace)
+    plan.appsAgentsPerWorkspace == null ? "Unlimited apps & AI agents" : freeAppsLine(plan.appsAgentsPerWorkspace)
   );
+  if (plan.appsAgentsPerWorkspace != null) lines.push(EVERYTHING_ELSE_LINE);
   lines.push(`${formatCount(plan.aiAnswersPerMonth)} AI answers / month`);
   lines.push(...plan.highlights);
   if (plan.onboardingHours > 0) {
@@ -259,7 +262,7 @@ export interface DisplayEntitlements {
   /** null = unchanged legacy limits */
   licences: number | null;
   aiAnswersPerMonth: number | null;
-  itemsPerWorkspace: number | null;
+  appsAgentsPerWorkspace: number | null;
   onboardingHours: number;
   isLegacy: boolean;
   isPack: boolean;
@@ -272,7 +275,7 @@ export function entitlementsFor(id: DisplayPlanId): DisplayEntitlements {
       label: "Business (legacy)",
       licences: null,
       aiAnswersPerMonth: null,
-      itemsPerWorkspace: null,
+      appsAgentsPerWorkspace: null,
       onboardingHours: 0,
       isLegacy: true,
       isPack: false,
@@ -284,7 +287,7 @@ export function entitlementsFor(id: DisplayPlanId): DisplayEntitlements {
     label: plan.label,
     licences: plan.licences,
     aiAnswersPerMonth: plan.aiAnswersPerMonth,
-    itemsPerWorkspace: plan.itemsPerWorkspace,
+    appsAgentsPerWorkspace: plan.appsAgentsPerWorkspace,
     onboardingHours: plan.onboardingHours,
     isLegacy: false,
     isPack: id !== "free",

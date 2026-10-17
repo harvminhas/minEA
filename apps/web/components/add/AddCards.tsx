@@ -8,7 +8,7 @@ import { addApi, billingApi, catalogLookupApi, objectsApi, toolCatalogApi } from
 import { useAppStore } from "@/lib/store";
 import { billingUiEnabled } from "@/lib/billing/flags";
 import { saveAddDraft, takeAddDraft } from "@/lib/add-draft";
-import { limitOffer, limitState, objectLimitFromError, partialSummary, pendingAppCount, restLink, roomFromDetail, roomHintText, takeFirst, type LimitState, type ObjectRoom } from "@/lib/object-limit";
+import { countedTypes, limitOffer, limitState, objectLimitFromError, partialSummary, pendingAppCount, restLink, roomFromDetail, roomHintText, takeFirst, type LimitState, type ObjectRoom } from "@/lib/object-limit";
 import { normalizeTerm } from "@/lib/setup/match-tools";
 import { LimitActions, LimitDivider, LimitPanel, RoomHint } from "@/components/add/LimitPanel";
 import { refreshLiveCatalog } from "@/lib/catalog/live-catalog";
@@ -407,7 +407,7 @@ export function AddResult({
   onLeave = () => {},
   onUndoPartial = () => {},
 }: {
-  /** Room on the plan for this Add (null: no item limit). */
+  /** Room on the plan for this Add (null: no limit on apps & AI agents). */
   limit?: LimitState | null;
   /** After "Add the first N for now": what was saved, the rest still on the cards. */
   partial?: PartialView | null;
@@ -552,7 +552,7 @@ export function AskAdd({
   const loaded = Boolean(catalog.data);
   const estate = useMemo(() => estateItems(objects), [objects]);
 
-  // Room on the plan (Free: 50 items per workspace), checked before saving so a long paste gets the
+  // Room on the plan (Free: 50 apps & AI agents per workspace), checked before saving so a long paste gets the
   // upgrade panel instead of a refused batch. The server's count and cap include org overrides.
   const { activeOrg } = useAppStore();
   const roomKey = ["object-room", orgSlug, workspaceSlug] as const;
@@ -576,22 +576,24 @@ export function AskAdd({
   const refreshRoom = () => { void queryClient.invalidateQueries({ queryKey: roomKey }); };
   // After "Add the first N for now": the receipt, and the rows that went (Undo puts them back).
   const [partial, setPartial] = useState<{ summary: string; receipt: AddReceipt; rows: AddRow[]; notAdded: string[] } | null>(null);
+  const countedInMap = useMemo(() => countedTypes(objects.map((object) => object.type)), [objects]);
   const limit: LimitState | null = useMemo(() => {
     if (!orgSlug || !loaded) return null;
     const planned = planInputs(rows);
     const cards = planned.filter((row) => !row.existing).length;
-    const itemsFor = (count: number) => buildBatch(takeFirst(planned, count).planned, estate).creates.length;
+    // Only apps & AI agents count: a card's new tenant or server costs nothing.
+    const itemsFor = (count: number) => countedTypes(buildBatch(takeFirst(planned, count).planned, estate).creates.map((item) => item.type));
     return limitState({
       plan: activeOrg?.plan,
       room: serverRoom ?? roomQuery.data ?? null,
-      catalogCount: objects.length,
+      catalogCount: countedInMap,
       adding: itemsFor(cards),
       cards,
       itemsFor,
       offer: limitOffer(billing.data, billingUiEnabled()),
       orgSlug,
     });
-  }, [orgSlug, loaded, rows, estate, activeOrg?.plan, serverRoom, roomQuery.data, objects.length, billing.data]);
+  }, [orgSlug, loaded, rows, estate, activeOrg?.plan, serverRoom, roomQuery.data, countedInMap, billing.data]);
 
   const freshTypes = useMemo(() => rows.filter((row) => !row.existing).map((row) => objectTypeFor(row.kind)), [rows]);
   const pendingApps = pendingAppCount(freshTypes, limit, Boolean(partial));

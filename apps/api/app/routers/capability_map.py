@@ -315,6 +315,7 @@ async def create_domain_mapping_system_endpoint(
 ) -> DomainDetailRead:
     await ctx.require_permission(db, "object.create")
     assert ctx.workspace
+    # Creates an application (the mapping system), which counts towards the plan's apps & AI agents.
     await require_object_room(db, ctx.org_id, ctx.workspace.id)
 
     try:

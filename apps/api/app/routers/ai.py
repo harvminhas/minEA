@@ -25,7 +25,7 @@ from app.routers.workspaces import build_workspace_context_graph
 from app.schemas.relationships import triple_allowed
 from app.services.relationship_write import save_relationship
 from app.services.audit import log_audit
-from app.services.authorization import require_limit, require_object_room
+from app.services.authorization import counted_types, require_limit, require_object_room
 from app.services.plan_features import assert_plan_allows_ai_chat
 from app.services.tenancy import TenancyContext, get_workspace_context
 
@@ -226,8 +226,8 @@ async def ingest_commit(
 ) -> dict[str, Any]:
     await ctx.require_permission(db, "object.create")
     assert ctx.workspace
-    if body.objects:
-        await require_object_room(db, ctx.org_id, ctx.workspace.id, adding=len(body.objects))
+    # Ingest can create apps/AI agents: those count; everything else is unlimited.
+    await require_object_room(db, ctx.org_id, ctx.workspace.id, adding=counted_types(item.type for item in body.objects))
 
     local_id_to_db_id: dict[str, uuid.UUID] = {}
     created_objects = []

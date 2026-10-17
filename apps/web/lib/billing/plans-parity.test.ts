@@ -17,7 +17,7 @@ const plansJson = JSON.parse(
       monthly_usd: number;
       yearly_usd: number;
       ai_answers_per_month: number;
-      items_per_workspace: number | null;
+      apps_agents_per_workspace: number | null;
       onboarding_hours: number;
     }
   >;
@@ -43,7 +43,7 @@ test("every catalogue number matches plans.json", () => {
         monthly: web.monthlyUsd,
         yearly: web.yearlyUsd,
         ai: web.aiAnswersPerMonth,
-        apps: web.itemsPerWorkspace,
+        apps: web.appsAgentsPerWorkspace,
         onboarding: web.onboardingHours,
       },
       {
@@ -52,7 +52,7 @@ test("every catalogue number matches plans.json", () => {
         monthly: api.monthly_usd,
         yearly: api.yearly_usd,
         ai: api.ai_answers_per_month,
-        apps: api.items_per_workspace,
+        apps: api.apps_agents_per_workspace,
         onboarding: api.onboarding_hours,
       },
       id

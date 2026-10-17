@@ -296,13 +296,13 @@ function LoadedBillingCentre({
             )}
           </div>
           <div>
-            <dt className="text-xs text-gray-400">Items</dt>
+            <dt className="text-xs text-gray-400">Apps &amp; AI agents</dt>
             <dd className="font-medium text-gray-900">
               {current.isLegacy
                 ? "Unchanged"
-                : current.itemsPerWorkspace == null
+                : current.appsAgentsPerWorkspace == null
                   ? "Unlimited"
-                  : `Up to ${current.itemsPerWorkspace}`}
+                  : `Up to ${current.appsAgentsPerWorkspace}`}
             </dd>
           </div>
         </dl>
@@ -438,7 +438,7 @@ function LoadedBillingCentre({
 
       <div className="mt-4 space-y-1 text-xs text-gray-400">
         <p>{VIEWERS_NOTE} Business starts from 5 licences, billed by invoice or card.</p>
-        <p>Free: 1 editor, up to 50 items (apps, platforms, servers…), 25 AI answers a month.</p>
+        <p>Free: 1 editor, up to 50 apps &amp; AI agents (everything else unlimited), 25 AI answers a month.</p>
         <p>{PRICE_NOTE}</p>
         {orgSlug && (
           <p>

@@ -179,9 +179,23 @@ async def get_object_cap(db: AsyncSession, org_id: uuid.UUID) -> int | None:
     return DEFAULT_ORG_LIMITS.get("max_objects_per_workspace")
 
 
+# What max_objects_per_workspace counts: apps and AI agents. Everything else (platforms/tenants,
+# servers, AI models, capabilities, data, locations, vendors, …) is unlimited on every plan.
+# The key name stays for compatibility with stored org_limits rows and per-org overrides.
+LIMITED_OBJECT_TYPES = frozenset({"application", "agent"})
+
+
+def counted_types(types) -> int:
+    """How many of these object types the limit counts."""
+    return sum(1 for t in types if t in LIMITED_OBJECT_TYPES)
+
+
 async def count_workspace_objects(db: AsyncSession, workspace_id: uuid.UUID) -> int:
+    """Apps and AI agents in the workspace (the types the limit counts)."""
     result = await db.execute(
-        select(func.count()).select_from(MinEAObject).where(MinEAObject.workspace_id == workspace_id)
+        select(func.count())
+        .select_from(MinEAObject)
+        .where(MinEAObject.workspace_id == workspace_id, MinEAObject.type.in_(LIMITED_OBJECT_TYPES))
     )
     return int(result.scalar_one())
 
@@ -194,7 +208,7 @@ async def _org_plan(db: AsyncSession, org_id: uuid.UUID) -> str:
 
 
 async def object_room(db: AsyncSession, org_id: uuid.UUID, workspace_id: uuid.UUID) -> dict:
-    """Items in the workspace and the org's real cap (org_limits overrides included) for the web's
+    """Apps & AI agents in the workspace and the org's real cap (org_limits overrides included) for the web's
     pre-check. max/remaining are None when there is no cap."""
     cap = await get_object_cap(db, org_id)
     current = await count_workspace_objects(db, workspace_id)
@@ -210,7 +224,9 @@ async def object_room(db: AsyncSession, org_id: uuid.UUID, workspace_id: uuid.UU
 async def require_object_room(
     db: AsyncSession, org_id: uuid.UUID, workspace_id: uuid.UUID, adding: int = 1
 ) -> None:
-    """403 limit_exceeded when adding this many items would pass max_objects_per_workspace."""
+    """403 limit_exceeded when adding this many apps/AI agents would pass max_objects_per_workspace."""
+    if adding <= 0:
+        return
     await require_limit(db, org_id, "max_objects_per_workspace", workspace_id=workspace_id, pending_delta=adding)
 
 
@@ -251,9 +267,9 @@ async def check_limit(
         )
         current = result.scalar_one()
     elif limit_key == "max_objects_per_workspace" and workspace_id:
-        # Items of any kind in the workspace. The ones being added count too: 50 stored blocks the
-        # 51st, and a batch that would pass the cap is refused whole (it is one transaction).
-        # Edits and deletes never call this, so a workspace already over the cap can still change.
+        # Apps and AI agents in the workspace (LIMITED_OBJECT_TYPES). Callers pass how many of
+        # those they add: 50 stored blocks the 51st, a batch that would pass the cap is refused whole
+        # (one transaction). Edits and deletes never call this, so a workspace already over can change.
         current = await count_workspace_objects(db, workspace_id)
         adding = max(pending_delta, 0)
         if current + adding > cap:

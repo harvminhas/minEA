@@ -144,7 +144,7 @@ async function apiFetchOnce<T>(path: string, init?: ApiInit): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    // Plan item limit: a friendly message (not raw JSON) for every create form, plus a toast with
+    // Plan limit on apps & AI agents: a friendly message (not raw JSON) for every create form, plus a toast with
     // the upgrade link unless the caller shows its own panel.
     const limit = res.status === 403 ? objectLimitDetail(err?.detail) : null;
     if (limit) {

@@ -37,7 +37,7 @@ function LimitMeter({ limit }: { limit: LimitState }) {
         {capAt < 100 && <div className="absolute inset-y-[-2px] w-[2px] bg-[#1c2230]" style={{ left: `calc(${capAt}% - 1px)` }} />}
       </div>
       <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#4b5163]">
-        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-[#3f35b5]" />{limit.used} in your map</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-[#3f35b5]" />{limit.used} apps &amp; AI agents in your map</span>
         {fits > 0 && <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-[#8f84f0]" />{fits} fit on {limit.label}</span>}
         {over > 0 && <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-[#fdba74]" />{over} over</span>}
         <span className="ml-auto text-[#8b90a0]">{limit.label} limit: {limit.max}</span>

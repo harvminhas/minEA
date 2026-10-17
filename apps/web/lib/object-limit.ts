@@ -1,10 +1,12 @@
 /**
- * The plan's item limit per workspace (max_objects_per_workspace: 50 on Free, none on Starter and up).
+ * The plan's limit on apps & AI agents per workspace (stored as max_objects_per_workspace: 50 on
+ * Free, none on Starter and up). Only applications and AI agents count; servers, platforms/tenants,
+ * AI models, capabilities, data, locations, vendors and the rest are unlimited on every plan.
  *
  * The API refuses a create that would pass the cap with
  *   403 {"code":"limit_exceeded","limit":"max_objects_per_workspace","current","max","adding","remaining","plan"}
  * apiFetch turns that into an ObjectLimitError whose message is the friendly line below, so every
- * single-add form that shows err.message reads "Free includes up to 50 items…" instead of raw JSON,
+ * single-add form that shows err.message reads "Free includes up to 50 apps & AI agents…" instead of raw JSON,
  * and a toast with the right upgrade link pops up (see ObjectLimitNotice). The Add cards pre-check
  * with GET …/objects/limit and show the upgrade panel instead.
  */
@@ -17,6 +19,20 @@ import { businessGetStartedHref } from "@/lib/billing/business-request";
 export const OBJECT_LIMIT_KEY = "max_objects_per_workspace";
 export const OBJECT_LIMIT_EVENT = "bubomap:object-limit";
 
+/** The object types the limit counts (must match LIMITED_OBJECT_TYPES in the API). */
+export const LIMITED_OBJECT_TYPES: ReadonlySet<string> = new Set(["application", "agent"]);
+
+export function countedTypes(types: Iterable<string>): number {
+  let n = 0;
+  for (const type of types) if (LIMITED_OBJECT_TYPES.has(type)) n += 1;
+  return n;
+}
+
+/** "1 app or AI agent" / "12 apps & AI agents". */
+export function appsAgents(n: number): string {
+  return n === 1 ? "1 app or AI agent" : `${n} apps & AI agents`;
+}
+
 export interface ObjectLimitDetail {
   code: "limit_exceeded";
   limit: typeof OBJECT_LIMIT_KEY;
@@ -27,7 +43,7 @@ export interface ObjectLimitDetail {
   plan?: string;
 }
 
-/** GET …/objects/limit: max and remaining are null when the plan has no item limit. */
+/** GET …/objects/limit: max and remaining are null when the plan has no limit on apps & AI agents. */
 export interface ObjectRoom {
   limit: typeof OBJECT_LIMIT_KEY;
   current: number;
@@ -36,7 +52,7 @@ export interface ObjectRoom {
   plan: string;
 }
 
-/** The 403 body's detail, when it is the item limit. */
+/** The 403 body's detail, when it is the apps & AI agents limit. */
 export function objectLimitDetail(detail: unknown): ObjectLimitDetail | null {
   if (!detail || typeof detail !== "object") return null;
   const d = detail as Record<string, unknown>;
@@ -127,7 +143,7 @@ export interface LimitState {
 /**
  * Room for this Add. Uses the server's count and cap (org overrides included) when known, else the
  * plan default and the catalogue count, so the pre-check works before GET …/objects/limit answers.
- * null when the plan has no item limit.
+ * null when the plan has no limit on apps & AI agents.
  */
 export function limitState(input: {
   plan: string | null | undefined;
@@ -187,7 +203,6 @@ export function roomFromDetail(detail: ObjectLimitDetail): ObjectRoom {
   };
 }
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export function roomHintText(limit: LimitState): string {
   return limit.room === 0 ? `${limit.label} is full (${limit.used} of ${limit.max})` : `${limit.room} left on ${limit.label}`;
@@ -198,13 +213,13 @@ export function limitPanelCopy(limit: LimitState, starterPrice: string): { title
   const left = limit.cards - limit.fitCards;
   const isFree = limit.plan === "free";
   const title = limit.used > limit.max
-    ? `This workspace is over the ${limit.label} limit of ${limit.max} items`
+    ? `This workspace is over the ${limit.label} limit of ${limit.max} apps & AI agents`
     : limit.room === 0
-      ? `${limit.label} is full: ${limit.used} of ${limit.max} items`
-      : `${limit.label} covers up to ${limit.max} items in a workspace`;
-  const more = isFree ? ` Starter (${starterPrice}) has no item limit.` : "";
+      ? `${limit.label} is full: ${limit.used} of ${limit.max} apps & AI agents`
+      : `${limit.label} covers up to ${limit.max} apps & AI agents in a workspace`;
+  const more = isFree ? ` Starter (${starterPrice}) has no limit. Servers, platforms and data are always unlimited.` : "";
   const body = limit.room === 0
-    ? `${plural(limit.adding, "item")} ${limit.adding === 1 ? "is" : "are"} waiting on the cards below.${more}`
+    ? `${appsAgents(limit.adding)} ${limit.adding === 1 ? "is" : "are"} waiting on the cards below.${more}`
     : `You have ${limit.used} and are adding ${limit.adding}, so ${fits} fit.${more}`;
   const footnote = left <= 0
     ? ""
@@ -260,15 +275,15 @@ export function objectLimitToastCopy(detail: ObjectLimitDetail, offer: LimitOffe
   const plan = normalizePlan(detail.plan ?? "free");
   const label = plan === "free" ? "Free" : "This workspace";
   const title = detail.current > detail.max
-    ? `This workspace is over the ${plan === "free" ? "Free " : ""}limit of ${detail.max} items`
-    : `${label} is full: ${detail.current} of ${detail.max} items`;
+    ? `This workspace is over the ${plan === "free" ? "Free " : ""}limit of ${detail.max} apps & AI agents`
+    : `${label} is full: ${detail.current} of ${detail.max} apps & AI agents`;
   const what = plan === "free"
-    ? `Free includes up to ${detail.max} items (apps, platforms, servers…) in a workspace.`
-    : `This workspace's limit is ${detail.max} items.`;
+    ? `Free includes up to ${detail.max} apps & AI agents in a workspace; everything else is unlimited.`
+    : `This workspace's limit is ${detail.max} apps & AI agents.`;
   const next = {
-    upgrade: plan === "free" ? "Starter has no item limit." : "Change the plan in Settings → Plan & billing.",
-    "checkout-closed": "Card checkout for Starter isn't open yet; Business has no item limit.",
-    business: "Business has no item limit.",
+    upgrade: plan === "free" ? "Starter has no limit." : "Change the plan in Settings → Plan & billing.",
+    "checkout-closed": "Card checkout for Starter isn't open yet; Business has no limit.",
+    business: "Business has no limit.",
     "ask-admin": "Ask an owner or admin to upgrade the plan.",
   }[offer];
   return { title, description: `${what} ${next}` };

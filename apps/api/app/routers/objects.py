@@ -23,7 +23,7 @@ from app.schemas.objects import (
     TypeSwitchResult,
 )
 from app.services.ai_features import apply_ai_features
-from app.services.authorization import object_room, require_limit
+from app.services.authorization import counted_types, object_room, require_object_room
 from app.services.capability_validation import validate_object_write
 from app.services.cost_lines import apply_cost_lines
 from app.services.infra_fields import validate_infra_patch
@@ -207,9 +207,8 @@ async def create_object(
         if existing is not None:
             response.status_code = status.HTTP_200_OK
             return await _to_read(db, existing)
-    await require_limit(
-        db, ctx.org_id, "max_objects_per_workspace", workspace_id=ctx.workspace.id, pending_delta=1
-    )
+    # Only apps and AI agents count towards the plan's limit; other types are unlimited.
+    await require_object_room(db, ctx.org_id, ctx.workspace.id, adding=counted_types([body.type]))
     assert ctx.workspace
 
     await validate_object_write(db, ctx.workspace.id, ctx.org_id, body, object_type=body.type)
@@ -296,10 +295,9 @@ async def add_batch(
     )
     if claimed.replay is not None:
         return AddBatchResult.model_validate(claimed.replay)
-    if body.creates:
-        await require_limit(
-            db, ctx.org_id, "max_objects_per_workspace", workspace_id=ctx.workspace.id, pending_delta=len(body.creates)
-        )
+    # Count only the apps/AI agents in the payload: a card that also creates a tenant, server or
+    # location costs 1, and a list of servers costs nothing.
+    await require_object_room(db, ctx.org_id, ctx.workspace.id, adding=counted_types(item.type for item in body.creates))
     result = await apply_add_batch(
         db,
         workspace_id=ctx.workspace.id,
@@ -530,6 +528,9 @@ async def switch_object_type(
             await db.execute(select(MinEAObject.id, MinEAObject.name).where(MinEAObject.id.in_(other_ids)))
         ).all():
             names[str(row_id)] = row_name
+    # Turning a server/platform/etc. into an app or AI agent adds one to what the plan counts.
+    if counted_types([body.type]) > counted_types([obj.type]):
+        await require_object_room(db, ctx.org_id, ctx.workspace.id, adding=1)
     try:
         plan = plan_type_switch(str(obj.id), obj.type, body.type, links, names)
     except ValueError as exc:
