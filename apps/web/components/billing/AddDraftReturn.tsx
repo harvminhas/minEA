@@ -11,7 +11,7 @@ export function AddDraftReturn({ orgSlug }: { orgSlug: string }) {
   if (!draft) return null;
   return (
     <div data-testid="add-draft-return" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
-      <span>Your list of {draft.count} {draft.count === 1 ? "item" : "items"} is waiting on the add cards.</span>
+      <span>{draft.count} {draft.count === 1 ? "item" : "items"} from your list {draft.count === 1 ? "wasn't" : "weren't"} added yet (Free was full).</span>
       <Link href={draft.returnTo} className="font-medium text-indigo-700 underline-offset-2 hover:underline">Back to your list</Link>
     </div>
   );

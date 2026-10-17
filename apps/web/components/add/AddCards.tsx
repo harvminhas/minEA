@@ -7,8 +7,9 @@ import type { MinEAObject, Relationship } from "@minea/types";
 import { addApi, billingApi, catalogLookupApi, objectsApi, toolCatalogApi } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { billingUiEnabled } from "@/lib/billing/flags";
-import { saveAddDraft } from "@/lib/add-draft";
-import { limitOffer, limitState, objectLimitFromError, partialAddedText, roomFromDetail, roomHintText, takeFirst, type LimitState, type ObjectRoom } from "@/lib/object-limit";
+import { saveAddDraft, takeAddDraft } from "@/lib/add-draft";
+import { limitOffer, limitState, objectLimitFromError, partialSummary, pendingAppCount, restLink, roomFromDetail, roomHintText, takeFirst, type LimitState, type ObjectRoom } from "@/lib/object-limit";
+import { normalizeTerm } from "@/lib/setup/match-tools";
 import { LimitActions, LimitDivider, LimitPanel, RoomHint } from "@/components/add/LimitPanel";
 import { refreshLiveCatalog } from "@/lib/catalog/live-catalog";
 import { OwnerDatalists, TEAM_PICKS_ID, useOwnerPicks } from "@/components/ownership/OwnerPicks";
@@ -37,7 +38,7 @@ import {
   type GapField,
 } from "@/lib/setup/add-cards";
 import { LOOKUP_DEBOUNCE_MS, applySuggestions, builtInHouse, lookupKey, namesToLookUp, rememberFailed, rememberLookups } from "@/lib/setup/ai-lookup";
-import { buildBatch, catalogLists, markAlreadySaved, planInputs, prepareRows, todoLines, type AddRow, type EstateItem } from "@/lib/setup/add-plan";
+import { buildBatch, catalogLists, markAlreadySaved, objectTypeFor, planInputs, prepareRows, todoLines, type AddRow, type EstateItem } from "@/lib/setup/add-plan";
 import { addSaveErrorMessage, maybeStillSaving } from "@/lib/add-batch-save";
 import { choiceForTool } from "@/lib/setup/match-tools";
 import { CLOUD_PROVIDERS, SAAS_PROVIDERS, defaultTenantName, providerForVendor, suggestsOwnCloud, type CloudProvider } from "@/lib/hosting/cloud";
@@ -326,6 +327,64 @@ export function AddSaved({ added, kept, todos, canUndo, motion, onUndo }: { adde
   );
 }
 
+/** After "Add the first N for now": the compact result that replaces the cards. */
+export type PartialView = {
+  summary: string;
+  notAdded: string[];
+  canUndo: boolean;
+  limit: LimitState | null;
+};
+
+export function AddPartial({ view, onUndo, onLeave }: { view: PartialView; onUndo: () => void; onLeave: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const link = view.limit ? restLink(view.limit.offer, view.limit.orgSlug) : null;
+  const count = view.notAdded.length;
+  return (
+    <div data-testid="limit-partial" role="status" className="rounded-2xl border border-[#e6e8ee] bg-white p-4">
+      <p className="text-[15px] font-semibold text-[#1c2230]"><span className="mr-1 text-[#16a34a]">✓</span>{view.summary}</p>
+      {view.canUndo && <button type="button" className="mt-1 text-[13px] font-medium text-[#3f35b5]" onClick={onUndo}>Undo</button>}
+      {count > 0 && (
+        <div className="mt-3 rounded-xl border border-[#eef0f4] bg-[#fafafb]">
+          <button
+            type="button"
+            data-testid="limit-not-added-toggle"
+            aria-expanded={open}
+            onClick={() => setOpen((value) => !value)}
+            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px] text-[#4b5163]"
+          >
+            <span>{count} not added · kept for later</span>
+            <span aria-hidden="true" className={`text-[#8b90a0] transition-transform ${open ? "rotate-90" : ""}`}>›</span>
+          </button>
+          {open && (
+            <div data-testid="limit-not-added" className="border-t border-[#eef0f4] px-3 py-2">
+              <p className="text-[12px] leading-5 text-[#6b7289]">{view.notAdded.join(", ")}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+                {link && <Link href={link.href} onClick={onLeave} data-testid="limit-rest-link" className="font-medium text-[#3f35b5]">{link.label}</Link>}
+                {!link && view.limit && (
+                  <>
+                    <span className="text-[#6b7289]">Ask an owner or admin to upgrade to add the rest.</span>
+                    <button
+                      type="button"
+                      className="font-medium text-[#3f35b5]"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(`${window.location.origin}${restLink("upgrade", view.limit!.orgSlug)!.href}`);
+                        setCopied(true);
+                      }}
+                    >
+                      {copied ? "Link copied" : "Copy link for your admin"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AddResult({
   rows,
   phase,
@@ -351,7 +410,7 @@ export function AddResult({
   /** Room on the plan for this Add (null: no item limit). */
   limit?: LimitState | null;
   /** After "Add the first N for now": what was saved, the rest still on the cards. */
-  partial?: { text: string; canUndo: boolean } | null;
+  partial?: PartialView | null;
   onAddFirst?: (count: number) => void;
   /** Leaving for Plan & billing: keep the list. */
   onLeave?: () => void;
@@ -376,20 +435,18 @@ export function AddResult({
   const byId = useMemo(() => new Map(objects.map((object) => [object.id, object])), [objects]);
   const { tenants: cloudTenants } = useCloudPicker();
   const pendingTenants = view.mode === "cards" ? cardPendingTenants(view.addCards, cloudTenants) : [];
-  if (view.mode === "closed" || (view.mode === "saved" && !snapshot)) return null;
+  if (!partial && (view.mode === "closed" || (view.mode === "saved" && !snapshot))) return null;
   return (
     <section className="max-w-full overflow-x-hidden">
       {view.motion ? <style>{MOTION_CSS}</style> : null}
-      {view.mode === "saved" && snapshot ? (
+      {partial ? (
+        // The person chose "Add the first N": a compact result, the rest collapsed. No cards, no
+        // upgrade button, no Adding/Cancel footer; Next (setup) or Add carries on with what was saved.
+        <AddPartial view={partial} onUndo={onUndoPartial} onLeave={onLeave} />
+      ) : view.mode === "saved" && snapshot ? (
         <AddSaved added={snapshot.added} kept={snapshot.kept} todos={snapshot.todos} canUndo={snapshot.canUndo} motion={view.motion} onUndo={onUndo} />
       ) : (
         <>
-          {partial && (
-            <div data-testid="limit-partial" role="status" className="mb-4 rounded-2xl border border-[#e6e8ee] bg-white p-4">
-              <p className="text-[15px] font-semibold text-[#1c2230]">{partial.text}</p>
-              {partial.canUndo && <button type="button" className="mt-2 text-[13px] font-medium text-[#3f35b5]" onClick={onUndoPartial}>Undo</button>}
-            </div>
-          )}
           <h2 className="text-[18px] font-semibold text-[#1c2230]">{view.title}</h2>
           {view.subtitle && <p className="mt-1 text-[13px] text-[#6b7289]">{view.subtitle}</p>}
           {view.mode === "cards" && limit && <div className="mt-2"><RoomHint limit={limit} /></div>}
@@ -464,9 +521,12 @@ export function AskAdd({
   onSaved,
   onClose,
   submitSignal = 0,
+  onPendingApps,
 }: {
   initialText: string;
   kind?: "app" | "platform";
+  /** New applications the cards would still save (what fits on the plan); the setup pill adds it to the saved apps. */
+  onPendingApps?: (count: number) => void;
   /** Bump to save the current rows through the same path as the cards' Add button. */
   submitSignal?: number;
   onSaved?: (receipt: AddReceipt) => void;
@@ -515,7 +575,7 @@ export function AskAdd({
   useEffect(() => setServerRoom(null), [roomQuery.dataUpdatedAt]);
   const refreshRoom = () => { void queryClient.invalidateQueries({ queryKey: roomKey }); };
   // After "Add the first N for now": the receipt, and the rows that went (Undo puts them back).
-  const [partial, setPartial] = useState<{ text: string; receipt: AddReceipt; rows: AddRow[] } | null>(null);
+  const [partial, setPartial] = useState<{ summary: string; receipt: AddReceipt; rows: AddRow[]; notAdded: string[] } | null>(null);
   const limit: LimitState | null = useMemo(() => {
     if (!orgSlug || !loaded) return null;
     const planned = planInputs(rows);
@@ -533,10 +593,19 @@ export function AskAdd({
     });
   }, [orgSlug, loaded, rows, estate, activeOrg?.plan, serverRoom, roomQuery.data, objects.length, billing.data]);
 
-  // Leaving for Plan & billing: keep the cards' names so the list comes back afterwards.
-  const keepForUpgrade = () => {
+  const freshTypes = useMemo(() => rows.filter((row) => !row.existing).map((row) => objectTypeFor(row.kind)), [rows]);
+  const pendingApps = pendingAppCount(freshTypes, limit, Boolean(partial));
+  useEffect(() => {
+    onPendingApps?.(pendingApps);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingApps]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => onPendingApps?.(0), []);
+
+  // Keep the cards' names in sessionStorage so the list comes back after Plan & billing.
+  const keepForUpgrade = (only?: string[]) => {
     if (!orgSlug || !workspaceSlug) return;
-    const names = rows.filter((row) => !row.existing).map((row) => row.name || row.input);
+    const names = only ?? rows.filter((row) => !row.existing).map((row) => row.name || row.input);
     const here = typeof window === "undefined" ? basePath : `${window.location.pathname}${window.location.search}`;
     // Ask has no add box to come back to without its question: return to Model > Applications.
     const back = here.includes("/model/") || here.includes("/setup") || here.includes("/views") ? here : `${basePath}/model/applications`;
@@ -669,7 +738,16 @@ export function AskAdd({
       if (!before.met && setupState(afterObjects, afterRels).met && !setup.mapReadyShownAt) {
         void setup.save({ mapReadyShownAt: new Date().toISOString() });
       }
+      // What each typed line was saved as: the setup wizard ties its drafts by id, not by name
+      // (an AI suggestion can save "Wait While" as "Waitwhile").
+      const idByKey = new Map(batch.creates.map((item, index) => [item.key, saved.created_object_ids[index]]));
+      const idsByInput: Record<string, string> = {};
+      for (const row of created) {
+        const id = idByKey.get(row.key);
+        if (id) idsByInput[normalizeTerm(row.input)] = id;
+      }
       const receipt: AddReceipt = {
+        idsByInput,
         question: initialText,
         added: savedAdded(names),
         names,
@@ -684,8 +762,13 @@ export function AskAdd({
         // Saved what fits; the rest stay on the cards, still waiting for an upgrade.
         edited.current = true;
         const went = rows.filter((row) => taken.has(row.key));
+        const waiting = rows.filter((row) => !row.existing && !taken.has(row.key));
+        const notAdded = waiting.map((row) => row.name || row.input);
         setRows((current) => current.filter((row) => !taken.has(row.key) && !row.existing));
-        setPartial({ text: partialAddedText(firstCount, fresh, kind === "platform" ? "platforms" : "apps"), receipt, rows: went });
+        const partialReceipt: AddReceipt = { ...receipt, notAdded: waiting.map((row) => row.input) };
+        setPartial({ summary: partialSummary(firstCount, fresh - firstCount, limit?.label ?? "Free", kind === "platform" ? "platforms" : "apps"), receipt: partialReceipt, rows: went, notAdded });
+        // The rest are kept for later (they come back in the add box after an upgrade).
+        keepForUpgrade(notAdded);
         setPhase("idle");
         return;
       }
@@ -745,6 +828,7 @@ export function AskAdd({
     for (const id of receipt.relationshipIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
     refreshRoom();
     setPartial(null);
+    takeAddDraft(orgSlug, workspaceSlug);
     setRows((current) => [...went, ...current]);
   };
 
@@ -804,9 +888,9 @@ export function AskAdd({
       onFillGap={(id, field, value) => { void fillGap(id, field, value); }}
       onSave={() => { void save(); }}
       limit={limit}
-      partial={partial ? { text: partial.text, canUndo: partial.receipt.canUndo && Date.now() < partial.receipt.undoUntil } : null}
+      partial={partial ? { summary: partial.summary, notAdded: partial.notAdded, canUndo: partial.receipt.canUndo && Date.now() < partial.receipt.undoUntil, limit } : null}
       onAddFirst={(count) => { if (phase !== "saving") void save(count); }}
-      onLeave={keepForUpgrade}
+      onLeave={() => keepForUpgrade(partial?.notAdded)}
       onUndoPartial={() => { void undoPartial(); }}
       onUndo={() => { void undo(); }}
       onCancel={() => {

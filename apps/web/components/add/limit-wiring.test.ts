@@ -36,3 +36,15 @@ test("upgrade links respect who can buy", () => {
   assert.match(ask, /can_manage_billing \? "upgrade" : "ask-admin"/);
   assert.match(ask, /quotaOffer === "upgrade" && \(/);
 });
+
+test("after Add the first N: compact result replaces the cards, footer and upgrade button", () => {
+  const cards = src("components/add/AddCards.tsx");
+  assert.match(cards, /\{partial \? \(\s*\/\/[^\n]*\n[^\n]*\n\s*<AddPartial view=\{partial\}/);
+  assert.match(cards, /data-testid="limit-not-added-toggle"/);
+  assert.match(cards, /aria-expanded=\{open\}/);
+  assert.match(cards, /keepForUpgrade\(notAdded\)/);
+  assert.match(cards, /notAdded: waiting\.map\(\(row\) => row\.input\)/);
+  assert.match(cards, /idsByInput\[normalizeTerm\(row\.input\)\] = id/);
+  const partialBlock = cards.slice(cards.indexOf("export function AddPartial"), cards.indexOf("export function AddResult"));
+  assert.doesNotMatch(partialBlock, /Upgrade to Starter|Adding |Cancel|LimitPanel|AddCard /);
+});

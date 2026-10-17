@@ -54,6 +54,7 @@ export function AddFlow({
   onSaved,
   onClose,
   submitSignal,
+  onPendingApps,
 }: {
   origin: "setup" | "ask" | "model" | "views";
   inline?: boolean;
@@ -65,11 +66,12 @@ export function AddFlow({
   onSaved?: (receipt: AddReceipt) => void;
   onClose?: () => void;
   submitSignal?: number;
+  onPendingApps?: (count: number) => void;
 }) {
   if (origin === "setup") return <SetupFlow inline={inline} />;
   const askKind = kind === "platform" ? "platform" : "app";
   if (origin === "ask" || cards || (origin === "model" && kind === "app")) {
-    return <AskAdd initialText={initialText ?? ""} kind={askKind} onSaved={onSaved} onClose={onClose} submitSignal={submitSignal} />;
+    return <AskAdd initialText={initialText ?? ""} kind={askKind} onSaved={onSaved} onClose={onClose} submitSignal={submitSignal} onPendingApps={onPendingApps} />;
   }
   return <AnywhereAdd origin={origin} kind={kind} initialText={initialText} compact={compact} inline={inline} onClose={onClose} />;
 }

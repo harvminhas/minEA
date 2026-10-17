@@ -10,7 +10,9 @@ import {
   objectLimitDetail,
   objectLimitFromError,
   objectLimitToastCopy,
-  partialAddedText,
+  partialSummary,
+  pendingAppCount,
+  restLink,
   roomFromDetail,
   roomHintText,
   takeFirst,
@@ -121,7 +123,8 @@ test("add the first N keeps paste order and takes rows already in the map along"
   assert.deepEqual([...taken], ["a", "b"]);
   assert.equal(fresh, 3);
   assert.equal(takeFirst(rows).planned.length, 4);
-  assert.equal(partialAddedText(50, 120), "Added 50 of 120 apps. The other 70 are still on the cards below.");
+  assert.equal(partialSummary(50, 69), "Added 50 apps. 69 not added (Free is full)");
+  assert.equal(partialSummary(1, 2, "Free", "platforms"), "Added 1 platform. 2 not added (Free is full)");
 });
 
 test("toast copy per offer; a 403 fills the same state as the pre-check", () => {
@@ -138,4 +141,20 @@ test("toast copy per offer; a 403 fills the same state as the pre-check", () => 
   const room = roomFromDetail(refused);
   assert.deepEqual(room, { limit: "max_objects_per_workspace", current: 0, max: 50, remaining: 50, plan: "free" });
   assert.equal(limitState({ plan: "free", room, catalogCount: 0, adding: 120, offer: "upgrade", orgSlug: "a" })!.fitCards, 50);
+});
+
+test("after Add the first N: a quiet link per offer, none for people who can't buy", () => {
+  assert.deepEqual(restLink("upgrade", "acme"), { label: "Upgrade to add the rest", href: "/orgs/acme/settings?tab=billing&start=starter" });
+  assert.match(restLink("business", "acme")!.label, /Business/);
+  assert.match(restLink("checkout-closed", "acme")!.label, /quote/);
+  assert.equal(restLink("ask-admin", "acme"), null);
+});
+
+test("setup pill counts only the new apps the cards will still save", () => {
+  const types = ["application", "application", "cloud_service", "application"];
+  assert.equal(pendingAppCount(types, null, false), 3);
+  assert.equal(pendingAppCount(types, { over: true, fitCards: 2 }, false), 2);
+  // Chose "Add the first N": the waiting ones won't be saved by Next.
+  assert.equal(pendingAppCount(types, { over: true, fitCards: 0 }, true), 0);
+  assert.equal(pendingAppCount(types, null, true), 0);
 });

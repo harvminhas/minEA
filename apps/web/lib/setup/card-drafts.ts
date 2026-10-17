@@ -17,12 +17,15 @@ export function choiceFromHosting(model: unknown): HostingChoice {
  * the catalogue (by the matched tool name or the typed name) so the later steps (AI, where, owners)
  * open prefilled and never create the same app twice. Objects created by that save are preferred.
  */
-export function draftsFromCards<T extends DraftLike>(drafts: T[], objects: CardObject[], createdIds: string[] = []): T[] {
+export function draftsFromCards<T extends DraftLike>(drafts: T[], objects: CardObject[], createdIds: string[] = [], idsByInput: Record<string, string> = {}): T[] {
   const fresh = new Set(createdIds);
   const ordered = [...objects].sort((a, b) => Number(fresh.has(b.id)) - Number(fresh.has(a.id)));
   return drafts.map((draft) => {
     const names = new Set([draft.input, draft.tool?.name].filter((name): name is string => Boolean(name)).map(normalizeTerm));
-    const hit = ordered.find((object) => (object.type === "application" || object.type === "model") && names.has(normalizeTerm(object.name)));
+    // The cards saved this line under another name (an AI suggestion, a "Did you mean" pick): tie by id.
+    const savedId = idsByInput[normalizeTerm(draft.input)];
+    const byId = savedId ? objects.find((object) => object.id === savedId) : undefined;
+    const hit = byId ?? ordered.find((object) => (object.type === "application" || object.type === "model") && names.has(normalizeTerm(object.name)));
     if (!hit) return draft;
     const choice = choiceFromHosting(hit.properties?.hosting_model);
     const resolved = { ...draft, objectId: hit.id, choice: choice === "unknown" ? draft.choice : choice };

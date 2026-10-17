@@ -9,6 +9,7 @@ import { addApi } from "@/lib/api-client";
 import { serverIdsAfter, whereBatch } from "@/lib/setup/where-batch";
 import { useAuth } from "@/lib/auth-context";
 import { AppAddPanel } from "@/components/add/AppAddPanel";
+import type { AddReceipt } from "@/lib/setup/add-cards";
 import { OwnerDatalists, PERSON_PICKS_ID, TEAM_PICKS_ID, useOwnerPicks } from "@/components/ownership/OwnerPicks";
 import { canonicalOwner } from "@/lib/owner-picks";
 import { licenceCount, perSeatLine, yearlyFor } from "@/lib/setup/licence-cost";
@@ -198,6 +199,10 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   const ownerPickLists = useOwnerPicks(apps.map((app) => app.ownerTeam), apps.map((app) => app.ownerName));
   const catalogState = setupState(catalog.data?.objects ?? [], catalog.data?.relationships ?? []);
   const unsavedApps = apps.filter((app) => !app.objectId).length;
+  // Step 1's pill: saved apps plus what the cards will still save. Not the typed lines: those
+  // double-counted cards saved under a suggested name ("Wait While" → "Waitwhile") and counted
+  // the ones left out by "Add the first N" on Free (Harvinder's "125 apps ✓" with 50 saved).
+  const [panelPending, setPanelPending] = useState(0);
   // Apps given a known location on this screen (Cloud, a picked server, people's computers) and not
   // already counted from the catalogue.
   const newlyLocated = apps.filter((app) => {
@@ -261,10 +266,17 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   // created before that render, so its `catalog.data` is the pre-save copy; the query cache isn't.
   const freshCatalog = () => latestCatalog(queryClient, orgSlug && workspaceSlug ? catalogQueryKey(orgSlug, workspaceSlug) : null, catalog.data);
 
-  const cardDrafts = (createdIds: string[] = []): Draft[] => {
-    return draftsFromCards(toDrafts(setupMatch(text)), freshCatalog().objects, createdIds).map((draft) =>
+  const cardDrafts = (createdIds: string[] = [], idsByInput: Record<string, string> = {}): Draft[] => {
+    return draftsFromCards(toDrafts(setupMatch(text)), freshCatalog().objects, createdIds, idsByInput).map((draft) =>
       draft.status === "matched" && !draft.yearly ? { ...draft, ...yearlyFor(draft.tool, draft.licences, { yearly: "", typical: true }) } : draft,
     );
+  };
+
+  // After the panel saved: tie lines by what they were saved as, and leave out the lines "Add the
+  // first N" didn't save (Free is full) so createApps never sends them in a batch of its own.
+  const savedDrafts = (receipt: AddReceipt): Draft[] => {
+    const waiting = new Set((receipt.notAdded ?? []).map(normalizeTerm));
+    return cardDrafts(receipt.objectIds, receipt.idsByInput).filter((draft) => draft.objectId || !waiting.has(normalizeTerm(draft.input)));
   };
 
   // Next: anything new on the cards saves through the panel (onSaved continues); when every card is
@@ -568,11 +580,12 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
               setText(next);
               if (next.trim() && step === 0) setStep(1);
             }}
-            onSaved={(receipt) => void run(() => createApps(cardDrafts(receipt.objectIds)))}
+            onPendingApps={setPanelPending}
+            onSaved={(receipt) => void run(() => createApps(savedDrafts(receipt)))}
             onClose={() => setPrefill("")}
           />
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <SetupProgress apps={catalogState.apps + unsavedApps} located={catalogState.located + newlyLocated} />
+            <SetupProgress apps={catalogState.apps + panelPending} located={catalogState.located + newlyLocated} />
             <div className="flex items-center gap-2">
               <button type="button" onClick={loadSample} className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-[#5b4ce6]">Load sample company</button>
               <button type="button" onClick={() => void run(skip)} className="rounded-lg px-3 py-1.5 text-[13px] text-[#6b7289]">Skip for now</button>

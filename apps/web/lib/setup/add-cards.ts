@@ -17,6 +17,10 @@ export type AddReceipt = {
   relationshipIds: string[];
   undoUntil: number;
   names?: string[];
+  /** What each typed line was saved as (normalised input → object id); names can differ (AI suggestions). */
+  idsByInput?: Record<string, string>;
+  /** "Add the first N": the typed lines that were NOT saved (waiting for an upgrade). */
+  notAdded?: string[];
 };
 
 const RECEIPT_KEY = "bubomap-add-receipt";

@@ -34,7 +34,9 @@ test("wizard step 1 uses the shared add panel, not its own table", () => {
   assert.doesNotMatch(src, /setup-results/);
   assert.match(src, /Skip for now/);
   assert.match(src, /Next →/);
-  assert.match(src, /<SetupProgress apps=\{catalogState\.apps \+ unsavedApps\} located=\{catalogState\.located \+ newlyLocated\} \/>/);
+  assert.match(src, /<SetupProgress apps=\{catalogState\.apps \+ panelPending\} located=\{catalogState\.located \+ newlyLocated\} \/>/);
+  assert.match(src, /onPendingApps=\{setPanelPending\}/);
+  assert.match(src, /createApps\(savedDrafts\(receipt\)\)/);
   assert.doesNotMatch(src, /Your map needs both|of \{SETUP_MIN\.located\} app with a known location/);
 });
 
@@ -45,4 +47,17 @@ test("a 'Did you mean' answer carries into the later wizard steps", () => {
   const [kept] = draftsFromCards([base], [{ id: "o2", name: "ArchGIS", type: "application" }]);
   assert.equal(kept!.status, "custom");
   assert.equal(kept!.tool, null);
+});
+
+test("a line saved under a suggested name ties by id, so it is neither counted nor created twice", () => {
+  const drafts = [
+    { input: "Wait While", tool: null, choice: "unknown" as const },
+    { input: "Zillow", tool: null, choice: "unknown" as const },
+  ];
+  const objects = [{ id: "w1", name: "Waitwhile", type: "application" }];
+  const byName = draftsFromCards(drafts, objects, ["w1"]);
+  assert.equal(byName[0]!.objectId, undefined, "names differ: the old tie missed it");
+  const byId = draftsFromCards(drafts, objects, ["w1"], { "wait while": "w1" });
+  assert.equal(byId[0]!.objectId, "w1");
+  assert.equal(byId[1]!.objectId, undefined);
 });

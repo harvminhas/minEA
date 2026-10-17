@@ -212,9 +212,34 @@ export function limitPanelCopy(limit: LimitState, starterPrice: string): { title
   return { title, body, footnote };
 }
 
-/** "Added 50 of 120 apps. The other 70 are still on the cards below." */
-export function partialAddedText(added: number, total: number, noun = "apps"): string {
-  return `Added ${added} of ${total} ${noun}. The other ${total - added} ${total - added === 1 ? "is" : "are"} still on the cards below.`;
+/** After "Add the first N for now": "Added 50 apps. 69 not added (Free is full)". */
+export function partialSummary(added: number, notAdded: number, label = "Free", noun: "apps" | "platforms" = "apps"): string {
+  const one = noun === "apps" ? "app" : "platform";
+  return `Added ${added} ${added === 1 ? one : noun}. ${notAdded} not added (${label} is full)`;
+}
+
+/** The quiet link inside the collapsed "not added" row (the person already chose; no big button). */
+export function restLink(offer: LimitOffer, orgSlug: string): LimitLink | null {
+  switch (offer) {
+    case "upgrade":
+      return { label: "Upgrade to add the rest", href: starterBillingHref(orgSlug) };
+    case "business":
+      return { label: "Upgrade to Business to add the rest", href: businessGetStartedHref({ org: orgSlug, from: "add_limit" }) };
+    case "checkout-closed":
+      return { label: "Get a Business quote to add the rest", href: businessGetStartedHref({ org: orgSlug, from: "add_limit" }) };
+    case "ask-admin":
+      return null;
+  }
+}
+
+/**
+ * New applications the cards would still save: the ones that fit, none once the person has chosen
+ * "Add the first N" (the rest wait for an upgrade). The setup pill adds this to the saved apps.
+ */
+export function pendingAppCount(freshTypes: string[], limit: Pick<LimitState, "over" | "fitCards"> | null, partialDone: boolean): number {
+  if (partialDone) return 0;
+  const fits = limit?.over ? limit.fitCards : freshTypes.length;
+  return freshTypes.slice(0, fits).filter((type) => type === "application").length;
 }
 
 /** The first `count` new rows in paste order; rows already in the map always go along (updates). */

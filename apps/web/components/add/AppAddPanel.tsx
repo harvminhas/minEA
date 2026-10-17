@@ -25,6 +25,7 @@ export function AppAddPanel({
   boxId = "model-add-box",
   submitSignal = 0,
   onTextChange,
+  onPendingApps,
 }: {
   origin: "model" | "ask" | "setup";
   /** Prefill (Ask: the names parsed from the question). */
@@ -40,6 +41,8 @@ export function AppAddPanel({
   submitSignal?: number;
   /** The box text as the person types (the wizard keeps it for its later steps). */
   onTextChange?: (text: string) => void;
+  /** New apps the cards would still save (what fits on the plan): the setup pill counts these. */
+  onPendingApps?: (count: number) => void;
 }) {
   const catalog = useModelCatalog();
   const [addText, setAddText] = useState(initialText);
@@ -161,7 +164,7 @@ export function AppAddPanel({
       </div>
       {restored > 0 && (
         <p data-testid="add-restored" className="mb-2 text-[12px] text-[#4b5163]">
-          Your list is back: {restored} {restored === 1 ? "item" : "items"} from before you went to Plan &amp; billing.
+          Your list is back: the {restored} {restored === 1 ? "item" : "items"} not added last time.
         </p>
       )}
       <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12px] text-[#6b7289]">
@@ -230,6 +233,7 @@ export function AppAddPanel({
         compact
         initialText={addText}
         submitSignal={submit}
+        onPendingApps={onPendingApps}
         onSaved={(receipt) => {
           setSaved(true);
           onSaved?.(receipt);
