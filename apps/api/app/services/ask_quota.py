@@ -2,7 +2,8 @@
 
 Each plan's allowance is ai_answers_per_month in plans.json (the same numbers the pricing page and
 Plan & billing show: Free 25, Starter 500, Team 2500, Business 5000). Any org can be given its own
-allowance with org_limits key "ai_questions_per_month" (how a Business org is configured).
+allowance with org_limits key "ai_questions_per_month" (how a Business org is configured); a row
+holding NULL means no cap, and no row means the plan's allowance.
 Only questions that reach the model count; quick answers worked out in the browser never call here.
 """
 
@@ -18,7 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.authorization import get_org_limit
+from app.services.authorization import org_limit_override
 from app.services.plan_features import normalize_plan
 from app.services.plans import PLAN_CATALOG
 
@@ -33,7 +34,7 @@ TZ = ZoneInfo("America/Toronto")
 class AskQuota:
     plan: str
     used: int
-    limit: int
+    limit: int | None  # None: no cap (an org_limits row holding NULL)
     month: str
     allowed: bool = True
 
@@ -45,10 +46,10 @@ def month_key(now: datetime | None = None) -> str:
     return (now or datetime.now(TZ)).astimezone(TZ).strftime("%Y-%m")
 
 
-async def monthly_limit(db: AsyncSession, org_id: uuid.UUID, plan: str) -> int:
-    override = await get_org_limit(db, org_id, LIMIT_KEY)
-    if override is not None:
-        return max(int(override), 0)
+async def monthly_limit(db: AsyncSession, org_id: uuid.UUID, plan: str) -> int | None:
+    has_row, override = await org_limit_override(db, org_id, LIMIT_KEY)
+    if has_row:
+        return None if override is None else max(int(override), 0)
     return PLAN_AI_QUESTIONS.get(normalize_plan(plan), PLAN_AI_QUESTIONS["free"])
 
 
@@ -79,7 +80,18 @@ async def take_question(db: AsyncSession, org_id: uuid.UUID, plan: str, now: dat
     return AskQuota(plan=normalize_plan(plan), used=int(row), limit=limit, month=month)
 
 
-async def _increment(db: AsyncSession, org_id: uuid.UUID, month: str, limit: int) -> int | None:
+async def _increment(db: AsyncSession, org_id: uuid.UUID, month: str, limit: int | None) -> int | None:
+    if limit is None:  # no cap: still counted, never refused
+        return (
+            await db.execute(
+                text(
+                    "INSERT INTO ai_question_usage (org_id, month, used) VALUES (:o, :m, 1) "
+                    "ON CONFLICT (org_id, month) DO UPDATE SET used = ai_question_usage.used + 1, updated_at = now() "
+                    "RETURNING used"
+                ),
+                {"o": org_id, "m": month},
+            )
+        ).scalar_one()
     return (
         await db.execute(
             text(

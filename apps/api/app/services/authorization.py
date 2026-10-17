@@ -69,14 +69,49 @@ async def seed_org_limits(db: AsyncSession, org_id: uuid.UUID, plan: str = "free
     await db.flush()
 
 
+_MISSING = object()
+
+
+async def _stored_limit(db: AsyncSession, org_id: uuid.UUID, limit_key: str):
+    """The org_limits value, or _MISSING when the org has no row for the key. A row holding NULL
+    returns None: "no cap" (what apply_plan_to_org writes for paid plans)."""
+    row = (
+        await db.execute(
+            select(OrgLimit.value).where(OrgLimit.org_id == org_id, OrgLimit.limit_key == limit_key)
+        )
+    ).first()
+    return _MISSING if row is None else row[0]
+
+
+async def plan_default_limit(db: AsyncSession, org_id: uuid.UUID, limit_key: str) -> int | None:
+    """The org's plan default for a key it has no row for: limits_for_plan (plans.json / plan_features
+    on top of DEFAULT_ORG_LIMITS). Business without a subscription gets the legacy limits, as
+    apply_plan_to_org would write. A key no plan defines is None (no cap)."""
+    from app.services.plan_features import limits_for_plan
+
+    org = (await db.execute(select(Org.plan, Org.stripe_subscription_id).where(Org.id == org_id))).first()
+    if org is None:
+        return DEFAULT_ORG_LIMITS.get(limit_key)
+    return limits_for_plan(org[0] or "free", stripe_managed=bool(org[1])).get(limit_key)
+
+
 async def get_org_limit(db: AsyncSession, org_id: uuid.UUID, limit_key: str) -> int | None:
-    result = await db.execute(
-        select(OrgLimit.value).where(OrgLimit.org_id == org_id, OrgLimit.limit_key == limit_key)
-    )
-    value = result.scalar_one_or_none()
-    if value is None and limit_key in DEFAULT_ORG_LIMITS:
-        return DEFAULT_ORG_LIMITS[limit_key]
+    """An org's cap for a limit key; None = no cap.
+
+    A stored NULL is no cap (paid plans write it on upgrade). Only a missing row falls back to the
+    plan default. Earlier, NULL fell back to DEFAULT_ORG_LIMITS too, which quietly capped paid orgs
+    at 10 workspaces, 5 admins, 50 members/viewers and 1000 objects."""
+    value = await _stored_limit(db, org_id, limit_key)
+    if value is _MISSING:
+        return await plan_default_limit(db, org_id, limit_key)
     return value
+
+
+async def org_limit_override(db: AsyncSession, org_id: uuid.UUID, limit_key: str) -> tuple[bool, int | None]:
+    """(has_row, value) for keys whose missing-row default lives outside org_limits (e.g. the Ask
+    allowance in plans.json). value None with has_row True = no cap."""
+    value = await _stored_limit(db, org_id, limit_key)
+    return (False, None) if value is _MISSING else (True, value)
 
 
 def _effective_role(scope: AuthScope, permission_slug: str) -> tuple[str, str] | None:
@@ -164,19 +199,8 @@ async def _count_role_usage(db: AsyncSession, org_id: uuid.UUID, role: str) -> i
 
 
 async def get_object_cap(db: AsyncSession, org_id: uuid.UUID) -> int | None:
-    """max_objects_per_workspace for the org. An org_limits row holding NULL is "no cap" (apply_plan
-    writes that for Starter/Team/Business); only a missing row falls back to the default.
-    get_org_limit treats both as missing, which capped paid orgs at the 1000 default."""
-    row = (
-        await db.execute(
-            select(OrgLimit.value).where(
-                OrgLimit.org_id == org_id, OrgLimit.limit_key == "max_objects_per_workspace"
-            )
-        )
-    ).first()
-    if row is not None:
-        return row[0]
-    return DEFAULT_ORG_LIMITS.get("max_objects_per_workspace")
+    """max_objects_per_workspace (apps & AI agents) for the org: NULL row = no cap, no row = plan default."""
+    return await get_org_limit(db, org_id, "max_objects_per_workspace")
 
 
 # What max_objects_per_workspace counts: apps and AI agents. Everything else (platforms/tenants,
@@ -240,10 +264,7 @@ async def check_limit(
     pending_delta: int = 0,
 ) -> tuple[bool, dict | None]:
     """Return (ok, error_detail). null limit value means unlimited."""
-    if limit_key == "max_objects_per_workspace":
-        cap = await get_object_cap(db, org_id)
-    else:
-        cap = await get_org_limit(db, org_id, limit_key)
+    cap = await get_org_limit(db, org_id, limit_key)
     if cap is None:
         return True, None
 
@@ -265,7 +286,7 @@ async def check_limit(
         result = await db.execute(
             select(func.count()).select_from(Workspace).where(Workspace.org_id == org_id)
         )
-        current = result.scalar_one()
+        current = result.scalar_one() + max(pending_delta, 0)
     elif limit_key == "max_objects_per_workspace" and workspace_id:
         # Apps and AI agents in the workspace (LIMITED_OBJECT_TYPES). Callers pass how many of
         # those they add: 50 stored blocks the 51st, a batch that would pass the cap is refused whole
@@ -316,7 +337,7 @@ async def check_limit(
             ),
             {"org_id": str(org_id), "month_start": month_start},
         )
-        current = result.scalar_one()
+        current = result.scalar_one() + max(pending_delta, 0)
     else:
         # Limits reserved for future resource types — allow if not tracked yet
         return True, None

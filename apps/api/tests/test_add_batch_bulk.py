@@ -53,7 +53,7 @@ async def _tenant():
 
     async with AsyncSession(engine, expire_on_commit=False) as db:
         await db.execute(text("INSERT INTO users (id, firebase_uid, email, full_name) VALUES (:u, :f, :e, 'Sam Rivera')"), {"u": user, "f": "fb-" + tag, "e": f"b-{tag}@example.com"})
-        await db.execute(text("INSERT INTO orgs (id, name, slug) VALUES (:o, 'bulk', :s)"), {"o": org, "s": "bulk-" + tag})
+        await db.execute(text("INSERT INTO orgs (id, name, slug, plan) VALUES (:o, 'bulk', :s, 'starter')"), {"o": org, "s": "bulk-" + tag})
         await db.execute(text("INSERT INTO org_memberships (user_id, org_id, role) VALUES (:u, :o, 'owner')"), {"u": user, "o": org})
         await db.execute(text("INSERT INTO workspaces (id, org_id, name, slug) VALUES (:w, :o, 'Default', 'default')"), {"w": ws, "o": org})
         await db.commit()

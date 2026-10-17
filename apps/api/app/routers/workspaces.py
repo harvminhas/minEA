@@ -137,7 +137,7 @@ async def create_workspace(
     )
     owned_count = count_result.scalar_one()
     assert_can_create_own_workspace(ctx.org.plan, owned_count)
-    await require_limit(db, ctx.org_id, "max_workspaces")
+    await require_limit(db, ctx.org_id, "max_workspaces", pending_delta=1)
 
     existing = await db.execute(
         select(Workspace).where(Workspace.org_id == ctx.org_id, Workspace.slug == body.slug)

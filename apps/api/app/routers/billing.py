@@ -21,8 +21,6 @@ from app.services.plan_features import (
     can_create_share_link,
     is_legacy_business,
     normalize_plan,
-    plan_max_active_share_links,
-    plan_max_own_workspaces,
 )
 from app.services.stripe_billing import (
     checkout_available,
@@ -77,9 +75,8 @@ async def billing_status(
         select(func.count()).select_from(Workspace).where(Workspace.org_id == ctx.org_id)
     )
     owned_count = count_result.scalar_one()
+    # None = no cap: a stored NULL (paid plans) or no row with an uncapped plan default.
     workspace_limit = await get_org_limit(db, ctx.org_id, "max_workspaces")
-    if workspace_limit is None:
-        workspace_limit = plan_max_own_workspaces(plan)
 
     now = utc_now()
     share_count_result = await db.execute(
@@ -93,8 +90,6 @@ async def billing_status(
     )
     share_count = share_count_result.scalar_one()
     share_limit = await get_org_limit(db, ctx.org_id, "max_active_share_links")
-    if share_limit is None:
-        share_limit = plan_max_active_share_links(plan)
 
     usage = await load_usage(db, ctx.org_id)
     cap = await licence_cap(db, ctx.org_id)
