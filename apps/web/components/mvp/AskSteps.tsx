@@ -98,6 +98,12 @@ export function TimingDetails({ details }: { details: AskTimingDetails }) {
       {details.repairs && details.repairs.length > 0 && (
         <p data-testid="ask-timing-repairs" className="mt-1">Fixed without a correction: {details.repairs.join("; ")}</p>
       )}
+      {details.bad_reply && (
+        <div data-testid="ask-timing-bad-reply" className="mt-1">
+          Reply that wasn't JSON (first 300 characters; ids, emails and numbers masked):
+          <pre className="mt-0.5 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-white p-1.5 font-mono text-[10px] text-[#3c4254]">{details.bad_reply}</pre>
+        </div>
+      )}
     </details>
   );
 }

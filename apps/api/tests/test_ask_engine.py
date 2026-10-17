@@ -417,7 +417,7 @@ def test_empty_reply_retry_turns_lookups_off(engine):
     models = engine([empty, _text_response(GOOD)])
     result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
     assert result["source"] == "llm"
-    assert models.configs[-1].tool_config.function_calling_config.mode == "NONE"
+    assert models.configs[-1].response_mime_type == "application/json" and not models.configs[-1].tools
 
 
 def test_prompt_asks_for_one_direct_reply_and_headline_first():
@@ -574,3 +574,62 @@ def test_headline_streams_even_when_the_first_text_part_has_a_thought_signature(
     events = asyncio.run(collect())
     assert [e["event"] for e in events].count("headline") == 1
     assert events[-1]["data"]["source"] == "llm" and events[-1]["data"]["timing"]["ai_calls"] == 1
+
+
+# ── JSON mode + tolerant parsing (prod: "not_json after a correction; finish STOP, 1152 tokens, 2063 chars") ──
+REAL = {"headline": "6 Applications renew soon", **GOOD}
+BODY = json.dumps(REAL, indent=2)
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "```json\n" + BODY + "\n```",
+        "Here is the answer you asked for:\n\n" + BODY + "\n\nLet me know if you need more detail.",
+        "```\n" + BODY,  # unclosed fence
+        BODY.replace('"Renews soon"', '"Renews soon",').replace('"a0"\n', '"a0",\n'),  # trailing commas
+        "Sure! ```json\n" + BODY[:-2] + ",\n}\n``` Hope that helps {not json}",
+    ],
+    ids=["fenced", "prose-wrapped", "unclosed-fence", "trailing-comma", "fenced+prose+comma"],
+)
+def test_tolerant_parser_recovers_realistic_bad_replies(reply):
+    parsed = loop._parse_answer(reply)
+    assert parsed is not None and parsed["headline"] == REAL["headline"] and parsed["citations"][0]["record_id"] == "a0"
+
+
+def test_smart_quotes_are_repaired():
+    assert loop._parse_answer('{\u201cheadline\u201d: \u201cHi\u201d, \u201canswer_markdown\u201d: \u201cx\u201d}') == {"headline": "Hi", "answer_markdown": "x"}
+
+
+def test_multi_part_reply_is_joined(engine):
+    half = len(BODY) // 2
+    engine([_reply([types.Part.from_text(text="```json\n" + BODY[:half]), types.Part(text="thinking...", thought=True), types.Part.from_text(text=BODY[half:] + "\n```")])])
+    result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
+    assert result["source"] == "llm" and result["timing"]["ai_calls"] == 1
+
+
+def test_not_json_after_repair_falls_back_without_a_reask_and_keeps_a_redacted_sample(engine):
+    bad = "Sorry, I can't format that. Contact ops@acme.com about a0-1234 costing $5,000 " + "x" * 400
+    models = engine([_reply([types.Part.from_text(text=bad)]), _text_response(GOOD)])
+    result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
+    assert result["source"] == "fallback" and result["fallback_reason"] == "not_json"
+    assert len(models.script) == 1  # not re-asked
+    sample = result["timing"]["bad_reply"]
+    assert len(sample) <= 300 and "<email>" in sample and "<n>" in sample and "ops@acme.com" not in sample and "5,000" not in sample
+
+
+def test_first_call_is_json_mode_without_tools_and_lookups_only_on_need_lookup(engine):
+    ask = {"headline": "x", "answer_markdown": "x", "need_lookup": True, "lookup_reason": "impact chain"}
+    models = engine([_text_response(ask), _call_response("aggregate", {"filters": {"renewal_within_days": 90}}), _text_response(GOOD)])
+    result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
+    assert result["source"] == "llm"
+    first, second, third = models.configs
+    assert first.response_mime_type == "application/json" and first.response_schema is not None and not first.tools
+    assert second.tools and not second.response_mime_type
+    assert third.response_mime_type == "application/json" and not third.tools
+    assert [c["why"] for c in result["timing"]["calls"]] == ["first", "need_lookup: impact chain", "tool follow-up: aggregate"]
+
+
+def test_schema_puts_headline_first():
+    assert loop.ANSWER_SCHEMA.property_ordering[0] == "headline"
+    assert {"need_lookup", "item_ids", "citations", "evidence"} <= set(loop.ANSWER_SCHEMA.properties)

@@ -67,7 +67,7 @@ SYSTEM = """You are BuboMap Ask. You answer questions about ONE company's IT est
 The user message contains the WHOLE workspace (every item of every kind, its fields, relationships, teams and people), then the question.
 Answer from that workspace. You know nothing else about this company.
 Answer in ONE reply, straight from the workspace: it already has every item, field, owner, vendor, cost and relationship. Do not call a lookup to re-read what the workspace shows.
-Call a lookup only when you truly need it: tracing what depends on what (impact_of), AI risk and data access (ai_landscape), or a total too large to add up reliably (aggregate).
+Reply with the JSON answer (the response schema). If you truly cannot answer without a lookup, set "need_lookup": true and "lookup_reason", and you will be given the lookups next. Call a lookup only when you truly need it: tracing what depends on what (impact_of), AI risk and data access (ai_landscape), or a total too large to add up reliably (aggregate).
 Never invent applications, capabilities, infrastructure, names, numbers, dates, owners, vendors, or relationships.
 Vendors are already resolved to one name each; "product" names the product a vendor sells (MuleSoft is a Salesforce product). Spelling in the question may be off; match it to the workspace names.
 Return "item_ids": the id of every item your answer is about (the screen builds its table from these, with real data). For a "no" answer, item_ids is empty.
@@ -238,19 +238,117 @@ async def _streamed_reply(models: Any, contents: list, config: Any, queue: "asyn
     )
 
 
-def _parse_answer(text: str) -> dict | None:
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.I)
+_FENCE = re.compile(r"```(?:json|JSON)?\s*(.*?)```", re.S)
+_SMART = str.maketrans({"\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'"})
+
+
+def _outer_object(text: str) -> str | None:
+    """The first balanced {...} in text, honouring strings and escapes (prose before/after is ignored)."""
+    start = text.find("{")
+    while start != -1:
+        depth, in_str, esc = 0, False, False
+        for i in range(start, len(text)):
+            ch = text[i]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+            elif ch == '"':
+                in_str = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start : i + 1]
+        start = text.find("{", start + 1)
+    return None
+
+
+def _repair_json(text: str) -> str:
+    """Smart quotes used as JSON quotes, and trailing commas before } or ]."""
+    text = text.translate(_SMART)
+    return re.sub(r",\s*([}\]])", r"\1", text)
+
+
+def _loads(text: str) -> dict | None:
     try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", cleaned, re.S)
-        if not match:
-            return None
-        try:
-            parsed = json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return None
-    return parsed if isinstance(parsed, dict) else None
+        value = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _parse_answer(text: str) -> dict | None:
+    """Tolerant: plain JSON, ```json fences, prose around the object, trailing commas, smart quotes.
+    Returns None only when no JSON object can be recovered."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    candidates = [text]
+    candidates += [m.group(1).strip() for m in _FENCE.finditer(text)]
+    candidates.append(re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.I))  # an unclosed fence
+    for candidate in list(candidates):
+        outer = _outer_object(candidate)
+        if outer:
+            candidates.append(outer)
+    for candidate in candidates:
+        parsed = _loads(candidate)
+        if parsed is not None:
+            return parsed
+    for candidate in candidates:
+        repaired = _repair_json(candidate)
+        parsed = _loads(repaired) or (_loads(_outer_object(repaired) or "") if "{" in repaired else None)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+_REDACT = [
+    (re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I), "<id>"),
+    (re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+"), "<email>"),
+    (re.compile(r"\$?\d[\d,]*(?:\.\d+)?"), "<n>"),
+]
+
+
+def redacted_sample(text: str, limit: int = 300) -> str:
+    """First `limit` chars of a bad reply with ids, emails and numbers masked (Timing details)."""
+    out = (text or "")[:limit]
+    for pattern, repl in _REDACT:
+        out = pattern.sub(repl, out)
+    return out
+
+
+def _schema() -> types.Schema:
+    S, T = types.Schema, types.Type
+    ids = S(type=T.ARRAY, items=S(type=T.STRING))
+    return S(
+        type=T.OBJECT,
+        properties={
+            "headline": S(type=T.STRING),
+            "answer_markdown": S(type=T.STRING),
+            "yes_no": S(type=T.STRING, enum=["yes", "no"]),
+            "item_ids": ids,
+            "intent": S(type=T.STRING),
+            "verdict": S(type=T.OBJECT, properties={"text": S(type=T.STRING), "inferred": S(type=T.BOOLEAN), "basis": S(type=T.ARRAY, items=S(type=T.STRING))}),
+            "evidence": S(type=T.ARRAY, items=S(type=T.OBJECT, properties={"text": S(type=T.STRING), "citation_ids": ids}, required=["text"])),
+            "fix_actions": S(type=T.ARRAY, items=S(type=T.OBJECT, properties={"record_id": S(type=T.STRING), "field": S(type=T.STRING), "suggested_value": S(type=T.STRING)})),
+            "citations": S(type=T.ARRAY, items=S(type=T.OBJECT, properties={"n": S(type=T.INTEGER), "record_id": S(type=T.STRING), "relationship": S(type=T.STRING)}, required=["n", "record_id"])),
+            "gaps": S(type=T.ARRAY, items=S(type=T.OBJECT, properties={"record_id": S(type=T.STRING), "field": S(type=T.STRING), "message": S(type=T.STRING)})),
+            "follow_ups": S(type=T.ARRAY, items=S(type=T.STRING)),
+            "unsupported": S(type=T.BOOLEAN),
+            "need_lookup": S(type=T.BOOLEAN),
+            "lookup_reason": S(type=T.STRING),
+        },
+        required=["headline", "answer_markdown"],
+        property_ordering=["headline", "answer_markdown", "yes_no", "item_ids", "intent", "verdict", "evidence", "fix_actions", "citations", "gaps", "follow_ups", "unsupported", "need_lookup", "lookup_reason"],
+    )
+
+
+ANSWER_SCHEMA = _schema()
 
 
 def _normalize_number(token: str) -> str:
@@ -671,14 +769,24 @@ async def run_ask_inner(
     for rec in earlier:
         bag.note_record(rec)  # items from earlier turns, re-checked against this workspace, may be named again
     contents: list[types.Content] = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
-    config = types.GenerateContentConfig(
+    common = dict(
         system_instruction=SYSTEM,
-        tools=build_gemini_tools(tool_specs(include_ai=ai_question)),
         temperature=0,
         max_output_tokens=MAX_OUTPUT_TOKENS,
-        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         **({"thinking_config": types.ThinkingConfig(thinking_budget=THINKING_BUDGET)} if model_name().startswith("gemini-2.5") else {}),
     )
+    # Gemini can't combine function calling with JSON mode in one request. So: answer calls are
+    # tool-free JSON mode with the schema (the whole workspace is in the prompt); only when the model
+    # sets need_lookup does one call go out with the lookups (no JSON mode), and the answer after the
+    # lookups is JSON mode again.
+    json_config = types.GenerateContentConfig(**common, response_mime_type="application/json", response_schema=ANSWER_SCHEMA)
+    tools_config = types.GenerateContentConfig(
+        **common,
+        tools=build_gemini_tools(tool_specs(include_ai=ai_question)),
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+    )
+    config = json_config
+    looked_up = False
     corrected = False
     headline_sent = False
     correcting = False  # the next model call is the correction round
@@ -755,7 +863,7 @@ async def run_ask_inner(
                         yield {"event": "step", "data": step(f"retry-{_round}", f"The AI's reply was empty ({finish_detail}); asked again", status="error")}
                         contents.append(types.Content(role="user", parts=[types.Part.from_text(text="Your last reply was empty or malformed. Reply with the JSON answer only, from the workspace.")]))
                         # The retry answers from the workspace: lookups off, so it can't come back as a broken call again.
-                        config = config.model_copy(update={"tool_config": types.ToolConfig(function_calling_config=types.FunctionCallingConfig(mode="NONE"))})
+                        config = json_config
                         continue
                     for event in give_up(code, finish_detail):
                         yield event
@@ -766,7 +874,23 @@ async def run_ask_inner(
                 if repaired:
                     timing.note_repairs(repaired)
                     log.info("ask repaired answer without a correction: %s", "; ".join(repaired)[:300])
-                problem = "not_json" if not parsed else _validate(parsed, bag, question)
+                timing.add("check", tick() - checking)
+                if not parsed:
+                    # Not re-asked: after the tolerant parse, a second try rarely helps and costs a call.
+                    timing.bad_reply = redacted_sample(text)
+                    for event in give_up("not_json", f"not_json after a tolerant parse; {finish_detail}; reply {len(text)} chars"):
+                        yield event
+                    return
+                if parsed.get("need_lookup") is True and not looked_up:
+                    looked_up = True
+                    reason = str(parsed.get("lookup_reason") or "")[:120]
+                    next_why = f"need_lookup: {reason or 'the model asked for a lookup'}"
+                    contents.append(types.Content(role="model", parts=[types.Part.from_text(text=text)]))
+                    contents.append(types.Content(role="user", parts=[types.Part.from_text(text="Request the lookup(s) you need now with function calls.")]))
+                    config = tools_config
+                    continue
+                checking = tick()
+                problem = _validate(parsed, bag, question)
                 timing.add("check", tick() - checking)
                 # Numbers: soften now (drop the offending sentences), no second model call.
                 # Only structural problems (not JSON, unknown ids...) still get one correction.
@@ -774,6 +898,7 @@ async def run_ask_inner(
                     corrected = True
                     correcting = True
                     next_why = f"correction: {problem_detail(problem, parsed, bag, text, finish)}"
+                    config = json_config
                     timing.corrected = True
                     checks += 1
                     yield {"event": "step", "data": checking_step(problem, checks)}
@@ -843,6 +968,7 @@ async def run_ask_inner(
                 parts.append(types.Part.from_function_response(name=name, response={"result": result}))
             contents.append(types.Content(role="user", parts=parts))
             next_why = f"tool follow-up: {', '.join(name for name, _ in calls)}"
+            config = json_config  # the answer after lookups: JSON mode, no tools
     except TimeoutError:
         detail = f"no reply within {CALL_TIMEOUT_SECONDS:.0f}s (call {len(tools_used) and 'after lookups' or 'first'}), model {model_name()}"
         for event in give_up("timeout", detail):

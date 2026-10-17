@@ -56,7 +56,7 @@ export type AskFixAction = {
 };
 
 export type AskTimingCall = { s: number; in: number; out: number; think: number; finish: string; why?: string; streamed?: boolean; correction?: boolean };
-export type AskTimingDetails = { calls: AskTimingCall[]; cache?: { hit?: boolean; why?: string; fingerprint_s?: number }; repairs?: string[]; total_s?: number; [key: string]: unknown };
+export type AskTimingDetails = { calls: AskTimingCall[]; cache?: { hit?: boolean; why?: string; fingerprint_s?: number }; repairs?: string[]; bad_reply?: string; total_s?: number; [key: string]: unknown };
 
 export type AskAnswer = {
   handler:

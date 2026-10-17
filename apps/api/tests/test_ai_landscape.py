@@ -293,7 +293,10 @@ class _MisrouteModels:
 
     async def generate_content(self, model, contents, config):
         self.calls += 1
-        if self.calls == 1:
+        if self.calls == 1:  # JSON mode, no tools: the model asks for a lookup
+            assert config.response_mime_type == "application/json" and not config.tools
+            return _text_response({"headline": "x", "answer_markdown": "x", "need_lookup": True, "lookup_reason": "AI"})
+        if self.calls == 2:
             self.tool_names = [decl.name for tool in config.tools for decl in (tool.function_declarations or [])]
             return _call_response("ai_landscape", {})
         self.seen_tool_result = contents[-1].parts[0].function_response.response["result"]

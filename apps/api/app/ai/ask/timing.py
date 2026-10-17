@@ -25,7 +25,8 @@ class AskTiming:
     tools: list[dict] = field(default_factory=list)
     cache_hit: bool | None = None  # workspace graph reused from the in-process cache
     cache: dict = field(default_factory=dict)  # {"hit", "why", "fingerprint_s"}
-    repairs: list[str] = field(default_factory=list)  # structural slips fixed without a model call
+    repairs: list[str] = field(default_factory=list)
+    bad_reply: str = ""  # redacted first 300 chars of a reply that wasn't JSON  # structural slips fixed without a model call
     corrected: bool = False
     correction_s: float = 0.0
     outcome: str = ""
@@ -72,6 +73,7 @@ class AskTiming:
             "cache_hit": self.cache_hit,
             "cache": self.cache,
             "repairs": self.repairs,
+            **({"bad_reply": self.bad_reply} if self.bad_reply else {}),
             "context_tokens_est": self.context_chars // 4,
             "ai_calls": len(self.calls),
             "ai_s": round(ai, 3),
@@ -89,8 +91,8 @@ class AskTiming:
 
     def log_line(self) -> str:
         d = self.as_dict()
-        flat = " ".join(f"{k}={v}" for k, v in d.items() if k not in {"calls", "tools", "cache", "repairs"})
-        return f"ASK_TIMING {flat} cache={json.dumps(self.cache, separators=(',', ':'))} repairs={json.dumps(self.repairs)} calls={json.dumps(d['calls'], separators=(',', ':'))} tools={json.dumps(d['tools'], separators=(',', ':'))}"
+        flat = " ".join(f"{k}={v}" for k, v in d.items() if k not in {"calls", "tools", "cache", "repairs", "bad_reply"})
+        return f"ASK_TIMING {flat} cache={json.dumps(self.cache, separators=(',', ':'))} repairs={json.dumps(self.repairs)} bad_reply={json.dumps(self.bad_reply)} calls={json.dumps(d['calls'], separators=(',', ':'))} tools={json.dumps(d['tools'], separators=(',', ':'))}"
 
     def summary(self) -> str:
         """'Took 6.2s: workspace 0.3s · AI 2 calls 5.1s · lookups 0.2s · check 0.1s'."""

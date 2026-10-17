@@ -159,3 +159,11 @@ test("Timing details list each AI call with why it was made, plus the cache resu
   const ai = answerFromModel(payload({ headline: "h", answer_text: "x", item_ids: ["crm"], items: [], timing: { summary: "Took 1s", ...details } } as never), ROWS, "/w", "q")!;
   assert.equal(ai.timingDetails?.calls.length, 3);
 });
+
+test("Timing details show the redacted bad reply sample", async () => {
+  const { AskSteps } = await import("../../components/mvp/AskSteps");
+  const details = { calls: [{ s: 1, in: 1, out: 1, think: 0, finish: "STOP", why: "first" }], bad_reply: "Sure! Here is <n> things" };
+  const html = renderToStaticMarkup(<AskSteps steps={[{ id: "x", status: "done", label: "y" }]} details={details} />);
+  assert.match(html, /data-testid="ask-timing-bad-reply"/);
+  assert.match(html, /Sure! Here is &lt;n&gt; things/);
+});
