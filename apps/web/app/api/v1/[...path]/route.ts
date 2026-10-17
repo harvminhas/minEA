@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { proxyReachabilityHelp, resolveApiOrigin } from "@/lib/api-base";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+// A long Add list is one batch write; the API itself allows 120s (apps/api/vercel.json).
+export const maxDuration = 120;
 
 async function proxyToApi(req: NextRequest, pathSegments: string[]): Promise<NextResponse> {
   const upstreamPath = `/api/v1/${pathSegments.join("/")}${req.nextUrl.search}`;

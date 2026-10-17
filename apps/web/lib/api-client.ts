@@ -93,6 +93,7 @@ import type {
   SharePreview,
 } from "@minea/types";
 import { apiV1Url } from "@/lib/api-base";
+import { batchKeyFor, batchSaved } from "@/lib/add-batch-save";
 import { apiRequestGate, shouldRetryRequest } from "@/lib/request-gate";
 import { getShareApiPath } from "@/lib/share-context";
 import { askWithStream, type StreamHandlers } from "@/lib/ask/stream";
@@ -376,13 +377,24 @@ export const addApi = {
       relationships: { type: string; from_key?: string; to_key?: string; from_id?: string; to_id?: string; from_type: string; to_type: string; attributes?: Record<string, unknown> }[];
     },
     token: string,
-  ) =>
-    apiFetch<{
+  ) => {
+    // Same items, same Idempotency-Key until they save: a retry after a timeout can't duplicate them.
+    const payload = JSON.stringify(body);
+    return apiFetch<{
       objects: MinEAObject[];
       relationships: Relationship[];
       created_object_ids: string[];
       created_relationship_ids: string[];
-    }>(`${wsBase(orgSlug, workspaceSlug)}/objects/batch`, { method: "POST", token, body: JSON.stringify(body) }),
+    }>(`${wsBase(orgSlug, workspaceSlug)}/objects/batch`, {
+      method: "POST",
+      token,
+      body: payload,
+      headers: { "Idempotency-Key": batchKeyFor(`${orgSlug}/${workspaceSlug}:${payload}`) },
+    }).then((saved) => {
+      batchSaved(`${orgSlug}/${workspaceSlug}:${payload}`);
+      return saved;
+    });
+  },
   undo: (
     orgSlug: string,
     workspaceSlug: string,

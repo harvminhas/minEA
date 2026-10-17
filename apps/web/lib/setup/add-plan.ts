@@ -163,7 +163,7 @@ export function collapseMatches(items: MatchItem[]): MatchItem[] {
   return out;
 }
 
-export function findExisting(item: MatchItem, kind: AddKind, estate: EstateItem[]): EstateItem | null {
+export function findExisting(item: Pick<MatchItem, "input" | "tool">, kind: AddKind, estate: EstateItem[]): EstateItem | null {
   const types = kind === "app" ? new Set(["application", "cloud_service"]) : new Set([objectTypeFor(kind)]);
   const keys = new Set<string>([dedupeKey(item.input)]);
   if (item.tool) {
@@ -228,6 +228,20 @@ export function prepareRows(text: string, preset: AddKind, estate: EstateItem[])
       hint: existing ? null : categoryHint(tool, estate),
     };
   });
+}
+
+/** After a save that may have gone through (timeout / 5xx), re-check the cards against the refetched
+ *  catalogue: a card whose record is now there shows as already in the map instead of being added again. */
+export function markAlreadySaved(rows: AddRow[], estate: EstateItem[]): AddRow[] {
+  let changed = false;
+  const next = rows.map((row) => {
+    if (row.existing) return row;
+    const existing = findExisting(row, row.kind, estate) ?? findExisting({ input: row.name, tool: null }, row.kind, estate);
+    if (!existing) return row;
+    changed = true;
+    return { ...row, existing, hint: null };
+  });
+  return changed ? next : rows;
 }
 
 /** Apps and platforms that are all SaaS skip the hosting step. Servers, locations, and vendors never get it. */

@@ -1,6 +1,7 @@
 """Regression: setup step 'Which of these have AI turned on?' sends one /objects/batch with an
 overwrite update per app. Reading the second app's updated_at after the first read's query had
-autoflushed it raised MissingGreenlet -> HTTP 500. Updated rows are now flushed and refreshed first."""
+autoflushed it raised MissingGreenlet -> HTTP 500. Updated rows are now flushed, then reloaded in one
+SELECT (populate_existing) before any read."""
 import asyncio
 import uuid
 from types import SimpleNamespace
@@ -29,8 +30,13 @@ class _Db:
         self.events = []
 
     async def execute(self, stmt):
-        wanted = stmt.whereclause.clauses[0].right.value
-        return SimpleNamespace(scalar_one_or_none=lambda: self.objs.get(wanted))
+        if stmt.get_execution_options().get("populate_existing"):
+            self.events.append("reload")
+            for o in self.objs.values():
+                o.__dict__["expired"] = False
+            return SimpleNamespace()
+        rows = list(self.objs.values())
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: rows))
 
     def add(self, row):
         pass
@@ -81,4 +87,4 @@ def test_ai_step_batch_of_several_apps_reads_fresh_rows():
         svc.validate_object_write = orig_validate
     assert [o.name for o in result.objects] == ["Slack", "Microsoft 365", "Zoom"]
     assert all(o.properties["ai_features"][0]["status"] == "on" for o in apps)
-    assert db.events[:4] == ["flush", *[("refresh", a.id) for a in apps]]
+    assert db.events[:2] == ["flush", "reload"]

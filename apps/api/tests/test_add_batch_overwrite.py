@@ -12,6 +12,12 @@ class _Result:
     def scalar_one_or_none(self):
         return self.obj
 
+    def scalars(self):
+        return self
+
+    def all(self):
+        return [self.obj]
+
 
 class _Db:
     def __init__(self, obj):

@@ -68,6 +68,7 @@ test("a picking card follows a rename on the card that typed it; offered on ever
 
 test("save errors are shown, not swallowed", () => {
   const src = readFileSync(new URL("../../components/add/AddCards.tsx", import.meta.url), "utf8");
-  assert.match(src, /setError\(err instanceof Error \? err\.message : "Could not save"\)/);
+  // The API's message, or "Still saving — refresh…" for a timeout / 5xx (lib/add-batch-save.ts).
+  assert.match(src, /setError\(addSaveErrorMessage\(err\)\)/);
   assert.match(src, /phase === "error" && error && <p/);
 });

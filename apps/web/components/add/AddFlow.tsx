@@ -27,7 +27,8 @@ import { defaultHosting, type ToolRecord } from "@/lib/setup/match-tools";
 import { setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
-import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
+import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
+import { addSaveErrorMessage, maybeStillSaving } from "@/lib/add-batch-save";
 import { AskAdd } from "@/components/add/AddCards";
 import { cardQuestion, hostingChoices, undoneSentence, type AddReceipt } from "@/lib/setup/add-cards";
 import { SetupFlow } from "@/components/mvp/setup-flow";
@@ -295,7 +296,11 @@ function AnywhereAdd({
     try {
       await task();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save");
+      setError(addSaveErrorMessage(err));
+      // A timeout / 5xx may still commit: refetch so the list shows what was saved.
+      if (maybeStillSaving(err) && orgSlug && workspaceSlug) {
+        void queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
+      }
     } finally {
       setBusy(false);
     }

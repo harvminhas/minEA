@@ -32,7 +32,8 @@ import {
   type GapField,
 } from "@/lib/setup/add-cards";
 import { LOOKUP_DEBOUNCE_MS, applySuggestions, builtInHouse, lookupKey, namesToLookUp, rememberFailed, rememberLookups } from "@/lib/setup/ai-lookup";
-import { buildBatch, catalogLists, planInputs, prepareRows, todoLines, type AddRow, type EstateItem } from "@/lib/setup/add-plan";
+import { buildBatch, catalogLists, markAlreadySaved, planInputs, prepareRows, todoLines, type AddRow, type EstateItem } from "@/lib/setup/add-plan";
+import { addSaveErrorMessage, maybeStillSaving } from "@/lib/add-batch-save";
 import { choiceForTool } from "@/lib/setup/match-tools";
 import { CLOUD_PROVIDERS, SAAS_PROVIDERS, defaultTenantName, providerForVendor, suggestsOwnCloud, type CloudProvider } from "@/lib/hosting/cloud";
 import { useCloudPicker } from "@/lib/hosting/use-cloud-regions";
@@ -41,7 +42,7 @@ import { CloudPicker } from "@/components/hosting/CloudPicker";
 import { setupState } from "@/lib/setup/setupMin";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { useTenancy } from "@/lib/tenancy";
-import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
+import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
 
 const UNDO_MS = 10 * 60 * 1000;
 
@@ -444,6 +445,8 @@ export function AskAdd({
   const [reduced, setReduced] = useState(false);
   const [closed, setClosed] = useState(false);
   const [snapshot, setSnapshot] = useState<AddReceipt | null>(null);
+  // The last save timed out or hit a 5xx: it may still be committing on the server.
+  const [stillSaving, setStillSaving] = useState(false);
   const edited = useRef(false);
   const kindRef = useRef(kind);
   const { objects, relationships } = catalogLists(catalog.data);
@@ -459,6 +462,7 @@ export function AskAdd({
     setPhase("idle");
     setSnapshot(null);
     setError("");
+    setStillSaving(false);
   }, [initialText]);
 
   useEffect(() => {
@@ -477,6 +481,13 @@ export function AskAdd({
     setRows(prepareRows(initialText, kind, estate));
     setRowsFor(initialText);
   }, [loaded, initialText, estate, phase, kind]);
+
+  // After a timed-out save the catalogue is refetched; cards whose records arrived show as already
+  // in the map, so Add again only sends what's really missing.
+  useEffect(() => {
+    if (!stillSaving) return;
+    setRows((current) => markAlreadySaved(current, estate));
+  }, [stillSaving, estate]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -545,6 +556,7 @@ export function AskAdd({
     }
     setPhase("saving");
     setError("");
+    setStillSaving(false);
     const planned = planInputs(rows);
     try {
       const batch = buildBatch(planned, estate);
@@ -579,8 +591,12 @@ export function AskAdd({
       setSnapshot(receipt);
       setPhase("saved");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save");
+      setError(addSaveErrorMessage(err));
       setPhase("error");
+      if (maybeStillSaving(err)) {
+        setStillSaving(true);
+        void queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
+      }
     }
   };
 

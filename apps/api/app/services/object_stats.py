@@ -223,8 +223,32 @@ async def _count_distinct_data_stores_by_system(
     return {row[0]: int(row[1]) for row in result.all()}
 
 
+async def updater_names(db: AsyncSession, objects: list[MinEAObject]) -> dict[uuid.UUID, str | None]:
+    """First name (or email prefix) of each object's updated_by user, in one query."""
+    updater_ids = list({o.updated_by for o in objects if o.updated_by})
+    user_map: dict[uuid.UUID, str | None] = {}
+    if updater_ids:
+        users_result = await db.execute(select(User).where(User.id.in_(updater_ids)))
+        for user in users_result.scalars().all():
+            name = user.full_name.split()[0] if user.full_name else user.email.split("@")[0]
+            user_map[user.id] = name
+    return user_map
+
+
+def new_system_stats(obj: MinEAObject, user_map: dict[uuid.UUID, str | None]) -> dict:
+    """enrich_system_objects for a record created in this request with no links yet: every count
+    is 0, so no relationship queries are needed."""
+    return {
+        "capability_count": 0,
+        "apis_provided_count": 0,
+        "apis_consumed_count": 0,
+        "data_store_count": 0,
+        "updated_by_name": user_map.get(obj.updated_by) if obj.updated_by else None,
+    }
+
+
 async def enrich_system_objects(
-    db: AsyncSession, objects: list[MinEAObject]
+    db: AsyncSession, objects: list[MinEAObject], user_map: dict[uuid.UUID, str | None] | None = None
 ) -> dict[uuid.UUID, dict]:
     """Batch-compute card metrics for application / solution / technical_capability."""
     system_objs = [o for o in objects if o.type in SYSTEM_TYPES]
@@ -240,13 +264,8 @@ async def enrich_system_objects(
     apis_consumed = await _count_by_from_to_type(db, workspace_id, org_id, ids, "consumes", "api")
     data_stores = await _count_distinct_data_stores_by_system(db, workspace_id, org_id, ids)
 
-    updater_ids = list({o.updated_by for o in system_objs if o.updated_by})
-    user_map: dict[uuid.UUID, str | None] = {}
-    if updater_ids:
-        users_result = await db.execute(select(User).where(User.id.in_(updater_ids)))
-        for user in users_result.scalars().all():
-            name = user.full_name.split()[0] if user.full_name else user.email.split("@")[0]
-            user_map[user.id] = name
+    if user_map is None:
+        user_map = await updater_names(db, system_objs)
 
     out: dict[uuid.UUID, dict] = {}
     for obj in system_objs:

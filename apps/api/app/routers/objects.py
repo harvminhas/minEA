@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,7 +49,10 @@ from app.services.object_stats import (
     enrich_tech_debt_view_items,
     enrich_system_objects,
     enrich_updated_by_objects,
+    new_system_stats,
+    updater_names,
 )
+from app.services import add_batch_idempotency as batch_idempotency
 from app.services.add_batch import AddBatchRequest, AddBatchResult, AddUndoRequest, apply_add_batch, undo_add_batch
 from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
@@ -80,6 +83,35 @@ async def _to_read(db: AsyncSession, obj: MinEAObject) -> ObjectRead:
         extra = await enrich_single_updated_by(db, obj)
         return base.model_copy(update=extra)
     return base
+
+
+async def _to_reads(
+    db: AsyncSession,
+    objs: list[MinEAObject],
+    *,
+    fresh_ids: set[UUID],
+    linked_ids: set[UUID],
+) -> list[ObjectRead]:
+    """_to_read for many objects in a constant number of queries (the add batch). Records created in
+    this request with no links in it skip the relationship counts (all 0)."""
+    names = await updater_names(db, objs)
+    counted = [o for o in objs if o.type in SYSTEM_TYPES and (o.id not in fresh_ids or o.id in linked_ids)]
+    system_stats = await enrich_system_objects(db, counted, user_map=names) if counted else {}
+    data_objs = [o for o in objs if o.type in DATA_TYPES]
+    data_stats = await enrich_data_objects(db, data_objs) if data_objs else {}
+    reads: list[ObjectRead] = []
+    for obj in objs:
+        base = ObjectRead.model_validate(obj).model_copy(update=ownership_read_payload(obj))
+        if obj.type in SYSTEM_TYPES:
+            extra = system_stats.get(obj.id) or new_system_stats(obj, names)
+        elif obj.type in DATA_TYPES:
+            extra = data_stats.get(obj.id, {})
+        elif obj.type in UPDATED_BY_ONLY_TYPES:
+            extra = {"updated_by_name": names.get(obj.updated_by) if obj.updated_by else None}
+        else:
+            extra = {}
+        reads.append(base.model_copy(update=extra) if extra else base)
+    return reads
 
 
 @router.get("", response_model=ObjectListResponse)
@@ -248,10 +280,22 @@ async def add_batch(
     body: AddBatchRequest,
     ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(None, alias=batch_idempotency.HEADER),
 ) -> AddBatchResult:
-    """Create, fill, and link in one transaction. Undo deletes only what this call created."""
+    """Create, fill, and link in one transaction. Undo deletes only what this call created.
+    A repeat with the same Idempotency-Key (and body) returns the first call's result."""
     await ctx.require_permission(db, "object.create")
     assert ctx.workspace
+    claimed = await batch_idempotency.claim(
+        db,
+        key=batch_idempotency.checked_key(idempotency_key),
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        user_id=ctx.user_id,
+        request_hash=batch_idempotency.fingerprint(body),
+    )
+    if claimed.replay is not None:
+        return AddBatchResult.model_validate(claimed.replay)
     if body.creates:
         await require_limit(
             db, ctx.org_id, "max_objects_per_workspace", workspace_id=ctx.workspace.id, pending_delta=len(body.creates)
@@ -262,8 +306,9 @@ async def add_batch(
         org_id=ctx.org_id,
         user_id=ctx.user_id,
         body=body,
-        to_read=_to_read,
+        read_many=_to_reads,
     )
+    await batch_idempotency.store(db, claimed, workspace_id=ctx.workspace.id, result=result)
     await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return result
 

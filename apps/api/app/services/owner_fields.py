@@ -188,26 +188,45 @@ async def apply_ownership_write_resolved(
     owner_team_name: str | None = None,
     point_of_contact_id: str | uuid.UUID | None = None,
     point_of_contact_name: str | None = None,
+    cache: dict | None = None,
 ) -> None:
+    """cache: pass one dict for a whole batch so each team / contact name is looked up once."""
     previous_team_id = getattr(entity, "owner_team_id", None)
-    team_uuid, resolved_team_name = await resolve_owner_team(
-        db,
-        workspace_id=workspace_id,
-        org_id=org_id,
-        user_id=user_id,
-        owner_team_id=owner_team_id,
-        owner_team_name=owner_team_name,
-        owner=owner,
+    team_key = ("team", str(owner_team_id or ""), " ".join((owner_team_name or owner or "").split()).lower())
+    if cache is not None and team_key in cache:
+        team_uuid, resolved_team_name = cache[team_key]
+    else:
+        team_uuid, resolved_team_name = await resolve_owner_team(
+            db,
+            workspace_id=workspace_id,
+            org_id=org_id,
+            user_id=user_id,
+            owner_team_id=owner_team_id,
+            owner_team_name=owner_team_name,
+            owner=owner,
+        )
+        if cache is not None:
+            cache[team_key] = (team_uuid, resolved_team_name)
+    contact_key = (
+        "contact",
+        str(team_uuid or ""),
+        str(point_of_contact_id or ""),
+        " ".join((point_of_contact_name or "").split()).lower(),
     )
-    contact_uuid, resolved_contact_name = await resolve_point_of_contact(
-        db,
-        workspace_id=workspace_id,
-        org_id=org_id,
-        user_id=user_id,
-        owner_team_id=team_uuid,
-        point_of_contact_id=point_of_contact_id,
-        point_of_contact_name=point_of_contact_name,
-    )
+    if cache is not None and contact_key in cache:
+        contact_uuid, resolved_contact_name = cache[contact_key]
+    else:
+        contact_uuid, resolved_contact_name = await resolve_point_of_contact(
+            db,
+            workspace_id=workspace_id,
+            org_id=org_id,
+            user_id=user_id,
+            owner_team_id=team_uuid,
+            point_of_contact_id=point_of_contact_id,
+            point_of_contact_name=point_of_contact_name,
+        )
+        if cache is not None:
+            cache[contact_key] = (contact_uuid, resolved_contact_name)
     apply_ownership_write(
         entity,
         owner_team_id=team_uuid,
