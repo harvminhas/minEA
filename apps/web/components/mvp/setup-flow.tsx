@@ -173,6 +173,9 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   // Step 3 lists only the apps the add cards left open (see where-needed.ts); null = all of them.
   const [whereKeys, setWhereKeys] = useState<string[] | null>(null);
   const [whereSkipped, setWhereSkipped] = useState(false);
+  // Step 2 in the bar: "done" once visited (answered or skipped by the person), "none" when there was
+  // nothing to ask, "todo" when it was never shown but still has AI features to answer.
+  const [aiStep, setAiStep] = useState<AiStepState>("done");
   const whereApps = whereKeys ? apps.filter((app) => whereKeys.includes(app.key)) : apps;
   const serverOptions = useMemo(() => {
     const names = new Map<string, string>();
@@ -217,6 +220,8 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     setServerIds(seed.serverIds);
     setWhereKeys(null);
     setWhereSkipped(false);
+    // Opened straight at step 3: step 2 was never shown. It only counts as done when it had nothing to ask.
+    setAiStep(aiStepRows(catalog.data.objects.filter((object) => object.type === "application").map((object) => ({ key: object.id, objectId: object.id, type: object.type, name: object.name, properties: object.properties }))).rows.length > 0 ? "todo" : "none");
     setStep(3);
     setSeeded(true);
   }, [startAt, seeded, catalog.data]);
@@ -252,10 +257,12 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
   // Drafts for the later steps, built from the box text and the catalogue as the panel left it
   // (its save writes each object into the cached catalogue). Location comes from the card's
   // "Where does it live?" pick, saved as hosting_model.
+  // The catalogue as it is NOW. A handler that runs right after a save (the panel's onSaved) was
+  // created before that render, so its `catalog.data` is the pre-save copy; the query cache isn't.
+  const freshCatalog = () => latestCatalog(queryClient, orgSlug && workspaceSlug ? catalogQueryKey(orgSlug, workspaceSlug) : null, catalog.data);
+
   const cardDrafts = (createdIds: string[] = []): Draft[] => {
-    const cached = orgSlug && workspaceSlug ? queryClient.getQueryData<{ objects?: MinEAObject[] }>(catalogQueryKey(orgSlug, workspaceSlug)) : undefined;
-    const objects = cached?.objects ?? catalog.data?.objects ?? [];
-    return draftsFromCards(toDrafts(setupMatch(text)), objects, createdIds).map((draft) =>
+    return draftsFromCards(toDrafts(setupMatch(text)), freshCatalog().objects, createdIds).map((draft) =>
       draft.status === "matched" && !draft.yearly ? { ...draft, ...yearlyFor(draft.tool, draft.licences, { yearly: "", typical: true }) } : draft,
     );
   };
@@ -300,9 +307,9 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
 
   // Into step 3, or straight past it when every app's location was answered on the add cards.
   const goWhere = (list: Draft[] = apps, fresh: MinEAObject[] = []) => {
-    const cached = orgSlug && workspaceSlug ? queryClient.getQueryData<{ objects?: MinEAObject[]; relationships?: Relationship[] }>(catalogQueryKey(orgSlug, workspaceSlug)) : undefined;
-    const objects = [...fresh, ...(cached?.objects ?? catalog.data?.objects ?? [])];
-    const relationships = cached?.relationships ?? catalog.data?.relationships ?? [];
+    const current = freshCatalog();
+    const objects = [...fresh, ...current.objects];
+    const relationships = current.relationships;
     const keys = whereStepKeys(list, objects, relationships);
     setWhereKeys(keys);
     setWhereSkipped(keys.length === 0);
@@ -329,9 +336,11 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
       });
       for (const object of result.objects) remember(object);
     }
+    // Apps the add panel just saved are only in the fresh cache (see freshCatalog), not in catalog.data.
+    const savedObjects = freshCatalog().objects;
     for (const draft of source) {
       if (draft.objectId) {
-        const known = catalog.data?.objects.find((object) => object.id === draft.objectId);
+        const known = savedObjects.find((object) => object.id === draft.objectId);
         if (known) stored[draft.key] = known;
         created.push(draft);
         continue;
@@ -355,6 +364,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
     );
     setAiRows(rows);
     setAiPicks(Object.fromEntries(rows.map((row) => [row.key, startPick(row)])));
+    setAiStep(rows.length > 0 ? "done" : "none");
     if (rows.length > 0) setStep(2);
     else goWhere(created.filter(isApp), Object.values(stored));
   };
@@ -654,7 +664,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
 
       {step === 3 && (
         <>
-          <Stepper step={3} compact={inline} />
+          <Stepper step={3} aiStep={aiStep} compact={inline} />
           <h2 className="text-[18px] font-semibold text-[#1c2230]">Where does each one live?</h2>
           <p className="mt-1 text-[13px] text-[#6b7289]">{meter}. Aim for {SETUP_MIN.apps} apps, and say where at least {SETUP_MIN.located} runs.</p>
           <p className="mt-1 text-[12px] text-[#8b90a0]" data-testid="where-filter-note">
@@ -710,47 +720,43 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
 
       {step === 4 && (
         <>
-          <Stepper step={4} whereSkipped={whereSkipped} compact={inline} />
+          <Stepper step={4} aiStep={aiStep} whereSkipped={whereSkipped} compact={inline} />
           <h2 className="text-[18px] font-semibold text-[#1c2230]">Owners and renewals</h2>
           <p className="mt-1 text-[13px] text-[#6b7289]">All optional. Empty cells are the ones still open.</p>
           <OwnerDatalists teams={ownerPickLists.teams} people={ownerPickLists.people} />
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-left text-[13px]">
-              <thead className="text-[12px] text-[#8b90a0]">
-                <tr>
-                  {["App", "Owner team", "Named owner", "Renewal", "Licences", "Yearly cost"].map((heading) => <th key={heading} className="px-2 py-1 font-medium">{heading}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {apps.map((app) => (
-                  <tr key={app.key}>
-                    <td className="px-2 py-1">{displayName(app)}</td>
-                    <Cell value={app.ownerTeam} list={TEAM_PICKS_ID} label={`Owner team for ${displayName(app)}`} onChange={(ownerTeam) => patch(app.key, { ownerTeam })} />
-                    <Cell value={app.ownerName} list={PERSON_PICKS_ID} label={`Named owner for ${displayName(app)}`} onChange={(ownerName) => patch(app.key, { ownerName })} />
-                    <Cell value={app.renewal} onChange={(renewal) => patch(app.key, { renewal })} type="date" />
-                    <td className="px-2 py-1">
-                      <input
-                        inputMode="numeric"
-                        aria-label={`Licences for ${displayName(app)}`}
-                        value={app.licences}
-                        onChange={(event) => patch(app.key, { licences: event.target.value, ...yearlyFor(app.tool, event.target.value, app) })}
-                        placeholder="—"
-                        className="h-8 w-20 rounded-lg border border-[#e6e8ee] px-2"
-                      />
-                    </td>
-                    <td className="px-2 py-1">
-                      <input
-                        value={app.yearly}
-                        onChange={(event) => patch(app.key, { yearly: event.target.value, typical: false })}
-                        className={`h-8 w-24 rounded-lg border px-2 ${app.yearly ? "border-[#e6e8ee]" : "border-[#fdba74] bg-[#fff7ed]"}`}
-                      />
-                      {app.typical && app.yearly && <span className="ml-1 text-[11px] text-[#9a3412]">typical</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {/* One block per app with labelled fields that wrap (2 columns narrow, 3 in the card, 5 on the
+              full page), so nothing is cut off or hidden behind a sideways scroll. */}
+          <ul data-testid="owners-list" className="mt-3 space-y-2">
+            {apps.map((app) => {
+              const name = displayName(app);
+              return (
+                <li key={app.key} className="rounded-xl border border-[#e6e8ee] px-3 py-2">
+                  <p className="text-[13px] font-medium text-[#1c2230]">{name}</p>
+                  <div data-testid="owners-fields" className={`mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1.5 ${inline ? "sm:grid-cols-3" : "sm:grid-cols-5"}`}>
+                    <Field label="Owner team" aria={`Owner team for ${name}`} value={app.ownerTeam} list={TEAM_PICKS_ID} onChange={(ownerTeam) => patch(app.key, { ownerTeam })} />
+                    <Field label="Named owner" aria={`Named owner for ${name}`} value={app.ownerName} list={PERSON_PICKS_ID} onChange={(ownerName) => patch(app.key, { ownerName })} />
+                    <Field label="Renewal" aria={`Renewal for ${name}`} value={app.renewal} type="date" onChange={(renewal) => patch(app.key, { renewal })} />
+                    <Field
+                      label="Licences"
+                      aria={`Licences for ${name}`}
+                      value={app.licences}
+                      inputMode="numeric"
+                      placeholder="—"
+                      optional
+                      onChange={(licences) => patch(app.key, { licences, ...yearlyFor(app.tool, licences, app) })}
+                    />
+                    <Field
+                      label="Yearly cost"
+                      note={app.typical && app.yearly ? "typical" : undefined}
+                      aria={`Yearly cost for ${name}`}
+                      value={app.yearly}
+                      onChange={(yearly) => patch(app.key, { yearly, typical: false })}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
           {(whereSaving || stepSaving) && <p role="status" data-testid="where-saving" className="mb-2 text-[12px] text-[#6b7289]">{whereSaving || stepSaving}</p>}
           <StepButtons busy={busy} onNext={() => void run(finish)} onSkip={() => void run(skip)} nextLabel="Show my map →" />
         </>
@@ -758,6 +764,24 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
       {error && <p className="mt-2 text-[13px] text-[#b42318]">{error}</p>}
     </section>
   );
+}
+
+export type AiStepState = "done" | "none" | "todo";
+
+/**
+ * The catalogue as the query cache has it right now, falling back to the copy from the last render.
+ * Use this in anything that runs straight after a save: the render-time copy is still pre-save.
+ */
+export function latestCatalog(
+  queryClient: { getQueryData: <T>(key: readonly unknown[]) => T | undefined },
+  key: readonly unknown[] | null,
+  rendered: { objects?: MinEAObject[]; relationships?: Relationship[] } | undefined,
+): { objects: MinEAObject[]; relationships: Relationship[] } {
+  const cached = key ? queryClient.getQueryData<{ objects?: MinEAObject[]; relationships?: Relationship[] }>(key) : undefined;
+  return {
+    objects: cached?.objects ?? rendered?.objects ?? [],
+    relationships: cached?.relationships ?? rendered?.relationships ?? [],
+  };
 }
 
 type AiPick = { audience: AiFeatureAudience; ticked: Record<string, boolean>; seats: Record<string, string> };
@@ -793,17 +817,35 @@ const STEPS: { label: string; optional?: boolean }[] = [
  * all four steps fit. The circles are decorative; screen readers hear
  * "Step 2 of 4, done: AI turned on? (optional)".
  */
-export function Stepper({ step, whereSkipped = false, compact = false }: { step: number; whereSkipped?: boolean; compact?: boolean }) {
+export function Stepper({
+  step,
+  whereSkipped = false,
+  aiStep = "done",
+  compact = false,
+}: {
+  step: number;
+  whereSkipped?: boolean;
+  /** Step 2 once the bar is past it: done, nothing to ask (shown done), or never answered (shown upcoming). */
+  aiStep?: AiStepState;
+  compact?: boolean;
+}) {
   return (
     <ol data-testid="setup-stepper" aria-label="Setup steps" className={`-mx-1 mb-4 flex items-center gap-x-1 overflow-x-auto whitespace-nowrap px-1 pb-1 text-[12px] ${compact ? "" : "sm:text-[13px]"} [scrollbar-width:none]`}>
       {STEPS.map(({ label, optional }, index) => {
         const n = index + 1;
-        const done = step > n;
         const current = step === n;
+        const done = step > n && !(n === 2 && aiStep === "todo");
+        const nothingToAsk = n === 2 && done && aiStep === "none";
         const state = done ? "done" : current ? "current" : "upcoming";
         return (
-          <li key={label} data-state={state} aria-current={current ? "step" : undefined} className="flex shrink-0 items-center gap-1.5">
-            {index > 0 && <span aria-hidden className={"h-px w-3 " + (done || current ? "bg-[#b9b1f5]" : "bg-[#dfe1e8]")} />}
+          <li
+            key={label}
+            data-state={state}
+            aria-current={current ? "step" : undefined}
+            title={nothingToAsk ? "Nothing to ask: none of your apps have known AI features" : undefined}
+            className="flex shrink-0 items-center gap-1.5"
+          >
+            {index > 0 && <span aria-hidden className={"h-px w-3 " + (step >= n ? "bg-[#b9b1f5]" : "bg-[#dfe1e8]")} />}
             <span
               aria-hidden
               data-testid="step-circle"
@@ -815,7 +857,7 @@ export function Stepper({ step, whereSkipped = false, compact = false }: { step:
               {done ? "✓" : n}
             </span>
             <span className={current ? "font-semibold text-[#1c2230]" : done ? "text-[#3c4254]" : "text-[#6b7289]"}>
-              <span className="sr-only">{`Step ${n} of ${STEPS.length}${done ? ", done" : current ? ", current" : ""}: `}</span>
+              <span className="sr-only">{`Step ${n} of ${STEPS.length}${nothingToAsk ? ", nothing to ask" : done ? ", done" : current ? ", current" : step > n ? ", not answered yet" : ""}: `}</span>
               {label}
               {optional && <span className="font-normal text-[#9aa0b0]"> (optional)</span>}
             </span>
@@ -828,19 +870,47 @@ export function Stepper({ step, whereSkipped = false, compact = false }: { step:
 }
 
 
-function Cell({ value, onChange, type = "text", list, label }: { value: string; onChange: (value: string) => void; type?: string; list?: string; label?: string }) {
+/** A labelled owners-step input. Empty = still open (orange), except optional ones like Licences. */
+function Field({
+  label,
+  aria,
+  value,
+  onChange,
+  type = "text",
+  list,
+  inputMode,
+  placeholder,
+  note,
+  optional = false,
+}: {
+  label: string;
+  aria: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  list?: string;
+  inputMode?: "numeric";
+  placeholder?: string;
+  note?: string;
+  optional?: boolean;
+}) {
+  const open = !value && !optional;
   return (
-    <td className="px-2 py-1">
+    <label className="block min-w-0 text-[11px] text-[#8b90a0]">
+      {label}
+      {note && <span className="ml-1 text-[#9a3412]">{note}</span>}
       <input
         type={type}
         list={list}
-        aria-label={label}
+        inputMode={inputMode}
+        placeholder={placeholder}
+        aria-label={aria}
         autoComplete={list ? "off" : undefined}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={`h-8 w-full min-w-[8rem] rounded-lg border px-2 ${value ? "border-[#e6e8ee]" : "border-[#fdba74] bg-[#fff7ed]"}`}
+        className={`mt-0.5 block h-8 w-full min-w-0 rounded-lg border px-2 text-[13px] text-[#1c2230] ${open ? "border-[#fdba74] bg-[#fff7ed]" : "border-[#e6e8ee]"}`}
       />
-    </td>
+    </label>
   );
 }
 

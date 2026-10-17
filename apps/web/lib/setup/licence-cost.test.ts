@@ -27,7 +27,7 @@ test("licence counts and the saved per-user line", () => {
 test("the catalogue invents no per-seat prices; step 4 and the app record have Licences", () => {
   assert.ok(TOOL_CATALOG.every((tool) => tool.typicalPerSeatMonthly == null));
   const setup = readFileSync(new URL("../../components/mvp/setup-flow.tsx", import.meta.url), "utf8");
-  assert.match(setup, /"Licences", "Yearly cost"/);
+  assert.match(setup, /label="Licences"[\s\S]*label="Yearly cost"/);
   assert.match(setup, /properties\.licence_count = seats/);
   const registry = readFileSync(new URL("../fields/registry.ts", import.meta.url), "utf8");
   assert.match(registry, /key: "licence_count", label: "Licences"/);
