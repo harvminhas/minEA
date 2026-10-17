@@ -2,8 +2,11 @@ import { splitAddList } from "@/lib/setup/add-intent";
 import { exactCatalogTool, normalizeTerm } from "@/lib/setup/match-tools";
 import type { AddKind } from "@/lib/setup/add-plan";
 
-export const APP_OR_PLATFORM =
-  "Not sure? If people log into it to do their work, it's an Application (e.g. HubSpot, QuickBooks). If apps are built on it or run inside it, it's a Platform (e.g. Azure, Salesforce Platform, VMware).";
+/** The app-vs-platform rule on its own (shown behind "What counts as an app?" in the add panel). */
+export const APP_OR_PLATFORM_BODY =
+  "If people log into it to do their work, it's an Application (e.g. HubSpot, QuickBooks). If apps are built on it or run inside it, it's a Platform (e.g. Azure, Salesforce Platform, VMware).";
+
+export const APP_OR_PLATFORM = `Not sure? ${APP_OR_PLATFORM_BODY}`;
 
 export type GuessKind = Extract<AddKind, "app" | "platform" | "server">;
 

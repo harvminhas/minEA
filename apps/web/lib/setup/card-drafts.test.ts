@@ -34,7 +34,8 @@ test("wizard step 1 uses the shared add panel, not its own table", () => {
   assert.doesNotMatch(src, /setup-results/);
   assert.match(src, /Skip for now/);
   assert.match(src, /Next →/);
-  assert.match(src, /Your map needs both/);
+  assert.match(src, /<SetupProgress apps=\{catalogState\.apps \+ unsavedApps\} located=\{catalogState\.located \+ newlyLocated\} \/>/);
+  assert.doesNotMatch(src, /Your map needs both|of \{SETUP_MIN\.located\} app with a known location/);
 });
 
 test("a 'Did you mean' answer carries into the later wizard steps", () => {

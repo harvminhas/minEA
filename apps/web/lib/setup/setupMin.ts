@@ -98,17 +98,16 @@ export type SetupCardHeader =
 /**
  * Header for the setup card over sample screens. "Example data" + sample wording only while the
  * wizard is closed AND there are no real apps; otherwise it's the person's own progress, saved.
- * Counts are clamped ("6 apps ✓", never "6 of 5"); the bar weighs both requirements equally and
- * never passes 100%.
+ * Plain wording, never "N of 1": "Add at least 5 apps · 3 so far", then "6 apps ✓ · Say where one app
+ * runs". A ✓ only marks a requirement that is actually met. The bar weighs both requirements
+ * equally and never passes 100%.
  */
 export function setupCardHeader(state: Pick<SetupState, "apps" | "located">, wizardOpen: boolean): SetupCardHeader {
   if (!wizardOpen && state.apps < 1) return { mode: "example" };
   const appsMet = state.apps >= SETUP_MIN.apps;
   const linksMet = state.located >= SETUP_MIN.located;
-  const appsPart = appsMet ? `${state.apps} apps ✓` : `${state.apps} of ${SETUP_MIN.apps} apps`;
-  const linkPart = linksMet
-    ? `${state.located} with a known location ✓`
-    : `${state.located} of ${SETUP_MIN.located} with a known location`;
+  const appsPart = appsMet ? `${appsLabel(state.apps)} ✓` : `Add at least ${SETUP_MIN.apps} apps · ${state.apps} so far`;
+  const linkPart = linksMet ? "Location known ✓" : appsMet ? "Say where one app runs" : "";
   const share = (have: number, need: number) => Math.min(1, Math.max(0, have) / need);
   const percent = Math.round(((share(state.apps, SETUP_MIN.apps) + share(state.located, SETUP_MIN.located)) / 2) * 100);
   const onlyLink = appsMet && !linksMet;
@@ -116,10 +115,39 @@ export function setupCardHeader(state: Pick<SetupState, "apps" | "located">, wiz
     mode: "progress",
     onlyLink,
     title: onlyLink ? "Last step: tell us where one app runs" : "Setting up your map",
-    progressLine: `${appsPart} · ${linkPart}`,
+    progressLine: linkPart ? `${appsPart} · ${linkPart}` : appsPart,
     percent,
     savedLine: onlyLink
       ? "Your entries are saved to your workspace. Pick where one app runs (cloud, our server or people’s computers); reports unlock right after."
-      : `Your entries are saved to your workspace. Reports unlock at ${SETUP_MIN.apps} apps and ${SETUP_MIN.located} app with a known location.`,
+      : `Your entries are saved to your workspace. Reports unlock once you have ${SETUP_MIN.apps} apps and say where one of them runs.`,
   };
+}
+
+function appsLabel(n: number): string {
+  return n === 1 ? "1 app" : `${n} apps`;
+}
+
+export type SetupPill = {
+  label: string;
+  /** Filled segments out of `segments` (one per required app, capped). */
+  filled: number;
+  segments: number;
+  ready: boolean;
+};
+
+/**
+ * The first-run wizard's progress pill. Apps first ("Add at least 5 apps to see your map · 0 so
+ * far"); the location ask only appears once the apps are in, and a ✓ only when something is done.
+ */
+export function setupPill(apps: number, located: number): SetupPill {
+  const need = SETUP_MIN.apps;
+  const have = Math.max(0, apps);
+  const appsMet = have >= need;
+  const linksMet = located >= SETUP_MIN.located;
+  const label = !appsMet
+    ? `Add at least ${need} apps to see your map · ${have} so far`
+    : linksMet
+      ? `${appsLabel(have)} ✓ · Your map is ready`
+      : `${appsLabel(have)} ✓ · Next, say where one of them runs`;
+  return { label, filled: Math.min(have, need), segments: need, ready: appsMet && linksMet };
 }

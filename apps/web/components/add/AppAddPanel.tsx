@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { AddFlow } from "@/components/add/AddFlow";
 import type { AddReceipt } from "@/lib/setup/add-cards";
 import { useModelCatalog } from "@/lib/use-model-catalog";
-import { APP_OR_PLATFORM, applicationAddHint, nextPreset } from "@/lib/setup/type-guidance";
+import { APP_OR_PLATFORM_BODY, applicationAddHint, nextPreset } from "@/lib/setup/type-guidance";
 import { ADD_BOX_BUTTON, ADD_BOX_LABEL, appendChipName, canSubmitAdd, isSubmitKey, quickAddSuggestions, textHasName } from "@/lib/setup/quick-add";
 
 /**
@@ -46,6 +46,7 @@ export function AppAddPanel({
   const [saved, setSaved] = useState(false);
   const [submit, setSubmit] = useState(0);
   const [highlight, setHighlight] = useState(false);
+  const [whatOpen, setWhatOpen] = useState(false);
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const kind = kindLocked ? kindChoice : nextPreset("app", addText, false) === "platform" ? "platform" : "app";
 
@@ -168,7 +169,24 @@ export function AppAddPanel({
           </button>
         )}
       </div>
-      <p className="mb-1 text-[12px] leading-5 text-[#6b7289]">{APP_OR_PLATFORM}</p>
+      {/* The app-vs-platform rule stays one click away instead of a paragraph under every box. */}
+      <div className="mb-1 text-[12px] leading-5">
+        <button
+          type="button"
+          data-testid="what-counts-toggle"
+          aria-expanded={whatOpen}
+          aria-controls={`${boxId}-what-counts`}
+          onClick={() => setWhatOpen((open) => !open)}
+          className="font-medium text-[#5b4ce6] hover:underline"
+        >
+          <span aria-hidden>{whatOpen ? "▾" : "▸"}</span> What counts as an app?
+        </button>
+        {whatOpen && (
+          <p id={`${boxId}-what-counts`} className="mt-1 rounded-lg bg-[#fafafb] px-3 py-2 text-[#6b7289]">
+            {APP_OR_PLATFORM_BODY}
+          </p>
+        )}
+      </div>
       {hint && (
         <p className="mb-3 text-[12px] text-[#4b5163]">
           {hint}:{" "}

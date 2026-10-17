@@ -17,7 +17,7 @@ test("step indicator stays on one row and scrolls horizontally when narrow", () 
   const stepper = setup.slice(setup.indexOf("function Stepper"));
   assert.match(stepper, /overflow-x-auto whitespace-nowrap/);
   assert.doesNotMatch(stepper.slice(0, 600), /flex-wrap/);
-  assert.match(stepper, /"shrink-0 "/);
+  assert.match(stepper, /className="flex shrink-0 items-center gap-1\.5"/);
 });
 
 test("results: the wizard shows the shared add cards, not its own results table", () => {

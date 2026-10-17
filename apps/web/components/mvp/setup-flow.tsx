@@ -29,7 +29,7 @@ import {
 import { SETUP_SCREENS, aiStepPatch, aiStepRows, replaceTypicalLine, setupCreate, storedSetupStep, type AiStepRow } from "@/lib/setup/add-plan";
 import type { AiFeatureAudience } from "@minea/types";
 import { modelPath } from "@/lib/mvp-paths";
-import { SETUP_MIN, setupMeter, setupState } from "@/lib/setup/setupMin";
+import { SETUP_MIN, setupMeter, setupPill, setupState } from "@/lib/setup/setupMin";
 import { LocationChips } from "@/components/hosting/LocationChips";
 import { CLOUD_PROVIDERS, EMPTY_DETAIL, suggestsOwnCloud, type HostingDetail } from "@/lib/hosting/cloud";
 import { useCloudPicker } from "@/lib/hosting/use-cloud-regions";
@@ -531,21 +531,8 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
           </p>
           <h1 className="mt-6 text-center text-[36px] font-semibold tracking-tight text-[#1c2230]">What runs your business?</h1>
           <p className="mx-auto mt-3 max-w-xl text-center text-[14px] leading-6 text-[#6b7289]">
-            List the software and systems {orgName} uses. We&apos;ll fill in vendors, categories and typical costs, then show you what depends on what.
+            List the software and systems {orgName} uses. We&apos;ll fill in vendors, categories and typical costs, then show you what breaks if a key system or vendor goes down.
           </p>
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            {[
-              ["What you use", "Paste or type a list. About 2 minutes."],
-              ["Where each one lives", "Cloud, your own server, or not sure."],
-              ["Owners & renewals", "Optional. Fill what you know."],
-            ].map(([title, body]) => (
-              <div key={title} className="rounded-xl border border-[#e6e8ee] px-3 py-3">
-                <p className="text-[14px] font-semibold text-[#1c2230]">{title}</p>
-                <p className="mt-1 text-[13px] text-[#6b7289]">{body}</p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-4 text-center text-[13px] text-[#6b7289]">Then you&apos;ll see what breaks if your most important server goes down.</p>
         </div>
       )}
       {step === 0 && inline && (
@@ -560,7 +547,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
           then the later steps open prefilled from what was saved. */}
       {(step === 0 || step === 1) && (
         <div data-testid="setup-what" className={step === 0 && !inline ? "mt-6" : "mt-3"}>
-          <Stepper step={1} />
+          <Stepper step={1} compact={inline} />
           <AppAddPanel
             origin="setup"
             boxId="setup-add-box"
@@ -575,9 +562,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
             onClose={() => setPrefill("")}
           />
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="rounded-full bg-[#f4f3ff] px-3 py-1 text-[12px] text-[#3c4254]">
-              ✓ {catalogState.apps + unsavedApps} apps ({SETUP_MIN.apps} needed) · {Math.min(catalogState.located + newlyLocated, SETUP_MIN.located)} of {SETUP_MIN.located} app with a known location · Your map needs both.
-            </p>
+            <SetupProgress apps={catalogState.apps + unsavedApps} located={catalogState.located + newlyLocated} />
             <div className="flex items-center gap-2">
               <button type="button" onClick={loadSample} className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-[#5b4ce6]">Load sample company</button>
               <button type="button" onClick={() => void run(skip)} className="rounded-lg px-3 py-1.5 text-[13px] text-[#6b7289]">Skip for now</button>
@@ -591,7 +576,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
 
       {step === 2 && (
         <>
-          <Stepper step={2} />
+          <Stepper step={2} compact={inline} />
           <h2 className="text-[18px] font-semibold text-[#1c2230]">Which of these have AI turned on?</h2>
           <p className="mt-1 text-[13px] text-[#6b7289]">Tick what&apos;s on today. We pre-ticked what&apos;s on by default in each plan.</p>
           <ul className="mt-3 space-y-3">
@@ -669,7 +654,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
 
       {step === 3 && (
         <>
-          <Stepper step={3} />
+          <Stepper step={3} compact={inline} />
           <h2 className="text-[18px] font-semibold text-[#1c2230]">Where does each one live?</h2>
           <p className="mt-1 text-[13px] text-[#6b7289]">{meter}. Aim for {SETUP_MIN.apps} apps, and say where at least {SETUP_MIN.located} runs.</p>
           <p className="mt-1 text-[12px] text-[#8b90a0]" data-testid="where-filter-note">
@@ -725,7 +710,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
 
       {step === 4 && (
         <>
-          <Stepper step={4} whereSkipped={whereSkipped} />
+          <Stepper step={4} whereSkipped={whereSkipped} compact={inline} />
           <h2 className="text-[18px] font-semibold text-[#1c2230]">Owners and renewals</h2>
           <p className="mt-1 text-[13px] text-[#6b7289]">All optional. Empty cells are the ones still open.</p>
           <OwnerDatalists teams={ownerPickLists.teams} people={ownerPickLists.people} />
@@ -794,18 +779,47 @@ function aiOthers(drafts: Draft[], rows: AiStepRow[]): string[] {
 
 
 
-function Stepper({ step, whereSkipped = false }: { step: number; whereSkipped?: boolean }) {
-  const labels = ["What you use", "AI turned on? (optional)", "Where each one lives", "Owners & renewals (optional)"];
+const STEPS: { label: string; optional?: boolean }[] = [
+  { label: "What you use" },
+  { label: "AI turned on?", optional: true },
+  { label: "Where each one lives" },
+  { label: "Owners & renewals", optional: true },
+];
+
+/**
+ * Step bar: a ~20px circle per step (current = filled violet with a white number, upcoming = grey
+ * outline, done = tinted with a check) joined by short lines, labels beside the circles. Stays on
+ * one row and scrolls sideways when narrow; `compact` (the wizard inside a card) keeps 12px text so
+ * all four steps fit. The circles are decorative; screen readers hear
+ * "Step 2 of 4, done: AI turned on? (optional)".
+ */
+export function Stepper({ step, whereSkipped = false, compact = false }: { step: number; whereSkipped?: boolean; compact?: boolean }) {
   return (
-    <ol data-testid="setup-stepper" className="-mx-1 mb-4 flex items-center gap-x-2 overflow-x-auto whitespace-nowrap px-1 pb-1 text-[12px] sm:text-[13px] [scrollbar-width:none]">
-      {labels.map((label, index) => {
+    <ol data-testid="setup-stepper" aria-label="Setup steps" className={`-mx-1 mb-4 flex items-center gap-x-1 overflow-x-auto whitespace-nowrap px-1 pb-1 text-[12px] ${compact ? "" : "sm:text-[13px]"} [scrollbar-width:none]`}>
+      {STEPS.map(({ label, optional }, index) => {
         const n = index + 1;
         const done = step > n;
+        const current = step === n;
+        const state = done ? "done" : current ? "current" : "upcoming";
         return (
-          <li key={label} aria-current={step === n ? "step" : undefined} className={"shrink-0 " + (step === n ? "font-semibold text-[#1c2230]" : "text-[#6b7289]")}>
-            {index > 0 && <span className="mr-2 text-[#c5c8d4]">—</span>}
-            {done ? <span className="text-[#047857]">✓</span> : n} {label}
-            {n === 3 && whereSkipped && done && <span className="ml-1 text-[#8b90a0]" data-testid="where-skipped">(answered on the cards)</span>}
+          <li key={label} data-state={state} aria-current={current ? "step" : undefined} className="flex shrink-0 items-center gap-1.5">
+            {index > 0 && <span aria-hidden className={"h-px w-3 " + (done || current ? "bg-[#b9b1f5]" : "bg-[#dfe1e8]")} />}
+            <span
+              aria-hidden
+              data-testid="step-circle"
+              className={
+                "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold leading-none " +
+                (current ? "bg-[#5b4ce6] text-white" : done ? "bg-[#e9e7fd] text-[#5b4ce6]" : "border border-[#c5c8d4] bg-white text-[#8b90a0]")
+              }
+            >
+              {done ? "✓" : n}
+            </span>
+            <span className={current ? "font-semibold text-[#1c2230]" : done ? "text-[#3c4254]" : "text-[#6b7289]"}>
+              <span className="sr-only">{`Step ${n} of ${STEPS.length}${done ? ", done" : current ? ", current" : ""}: `}</span>
+              {label}
+              {optional && <span className="font-normal text-[#9aa0b0]"> (optional)</span>}
+            </span>
+            {n === 3 && whereSkipped && done && <span className="text-[#8b90a0]" data-testid="where-skipped">(answered on the cards)</span>}
           </li>
         );
       })}
@@ -848,5 +862,27 @@ export function SetupCard({ onOpen }: { onOpen: () => void }) {
       <span className="text-[14px] font-medium text-[#1c2230]">Finish adding your apps</span>
       <span className="mt-1 block text-[12px] text-[#6b7289]">{setup.gap || `${setup.state.apps} apps so far`}</span>
     </button>
+  );
+}
+
+/** First-run progress: one segment per required app plus a plain sentence (see setupPill). */
+export function SetupProgress({ apps, located }: { apps: number; located: number }) {
+  const pill = setupPill(apps, located);
+  return (
+    <div data-testid="setup-pill" className="flex items-center gap-2.5 rounded-full bg-[#f4f3ff] px-3 py-1.5 text-[12px] text-[#3c4254]">
+      <span
+        role="progressbar"
+        aria-label="Apps added"
+        aria-valuemin={0}
+        aria-valuemax={pill.segments}
+        aria-valuenow={pill.filled}
+        className="flex gap-0.5"
+      >
+        {Array.from({ length: pill.segments }, (_, i) => (
+          <span key={i} className={"h-1.5 w-3.5 rounded-full " + (i < pill.filled ? "bg-[#5b4ce6]" : "bg-[#d9d5fb]")} />
+        ))}
+      </span>
+      <span aria-live="polite">{pill.label}</span>
+    </div>
   );
 }

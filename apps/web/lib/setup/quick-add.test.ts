@@ -51,7 +51,11 @@ test("the Applications add box has a label, an Add apps button, chips, focus + h
   assert.match(screen, /ring-4/);
   assert.match(screen, /Add one with full details/);
   assert.match(screen, /submitSignal=\{submit\}/);
-  assert.match(screen, /\{APP_OR_PLATFORM\}/, "keeps the Not sure? helper");
+  // The app-vs-platform rule sits behind a small "What counts as an app?" toggle, collapsed by default.
+  assert.match(screen, /const \[whatOpen, setWhatOpen\] = useState\(false\)/);
+  assert.match(screen, /What counts as an app\?/);
+  assert.match(screen, /aria-expanded=\{whatOpen\}/);
+  assert.match(screen, /\{whatOpen && \([\s\S]*\{APP_OR_PLATFORM_BODY\}/);
   const cards = src("components/add/AddCards.tsx");
   assert.match(cards, /rowsFor !== initialText/, "a submit waits for rows built from the submitted text");
 });

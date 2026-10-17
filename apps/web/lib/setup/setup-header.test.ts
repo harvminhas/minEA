@@ -14,10 +14,11 @@ test("progress header: counts, bar percent and the 'saved' line", () => {
   assert.equal(h.mode, "progress");
   if (h.mode !== "progress") return;
   assert.equal(h.title, "Setting up your map");
-  assert.equal(h.progressLine, "4 of 5 apps · 0 of 1 with a known location");
+  assert.equal(h.progressLine, "Add at least 5 apps · 4 so far");
+  assert.doesNotMatch(h.progressLine, /of 1|✓/);
   assert.equal(h.percent, 40);
   assert.equal(h.onlyLink, false);
-  assert.equal(h.savedLine, "Your entries are saved to your workspace. Reports unlock at 5 apps and 1 app with a known location.");
+  assert.equal(h.savedLine, "Your entries are saved to your workspace. Reports unlock once you have 5 apps and say where one of them runs.");
   assert.doesNotMatch(h.savedLine, /sample|nothing here is saved/i);
   const full = setupCardHeader({ apps: 9, located: 3 }, false);
   assert.equal(full.mode === "progress" && full.percent, 100);
@@ -40,7 +41,7 @@ test("apps met, link missing: clamped count, 'Last step' copy, bar at 50% (never
   if (h.mode !== "progress") return;
   assert.equal(h.onlyLink, true);
   assert.equal(h.title, "Last step: tell us where one app runs");
-  assert.equal(h.progressLine, "6 apps ✓ · 0 of 1 with a known location");
+  assert.equal(h.progressLine, "6 apps ✓ · Say where one app runs");
   assert.doesNotMatch(h.progressLine, /6 of 5/);
   assert.equal(h.percent, 50);
   const over = setupCardHeader({ apps: 40, located: 7 }, true);
@@ -66,4 +67,17 @@ test("Reports no longer latches the card after setup is met", () => {
   assert.match(src, /\{blocked && <SampleCompanyBadge/);
   const views = readFileSync(new URL("../../components/mvp/EstateViews.tsx", import.meta.url), "utf8");
   assert.match(views, /\{opening\.example && <SampleCompanyBadge/);
+});
+
+test("progress line wording: no 'N of 1', a ✓ only for what is done", () => {
+  const line = (apps: number, located: number) => {
+    const h = setupCardHeader({ apps, located }, true);
+    return h.mode === "progress" ? h.progressLine : "";
+  };
+  assert.equal(line(0, 0), "Add at least 5 apps · 0 so far");
+  assert.equal(line(1, 0), "Add at least 5 apps · 1 so far");
+  assert.equal(line(3, 1), "Add at least 5 apps · 3 so far · Location known ✓");
+  assert.equal(line(5, 0), "5 apps ✓ · Say where one app runs");
+  assert.equal(line(7, 2), "7 apps ✓ · Location known ✓");
+  for (const [apps, located] of [[0, 0], [1, 0], [4, 1], [5, 0], [9, 3]]) assert.doesNotMatch(line(apps, located), /\d+ of \d+/);
 });
