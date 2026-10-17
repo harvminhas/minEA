@@ -27,8 +27,8 @@ test("flag off: in-app upgrade copy names Business, never Contact us", () => {
   process.env.NEXT_PUBLIC_BILLING_UI = "0";
   assert.deepEqual(messages(), [
     "Inviting teammates requires a Business plan, starting from 5 licences.",
-    "Free includes up to 50 repository objects. Upgrade to Business to add more.",
-    "Repository object limit reached for your plan.",
+    "Free includes up to 50 items (apps, platforms, servers…) in a workspace. Upgrade to Business to add more.",
+    "This workspace has reached its item limit.",
     "Free includes one active share link. Upgrade to Business for more, or revoke an existing link first.",
     "Free includes one workspace. Upgrade to Business to create more workspaces, or join unlimited workspaces shared with you by others.",
   ]);

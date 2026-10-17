@@ -20,6 +20,7 @@ from app.schemas.data_layer import (
     DataStoreUpdate,
     FlowEndpointCatalog,
 )
+from app.services.authorization import require_object_room
 from app.services.data_layer import (
     add_data_link,
     flow_endpoint_catalog,
@@ -202,6 +203,7 @@ async def create_entity(
 ) -> DataObjectDetail:
     await ctx.require_write(db)
     assert ctx.workspace
+    await require_object_room(db, ctx.org_id, ctx.workspace.id)
 
     obj = MinEAObject(
         workspace_id=ctx.workspace.id,
@@ -396,6 +398,7 @@ async def create_store(
 ) -> DataStoreDetail:
     await ctx.require_write(db)
     assert ctx.workspace
+    await require_object_room(db, ctx.org_id, ctx.workspace.id)
 
     obj = MinEAObject(
         workspace_id=ctx.workspace.id,
@@ -537,6 +540,7 @@ async def create_domain(
 ) -> DataDomainDetail:
     await ctx.require_write(db)
     assert ctx.workspace
+    await require_object_room(db, ctx.org_id, ctx.workspace.id)
 
     obj = MinEAObject(
         workspace_id=ctx.workspace.id,

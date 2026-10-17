@@ -7,6 +7,12 @@ interface Toast {
   title?: string;
   description?: string;
   variant?: "default" | "destructive";
+  /** A link under the text (e.g. "Upgrade to Starter"). */
+  action?: { label: string; href: string };
+  /** ms before it hides itself (default 4000). */
+  duration?: number;
+  /** Replaces a toast with the same tag instead of stacking (e.g. one item-limit toast at a time). */
+  tag?: string;
 }
 
 let globalToasts: Toast[] = [];
@@ -16,14 +22,15 @@ function notify() {
   listeners.forEach((l) => l([...globalToasts]));
 }
 
-export function toast({ title, description, variant }: Omit<Toast, "id">) {
+export function toast({ title, description, variant, action, duration = 4000, tag }: Omit<Toast, "id">) {
   const id = Math.random().toString(36).slice(2);
-  globalToasts = [...globalToasts, { id, title, description, variant }];
+  const kept = tag ? globalToasts.filter((t) => t.tag !== tag) : globalToasts;
+  globalToasts = [...kept, { id, title, description, variant, action, duration, tag }];
   notify();
   setTimeout(() => {
     globalToasts = globalToasts.filter((t) => t.id !== id);
     notify();
-  }, 4000);
+  }, duration);
 }
 
 export function useToast() {

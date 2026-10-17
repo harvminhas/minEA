@@ -12,13 +12,13 @@ import { BUSINESS_GET_STARTED_LABEL, BUSINESS_MIN_LICENCES } from "@/lib/billing
 
 const FREE_FEATURES = [
   "All views — heatmap, journeys, investments, tech debt",
-  "Full repository, up to 50 objects",
+  "Full repository, up to 50 items (apps, platforms, servers…)",
   "One workspace, one share link",
   "Join unlimited workspaces shared with you",
 ];
 
 const BUSINESS_FEATURES = [
-  "Unlimited workspaces and repository objects",
+  "Unlimited workspaces and items",
   "AI architecture chat",
   "Unlimited free viewers",
   "4 hours of onboarding consulting included",

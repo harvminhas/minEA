@@ -10,6 +10,7 @@ import { AppBootProvider } from "@/lib/app-boot-context";
 import { AppBootGate } from "@/components/ui/AppBootGate";
 import { LastAppPathTracker } from "@/components/LastAppPathTracker";
 import { Toaster } from "@/components/ui/toaster";
+import { ObjectLimitNotice } from "@/components/billing/ObjectLimitNotice";
 import { installDuplicateKeyProbe } from "@/lib/dev/duplicate-key-probe";
 
 // Dev only (no-op in production): print the key and component stack of any duplicate-key warning.
@@ -45,6 +46,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <AppBootGate>{children}</AppBootGate>
         </AppBootProvider>
         <Toaster />
+        <ObjectLimitNotice />
         <ReactQueryDevtools initialIsOpen={false} />
       </QueryClientProvider>
     </AuthProvider>

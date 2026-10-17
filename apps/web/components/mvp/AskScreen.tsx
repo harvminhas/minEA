@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ChevronRight, Sparkles, X } from "lucide-react";
-import { addApi, aiApi, objectsApi, peopleDirectoryApi } from "@/lib/api-client";
+import { addApi, aiApi, billingApi, objectsApi, peopleDirectoryApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, modelItemPath, modelPath, reportPath } from "@/lib/mvp-paths";
@@ -225,6 +225,14 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const aiNote = answer.handler === "unsupported" ? aiFallbackNote(fallbackReason, false) : null;
   const aiUnavailable = Boolean(aiNote?.blocked);
   const quotaHit = fallbackReason === "limit" ? remoteData?.quota ?? null : null;
+  // Only owners/admins with a verified email can change the plan: the others get "ask an admin".
+  const quotaBilling = useQuery({
+    queryKey: ["billing-status", orgSlug],
+    queryFn: async () => billingApi.status(orgSlug!, (await getToken())!),
+    enabled: Boolean(orgSlug && quotaHit?.plan === "free"),
+    staleTime: 60_000,
+  });
+  const quotaOffer = !quotaBilling.data ? null : quotaBilling.data.can_manage_billing ? "upgrade" : "ask-admin";
 
   // Reveal a freshly streamed answer word by word in the card (cached answers show at once).
   const [revealed, setRevealed] = useState<{ question: string; at: number; n: number } | null>(null);
@@ -547,8 +555,11 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               <p data-testid="ask-limit" className="mb-3 flex flex-wrap items-center gap-1.5 text-[12px] text-[#6b7289]">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#f59e0b]" />
                 Your organisation has used its {quotaHit.limit.toLocaleString("en-US")} AI questions for this month. Quick answers (vendors, owners, renewals, spend, impact) still work.
-                {quotaHit.plan === "free" && orgSlug && (
+                {quotaHit.plan === "free" && orgSlug && quotaOffer === "upgrade" && (
                   <Link href={adminTabHref(orgSlug, "billing")} className="font-medium text-[#5b4ce6]">Upgrade to Starter →</Link>
+                )}
+                {quotaHit.plan === "free" && orgSlug && quotaOffer === "ask-admin" && (
+                  <span data-testid="ask-limit-admin">Ask an owner or admin to upgrade the plan.</span>
                 )}
               </p>
             )}

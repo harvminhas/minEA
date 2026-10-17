@@ -23,7 +23,7 @@ from app.schemas.objects import (
     TypeSwitchResult,
 )
 from app.services.ai_features import apply_ai_features
-from app.services.authorization import require_limit
+from app.services.authorization import object_room, require_limit
 from app.services.capability_validation import validate_object_write
 from app.services.cost_lines import apply_cost_lines
 from app.services.infra_fields import validate_infra_patch
@@ -329,6 +329,18 @@ async def undo_batch(
         body=body,
     )
     await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
+
+
+@router.get("/limit")
+async def object_limit(
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Items in this workspace and the org's real cap (org_limits overrides included), so the Add
+    cards can say "N left on Free" and stop a batch the server would refuse."""
+    await ctx.require_read(db)
+    assert ctx.workspace
+    return await object_room(db, ctx.org_id, ctx.workspace.id)
 
 
 @router.get("/{object_id}", response_model=ObjectRead)

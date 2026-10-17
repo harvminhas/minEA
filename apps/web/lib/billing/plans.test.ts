@@ -31,7 +31,7 @@ test("pack prices and licences match Harvinder's decisions", () => {
   );
   assert.equal(CATALOG.free.licences, 1);
   assert.equal(CATALOG.free.monthlyUsd, 0);
-  assert.equal(CATALOG.free.appsPlatforms, 25);
+  assert.equal(CATALOG.free.itemsPerWorkspace, 50);
   assert.equal(PRICE_NOTE, "Prices in USD. Taxes may apply.");
 });
 
@@ -161,7 +161,7 @@ test("pricing card lines: licences, free viewers, AI and onboarding hours", () =
   assert.deepEqual(planIncludes(CATALOG.free).slice(0, 4), [
     "1 editor",
     "Unlimited free viewers",
-    "Up to 25 apps & platforms",
+    "Up to 50 items (apps, platforms, servers…)",
     "25 AI answers / month",
   ]);
   assert.equal(planIncludes(CATALOG.starter)[0], "1 licence (people who edit)");

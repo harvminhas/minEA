@@ -1,5 +1,5 @@
 {
-  "_comment": "Canonical plan catalogue. Python loads this file (app/services/plans.py); apps/web/lib/billing/plans.ts mirrors it and parity tests on both sides compare against it. Prices are USD. Starter is sold monthly only (sell_intervals) at $149 under its own lookup key (lookup_keys); its old $99/mo and $990/yr prices stay mapped to Starter through legacy_lookup_keys so existing subscribers keep working. yearly_usd null = no yearly price on sale.",
+  "_comment": "Canonical plan catalogue. Python loads this file (app/services/plans.py); apps/web/lib/billing/plans.ts mirrors it and parity tests on both sides compare against it. Prices are USD. Starter is sold monthly only (sell_intervals) at $149 under its own lookup key (lookup_keys); its old $99/mo and $990/yr prices stay mapped to Starter through legacy_lookup_keys so existing subscribers keep working. yearly_usd null = no yearly price on sale. items_per_workspace = records of any kind (apps, platforms, servers, capabilities…) in one workspace; null = unlimited. It must match max_objects_per_workspace in app/services/plan_features.py (tested).",
   "currency": "usd",
   "plans": {
     "free": {
@@ -8,7 +8,7 @@
       "monthly_usd": 0,
       "yearly_usd": 0,
       "ai_answers_per_month": 25,
-      "apps_platforms": 25,
+      "items_per_workspace": 50,
       "onboarding_hours": 0
     },
     "starter": {
@@ -17,7 +17,7 @@
       "monthly_usd": 149,
       "yearly_usd": null,
       "ai_answers_per_month": 500,
-      "apps_platforms": null,
+      "items_per_workspace": null,
       "onboarding_hours": 0
     },
     "team": {
@@ -26,7 +26,7 @@
       "monthly_usd": 449,
       "yearly_usd": 4490,
       "ai_answers_per_month": 2500,
-      "apps_platforms": null,
+      "items_per_workspace": null,
       "onboarding_hours": 4
     },
     "business": {
@@ -35,7 +35,7 @@
       "monthly_usd": 799,
       "yearly_usd": 7990,
       "ai_answers_per_month": 5000,
-      "apps_platforms": null,
+      "items_per_workspace": null,
       "onboarding_hours": 4
     }
   },

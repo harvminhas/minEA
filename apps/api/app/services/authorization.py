@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.authz import OrgLimit, Permission, RolePermission
 from app.models.objects import MinEAObject, Workspace
-from app.models.tenancy import Invite, OrgMembership, WorkspaceMembership
+from app.models.tenancy import Invite, Org, OrgMembership, WorkspaceMembership
 from app.services.defaults import DEFAULT_ORG_LIMITS, ROLE_LIMIT_KEYS
 
 ORG_ADMIN_ROLES = {"owner", "admin"}
@@ -163,6 +163,57 @@ async def _count_role_usage(db: AsyncSession, org_id: uuid.UUID, role: str) -> i
     return assigned + pending
 
 
+async def get_object_cap(db: AsyncSession, org_id: uuid.UUID) -> int | None:
+    """max_objects_per_workspace for the org. An org_limits row holding NULL is "no cap" (apply_plan
+    writes that for Starter/Team/Business); only a missing row falls back to the default.
+    get_org_limit treats both as missing, which capped paid orgs at the 1000 default."""
+    row = (
+        await db.execute(
+            select(OrgLimit.value).where(
+                OrgLimit.org_id == org_id, OrgLimit.limit_key == "max_objects_per_workspace"
+            )
+        )
+    ).first()
+    if row is not None:
+        return row[0]
+    return DEFAULT_ORG_LIMITS.get("max_objects_per_workspace")
+
+
+async def count_workspace_objects(db: AsyncSession, workspace_id: uuid.UUID) -> int:
+    result = await db.execute(
+        select(func.count()).select_from(MinEAObject).where(MinEAObject.workspace_id == workspace_id)
+    )
+    return int(result.scalar_one())
+
+
+async def _org_plan(db: AsyncSession, org_id: uuid.UUID) -> str:
+    from app.services.plan_features import normalize_plan
+
+    result = await db.execute(select(Org.plan).where(Org.id == org_id))
+    return normalize_plan(result.scalar_one_or_none())
+
+
+async def object_room(db: AsyncSession, org_id: uuid.UUID, workspace_id: uuid.UUID) -> dict:
+    """Items in the workspace and the org's real cap (org_limits overrides included) for the web's
+    pre-check. max/remaining are None when there is no cap."""
+    cap = await get_object_cap(db, org_id)
+    current = await count_workspace_objects(db, workspace_id)
+    return {
+        "limit": "max_objects_per_workspace",
+        "current": current,
+        "max": cap,
+        "remaining": None if cap is None else max(cap - current, 0),
+        "plan": await _org_plan(db, org_id),
+    }
+
+
+async def require_object_room(
+    db: AsyncSession, org_id: uuid.UUID, workspace_id: uuid.UUID, adding: int = 1
+) -> None:
+    """403 limit_exceeded when adding this many items would pass max_objects_per_workspace."""
+    await require_limit(db, org_id, "max_objects_per_workspace", workspace_id=workspace_id, pending_delta=adding)
+
+
 async def check_limit(
     db: AsyncSession,
     org_id: uuid.UUID,
@@ -173,7 +224,10 @@ async def check_limit(
     pending_delta: int = 0,
 ) -> tuple[bool, dict | None]:
     """Return (ok, error_detail). null limit value means unlimited."""
-    cap = await get_org_limit(db, org_id, limit_key)
+    if limit_key == "max_objects_per_workspace":
+        cap = await get_object_cap(db, org_id)
+    else:
+        cap = await get_org_limit(db, org_id, limit_key)
     if cap is None:
         return True, None
 
@@ -197,10 +251,22 @@ async def check_limit(
         )
         current = result.scalar_one()
     elif limit_key == "max_objects_per_workspace" and workspace_id:
-        result = await db.execute(
-            select(func.count()).select_from(MinEAObject).where(MinEAObject.workspace_id == workspace_id)
-        )
-        current = result.scalar_one()
+        # Items of any kind in the workspace. The ones being added count too: 50 stored blocks the
+        # 51st, and a batch that would pass the cap is refused whole (it is one transaction).
+        # Edits and deletes never call this, so a workspace already over the cap can still change.
+        current = await count_workspace_objects(db, workspace_id)
+        adding = max(pending_delta, 0)
+        if current + adding > cap:
+            return False, {
+                "code": "limit_exceeded",
+                "limit": limit_key,
+                "current": current,
+                "max": cap,
+                "adding": adding,
+                "remaining": max(cap - current, 0),
+                "plan": await _org_plan(db, org_id),
+            }
+        return True, None
     elif limit_key == "max_pending_invites":
         current = await _count_pending_invites(db, org_id)
         if pending_delta:

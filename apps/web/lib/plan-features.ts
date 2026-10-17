@@ -60,11 +60,11 @@ export const PLAN_OBJECT_LIMITS: Record<OrgPlan, number | null> = perPlan<number
 export const PLAN_SHARE_LINK_LIMITS: Record<OrgPlan, number | null> = perPlan<number | null>(1, 50);
 
 const PACK_DESCRIPTION =
-  "Unlimited workspaces and repository objects, AI chat, team collaboration. Viewers are free.";
+  "Unlimited workspaces and items, AI chat, team collaboration. Viewers are free.";
 
 export const PLAN_DESCRIPTIONS: Record<OrgPlan, string> = {
   free:
-    "One user, one workspace, up to 50 repository objects, all views. Join unlimited workspaces others share with you.",
+    "One user, one workspace, up to 50 items (apps, platforms, servers…), all views. Join unlimited workspaces others share with you.",
   starter: `1 licence. ${PACK_DESCRIPTION}`,
   team: `5 licences. ${PACK_DESCRIPTION}`,
   business:
@@ -131,13 +131,12 @@ export function objectCreateBlockedMessage(
   const p = normalizePlan(plan ?? "free");
   if (p === "free") {
     const cap = limit ?? PLAN_OBJECT_LIMITS.free;
-    if (billingUiEnabled()) {
-      return `Free includes up to ${cap} repository objects. ${SELF_SERVE_UPGRADE} to add more.`;
-    }
-    return `Free includes up to ${cap} repository objects. Upgrade to Business to add more.`;
+    const what = `Free includes up to ${cap} items (apps, platforms, servers…) in a workspace.`;
+    if (billingUiEnabled()) return `${what} ${SELF_SERVE_UPGRADE} to add more.`;
+    return `${what} Upgrade to Business to add more.`;
   }
-  if (billingUiEnabled()) return "Repository object limit reached for your plan.";
-  return "Repository object limit reached for your plan.";
+  if (limit != null) return `This workspace has reached its limit of ${limit} items.`;
+  return "This workspace has reached its item limit.";
 }
 
 export function planAllowsAiChat(plan: OrgPlan | string | undefined | null): boolean {

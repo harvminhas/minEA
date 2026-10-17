@@ -17,6 +17,7 @@ import {
 } from "@/lib/plan-features";
 import { PlanSection } from "@/components/billing/PlanSection";
 import { BillingCentre } from "@/components/billing/BillingCentre";
+import { AddDraftReturn } from "@/components/billing/AddDraftReturn";
 import { useCheckoutWatch } from "@/lib/billing/use-checkout-watch";
 import { parseCheckoutSessionId } from "@/lib/support";
 import { businessGetStartedHref } from "@/lib/billing/business-request";
@@ -657,6 +658,7 @@ export default function OrgSettingsPage() {
           {autoStartError}
         </p>
       )}
+      {show("billing") && <AddDraftReturn orgSlug={orgSlug} />}
       {billingUi && canSeeBilling && show("billing") && (
         <BillingCentre
           orgSlug={orgSlug}

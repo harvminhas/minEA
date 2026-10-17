@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { AddFlow } from "@/components/add/AddFlow";
 import type { AddReceipt } from "@/lib/setup/add-cards";
 import { useModelCatalog } from "@/lib/use-model-catalog";
+import { useTenancy } from "@/lib/tenancy";
+import { takeAddDraft } from "@/lib/add-draft";
 import { APP_OR_PLATFORM_BODY, applicationAddHint, nextPreset } from "@/lib/setup/type-guidance";
 import { ADD_BOX_BUTTON, ADD_BOX_LABEL, appendChipName, canSubmitAdd, isSubmitKey, quickAddSuggestions, textHasName } from "@/lib/setup/quick-add";
 
@@ -58,6 +60,19 @@ export function AppAddPanel({
     setAddText(initialText);
     setSaved(false);
   }, [initialText]);
+
+  // Back from Plan & billing (Upgrade to Starter on the cards): the list comes back, once.
+  const { orgSlug, workspaceSlug } = useTenancy();
+  const [restored, setRestored] = useState(0);
+  useEffect(() => {
+    // Ask's box holds the names from its question; the draft returns to Model > Applications.
+    if (!orgSlug || !workspaceSlug || origin === "ask") return;
+    const draft = takeAddDraft(orgSlug, workspaceSlug);
+    if (!draft) return;
+    setAddText(draft.text);
+    setSaved(false);
+    setRestored(draft.count);
+  }, [orgSlug, workspaceSlug, origin]);
 
   const appNames = useMemo(() => (catalog.data?.objects ?? []).map((object) => object.name), [catalog.data?.objects]);
   const suggestions = useMemo(() => quickAddSuggestions("app", appNames, 5).filter((name) => !textHasName(addText, name)), [appNames, addText]);
@@ -144,6 +159,11 @@ export function AppAddPanel({
           {ADD_BOX_BUTTON}
         </button>
       </div>
+      {restored > 0 && (
+        <p data-testid="add-restored" className="mb-2 text-[12px] text-[#4b5163]">
+          Your list is back: {restored} {restored === 1 ? "item" : "items"} from before you went to Plan &amp; billing.
+        </p>
+      )}
       <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12px] text-[#6b7289]">
         {suggestions.length > 0 && <span>Quick add:</span>}
         {suggestions.map((name) => (

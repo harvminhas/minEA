@@ -24,6 +24,7 @@ import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformP
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { AddFlow } from "@/components/add/AddFlow";
+import { RESTORE_PARAM, RESTORE_VALUE } from "@/lib/add-draft";
 import { AppAddPanel } from "@/components/add/AppAddPanel";
 import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
 import { SampleCompanyBadge, SetupProgressCard } from "@/components/mvp/SetupProgressCard";
@@ -84,6 +85,11 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   const [view, setView] = useState<"table" | "cards">("table");
   const [creating, setCreating] = useState<"runtime" | "platform" | "application" | null>(null);
   const [appAdd, setAppAdd] = useState(false);
+  // Back from Plan & billing with a list waiting (?add=restore): open the add box with it.
+  useEffect(() => {
+    if (section !== "applications" || typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get(RESTORE_PARAM) === RESTORE_VALUE) setAppAdd(true);
+  }, [section]);
   const [addPulse, setAddPulse] = useState(0);
   const anywhere = addAnywhereEnabled();
 

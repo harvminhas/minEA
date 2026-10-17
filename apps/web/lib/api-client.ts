@@ -93,6 +93,7 @@ import type {
   SharePreview,
 } from "@minea/types";
 import { apiV1Url } from "@/lib/api-base";
+import { announceObjectLimit, objectLimitDetail, ObjectLimitError, type ObjectRoom } from "@/lib/object-limit";
 import { batchKeyFor, batchSaved } from "@/lib/add-batch-save";
 import { apiRequestGate, shouldRetryRequest } from "@/lib/request-gate";
 import { getShareApiPath } from "@/lib/share-context";
@@ -103,7 +104,12 @@ function wsBase(orgSlug: string, workspaceSlug: string) {
   return `/orgs/${orgSlug}/workspaces/${workspaceSlug}`;
 }
 
-type ApiInit = RequestInit & { token?: string; returnStatus?: boolean };
+type ApiInit = RequestInit & {
+  token?: string;
+  returnStatus?: boolean;
+  /** The caller shows the item-limit 403 itself (the Add cards' upgrade panel): no toast. */
+  quietLimit?: boolean;
+};
 
 async function apiFetch<T>(path: string, init?: ApiInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
@@ -125,7 +131,7 @@ async function apiFetch<T>(path: string, init?: ApiInit): Promise<T> {
 }
 
 async function apiFetchOnce<T>(path: string, init?: ApiInit): Promise<T> {
-  const { token, returnStatus, ...fetchInit } = init ?? {};
+  const { token, returnStatus, quietLimit, ...fetchInit } = init ?? {};
   const sharePath = getShareApiPath(path);
   const resolvedPath = sharePath ?? path;
   const res = await fetch(apiV1Url(resolvedPath), {
@@ -138,6 +144,13 @@ async function apiFetchOnce<T>(path: string, init?: ApiInit): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
+    // Plan item limit: a friendly message (not raw JSON) for every create form, plus a toast with
+    // the upgrade link unless the caller shows its own panel.
+    const limit = res.status === 403 ? objectLimitDetail(err?.detail) : null;
+    if (limit) {
+      if (!quietLimit) announceObjectLimit(limit);
+      throw new ObjectLimitError(limit, resolvedPath);
+    }
     const detail =
       typeof err.detail === "string"
         ? err.detail
@@ -377,6 +390,7 @@ export const addApi = {
       relationships: { type: string; from_key?: string; to_key?: string; from_id?: string; to_id?: string; from_type: string; to_type: string; attributes?: Record<string, unknown> }[];
     },
     token: string,
+    opts: { quietLimit?: boolean } = {},
   ) => {
     // Same items, same Idempotency-Key until they save: a retry after a timeout can't duplicate them.
     const payload = JSON.stringify(body);
@@ -390,11 +404,15 @@ export const addApi = {
       token,
       body: payload,
       headers: { "Idempotency-Key": batchKeyFor(`${orgSlug}/${workspaceSlug}:${payload}`) },
+      quietLimit: opts.quietLimit,
     }).then((saved) => {
       batchSaved(`${orgSlug}/${workspaceSlug}:${payload}`);
       return saved;
     });
   },
+  /** Items in the workspace and the org's real cap (overrides included); max null = no limit. */
+  room: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<ObjectRoom>(`${wsBase(orgSlug, workspaceSlug)}/objects/limit`, { token }),
   undo: (
     orgSlug: string,
     workspaceSlug: string,

@@ -21,7 +21,7 @@ export interface CatalogPlan {
   yearlyUsd: number | null;
   aiAnswersPerMonth: number;
   /** null = unlimited */
-  appsPlatforms: number | null;
+  itemsPerWorkspace: number | null;
   onboardingHours: number;
   highlights: string[];
 }
@@ -38,7 +38,7 @@ export const CATALOG: Record<CatalogPlanId, CatalogPlan> = {
     monthlyUsd: 0,
     yearlyUsd: 0,
     aiAnswersPerMonth: 25,
-    appsPlatforms: 25,
+    itemsPerWorkspace: 50,
     onboardingHours: 0,
     highlights: ["All reports and views", "One workspace, one share link"],
   },
@@ -50,10 +50,10 @@ export const CATALOG: Record<CatalogPlanId, CatalogPlan> = {
     monthlyUsd: 149,
     yearlyUsd: null,
     aiAnswersPerMonth: 500,
-    appsPlatforms: null,
+    itemsPerWorkspace: null,
     onboardingHours: 0,
     highlights: [
-      "Unlimited workspaces and repository objects",
+      "Unlimited workspaces",
       "AI architecture chat",
       "Share links for views, roadmaps and objects",
     ],
@@ -66,7 +66,7 @@ export const CATALOG: Record<CatalogPlanId, CatalogPlan> = {
     monthlyUsd: 449,
     yearlyUsd: 4490,
     aiAnswersPerMonth: 2500,
-    appsPlatforms: null,
+    itemsPerWorkspace: null,
     onboardingHours: 4,
     highlights: ["Everything in Starter"],
   },
@@ -78,7 +78,7 @@ export const CATALOG: Record<CatalogPlanId, CatalogPlan> = {
     monthlyUsd: 799,
     yearlyUsd: 7990,
     aiAnswersPerMonth: 5000,
-    appsPlatforms: null,
+    itemsPerWorkspace: null,
     onboardingHours: 4,
     highlights: ["Everything in Team"],
   },
@@ -113,7 +113,7 @@ export const BUSINESS_GET_STARTED_LABEL = "Get started";
 export const BUSINESS_DETAILS: readonly string[] = [
   `Starting from ${BUSINESS_MIN_LICENCES} licences`,
   "Unlimited free viewers",
-  "Unlimited apps & platforms",
+  "Unlimited items",
   "Everything in Starter",
   "4 hours of onboarding consulting included",
   "Pay by invoice or card",
@@ -177,6 +177,11 @@ export function formatCount(n: number): string {
   return n.toLocaleString("en-US");
 }
 
+/** Free's item allowance: records of any kind in a workspace (max_objects_per_workspace). */
+export function freeItemsLine(max: number): string {
+  return `Up to ${max} items (apps, platforms, servers…)`;
+}
+
 /** "What's included" lines for a pricing card. */
 export function planIncludes(plan: CatalogPlan): string[] {
   const lines: string[] = [];
@@ -187,9 +192,7 @@ export function planIncludes(plan: CatalogPlan): string[] {
   );
   lines.push("Unlimited free viewers");
   lines.push(
-    plan.appsPlatforms == null
-      ? "Unlimited apps & platforms"
-      : `Up to ${plan.appsPlatforms} apps & platforms`
+    plan.itemsPerWorkspace == null ? "Unlimited items" : freeItemsLine(plan.itemsPerWorkspace)
   );
   lines.push(`${formatCount(plan.aiAnswersPerMonth)} AI answers / month`);
   lines.push(...plan.highlights);
@@ -256,7 +259,7 @@ export interface DisplayEntitlements {
   /** null = unchanged legacy limits */
   licences: number | null;
   aiAnswersPerMonth: number | null;
-  appsPlatforms: number | null;
+  itemsPerWorkspace: number | null;
   onboardingHours: number;
   isLegacy: boolean;
   isPack: boolean;
@@ -269,7 +272,7 @@ export function entitlementsFor(id: DisplayPlanId): DisplayEntitlements {
       label: "Business (legacy)",
       licences: null,
       aiAnswersPerMonth: null,
-      appsPlatforms: null,
+      itemsPerWorkspace: null,
       onboardingHours: 0,
       isLegacy: true,
       isPack: false,
@@ -281,7 +284,7 @@ export function entitlementsFor(id: DisplayPlanId): DisplayEntitlements {
     label: plan.label,
     licences: plan.licences,
     aiAnswersPerMonth: plan.aiAnswersPerMonth,
-    appsPlatforms: plan.appsPlatforms,
+    itemsPerWorkspace: plan.itemsPerWorkspace,
     onboardingHours: plan.onboardingHours,
     isLegacy: false,
     isPack: id !== "free",

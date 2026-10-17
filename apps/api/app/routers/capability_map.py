@@ -24,6 +24,7 @@ from app.schemas.capability_map import (
     LibraryDomainGroup,
     UpsertDomainMappingRequest,
 )
+from app.services.authorization import require_object_room
 from app.services.capability_heatmap import build_capability_heatmap
 from app.services.capability_map import (
     add_domain_mapping_system,
@@ -314,6 +315,7 @@ async def create_domain_mapping_system_endpoint(
 ) -> DomainDetailRead:
     await ctx.require_permission(db, "object.create")
     assert ctx.workspace
+    await require_object_room(db, ctx.org_id, ctx.workspace.id)
 
     try:
         await create_domain_mapping_system(

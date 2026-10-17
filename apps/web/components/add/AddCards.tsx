@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MinEAObject, Relationship } from "@minea/types";
-import { addApi, catalogLookupApi, objectsApi, toolCatalogApi } from "@/lib/api-client";
+import { addApi, billingApi, catalogLookupApi, objectsApi, toolCatalogApi } from "@/lib/api-client";
+import { useAppStore } from "@/lib/store";
+import { billingUiEnabled } from "@/lib/billing/flags";
+import { saveAddDraft } from "@/lib/add-draft";
+import { limitOffer, limitState, objectLimitFromError, partialAddedText, roomFromDetail, roomHintText, takeFirst, type LimitState, type ObjectRoom } from "@/lib/object-limit";
+import { LimitActions, LimitDivider, LimitPanel, RoomHint } from "@/components/add/LimitPanel";
 import { refreshLiveCatalog } from "@/lib/catalog/live-catalog";
 import { OwnerDatalists, TEAM_PICKS_ID, useOwnerPicks } from "@/components/ownership/OwnerPicks";
 import { useAuth } from "@/lib/auth-context";
@@ -337,7 +342,20 @@ export function AddResult({
   onSave,
   onUndo,
   onCancel,
+  limit = null,
+  partial = null,
+  onAddFirst = () => {},
+  onLeave = () => {},
+  onUndoPartial = () => {},
 }: {
+  /** Room on the plan for this Add (null: no item limit). */
+  limit?: LimitState | null;
+  /** After "Add the first N for now": what was saved, the rest still on the cards. */
+  partial?: { text: string; canUndo: boolean } | null;
+  onAddFirst?: (count: number) => void;
+  /** Leaving for Plan & billing: keep the list. */
+  onLeave?: () => void;
+  onUndoPartial?: () => void;
   rows: AddRow[];
   phase: AddPhase;
   error: string;
@@ -366,8 +384,16 @@ export function AddResult({
         <AddSaved added={snapshot.added} kept={snapshot.kept} todos={snapshot.todos} canUndo={snapshot.canUndo} motion={view.motion} onUndo={onUndo} />
       ) : (
         <>
+          {partial && (
+            <div data-testid="limit-partial" role="status" className="mb-4 rounded-2xl border border-[#e6e8ee] bg-white p-4">
+              <p className="text-[15px] font-semibold text-[#1c2230]">{partial.text}</p>
+              {partial.canUndo && <button type="button" className="mt-2 text-[13px] font-medium text-[#3f35b5]" onClick={onUndoPartial}>Undo</button>}
+            </div>
+          )}
           <h2 className="text-[18px] font-semibold text-[#1c2230]">{view.title}</h2>
           {view.subtitle && <p className="mt-1 text-[13px] text-[#6b7289]">{view.subtitle}</p>}
+          {view.mode === "cards" && limit && <div className="mt-2"><RoomHint limit={limit} /></div>}
+          {view.mode === "cards" && limit?.over && <LimitPanel limit={limit} busy={phase === "saving"} onAddFirst={onAddFirst} onLeave={onLeave} />}
           {view.mode === "records" && (
             <div className="mt-3 space-y-3">
               {view.recordCards.map((row) => (
@@ -390,9 +416,18 @@ export function AddResult({
           {view.mode === "cards" && (
             <>
               <div className="mt-3 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
-                {view.addCards.map((row, index) => (
-                  <AddCard key={row.key} row={row} index={index} dim={phase === "saving"} motion={view.motion} onRemove={() => onRemove(row.key)} onChange={(patch) => onChange(row.key, patch)} pendingTenants={pendingTenants} />
-                ))}
+                {view.addCards.map((row, index) => {
+                  const card = <AddCard key={row.key} row={row} index={index} dim={phase === "saving"} motion={view.motion} onRemove={() => onRemove(row.key)} onChange={(patch) => onChange(row.key, patch)} pendingTenants={pendingTenants} />;
+                  // Over the plan: the cards that fit come first (paste order), the rest wait, dimmed.
+                  const fits = limit?.over ? limit.fitCards : Infinity;
+                  if (index < fits) return card;
+                  return (
+                    <Fragment key={row.key}>
+                      {index === fits && limit && <LimitDivider fits={fits} waiting={view.addCards.length - fits} label={limit.label} />}
+                      <div data-testid="limit-waiting" className="opacity-[0.72]">{card}</div>
+                    </Fragment>
+                  );
+                })}
               </div>
               {view.alreadyLines.length > 0 && (
                 <div className="mt-3 space-y-2">
@@ -401,14 +436,18 @@ export function AddResult({
                   ))}
                 </div>
               )}
-              <div className="mt-4 flex items-center gap-3">
-                {view.button && (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                {view.button && limit?.over && <LimitActions limit={limit} busy={phase === "saving"} onAddFirst={onAddFirst} onLeave={onLeave} />}
+                {view.button && !limit?.over && (
                   <button type="button" className="rounded-xl bg-[#5b4ce6] px-4 py-2 text-[14px] font-semibold text-white" onClick={() => { if (phase !== "saving") onSave(); }}>
                     {phase === "saving" && <span className={view.motion ? "add-check mr-1" : "mr-1"}>✓</span>}
                     {view.button}
                   </button>
                 )}
                 <button type="button" className="text-[13px] text-[#6b7289]" disabled={phase === "saving"} onClick={onCancel}>Cancel</button>
+                {limit && (
+                  <span data-testid="limit-footer" className="ml-auto text-[12px] text-[#6b7289]">Adding {limit.adding} · {roomHintText(limit)}</span>
+                )}
               </div>
               {phase === "error" && error && <p className="mt-2 text-[13px] text-[#b42318]">{error}</p>}
             </>
@@ -453,11 +492,63 @@ export function AskAdd({
   const loaded = Boolean(catalog.data);
   const estate = useMemo(() => estateItems(objects), [objects]);
 
+  // Room on the plan (Free: 50 items per workspace), checked before saving so a long paste gets the
+  // upgrade panel instead of a refused batch. The server's count and cap include org overrides.
+  const { activeOrg } = useAppStore();
+  const roomKey = ["object-room", orgSlug, workspaceSlug] as const;
+  const roomQuery = useQuery({
+    queryKey: roomKey,
+    queryFn: async () => addApi.room(orgSlug!, workspaceSlug!, (await getToken())!),
+    enabled: Boolean(orgSlug && workspaceSlug),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const capped = roomQuery.data ? roomQuery.data.max != null : limitState({ plan: activeOrg?.plan, catalogCount: 0, adding: 0, offer: "upgrade", orgSlug: "" }) != null;
+  const billing = useQuery({
+    queryKey: ["billing-status", orgSlug],
+    queryFn: async () => billingApi.status(orgSlug!, (await getToken())!),
+    enabled: Boolean(orgSlug) && capped,
+    staleTime: 60_000,
+  });
+  // A 403 limit_exceeded from the server wins until the room query has refetched.
+  const [serverRoom, setServerRoom] = useState<ObjectRoom | null>(null);
+  useEffect(() => setServerRoom(null), [roomQuery.dataUpdatedAt]);
+  const refreshRoom = () => { void queryClient.invalidateQueries({ queryKey: roomKey }); };
+  // After "Add the first N for now": the receipt, and the rows that went (Undo puts them back).
+  const [partial, setPartial] = useState<{ text: string; receipt: AddReceipt; rows: AddRow[] } | null>(null);
+  const limit: LimitState | null = useMemo(() => {
+    if (!orgSlug || !loaded) return null;
+    const planned = planInputs(rows);
+    const cards = planned.filter((row) => !row.existing).length;
+    const itemsFor = (count: number) => buildBatch(takeFirst(planned, count).planned, estate).creates.length;
+    return limitState({
+      plan: activeOrg?.plan,
+      room: serverRoom ?? roomQuery.data ?? null,
+      catalogCount: objects.length,
+      adding: itemsFor(cards),
+      cards,
+      itemsFor,
+      offer: limitOffer(billing.data, billingUiEnabled()),
+      orgSlug,
+    });
+  }, [orgSlug, loaded, rows, estate, activeOrg?.plan, serverRoom, roomQuery.data, objects.length, billing.data]);
+
+  // Leaving for Plan & billing: keep the cards' names so the list comes back afterwards.
+  const keepForUpgrade = () => {
+    if (!orgSlug || !workspaceSlug) return;
+    const names = rows.filter((row) => !row.existing).map((row) => row.name || row.input);
+    const here = typeof window === "undefined" ? basePath : `${window.location.pathname}${window.location.search}`;
+    // Ask has no add box to come back to without its question: return to Model > Applications.
+    const back = here.includes("/model/") || here.includes("/setup") || here.includes("/views") ? here : `${basePath}/model/applications`;
+    saveAddDraft(orgSlug, workspaceSlug, names, back);
+  };
+
   const textRef = useRef<string | null>(null);
   useEffect(() => {
     if (textRef.current === initialText) return;
     textRef.current = initialText;
     edited.current = false;
+    setPartial(null);
     setClosed(false);
     setPhase("idle");
     setSnapshot(null);
@@ -546,7 +637,7 @@ export function AskAdd({
     setRows((current) => resolveSharedTenants(current.map((row) => (row.key === key ? { ...row, ...change } : row))));
   };
 
-  const save = async () => {
+  const save = async (firstCount?: number) => {
     if (!orgSlug || !workspaceSlug) return;
     const token = await getToken();
     if (!token) {
@@ -557,15 +648,17 @@ export function AskAdd({
     setPhase("saving");
     setError("");
     setStillSaving(false);
-    const planned = planInputs(rows);
+    // "Add the first N for now": the first N new cards in paste order (cards already in the map go along).
+    const { planned, taken, fresh } = takeFirst(planInputs(rows), firstCount);
+    const batch = buildBatch(planned, estate);
     try {
-      const batch = buildBatch(planned, estate);
       const before = setupState(objects, relationships);
       const saved = await addApi.save(orgSlug, workspaceSlug, {
         creates: batch.creates.map((item) => ({ key: item.key, type: item.type, name: item.name, properties: item.properties, owner: item.owner, owner_team_name: item.ownerTeam, point_of_contact_name: item.ownerName })),
         updates: batch.updates.map((item) => ({ id: item.id, properties: item.properties, owner: item.owner, owner_team_name: item.ownerTeam, point_of_contact_name: item.ownerName })),
         relationships: batch.relationships.map((item) => ({ type: item.type, from_key: item.fromKey, to_key: item.toKey, from_id: item.fromId, to_id: item.toId, from_type: item.fromType, to_type: item.toType, ...(item.attributes ? { attributes: item.attributes } : {}) })),
-      }, token);
+      }, token, { quietLimit: true });
+      refreshRoom();
       for (const object of saved.objects) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object });
       for (const relationship of saved.relationships) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship });
       const created = planned.filter((row) => !row.existing);
@@ -587,10 +680,30 @@ export function AskAdd({
         relationshipIds: saved.created_relationship_ids,
         undoUntil: Date.now() + UNDO_MS,
       };
+      if (firstCount !== undefined && firstCount < fresh) {
+        // Saved what fits; the rest stay on the cards, still waiting for an upgrade.
+        edited.current = true;
+        const went = rows.filter((row) => taken.has(row.key));
+        setRows((current) => current.filter((row) => !taken.has(row.key) && !row.existing));
+        setPartial({ text: partialAddedText(firstCount, fresh, kind === "platform" ? "platforms" : "apps"), receipt, rows: went });
+        setPhase("idle");
+        return;
+      }
+      setPartial(null);
       onSaved?.(receipt);
       setSnapshot(receipt);
       setPhase("saved");
     } catch (err) {
+      const refused = objectLimitFromError(err);
+      if (refused) {
+        // Same panel as the pre-check, with the server's numbers.
+        setServerRoom(roomFromDetail(refused));
+        refreshRoom();
+        const stillFits = batch.creates.length <= (refused.remaining ?? Math.max(0, refused.max - refused.current));
+        setError(stillFits ? (err instanceof Error ? err.message : "") : "");
+        setPhase(stillFits ? "error" : "idle");
+        return;
+      }
       setError(addSaveErrorMessage(err));
       setPhase("error");
       if (maybeStillSaving(err)) {
@@ -611,9 +724,29 @@ export function AskAdd({
     if (textRef.current !== initialText || rowsFor !== initialText) return;
     const ready = rows.length > 0 && rows.some((row) => !row.existing);
     submitPending.current = false;
+    // More than the plan has room for: stay on the cards with the upgrade panel instead of sending a
+    // batch the server would refuse. After "Add the first N", Add/Next carries on with what was saved
+    // (the setup wizard moves to its next step).
+    if (ready && limit?.over) {
+      if (partial) onSaved?.(partial.receipt);
+      return;
+    }
     if (ready) void save();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitSignal, rows, rowsFor, loaded, phase, initialText]);
+  }, [submitSignal, rows, rowsFor, loaded, phase, initialText, limit?.over]);
+
+  const undoPartial = async () => {
+    if (!partial || !orgSlug || !workspaceSlug || Date.now() > partial.receipt.undoUntil) return;
+    const token = await getToken();
+    if (!token) return;
+    const { receipt, rows: went } = partial;
+    await addApi.undo(orgSlug, workspaceSlug, { object_ids: receipt.objectIds, relationship_ids: receipt.relationshipIds }, token);
+    for (const id of receipt.objectIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeId: id });
+    for (const id of receipt.relationshipIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
+    refreshRoom();
+    setPartial(null);
+    setRows((current) => [...went, ...current]);
+  };
 
   const undo = async () => {
     if (!snapshot || !orgSlug || !workspaceSlug || Date.now() > snapshot.undoUntil) return;
@@ -622,6 +755,7 @@ export function AskAdd({
     await addApi.undo(orgSlug, workspaceSlug, { object_ids: snapshot.objectIds, relationship_ids: snapshot.relationshipIds }, token);
     for (const id of snapshot.objectIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeId: id });
     for (const id of snapshot.relationshipIds) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
+    refreshRoom();
     const undone: AddReceipt = {
       ...snapshot,
       added: undoneSentence(snapshot.names ?? []),
@@ -669,6 +803,11 @@ export function AskAdd({
       onAddAsNew={(key) => patch(key, { existing: null, status: "custom", tool: null, choice: "unknown", name: rows.find((row) => row.key === key)?.input || "" })}
       onFillGap={(id, field, value) => { void fillGap(id, field, value); }}
       onSave={() => { void save(); }}
+      limit={limit}
+      partial={partial ? { text: partial.text, canUndo: partial.receipt.canUndo && Date.now() < partial.receipt.undoUntil } : null}
+      onAddFirst={(count) => { if (phase !== "saving") void save(count); }}
+      onLeave={keepForUpgrade}
+      onUndoPartial={() => { void undoPartial(); }}
       onUndo={() => { void undo(); }}
       onCancel={() => {
         if (onClose) {
