@@ -16,7 +16,6 @@ import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
 import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
 import { SystemDiagramModal } from "@/components/application/SystemDiagram";
 import { SystemDiagramPreview } from "@/components/application/SystemDiagramPreview";
-import { isSystemObjectType } from "@/lib/platform-relationship-utils";
 import { REGISTRY, recordTypeOf } from "@/lib/fields/registry";
 import type { CatalogRow } from "@/lib/model-catalog";
 import { applyCatalogWrite, catalogQueryKey, useModelCatalog, type WorkspaceCatalog } from "@/lib/use-model-catalog";
@@ -375,23 +374,6 @@ function SwitchLines({ title, lines }: { title: string; lines: { id: string; lin
   );
 }
 
-function RelList({ title, items, empty }: { title: string; items: { id: string; name: string }[]; empty: string }) {
-  return (
-    <section>
-      <h3 className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">{title.toUpperCase()}</h3>
-      {items.length === 0 ? (
-        <p className="text-[13px] text-[#8b90a0]">{empty}</p>
-      ) : (
-        <ul className="space-y-1.5">
-          {items.map((item) => (
-            <li key={item.id} className="text-[13px] text-[#1c2230]">{item.name}</li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
 function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: boolean; highlight?: string | null }) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
@@ -401,7 +383,6 @@ function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: 
   const [adding, setAdding] = useState(false);
   const objects = catalog.data?.objects ?? [];
   const rels = catalog.data?.relationships ?? [];
-  const nameOf = (id: string) => objects.find((item) => item.id === id)?.name ?? "Untitled";
   const relatedNameOverrides = Object.fromEntries(objects.map((item) => [item.id, item.name]));
   const partyIds = sameNamePartyIds(objects, row.id, row.object.type, row.name);
   const rowRelationships = relationshipsForIds(rels, partyIds);
@@ -468,56 +449,11 @@ function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: 
       )}
     </div>
   );
-  let lists = null;
-  if (row.object.type === "model") {
-    const linked = rels.filter(
-      (rel) =>
-        rel.to_object_id === row.id &&
-        rel.type === "runs_on" &&
-        (rel.from_type === "component" || rel.from_type === "integration_flow" || rel.from_type === "application")
-    );
-    lists = (
-      <div className="space-y-4">
-        <RelList title="Applications" items={linked.filter((rel) => rel.from_type === "application").map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="No applications run on this server yet." />
-        <RelList title="Components" items={linked.filter((rel) => rel.from_type === "component").map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="No components run on this runtime yet." />
-        <RelList title="Integrations" items={linked.filter((rel) => rel.from_type === "integration_flow").map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="No integrations reference this runtime yet." />
-      </div>
-    );
-  } else if (row.object.type === "cloud_service") {
-    const systems = rels.filter(
-      (rel) =>
-        rel.to_object_id === row.id &&
-        (rel.type === "built_on" || rel.type === "runs_on") &&
-        (isSystemObjectType(rel.from_type) || rel.from_type === "application")
-    );
-    const components = rels.filter(
-      (rel) => rel.to_object_id === row.id && rel.type === "built_on" && rel.from_type === "component"
-    );
-    lists = (
-      <div className="space-y-4">
-        <h3 className="text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">
-          HOSTED OR BUILT HERE ({systems.length + components.length})
-        </h3>
-        {systems.length === 0 && components.length === 0 ? (
-          <p className="text-[13px] text-[#8b90a0]">No systems or components linked yet.</p>
-        ) : (
-          <>
-            {systems.length > 0 && (
-              <RelList title="Systems" items={systems.map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="" />
-            )}
-            {components.length > 0 && (
-              <RelList title="Components" items={components.map((rel) => ({ id: rel.from_object_id, name: nameOf(rel.from_object_id) }))} empty="" />
-            )}
-          </>
-        )}
-      </div>
-    );
-  }
-
+  // The connections list below already names every link from this record's side ("Hosts
+  // Salesforce"), so servers and platforms no longer repeat those items in a list above it.
   return (
     <div className="space-y-6">
       {map}
-      {lists}
       <ObjectRelationshipsTab
         objectId={row.id}
         objectName={row.name}

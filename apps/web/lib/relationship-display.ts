@@ -6,6 +6,7 @@ import {
   type RelationshipLabel,
   type RelationshipType,
 } from "@minea/types";
+import { uiTypeLabel } from "@/lib/ui-type-labels";
 
 export function isTechDebtRelationship(rel: Relationship): boolean {
   return rel.from_type === "tech_debt" || rel.to_type === "tech_debt";
@@ -24,11 +25,6 @@ export function otherRelationshipObjectType(
   currentObjectId: string
 ): ObjectType {
   return rel.from_object_id === currentObjectId ? rel.to_type : rel.from_type;
-}
-
-export function relationshipEndpointLabel(type: ObjectType): string {
-  if (type === "application") return "System";
-  return OBJECT_TYPE_LABELS[type] ?? type;
 }
 
 /**
@@ -66,22 +62,22 @@ export function relationshipSentenceFrom(
     : words.reverseSentence(otherName, currentName);
 }
 
+/**
+ * One relationship as two lines read from the current record: nameLine "Hosts Salesforce" and
+ * typeLine, the other item's kind in plain words ("Application"), never stored codes.
+ */
 export function formatRelationshipTriple(
   rel: Relationship,
   currentObjectId: string,
   currentName: string,
   otherName: string
 ): { nameLine: string; typeLine: string } {
-  const fromName = rel.from_object_id === currentObjectId ? currentName : otherName;
   const outbound = rel.from_object_id === currentObjectId;
-  const verb = relationshipVerb(rel.type, rel.from_type, rel.to_type);
-  const fromType = relationshipEndpointLabel(rel.from_type);
-  const toType = relationshipEndpointLabel(rel.to_type);
-  const toName = rel.to_object_id === currentObjectId ? currentName : otherName;
-
+  const otherType = outbound ? rel.to_type : rel.from_type;
+  const kind = uiTypeLabel(otherType, true);
   return {
-    nameLine: `${relationshipPhrase(rel, currentObjectId)} ${outbound ? toName : fromName}`,
-    typeLine: `${fromType} → ${verb} → ${toType}`,
+    nameLine: `${relationshipPhrase(rel, currentObjectId)} ${otherName}`,
+    typeLine: kind.charAt(0).toUpperCase() + kind.slice(1),
   };
 }
 

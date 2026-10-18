@@ -172,3 +172,21 @@ test("an app hosted on a tenant reads Hosts from the tenant", () => {
   assert.equal(formatRelationshipTriple(rel, "azure", "Azure", "Salesforce").nameLine, "Hosts Salesforce");
   assert.equal(formatRelationshipTriple(rel, "sf", "Salesforce", "Azure").nameLine, "Runs on Azure");
 });
+
+test("relationship rows say the other item's kind in plain words, not the stored triple", () => {
+  const rel: Relationship = {
+    id: "r",
+    workspace_id: "w",
+    org_id: "o",
+    type: "runs_on",
+    from_object_id: "sf",
+    from_type: "application",
+    to_object_id: "azure",
+    to_type: "cloud_service",
+    attributes: {},
+    created_at: "2026-01-01T00:00:00Z",
+  };
+  assert.equal(formatRelationshipTriple(rel, "azure", "Azure", "Salesforce").typeLine, "Application");
+  assert.equal(formatRelationshipTriple(rel, "sf", "Salesforce", "Azure").typeLine, "Platform");
+  assert.doesNotMatch(formatRelationshipTriple(rel, "azure", "Azure", "Salesforce").typeLine, /→|runs on|System/);
+});

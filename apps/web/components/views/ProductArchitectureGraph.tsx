@@ -2,7 +2,8 @@
 
 import { memo, useMemo } from "react";
 import { Handle, MarkerType, Position, type Edge, type Node, type NodeTypes } from "reactflow";
-import { relationshipLabelFor, type ProductGraphNode, type ProductGraphResponse } from "@minea/types";
+import type { ProductGraphNode, ProductGraphResponse } from "@minea/types";
+import { productEdgeLabel } from "@/lib/product-relationship-utils";
 import { EntityFlowCanvas, type NodeLayout } from "@/components/shared/EntityFlowCanvas";
 import { getLayerColor, getTypeLayer } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -216,9 +217,3 @@ export function ProductArchitectureGraph({
   );
 }
 
-/** The API sends words ("Runs on"); an older build sent the stored code ("runs on" / "runs_on"). */
-export function productEdgeLabel(label: string): string {
-  if (!/^[a-z_ ]+$/.test(label)) return label;
-  if (label === "delivers") return "Delivers";
-  return relationshipLabelFor(label.replace(/ /g, "_")).forward;
-}

@@ -1,4 +1,4 @@
-import type { ProductGraphEdge, ProductGraphNode, ProductGraphResponse } from "@minea/types";
+import { relationshipLabelFor, type ProductGraphEdge, type ProductGraphNode, type ProductGraphResponse } from "@minea/types";
 
 export function productGraphLabelById(
   graph: ProductGraphResponse | undefined
@@ -34,18 +34,22 @@ export function productRelationshipSummary(
   return `${edges.length} connection${edges.length === 1 ? "" : "s"} · ${parts.join(" · ")}`;
 }
 
+/** The API sends words ("Runs on"); an older build sent the stored code ("runs on" / "runs_on"). */
+export function productEdgeLabel(label: string): string {
+  if (!/^[a-z_ ]+$/.test(label)) return label;
+  if (label === "delivers") return "Delivers";
+  return relationshipLabelFor(label.replace(/ /g, "_")).forward;
+}
+
+/** One product-graph link as a plain sentence ("Payments delivers Billing"); no codes or kinds line. */
 export function formatProductGraphEdgeLine(
   edge: ProductGraphEdge,
   labelById: Record<string, ProductGraphNode>
 ): { nameLine: string; typeLine: string } {
-  const source = labelById[edge.source];
-  const target = labelById[edge.target];
-  const sourceLabel = source?.label ?? "Unknown";
-  const targetLabel = target?.label ?? "Unknown";
-  const relLabel = edge.label.replace(/_/g, " ");
-
+  const sourceLabel = labelById[edge.source]?.label ?? "Unknown";
+  const targetLabel = labelById[edge.target]?.label ?? "Unknown";
   return {
-    nameLine: `${sourceLabel} → ${targetLabel}`,
-    typeLine: `${relLabel} · ${source?.type?.replace(/_/g, " ") ?? "object"} → ${target?.type?.replace(/_/g, " ") ?? "object"}`,
+    nameLine: `${sourceLabel} ${productEdgeLabel(edge.label).toLowerCase()} ${targetLabel}`,
+    typeLine: "",
   };
 }

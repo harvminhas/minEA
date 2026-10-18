@@ -51,5 +51,7 @@ test("AI nodes have their own violet style and plain labels", () => {
 test("every record's Relationships tab renders the map, not only applications", () => {
   const panel = readFileSync(new URL("../../components/mvp/ModelDetailPanel.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(panel, /if \(row\.kind === "application"\) \{\s*const nameById/);
-  assert.match(panel, /\{map\}\s*\{lists\}/);
+  assert.match(panel, /\{map\}\s*<ObjectRelationshipsTab/);
+  // Platforms and servers don't repeat their hosted items above the connections list.
+  assert.doesNotMatch(panel, /HOSTED OR BUILT HERE|BUILT ON THIS PLATFORM|\{lists\}/);
 });
