@@ -1,7 +1,8 @@
 /**
  * Failure propagation for stored relationship types.
  *
- * Edges are stored once, source → target. Words come from RELATIONSHIP_LABELS.
+ * Edges are stored once, source → target. Words come from RELATIONSHIP_LABELS (the shared
+ * relationship-labels.json registry). Each path step reads from the affected item's side.
  * A swap in the dialog stores the flipped ends, not a second edge.
  *
  * Direct (apps that stop) comes only from runs_on, built_on, depends_on,
@@ -24,6 +25,8 @@ export type ImpactRule = {
   /** Failed record is the stored source. The target is affected. */
   whenSourceFails?: ImpactSeverity;
   label: (sourceName: string, targetName: string) => string;
+  /** The same link read from the stored target ("Order DB gets data from CRM"). */
+  reverseLabel: (sourceName: string, targetName: string) => string;
   /** Short path phrase, read from the affected item back toward the failed one. */
   step: (sourceName: string, targetName: string) => string;
 };
@@ -36,6 +39,7 @@ function rule(
   return {
     ...severity,
     label: (source, target) => words.sentence(source, target),
+    reverseLabel: (source, target) => words.reverseSentence(source, target),
     step: (source, target) =>
       severity.whenSourceFails && !severity.whenTargetFails
         ? `${words.reverse} ${source}`
@@ -133,7 +137,11 @@ export function impactOf(nodes: ImpactNode[], edges: ImpactEdge[], failedId: str
         type: edge.type,
         fromId: edge.fromId,
         toId: edge.toId,
-        label: rule.label(nameOf(edge.fromId), nameOf(edge.toId)),
+        // Read from the affected item: it is the stored source unless the source failed.
+        label:
+          affectedId === edge.toId
+            ? rule.reverseLabel(nameOf(edge.fromId), nameOf(edge.toId))
+            : rule.label(nameOf(edge.fromId), nameOf(edge.toId)),
       };
       const path = [...current.path, step];
       const depth = current.depth + 1;

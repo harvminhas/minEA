@@ -18,50 +18,12 @@ from app.schemas.relationships import triple_allowed
 from app.services.ai_features import apply_ai_features, strip_ai_keys
 from app.services.cost_lines import apply_cost_lines
 from app.services.owner_accountability_sync import _OBJECT_OWNER_ACCOUNTABILITY
+from app.services.relationship_labels import relationship_words
 from app.services.system_properties import SYSTEM_OBJECT_TYPES, normalize_system_properties
 
 _APPISH = frozenset({"application", "solution", "technical_capability"})
 _SWITCHABLE = _APPISH | {"cloud_service"}
 _HOST = frozenset({"built_on", "runs_on"})
-# Same forward / reverse phrases as formatRelationshipTriple.
-_LABELS: dict[str, tuple[str, str]] = {
-    "depends_on": ("Depends on", "Needed by"),
-    "part_of": ("Part of", "Includes"),
-    "calls": ("Calls", "Called by"),
-    "uses": ("Makes use of", "Made use of"),
-    "contains": ("Contains", "Stored in"),
-    "connects": ("Uses", "Used by flow"),
-    "routes": ("Routes to", "Routed from"),
-    "hosts": ("Gateway for", "Behind gateway"),
-    "carries": ("Carries", "Carried by"),
-    "supported_by": ("Supported by", "Supports"),
-    "exposes": ("Exposes", "Exposed by"),
-    "publishes": ("Publishes", "Published by"),
-    "consumes": ("Consumes", "Consumed by"),
-    "subscribes": ("Subscribes to", "Subscribed by"),
-    "reads": ("Reads from", "Read by"),
-    "writes": ("Writes to", "Written to by"),
-    "creates": ("Creates", "Created by"),
-    "updates": ("Updates", "Updated by"),
-    "owns": ("Owns", "Owned by"),
-    "belongs_to": ("Belongs to", "Contains entity/store"),
-    "runs_on": ("Runs on", "Runs"),
-    "built_on": ("Built on", "Platform for"),
-    "affects": ("Affects", "Affected by"),
-    "resolves": ("Resolves", "Resolved by"),
-    "replaces": ("Replaces", "Replaced by"),
-    "uses_model": ("Uses model", "Used by"),
-    "can_call": ("Can call", "Callable by"),
-    "supports": ("Provides support", "Receives support"),
-    "escalates_to": ("Escalates to", "Escalated from"),
-    "accesses": ("Accesses", "Accessed by"),
-    "connects_to": ("Connects to", "Connected through"),
-    "located_at": ("Located at", "Location of"),
-    "supplied_by": ("Supplied by", "Supplies"),
-    "authenticates_via": ("Signs in with", "Sign-in for"),
-    "sends_data_to": ("Sends data to", "Gets data from"),
-}
-
 
 @dataclass
 class SwitchLink:
@@ -105,9 +67,10 @@ def _fit(rel_type: str, from_type: str, to_type: str) -> str | None:
     return None
 
 
-def _name_line(rel_type: str, outbound: bool, other_name: str) -> str:
-    forward, reverse = _LABELS.get(rel_type, (rel_type.replace("_", " "), rel_type.replace("_", " ")))
-    return f"{forward if outbound else reverse} {other_name}"
+def _name_line(rel_type: str, outbound: bool, other_name: str, from_type: str | None = None, to_type: str | None = None) -> str:
+    """Same words as the web's formatRelationshipTriple (shared relationship_labels.json)."""
+    words = relationship_words(rel_type, from_type, to_type)
+    return f"{words.forward if outbound else words.reverse} {other_name}"
 
 
 def plan_type_switch(
@@ -212,10 +175,14 @@ def _kind_aliases(object_type: str) -> set[str]:
 
 
 def unread_on_platform(new_type: str, link_kind: str, table: str) -> bool:
-    """A platform has no reader for an application's manages or managed_by row."""
+    """A platform has no reader for an application's people accountabilities or managed_by row.
+
+    people_accountabilities.entity_kind has no cloud_service value, so every people row
+    (owns, the legacy manages, stewards, approves, ...) is dropped rather than retargeted.
+    """
     if new_type != "cloud_service":
         return False
-    if table == "people_accountabilities" and link_kind == "manages":
+    if table == "people_accountabilities":
         return True
     return table == "data_links" and link_kind == "managed_by"
 

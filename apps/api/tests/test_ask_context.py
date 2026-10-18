@@ -132,3 +132,27 @@ def test_labels_file_matches_the_web_copy():
     web = Path(__file__).resolve().parents[2] / "web" / "lib" / "ask" / "ask-labels.json"
     if web.exists():
         assert json.loads(api.read_text()) == json.loads(web.read_text())
+
+
+def test_relationship_lines_use_registry_sentences_and_reverse_wording():
+    from app.ai.ask.graph import Edge
+
+    crm = obj("application", "CRM")
+    okta = obj("application", "Okta")
+    azure = obj("cloud_service", "Azure")
+    billing = obj("application", "Billing")
+    topic = obj("integration", "Orders topic")
+    g = graph(crm, okta, azure, billing, topic)
+    g.edges = [
+        Edge(str(crm.id), str(okta.id), "authenticates_via", ""),
+        Edge(str(crm.id), str(azure.id), "runs_on", ""),
+        Edge(str(billing.id), str(topic.id), "subscribes", ""),
+    ]
+    text = build_context(g)
+    assert f"CRM ({crm.id}) signs in with Okta ({okta.id})" in text
+    assert f"CRM ({crm.id}) runs on Azure ({azure.id})" in text
+    assert f"Billing ({billing.id}) subscribes to Orders topic ({topic.id})" in text
+    assert "runs on = hosts" in text
+    assert "signs in with = sign-in for" in text
+    assert "authenticates via" not in text
+    assert not re.search(r"\b[a-z]+_[a-z_]+\b", text.split("RELATIONSHIPS", 1)[1])

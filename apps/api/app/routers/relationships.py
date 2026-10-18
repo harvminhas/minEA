@@ -27,6 +27,7 @@ from app.services.data_domain_rollup import (
     sync_entity_domain_property,
 )
 from app.services.catalog_cache import mark_catalog_dirty
+from app.services.relationship_labels import is_mutual, relationship_words
 from app.services.relationship_write import relationship_http_status, save_relationship, without_vendor_text
 from app.services.data_layer import add_data_link
 from app.services.tenancy import TenancyContext, get_workspace_context
@@ -85,6 +86,56 @@ async def _require_object_in_workspace(
         )
 
 
+def reversed_duplicate_message(rel_type: str, source_name: str, source_type: str, target_name: str, target_type: str) -> str:
+    """Friendly 409 text for B -[t]-> A when A -[t]-> B is already stored: say it both ways."""
+    words = relationship_words(rel_type, source_type, target_type)
+    return (
+        f"Already recorded: {words.sentence(source_name, target_name)}, which also reads "
+        f"\u201c{words.reverse_sentence(source_name, target_name)}\u201d. Edit or remove that link instead "
+        "of adding it the other way round."
+    )
+
+
+async def _reject_reversed_duplicate(db: AsyncSession, ctx: TenancyContext, body: RelationshipCreate) -> None:
+    """The unique index is direction-sensitive, so stop "Azure runs on Salesforce" next to
+    "Salesforce runs on Azure". Mutual types (depends_on, sends_data_to, ...) may go both ways."""
+    if is_mutual(body.type) or body.from_object_id == body.to_object_id:
+        return
+    assert ctx.workspace
+    reverse = (
+        await db.execute(
+            select(Relationship).where(
+                Relationship.workspace_id == ctx.workspace.id,
+                Relationship.org_id == ctx.org_id,
+                Relationship.type == body.type,
+                Relationship.from_object_id == body.to_object_id,
+                Relationship.to_object_id == body.from_object_id,
+            )
+        )
+    ).scalars().first()
+    if reverse is None:
+        return
+    names = dict(
+        (
+            await db.execute(
+                select(MinEAObject.id, MinEAObject.name).where(
+                    MinEAObject.id.in_((reverse.from_object_id, reverse.to_object_id))
+                )
+            )
+        ).all()
+    )
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=reversed_duplicate_message(
+            reverse.type,
+            names.get(reverse.from_object_id, "This item"),
+            reverse.from_type,
+            names.get(reverse.to_object_id, "the other item"),
+            reverse.to_type,
+        ),
+    )
+
+
 @router.post("", response_model=RelationshipRead)
 async def create_relationship(
     body: RelationshipCreate,
@@ -129,6 +180,7 @@ async def create_relationship(
     if existing is not None:
         response.status_code = relationship_http_status(False)
         return existing
+    await _reject_reversed_duplicate(db, ctx, body)
     response.status_code = relationship_http_status(True)
 
     if body.type == "owns" and body.from_type == "application" and body.to_type == "data_store":

@@ -1,18 +1,38 @@
-import type { AccountabilityEntityKind, AccountabilityLinkKind, PeopleAccountability } from "@minea/types";
+import {
+  accountabilityLabel,
+  type AccountabilityEntityKind,
+  type AccountabilityLinkKind,
+  type PeopleAccountability,
+} from "@minea/types";
 
 export const PEOPLE_LAYER_COLOR = "#e11d48";
 
-export const ACCOUNTABILITY_LINK_OPTIONS: Record<
-  AccountabilityLinkKind,
-  { label: string; description: string }
-> = {
-  owns: { label: "owns", description: "Accountable for this" },
-  performs: { label: "performs", description: "Carries out this process" },
-  approves: { label: "approves", description: "Sign-off authority" },
-  informed: { label: "informed", description: "Kept in the loop" },
-  stewards: { label: "stewards", description: "Data custodian" },
-  manages: { label: "manages", description: "Operational owner" },
-};
+const LINK_KINDS: AccountabilityLinkKind[] = ["owns", "performs", "approves", "informed", "stewards", "manages"];
+
+/** Picker labels from the shared registry, read from the team / role side ("Owns"). */
+export const ACCOUNTABILITY_LINK_OPTIONS = Object.fromEntries(
+  LINK_KINDS.map((kind) => {
+    const words = accountabilityLabel(kind);
+    return [kind, { label: words.forward, description: words.description }];
+  })
+) as Record<AccountabilityLinkKind, { label: string; description: string }>;
+
+/**
+ * The verb to show for one accountability row. The owner-team sync row reads "Owns" even when an
+ * older sync stored it as manages / stewards (rows are never rewritten; dev and prod share one DB).
+ */
+export function accountabilityDisplayKind(item: Pick<PeopleAccountability, "link_kind" | "is_owner">): string {
+  return item.is_owner ? "owns" : item.link_kind;
+}
+
+/** "Owns" from the team side, "Owned by" from the entity side. */
+export function accountabilityWords(
+  item: Pick<PeopleAccountability, "link_kind" | "is_owner">,
+  side: "subject" | "entity" = "subject"
+): string {
+  const words = accountabilityLabel(accountabilityDisplayKind(item));
+  return side === "subject" ? words.forward : words.reverse;
+}
 
 /** Allowed relationship verbs per entity type. */
 export const LINK_KINDS_BY_ENTITY: Record<string, AccountabilityLinkKind[]> = {
@@ -20,9 +40,9 @@ export const LINK_KINDS_BY_ENTITY: Record<string, AccountabilityLinkKind[]> = {
   capability: ["owns", "informed"],
   business_domain: ["owns", "informed"],
   process: ["owns", "performs", "approves", "informed"],
-  application: ["stewards", "manages", "approves"],
+  application: ["owns", "stewards", "manages", "approves"],
   data_domain: ["owns", "informed"],
-  data_store: ["stewards", "manages"],
+  data_store: ["owns", "stewards", "manages"],
 };
 
 export const LINK_KIND_STYLE: Record<string, string> = {
@@ -171,4 +191,11 @@ export function groupAccountabilities(
 
 export function accountabilityPairKey(entityId: string, linkKind: string): string {
   return `${entityId}:${linkKind}`;
+}
+
+/** people_accountabilities.entity_kind for a catalog object type (solution rows are stored as application). */
+export function accountabilityEntityKindOf(objectType: string): AccountabilityEntityKind | null {
+  if (objectType === "solution") return "application";
+  const kinds: string[] = ["capability", "business_domain", "application", "data_domain", "data_store", "product", "process"];
+  return kinds.includes(objectType) ? (objectType as AccountabilityEntityKind) : null;
 }

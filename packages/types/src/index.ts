@@ -127,7 +127,16 @@ export const GROWTH_TYPES: ObjectType[] = ["agent", "tool", "model"];
 export const ALLOWED_TRIPLES: readonly [string, string, string][] =
   allowedTripleRules as [string, string, string][];
 
-export { RELATIONSHIP_LABELS, type RelationshipLabel } from "./relationship-labels";
+export {
+  ACCOUNTABILITY_LABELS,
+  ACCOUNTABILITY_OWNER_LEGACY,
+  RELATIONSHIP_LABELS,
+  RELATIONSHIP_REGISTRY,
+  accountabilityLabel,
+  relationshipLabelFor,
+  type AccountabilityLabel,
+  type RelationshipLabel,
+} from "./relationship-labels";
 
 export type ImpactSeverityName = "direct" | "loses_sign_in" | "degraded" | "loses_support";
 export type ImpactLane = { whenTargetFails?: ImpactSeverityName; whenSourceFails?: ImpactSeverityName };
@@ -1940,6 +1949,18 @@ export interface PeopleAccountability {
   entity_name: string;
   link_kind: AccountabilityLinkKind | string;
   subtitle?: string | null;
+  /** The owner-team sync row (owns, or a legacy manages / stewards row): reads "Owns". */
+  is_owner?: boolean;
+}
+
+/** One accountability seen from the entity: "Owned by Finance". */
+export interface EntityAccountability {
+  id: string;
+  subject_type: "team" | "role" | string;
+  subject_id: string;
+  subject_name: string;
+  link_kind: AccountabilityLinkKind | string;
+  is_owner?: boolean;
 }
 
 export interface PeopleRoleDetail extends PeopleRole {

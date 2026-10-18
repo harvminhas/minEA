@@ -212,7 +212,7 @@ export function PlatformDetail({ platform, onClose, onDelete, onUpdate }: Props)
             )}
 
             <DetailSection
-              title={`Built on this platform (${systems.length + components.length})`}
+              title={`Hosted or built here (${systems.length + components.length})`}
               action={
                 canEdit ? (
                   <button

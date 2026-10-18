@@ -600,7 +600,8 @@ test("Signs in with: providers are links, Own login is a flag, and each clears t
     assert.equal(def.label, "Signs in with", type);
     assert.equal(def.section, "hosting", type);
     assert.deepEqual(def.source, { kind: "rel", edge: "authenticates_via", dir: "out", target: ["application", "solution", "technical_capability", "cloud_service"], single: false });
-    assert.equal(REGISTRY[type].find((field) => field.key === "sign_in_for")?.editor, "none", type);
+    // Sign-in for is the reverse, editable from the provider and saved item -> provider.
+    assert.deepEqual(REGISTRY[type].find((field) => field.key === "sign_in_for")?.source, { kind: "rel", edge: "authenticates_via", dir: "in", target: ["application", "solution", "technical_capability", "cloud_service"], single: false }, type);
     assert.equal(CREATE_FORM_KEYS[type].includes("signs_in_with"), false, type);
   }
   const def = REGISTRY.application.find((field) => field.key === "signs_in_with")!;
@@ -636,4 +637,33 @@ test("Signs in with: providers are links, Own login is a flag, and each clears t
   const stale = { ...app, properties: { sign_in: "own_login" } };
   assert.deepEqual(readField(def, stale, [outgoing(stale, "authenticates_via", "cloud_service", "m365")]), ["m365"]);
   assert.equal(INTERNAL_KEYS.includes("sign_in" as never), true);
+});
+
+test("reverse fields are editable from the target and save the canonical direction", () => {
+  const hosts = REGISTRY.platform.find((field) => field.key === "hosts")!;
+  assert.equal(hosts.label, "Hosts");
+  assert.equal(hosts.editor, "relation");
+  const platform = { ...blankRecord("platform"), id: "azure", type: "cloud_service" };
+  const patch = toPatch(hosts, ["sf"], platform, [], undefined, () => "application");
+  assert.deepEqual(patch.addRel, [
+    { type: "runs_on", from_object_id: "sf", from_type: "application", to_object_id: "azure", to_type: "cloud_service" },
+  ]);
+  assert.equal(REGISTRY.server.find((field) => field.key === "hosts")?.source.kind, "rel");
+  assert.equal(REGISTRY.ai_model.find((field) => field.key === "used_by")?.editor, "relation");
+  for (const type of Object.keys(REGISTRY) as (keyof typeof REGISTRY)[]) {
+    assert.ok(!REGISTRY[type].some((field) => field.key === "built_on_it" || field.key === "runs_on_it"), type);
+  }
+});
+
+test("Platform for moves an app off its other platform", () => {
+  const def = REGISTRY.platform.find((field) => field.key === "platform_for")!;
+  const platform = { ...blankRecord("platform"), id: "pp", type: "cloud_service" };
+  const edges = [{ id: "old", type: "built_on", from_object_id: "app1", from_type: "application", to_object_id: "other", to_type: "cloud_service" }];
+  const patch = toPatch(def, ["app1"], platform, edges, undefined, () => "application");
+  assert.deepEqual(patch.removeRelIds, ["old"]);
+  assert.equal(patch.addRel?.[0]?.to_object_id, "pp");
+});
+
+test("the owner field reads Owned by", () => {
+  assert.equal(REGISTRY.application.find((field) => field.key === "owner")?.label, "Owned by");
 });

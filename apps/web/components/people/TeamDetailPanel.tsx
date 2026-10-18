@@ -11,7 +11,7 @@ import { AccountabilitiesPanel, type AssignTarget } from "@/components/people/Ac
 import { AssignAccountabilityDialog } from "@/components/people/AssignAccountabilityDialog";
 import { EditAccountabilityDialog } from "@/components/people/EditAccountabilityDialog";
 import { ConfirmRemoveAssignmentDialog } from "@/components/people/ConfirmRemoveAssignmentDialog";
-import { ASSIGNMENT_KIND_STYLE, PEOPLE_LAYER_COLOR, initials } from "@/lib/people-utils";
+import { ASSIGNMENT_KIND_STYLE, PEOPLE_LAYER_COLOR, initials, accountabilityDisplayKind } from "@/lib/people-utils";
 import { cn } from "@/lib/utils";
 import type { AssignmentKind, PeopleAccountability, PeopleRole } from "@minea/types";
 
@@ -435,7 +435,7 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
       {deleteTarget && (
         <ConfirmRemoveAssignmentDialog
           entityName={deleteTarget.entity_name}
-          linkKind={deleteTarget.link_kind}
+          linkKind={accountabilityDisplayKind(deleteTarget)}
           subjectType="team"
           loading={deletingId === deleteTarget.id}
           error={deleteError}

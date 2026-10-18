@@ -4,7 +4,13 @@ import Link from "next/link";
 import { ArrowUpRight, Box, Database, Flag, GitBranch, HardDrive, Layers, Link2, Pencil, Star, Trash2 } from "lucide-react";
 import type { PeopleAccountability } from "@minea/types";
 import { useTenancy } from "@/lib/tenancy";
-import { entityPath, groupAccountabilities, LINK_KIND_STYLE } from "@/lib/people-utils";
+import {
+  accountabilityDisplayKind,
+  accountabilityWords,
+  entityPath,
+  groupAccountabilities,
+  LINK_KIND_STYLE,
+} from "@/lib/people-utils";
 import { cn } from "@/lib/utils";
 
 const ENTITY_ICON: Record<string, typeof Box> = {
@@ -68,11 +74,11 @@ function AccountabilityRow({
 
       <span
         className={cn(
-          "rounded-full px-2 py-0.5 text-[10px] font-medium capitalize flex-shrink-0",
-          LINK_KIND_STYLE[item.link_kind] ?? "bg-gray-100 text-gray-600"
+          "rounded-full px-2 py-0.5 text-[10px] font-medium flex-shrink-0",
+          LINK_KIND_STYLE[accountabilityDisplayKind(item)] ?? "bg-gray-100 text-gray-600"
         )}
       >
-        {item.link_kind}
+        {accountabilityWords(item)}
       </span>
 
       {(onEdit || onDelete) && (

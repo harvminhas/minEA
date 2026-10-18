@@ -2,7 +2,7 @@
 
 import { Link2, X } from "lucide-react";
 import type { SystemDrawerLink } from "@/lib/system-drawer-utils";
-import { relationshipVerb } from "@/lib/relationship-display";
+import { relationshipWords } from "@/lib/relationship-display";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -12,6 +12,8 @@ interface Props {
   emptyLabel: string;
   onRemove?: (relationshipId: string) => void;
   isRemoving?: boolean;
+  /** The record these links hang off (these lists live on application-style records). */
+  systemType?: string;
 }
 
 export function SystemLinkedObjectList({
@@ -21,6 +23,7 @@ export function SystemLinkedObjectList({
   emptyLabel,
   onRemove,
   isRemoving,
+  systemType = "application",
 }: Props) {
   if (links.length === 0) {
     return <p className="text-sm text-gray-400">{emptyLabel}</p>;
@@ -30,10 +33,11 @@ export function SystemLinkedObjectList({
     <ul className="space-y-2">
       {links.map((link) => {
         const name = nameById[link.objectId] ?? (namesLoading ? "Loading…" : "Unknown object");
+        // Read from this system: forward when it is the stored source, the reverse words otherwise.
         const verb =
           link.direction === "outbound"
-            ? relationshipVerb(link.relationshipType)
-            : `${relationshipVerb(link.relationshipType)} (inbound)`;
+            ? relationshipWords(link.relationshipType, systemType, link.objectType).forward
+            : relationshipWords(link.relationshipType, link.objectType, systemType).reverse;
 
         return (
           <li
@@ -44,8 +48,8 @@ export function SystemLinkedObjectList({
               <Link2 size={14} className="text-gray-400 flex-shrink-0 mt-0.5" />
               <div className="min-w-0">
                 <p className="text-sm text-gray-900 leading-snug truncate">{name}</p>
-                <p className="text-xs text-gray-500 mt-0.5 capitalize">
-                  {verb.replace(/_/g, " ")}
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {verb}
                 </p>
               </div>
             </div>

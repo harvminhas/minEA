@@ -10,16 +10,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.objects import MinEAObject
 from app.models.people import PeopleAccountability
 from app.models.views_graph import Process, Product
+from app.services.relationship_labels import ACCOUNTABILITY_OWNER_LEGACY
 
-# Default accountability verb when an entity's owner team is set in forms.
+# Accountability row written when an entity's owner team is set in forms: the team "Owns" it and the
+# entity reads "Owned by" that team. Syncs before October 2026 wrote "manages" for applications and
+# "stewards" for data stores; those rows stay as they are (shared dev/prod database, no rewrite) and
+# are treated as the owner row when their team is the entity's owner team (OWNER_LEGACY_LINK_KINDS).
 _OBJECT_OWNER_ACCOUNTABILITY: dict[str, tuple[str, str]] = {
-    "application": ("application", "manages"),
-    "solution": ("application", "manages"),
+    "application": ("application", "owns"),
+    "solution": ("application", "owns"),
     "capability": ("capability", "owns"),
     "business_domain": ("business_domain", "owns"),
     "data_domain": ("data_domain", "owns"),
-    "data_store": ("data_store", "stewards"),
+    "data_store": ("data_store", "owns"),
 }
+
+# entity_kind -> verb older owner syncs wrote (mirrors accountability_owner_legacy in relationship_labels.json).
+OWNER_LEGACY_LINK_KINDS: dict[str, str] = dict(ACCOUNTABILITY_OWNER_LEGACY)
+
+
+def owner_link_kinds(entity_kind: str) -> tuple[str, ...]:
+    """Verbs that mean "this team owns it" for one entity kind: owns, plus any legacy sync verb."""
+    legacy = OWNER_LEGACY_LINK_KINDS.get(entity_kind)
+    return ("owns", legacy) if legacy else ("owns",)
 
 
 def owner_accountability_target(entity: Any) -> tuple[str, uuid.UUID, str] | None:
@@ -63,7 +76,7 @@ async def sync_owner_team_accountability(
                 PeopleAccountability.subject_id == previous_team_id,
                 PeopleAccountability.entity_kind == entity_kind,
                 PeopleAccountability.entity_id == entity_id,
-                PeopleAccountability.link_kind == link_kind,
+                PeopleAccountability.link_kind.in_(owner_link_kinds(entity_kind)),
             )
         )
 
@@ -78,10 +91,11 @@ async def sync_owner_team_accountability(
             PeopleAccountability.subject_id == team_id,
             PeopleAccountability.entity_kind == entity_kind,
             PeopleAccountability.entity_id == entity_id,
-            PeopleAccountability.link_kind == link_kind,
+            PeopleAccountability.link_kind.in_(owner_link_kinds(entity_kind)),
         )
     )
-    if existing.scalar_one_or_none():
+    # A legacy "manages" / "stewards" owner row already says it; don't add a second row.
+    if existing.scalars().first():
         return
 
     db.add(

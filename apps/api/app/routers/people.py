@@ -10,6 +10,7 @@ from app.schemas.people import (
     AccountabilityCreate,
     AccountabilityUpdate,
     AddRoleToTeamCreate,
+    EntityAccountabilityListResponse,
     PeopleContactCreate,
     PeopleContactDetail,
     PeopleContactListResponse,
@@ -32,6 +33,7 @@ from app.schemas.people import (
 from app.services.contact_assignments import load_contact_assignments
 from app.services.people import (
     load_accountabilities,
+    load_entity_accountabilities,
     load_role_teams,
     load_team_roles,
     validate_accountability_entity,
@@ -704,6 +706,20 @@ async def add_team_accountability(
             link_kind=body.link_kind,
         )
     )
+
+
+@router.get("/accountabilities", response_model=EntityAccountabilityListResponse)
+async def list_entity_accountabilities(
+    entity_kind: str,
+    entity_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> EntityAccountabilityListResponse:
+    """Accountabilities for one entity, so its page can show them from its side ("Owned by")."""
+    await ctx.require_read(db)
+    assert ctx.workspace
+    items = await load_entity_accountabilities(db, ctx.workspace.id, ctx.org_id, entity_kind, entity_id)
+    return EntityAccountabilityListResponse(items=items)
 
 
 @router.delete("/accountabilities/{accountability_id}", status_code=status.HTTP_204_NO_CONTENT)

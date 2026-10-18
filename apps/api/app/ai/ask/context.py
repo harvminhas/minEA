@@ -12,6 +12,7 @@ from collections import Counter
 from app.ai.ask.graph import WorkspaceGraph
 from app.ai.ask.labels import hosting_label, humanize
 from app.ai.ask.record_filters import build_facts, provider_label, region_label
+from app.services.relationship_labels import relationship_words
 
 log = logging.getLogger(__name__)
 ACTIVE_FEATURE = {"on", "piloting"}
@@ -23,8 +24,28 @@ def _money(value: float | None) -> str:
     return f"${int(round(value)):,}/yr" if value is not None else ""
 
 
-def _relation(value: str) -> str:
-    return humanize(value).lower() if "_" in value else value.replace("_", " ")
+def _relationship_line(edge, recs_by_id: dict) -> str:
+    """One stored link as a plain sentence from the shared registry ("CRM signs in with Okta")."""
+    source, target = recs_by_id[edge.from_id], recs_by_id[edge.to_id]
+    words = relationship_words(edge.relation, source.raw_type, target.raw_type)
+    return words.sentence(f"{source.name} ({source.id})", f"{target.name} ({target.id})")
+
+
+def _reverse_legend(edges, recs_by_id: dict) -> str:
+    """How each link type in use reads from its other end, so answers can say "Azure hosts Salesforce"."""
+    pairs: list[str] = []
+    seen: set[str] = set()
+    for edge in edges:
+        source, target = recs_by_id[edge.from_id], recs_by_id[edge.to_id]
+        words = relationship_words(edge.relation, source.raw_type, target.raw_type)
+        if words.symmetric:
+            continue
+        pair = f"{words.forward.lower()} = {words.reverse.lower()}"
+        if pair in seen:
+            continue
+        seen.add(pair)
+        pairs.append(pair)
+    return "; ".join(pairs)
 
 
 def build_context(graph: WorkspaceGraph) -> str:
@@ -85,12 +106,16 @@ def build_context(graph: WorkspaceGraph) -> str:
             label = humanize(str(kind))
             parts.append(label[:1].upper() + label[1:] if label == str(kind) else label)
         lines.append(" | ".join(str(p) for p in parts if p))
-    names = {r.id: r.name for r in recs}
-    rels = [f"{names[e.from_id]} ({e.from_id}) {_relation(e.relation)} {names[e.to_id]} ({e.to_id})" for e in graph.edges if e.from_id in names and e.to_id in names]
+    by_id = {r.id: r for r in recs}
+    edges = [e for e in graph.edges if e.from_id in by_id and e.to_id in by_id]
+    rels = [_relationship_line(e, by_id) for e in edges]
     if rels:
         lines.append("")
         lines.append(f"RELATIONSHIPS ({len(rels)}):")
         lines += rels
+        legend = _reverse_legend(edges, by_id)
+        if legend:
+            lines.append(f"FROM THE OTHER END (stored link = how the other item reads it): {legend}")
     teams = Counter(r.owner_team for r in recs if r.owner_team)
     people = Counter(r.owner_person for r in recs if r.owner_person)
     if teams:

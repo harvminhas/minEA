@@ -7,7 +7,26 @@ from sqlalchemy.orm import selectinload
 from app.models.objects import MinEAObject
 from app.models.people import PeopleAccountability, PeopleRole, Team, TeamRoleAssignment
 from app.models.views_graph import Process, Product
-from app.schemas.people import AccountabilityRead, TeamRoleOnTeamRead, TeamUsingRoleRead
+from app.schemas.people import (
+    AccountabilityRead,
+    EntityAccountabilityRead,
+    TeamRoleOnTeamRead,
+    TeamUsingRoleRead,
+)
+from app.services.owner_accountability_sync import owner_link_kinds
+
+OBJECT_ENTITY_KINDS = ("capability", "business_domain", "application", "data_domain", "data_store")
+
+
+def is_owner_row(row: PeopleAccountability, owner_team_id: UUID | None) -> bool:
+    """True when this row is the owner-team sync row: the entity's owner team with owns (or the
+    legacy manages / stewards verb older syncs wrote). Those read "Owns" / "Owned by"."""
+    return (
+        owner_team_id is not None
+        and row.subject_type == "team"
+        and row.subject_id == owner_team_id
+        and row.link_kind in owner_link_kinds(row.entity_kind)
+    )
 
 
 async def resolve_accountability_labels(
@@ -65,6 +84,14 @@ async def resolve_accountability_labels(
     for row in rows:
         name = "Unknown"
         subtitle: str | None = None
+        owner_entity = (
+            products.get(row.entity_id)
+            if row.entity_kind == "product"
+            else processes.get(row.entity_id)
+            if row.entity_kind == "process"
+            else objects.get(row.entity_id)
+        )
+        is_owner = is_owner_row(row, getattr(owner_entity, "owner_team_id", None))
         if row.entity_kind == "product":
             product = products.get(row.entity_id)
             if product:
@@ -137,6 +164,7 @@ async def resolve_accountability_labels(
                 entity_name=name,
                 link_kind=row.link_kind,
                 subtitle=subtitle,
+                is_owner=is_owner,
             )
         )
     return reads
@@ -201,6 +229,57 @@ async def load_accountabilities(
     )
     rows = list(result.scalars().all())
     return await resolve_accountability_labels(db, workspace_id, org_id, rows)
+
+
+async def load_entity_accountabilities(
+    db: AsyncSession,
+    workspace_id: UUID,
+    org_id: UUID,
+    entity_kind: str,
+    entity_id: UUID,
+) -> list[EntityAccountabilityRead]:
+    """Teams and roles accountable for one entity, read from the entity's side ("Owned by Finance")."""
+    rows = list(
+        (
+            await db.execute(
+                select(PeopleAccountability)
+                .where(
+                    PeopleAccountability.workspace_id == workspace_id,
+                    PeopleAccountability.org_id == org_id,
+                    PeopleAccountability.entity_kind == entity_kind,
+                    PeopleAccountability.entity_id == entity_id,
+                )
+                .order_by(PeopleAccountability.link_kind, PeopleAccountability.created_at)
+            )
+        ).scalars().all()
+    )
+    if not rows:
+        return []
+    owner_team_id: UUID | None = None
+    model = Product if entity_kind == "product" else Process if entity_kind == "process" else MinEAObject
+    owner_team_id = await db.scalar(
+        select(model.owner_team_id).where(model.id == entity_id, model.workspace_id == workspace_id, model.org_id == org_id)
+    )
+    team_ids = [r.subject_id for r in rows if r.subject_type == "team"]
+    role_ids = [r.subject_id for r in rows if r.subject_type == "role"]
+    names: dict[UUID, str] = {}
+    if team_ids:
+        names.update({t.id: t.name for t in (await db.execute(select(Team).where(Team.id.in_(team_ids)))).scalars()})
+    if role_ids:
+        names.update(
+            {r.id: r.name for r in (await db.execute(select(PeopleRole).where(PeopleRole.id.in_(role_ids)))).scalars()}
+        )
+    return [
+        EntityAccountabilityRead(
+            id=row.id,
+            subject_type=row.subject_type,
+            subject_id=row.subject_id,
+            subject_name=names.get(row.subject_id, "Unknown"),
+            link_kind=row.link_kind,
+            is_owner=is_owner_row(row, owner_team_id),
+        )
+        for row in rows
+    ]
 
 
 async def validate_accountability_entity(

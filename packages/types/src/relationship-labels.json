@@ -1,0 +1,284 @@
+{
+  "_comment": "Relationship words, stored once (source -> target). forward/sentence read from the stored source, reverse/reverse_sentence from the stored target. overrides replace words for listed source/target types. symmetric: same words both ways and a reversed link is the same link. mutual: A->B and B->A may both be recorded (otherwise a reversed copy is refused). The API keeps a copy at apps/api/app/data/relationship_labels.json (parity tests on both sides).",
+  "types": {
+    "depends_on": {
+      "forward": "Depends on",
+      "reverse": "Needed by",
+      "sentence": "{from} depends on {to}",
+      "reverse_sentence": "{to} is needed by {from}",
+      "mutual": true
+    },
+    "part_of": {
+      "forward": "Part of",
+      "reverse": "Includes",
+      "sentence": "{from} is part of {to}",
+      "reverse_sentence": "{to} includes {from}"
+    },
+    "calls": {
+      "forward": "Calls",
+      "reverse": "Called by",
+      "sentence": "{from} calls {to}",
+      "reverse_sentence": "{to} is called by {from}",
+      "mutual": true
+    },
+    "uses": {
+      "forward": "Uses",
+      "reverse": "Used by",
+      "sentence": "{from} uses {to}",
+      "reverse_sentence": "{to} is used by {from}"
+    },
+    "contains": {
+      "forward": "Contains",
+      "reverse": "Stored in",
+      "sentence": "{from} contains {to}",
+      "reverse_sentence": "{to} is stored in {from}"
+    },
+    "connects": {
+      "forward": "Uses",
+      "reverse": "Used by",
+      "sentence": "{from} uses {to}",
+      "reverse_sentence": "{to} is used by {from}"
+    },
+    "routes": {
+      "forward": "Routes",
+      "reverse": "Routed by",
+      "sentence": "{from} routes {to}",
+      "reverse_sentence": "{to} is routed by {from}"
+    },
+    "hosts": {
+      "forward": "Gateway for",
+      "reverse": "Behind gateway",
+      "sentence": "{from} is gateway for {to}",
+      "reverse_sentence": "{to} is behind gateway {from}"
+    },
+    "carries": {
+      "forward": "Carries",
+      "reverse": "Carried by",
+      "sentence": "{from} carries {to}",
+      "reverse_sentence": "{to} is carried by {from}"
+    },
+    "supported_by": {
+      "forward": "Supported by",
+      "reverse": "Supports",
+      "sentence": "{from} is supported by {to}",
+      "reverse_sentence": "{to} supports {from}"
+    },
+    "exposes": {
+      "forward": "Exposes",
+      "reverse": "Exposed by",
+      "sentence": "{from} exposes {to}",
+      "reverse_sentence": "{to} is exposed by {from}"
+    },
+    "publishes": {
+      "forward": "Publishes",
+      "reverse": "Published by",
+      "sentence": "{from} publishes {to}",
+      "reverse_sentence": "{to} is published by {from}"
+    },
+    "consumes": {
+      "forward": "Consumes",
+      "reverse": "Consumed by",
+      "sentence": "{from} consumes {to}",
+      "reverse_sentence": "{to} is consumed by {from}"
+    },
+    "subscribes": {
+      "forward": "Subscribes to",
+      "reverse": "Subscribed to by",
+      "sentence": "{from} subscribes to {to}",
+      "reverse_sentence": "{to} is subscribed to by {from}"
+    },
+    "reads": {
+      "forward": "Reads from",
+      "reverse": "Read by",
+      "sentence": "{from} reads from {to}",
+      "reverse_sentence": "{to} is read by {from}"
+    },
+    "writes": {
+      "forward": "Writes to",
+      "reverse": "Written to by",
+      "sentence": "{from} writes to {to}",
+      "reverse_sentence": "{to} is written to by {from}"
+    },
+    "creates": {
+      "forward": "Creates",
+      "reverse": "Created by",
+      "sentence": "{from} creates {to}",
+      "reverse_sentence": "{to} is created by {from}"
+    },
+    "updates": {
+      "forward": "Updates",
+      "reverse": "Updated by",
+      "sentence": "{from} updates {to}",
+      "reverse_sentence": "{to} is updated by {from}"
+    },
+    "owns": {
+      "forward": "Owns",
+      "reverse": "Owned by",
+      "sentence": "{from} owns {to}",
+      "reverse_sentence": "{to} is owned by {from}"
+    },
+    "belongs_to": {
+      "forward": "Belongs to",
+      "reverse": "Includes",
+      "sentence": "{from} belongs to {to}",
+      "reverse_sentence": "{to} includes {from}"
+    },
+    "runs_on": {
+      "forward": "Runs on",
+      "reverse": "Hosts",
+      "sentence": "{from} runs on {to}",
+      "reverse_sentence": "{to} hosts {from}",
+      "overrides": [
+        {
+          "from": [
+            "ai_model"
+          ],
+          "to": [
+            "cloud_service"
+          ],
+          "forward": "Accessed through",
+          "reverse": "Provides access to",
+          "sentence": "{from} is accessed through {to}",
+          "reverse_sentence": "{to} provides access to {from}"
+        }
+      ]
+    },
+    "built_on": {
+      "forward": "Built on",
+      "reverse": "Platform for",
+      "sentence": "{from} is built on {to}",
+      "reverse_sentence": "{to} is the platform for {from}",
+      "overrides": [
+        {
+          "from": [
+            "agent"
+          ],
+          "to": [
+            "cloud_service",
+            "tool"
+          ],
+          "forward": "Built with",
+          "reverse": "Used to build",
+          "sentence": "{from} is built with {to}",
+          "reverse_sentence": "{to} is used to build {from}"
+        }
+      ]
+    },
+    "affects": {
+      "forward": "Affects",
+      "reverse": "Affected by",
+      "sentence": "{from} affects {to}",
+      "reverse_sentence": "{to} is affected by {from}"
+    },
+    "resolves": {
+      "forward": "Resolves",
+      "reverse": "Resolved by",
+      "sentence": "{from} resolves {to}",
+      "reverse_sentence": "{to} is resolved by {from}"
+    },
+    "replaces": {
+      "forward": "Replaces",
+      "reverse": "Replaced by",
+      "sentence": "{from} replaces {to}",
+      "reverse_sentence": "{to} is replaced by {from}"
+    },
+    "uses_model": {
+      "forward": "Uses model",
+      "reverse": "Used by",
+      "sentence": "{from} uses model {to}",
+      "reverse_sentence": "{to} is used by {from}"
+    },
+    "can_call": {
+      "forward": "Can call",
+      "reverse": "Can be called by",
+      "sentence": "{from} can call {to}",
+      "reverse_sentence": "{to} can be called by {from}",
+      "mutual": true
+    },
+    "supports": {
+      "forward": "Supports",
+      "reverse": "Supported by",
+      "sentence": "{from} supports {to}",
+      "reverse_sentence": "{to} is supported by {from}"
+    },
+    "escalates_to": {
+      "forward": "Escalates to",
+      "reverse": "Receives escalations from",
+      "sentence": "{from} escalates to {to}",
+      "reverse_sentence": "{to} receives escalations from {from}"
+    },
+    "accesses": {
+      "forward": "Accesses",
+      "reverse": "Accessed by",
+      "sentence": "{from} accesses {to}",
+      "reverse_sentence": "{to} is accessed by {from}"
+    },
+    "connects_to": {
+      "forward": "Connects to",
+      "reverse": "Connected through",
+      "sentence": "{from} connects to {to}",
+      "reverse_sentence": "{to} is connected through {from}"
+    },
+    "located_at": {
+      "forward": "Located at",
+      "reverse": "Location of",
+      "sentence": "{from} is located at {to}",
+      "reverse_sentence": "{to} is the location of {from}"
+    },
+    "supplied_by": {
+      "forward": "Supplied by",
+      "reverse": "Supplies",
+      "sentence": "{from} is supplied by {to}",
+      "reverse_sentence": "{to} supplies {from}"
+    },
+    "sends_data_to": {
+      "forward": "Sends data to",
+      "reverse": "Gets data from",
+      "sentence": "{from} sends data to {to}",
+      "reverse_sentence": "{to} gets data from {from}",
+      "mutual": true
+    },
+    "authenticates_via": {
+      "forward": "Signs in with",
+      "reverse": "Sign-in for",
+      "sentence": "{from} signs in with {to}",
+      "reverse_sentence": "{to} is the sign-in for {from}"
+    }
+  },
+  "accountability": {
+    "owns": {
+      "forward": "Owns",
+      "reverse": "Owned by",
+      "description": "Accountable for this"
+    },
+    "manages": {
+      "forward": "Manages",
+      "reverse": "Managed by",
+      "description": "Operational owner"
+    },
+    "stewards": {
+      "forward": "Stewards",
+      "reverse": "Stewarded by",
+      "description": "Data custodian"
+    },
+    "performs": {
+      "forward": "Performs",
+      "reverse": "Performed by",
+      "description": "Carries out this process"
+    },
+    "approves": {
+      "forward": "Approves",
+      "reverse": "Approved by",
+      "description": "Sign-off authority"
+    },
+    "informed": {
+      "forward": "Informed about",
+      "reverse": "Keeps informed",
+      "description": "Kept in the loop"
+    }
+  },
+  "accountability_owner_legacy": {
+    "application": "manages",
+    "data_store": "stewards"
+  }
+}

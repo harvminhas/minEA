@@ -18,7 +18,7 @@ import { SystemDiagramModal } from "@/components/application/SystemDiagram";
 import { SystemDiagramPreview } from "@/components/application/SystemDiagramPreview";
 import { isSystemObjectType } from "@/lib/platform-relationship-utils";
 import { REGISTRY, recordTypeOf } from "@/lib/fields/registry";
-import { vendorRollup, type CatalogRow } from "@/lib/model-catalog";
+import type { CatalogRow } from "@/lib/model-catalog";
 import { applyCatalogWrite, catalogQueryKey, useModelCatalog, type WorkspaceCatalog } from "@/lib/use-model-catalog";
 import { usePermissions } from "@/lib/use-permissions";
 import { relationshipsForIds, sameNamePartyIds } from "@/lib/relationships-for-object";
@@ -34,6 +34,8 @@ import { AppLocationEditor } from "@/components/hosting/AppLocationEditor";
 import { InlineField, RecordFields, toFieldEdges } from "@/components/mvp/InfraEditors";
 import { askPath } from "@/lib/mvp-paths";
 import { Pill } from "@/components/mvp/pills";
+import { VendorSupplies } from "@/components/mvp/VendorSupplies";
+import { EntityAccountabilities } from "@/components/people/EntityAccountabilities";
 
 export function ModelDetailPanel({
   row,
@@ -171,20 +173,7 @@ export function ModelDetailPanel({
                 Impact if down: ask what breaks if {row.name} goes down →
               </a>
             )}
-            {row.object.type === "external_party" && (
-              <section>
-                <h3 className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">SUPPLIED ITEMS</h3>
-                {(() => {
-                  const items = vendorRollup(catalog.data?.rows ?? []).find(
-                    (vendor) => vendor.vendor.trim().toLowerCase() === row.name.trim().toLowerCase()
-                  )?.items ?? [];
-                  if (items.length === 0) return <p className="text-[13px] text-[#8b90a0]">Nothing lists this vendor yet.</p>;
-                  return items.map((item) => (
-                    <div key={item.id} className="py-1.5 text-[13px] text-[#1c2230]">{item.name}</div>
-                  ));
-                })()}
-              </section>
-            )}
+            {row.object.type === "external_party" && <VendorSupplies vendor={row.object} canEdit={canEdit && storedObject} />}
             {(row.object.type === "application" || row.object.type === "solution" || row.object.type === "technical_capability" || row.object.type === "cloud_service") && (
               <TypeSwitch
                 canEdit={canEdit}
@@ -204,6 +193,7 @@ export function ModelDetailPanel({
                 onOpenKey={setOpenField}
               />
             )}
+            {storedObject && <EntityAccountabilities object={row.object} />}
             <section>
               <h3 className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">DEPENDS ON THIS</h3>
               {impactGraph.isLoading && <p className="text-[13px] text-[#8b90a0]">Looking up what depends on this…</p>}
@@ -506,7 +496,7 @@ function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: 
     lists = (
       <div className="space-y-4">
         <h3 className="text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">
-          BUILT ON THIS PLATFORM ({systems.length + components.length})
+          HOSTED OR BUILT HERE ({systems.length + components.length})
         </h3>
         {systems.length === 0 && components.length === 0 ? (
           <p className="text-[13px] text-[#8b90a0]">No systems or components linked yet.</p>

@@ -42,9 +42,8 @@ import { countLabel } from "@/lib/labels";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
 import { aiLandscape } from "@/lib/ai/landscape";
 import { aiHomeCard, type AiHomeCard } from "@/lib/ai/home-card";
-import { relationshipVerb } from "@/lib/relationship-display";
+import { relationshipWords } from "@/lib/relationship-display";
 import type { ImpactEdge, ImpactNode } from "@/lib/impact/relationship-impact";
-import type { RelationshipType } from "@minea/types";
 
 export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const params = useSearchParams();
@@ -842,11 +841,14 @@ function RecordPreview({
       const outbound = edge.fromId === id;
       const otherId = outbound ? edge.toId : edge.fromId;
       const other = nodes.find((item) => item.id === otherId);
+      const typeOf = (recordId: string) => rows.find((item) => item.id === recordId)?.object.type ?? null;
+      // Read from this record: "Azure hosts Salesforce" for a stored Salesforce runs on Azure.
+      const words = relationshipWords(edge.type, typeOf(edge.fromId), typeOf(edge.toId));
       return {
         id: `${edge.type}:${edge.fromId}:${edge.toId}`,
         otherId,
         otherName: other?.name || "Unnamed",
-        verb: relationshipVerb(edge.type as RelationshipType),
+        verb: (outbound ? words.forward : words.reverse).toLowerCase(),
         outbound,
       };
     })
@@ -879,7 +881,7 @@ function RecordPreview({
           </button>
         </div>
         <dl className="mt-4 space-y-1 text-[13px] text-[#3c4254]">
-          <div className="flex justify-between gap-3"><dt className="text-[#8b90a0]">Owner</dt><dd>{owner || "Not set"}</dd></div>
+          <div className="flex justify-between gap-3"><dt className="text-[#8b90a0]">Owned by</dt><dd>{owner || "Not set"}</dd></div>
           <div className="flex justify-between gap-3"><dt className="text-[#8b90a0]">Criticality</dt><dd>{row?.criticalityLabel || "Not set"}</dd></div>
           {row?.annualCostNumber != null && (
             <div className="flex justify-between gap-3"><dt className="text-[#8b90a0]">Annual cost</dt><dd>{moneyLabel(row.annualCostNumber)}/yr</dd></div>
@@ -895,23 +897,11 @@ function RecordPreview({
           <ul className="mt-2 space-y-2">
             {links.map((link) => (
               <li key={link.id} className="flex flex-wrap items-center gap-2 text-[13px]">
-                {link.outbound ? (
-                  <>
-                    <span className="rounded-lg bg-[#f4f3ff] px-2 py-1 font-medium text-[#3f35b5]">{name}</span>
-                    <span className="text-[#8b90a0]">{link.verb}</span>
-                    <button type="button" onClick={() => onOpen(link.otherId)} className="rounded-lg border border-[#e6e8ee] px-2 py-1 font-medium text-[#1c2230] hover:border-[#c9c6f5]">
-                      {link.otherName}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button type="button" onClick={() => onOpen(link.otherId)} className="rounded-lg border border-[#e6e8ee] px-2 py-1 font-medium text-[#1c2230] hover:border-[#c9c6f5]">
-                      {link.otherName}
-                    </button>
-                    <span className="text-[#8b90a0]">{link.verb}</span>
-                    <span className="rounded-lg bg-[#f4f3ff] px-2 py-1 font-medium text-[#3f35b5]">{name}</span>
-                  </>
-                )}
+                <span className="rounded-lg bg-[#f4f3ff] px-2 py-1 font-medium text-[#3f35b5]">{name}</span>
+                <span className="text-[#8b90a0]">{link.verb}</span>
+                <button type="button" onClick={() => onOpen(link.otherId)} className="rounded-lg border border-[#e6e8ee] px-2 py-1 font-medium text-[#1c2230] hover:border-[#c9c6f5]">
+                  {link.otherName}
+                </button>
               </li>
             ))}
           </ul>

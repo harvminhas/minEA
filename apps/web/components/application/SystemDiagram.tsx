@@ -312,7 +312,7 @@ export function buildSystemGraph(
         data: { link },
       });
 
-      const edgeLabel = mergedSystemDiagramEdgeLabel(link);
+      const edgeLabel = mergedSystemDiagramEdgeLabel(link, system.type);
       if (outbound) {
         edges.push({
           id: `e-${nodeId}-out`,

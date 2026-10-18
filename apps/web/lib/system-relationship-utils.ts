@@ -122,8 +122,15 @@ export function mergeSystemDiagramLinks(links: SystemDiagramLink[]): MergedSyste
   return [...map.values()];
 }
 
-export function mergedSystemDiagramEdgeLabel(link: MergedSystemDiagramLink): string {
-  return link.relationshipTypes.map((type) => relationshipVerb(type)).join(", ");
+export function mergedSystemDiagramEdgeLabel(link: MergedSystemDiagramLink, centerType: string | null = null): string {
+  // Drawn on the arrow, which always points source → target, so the forward words read right.
+  return link.relationshipTypes
+    .map((type) =>
+      link.direction === "outbound"
+        ? relationshipVerb(type, centerType, link.objectType)
+        : relationshipVerb(type, link.objectType, centerType)
+    )
+    .join(", ");
 }
 
 export function systemDiagramNodeId(link: Pick<MergedSystemDiagramLink, "objectId" | "direction">): string {

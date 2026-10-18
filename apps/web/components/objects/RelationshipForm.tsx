@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X, Search } from "lucide-react";
-import { type MinEAObject, type ObjectListResponse, type ObjectType, type Relationship, type RelationshipType, ALLOWED_TRIPLES, RELATIONSHIP_LABELS } from "@minea/types";
+import { type MinEAObject, type ObjectListResponse, type ObjectType, type Relationship, type RelationshipType, ALLOWED_TRIPLES, relationshipLabelFor } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { tripleKey } from "@/lib/allowed-triples";
 import { appendComponentSystemRef } from "@/lib/component-relationship-utils";
@@ -15,6 +15,8 @@ import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-m
 import { usePermissions } from "@/lib/use-permissions";
 import { useTenancy } from "@/lib/tenancy";
 import { detailsAlsoSetsHint } from "@/lib/fields/shared-links";
+import { friendlyError } from "@/lib/row-saving";
+import { buildRelationshipOptionsForTarget, siblingOption, type RelDirection } from "@/lib/relationship-options";
 import {
   emptyTypeHint,
   linkGroupsFor,
@@ -42,16 +44,6 @@ type PickerChoice = {
   createName?: string;
 };
 
-type RelDirection = "outbound" | "inverse";
-
-type RelOption = {
-  key: string;
-  type: RelationshipType;
-  label: string;
-  outbound: boolean;
-  inverse: boolean;
-};
-
 const ALLOWED_TRIPLE_KEYS = new Set(
   ALLOWED_TRIPLES.map(([type, from, to]) => tripleKey(type, from, to))
 );
@@ -66,29 +58,6 @@ function connectableTargetTypes(fromType: string): string[] {
     if (!types.includes(link.target)) types.push(link.target);
   }
   return types;
-}
-
-function defaultDirection(option: RelOption): RelDirection {
-  return option.outbound ? "outbound" : "inverse";
-}
-
-function buildRelationshipOptionsForTarget(fromType: string, targetType: string): RelOption[] {
-  const byType = new Map<string, RelOption>();
-  for (const link of linksForTarget(fromType, targetType)) {
-    const outbound = link.direction !== "inverse" && allowedTriple(link.type, fromType, targetType);
-    const inverse = link.direction !== "outbound" && allowedTriple(link.type, targetType, fromType);
-    if (!outbound && !inverse) continue;
-    const words = RELATIONSHIP_LABELS[link.type as RelationshipType];
-    if (!words) continue;
-    byType.set(link.type, {
-      key: link.type,
-      type: link.type as RelationshipType,
-      label: inverse && !outbound ? words.reverse : words.forward,
-      outbound,
-      inverse,
-    });
-  }
-  return [...byType.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
 export function RelationshipForm({ fromObject, onClose, onSuccess, initialTargetType }: Props) {
@@ -162,9 +131,8 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
   }, [fromObject.type, selectedTarget]);
 
   const selectedOption = relationshipOptions.find((option) => option.key === selectedOptionKey);
-  const canSwap = Boolean(
-    selectedOption && (direction === "outbound" ? selectedOption.inverse : selectedOption.outbound)
-  );
+  const swapTo = siblingOption(relationshipOptions, selectedOption);
+  const canSwap = Boolean(swapTo);
 
   const resolvedTriple = useMemo(() => {
     if (!selectedOption || !selectedTarget) return null;
@@ -187,13 +155,14 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
   }, [direction, fromObject, selectedOption, selectedTarget]);
 
   const detailsHint = resolvedTriple ? detailsAlsoSetsHint(resolvedTriple.type, resolvedTriple.fromType) : null;
+  // Always read from the open record: "Azure hosts Salesforce" even though Salesforce → Azure is stored.
   const sentence = resolvedTriple && selectedTarget
-    ? direction === "inverse" && resolvedTriple.type === "supplied_by"
-      ? `${fromObject.name} supplies ${selectedTarget.name}`
-      : RELATIONSHIP_LABELS[resolvedTriple.type].sentence(
-          resolvedTriple.fromId === fromObject.id ? fromObject.name : selectedTarget.name,
-          resolvedTriple.toId === selectedTarget.id ? selectedTarget.name : fromObject.name
-        )
+    ? (() => {
+        const words = relationshipLabelFor(resolvedTriple.type, resolvedTriple.fromType, resolvedTriple.toType);
+        return direction === "inverse"
+          ? words.reverseSentence(selectedTarget.name, fromObject.name)
+          : words.sentence(fromObject.name, selectedTarget.name);
+      })()
     : "";
   const sentenceSource = direction === "inverse" && selectedTarget ? selectedTarget : fromObject;
   const linkToRecord = direction === "inverse" && selectedTarget ? fromObject : selectedTarget;
@@ -339,6 +308,10 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
       }
       onSuccess(result.relationship);
     },
+    onError: (err) => {
+      // e.g. 409: the same link already exists the other way round.
+      setCreateError(friendlyError(err));
+    },
   });
 
   const createTarget = useMutation({
@@ -371,7 +344,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
     setFlowHow("");
     setFlowFrequency("");
     const option = options.find((item) => item.key === key);
-    setDirection(option ? defaultDirection(option) : "outbound");
+    setDirection(option ? option.direction : "outbound");
   }
 
   function selectTarget(obj: MinEAObject) {
@@ -633,7 +606,11 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
                     <button
                       type="button"
                       disabled={!canSwap}
-                      onClick={() => setDirection((current) => (current === "outbound" ? "inverse" : "outbound"))}
+                      onClick={() => {
+                        if (!swapTo) return;
+                        setSelectedOptionKey(swapTo.key);
+                        setDirection(swapTo.direction);
+                      }}
                       className="h-full rounded-md border border-gray-200 px-3 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       ⇄

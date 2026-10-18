@@ -1,5 +1,6 @@
 import type { SupportRequestBody } from "@/lib/support";
 import type {
+  EntityAccountability,
   MinEAObject,
   ObjectCreate,
   ObjectUpdate,
@@ -1106,6 +1107,19 @@ export const peopleApi = {
       body: JSON.stringify(body),
       token,
     }),
+
+  /** Teams and roles accountable for one entity, read from its side ("Owned by Finance"). */
+  listEntityAccountabilities: (
+    orgSlug: string,
+    workspaceSlug: string,
+    entityKind: string,
+    entityId: string,
+    token: string
+  ) =>
+    apiFetch<{ items: EntityAccountability[] }>(
+      `${wsBase(orgSlug, workspaceSlug)}/people/accountabilities?entity_kind=${encodeURIComponent(entityKind)}&entity_id=${encodeURIComponent(entityId)}`,
+      { token }
+    ),
 
   deleteAccountability: (
     orgSlug: string,

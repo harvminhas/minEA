@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { accountabilityLabel } from "@minea/types";
 import { LINK_KIND_STYLE } from "@/lib/people-utils";
 
 interface Props {
@@ -66,11 +67,11 @@ export function ConfirmRemoveAssignmentDialog({
           <span className="text-sm text-gray-800 font-medium truncate flex-1">{entityName}</span>
           <span
             className={cn(
-              "rounded-full px-2 py-0.5 text-[10px] font-medium capitalize flex-shrink-0",
+              "rounded-full px-2 py-0.5 text-[10px] font-medium flex-shrink-0",
               LINK_KIND_STYLE[linkKind] ?? "bg-gray-100 text-gray-600"
             )}
           >
-            {linkKind}
+            {accountabilityLabel(linkKind).forward}
           </span>
         </div>
 

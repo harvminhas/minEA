@@ -2,7 +2,7 @@
 
 import { memo, useMemo } from "react";
 import { Handle, MarkerType, Position, type Edge, type Node, type NodeTypes } from "reactflow";
-import type { ProductGraphNode, ProductGraphResponse } from "@minea/types";
+import { relationshipLabelFor, type ProductGraphNode, type ProductGraphResponse } from "@minea/types";
 import { EntityFlowCanvas, type NodeLayout } from "@/components/shared/EntityFlowCanvas";
 import { getLayerColor, getTypeLayer } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -127,7 +127,7 @@ export function buildProductArchitectureGraph(
     id: edge.id,
     source: edge.source,
     target: edge.target,
-    label: compact ? undefined : edge.label,
+    label: compact ? undefined : productEdgeLabel(edge.label),
     type: "smoothstep",
     animated: false,
     markerEnd: compact
@@ -214,4 +214,11 @@ export function ProductArchitectureGraph({
       )}
     </div>
   );
+}
+
+/** The API sends words ("Runs on"); an older build sent the stored code ("runs on" / "runs_on"). */
+export function productEdgeLabel(label: string): string {
+  if (!/^[a-z_ ]+$/.test(label)) return label;
+  if (label === "delivers") return "Delivers";
+  return relationshipLabelFor(label.replace(/ /g, "_")).forward;
 }

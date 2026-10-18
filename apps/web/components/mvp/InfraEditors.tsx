@@ -22,6 +22,7 @@ import { actsAsFlag, actsAsLabel, readActsAs } from "@/lib/ai/acts-as";
 import { holdsDataLabel, readHoldsData, suggestedHoldsData, toggleHoldsData } from "@/lib/ai/sensitive";
 import { emptyTypeHint } from "@/lib/relationship-targets";
 import { domainSuggestions, resolveDomain } from "@/lib/capabilities";
+import { friendlyError } from "@/lib/row-saving";
 import { OWN_LOGIN, OWN_LOGIN_LABEL, SIGN_IN_EDGE, isIdentityProvider, orderSignInChoices, signInCounts, signInSuggestion, toggleSignInPick } from "@/lib/sign-in";
 import { infraStatus } from "@/lib/infra/status";
 import { OwnershipFields } from "@/components/ownership/OwnershipFields";
@@ -185,24 +186,6 @@ function dateLabel(value: string): string {
 
 export function displayValue(def: FieldDef, record: FieldRecord, object: MinEAObject, edges: FieldEdge[], names: Map<string, string>): string {
   if (def.editor === "none") {
-    if (def.key === "runs_on_it") {
-      const count = edges.filter((edge) => edge.to_object_id === record.id && edge.type === "runs_on").length;
-      return count ? String(count) : "";
-    }
-    if (def.key === "built_on_it") {
-      const count = edges.filter((edge) => edge.to_object_id === record.id && (edge.type === "built_on" || edge.type === "runs_on")).length;
-      return count ? String(count) : "";
-    }
-    if (def.key === "sign_in_for") {
-      const count = edges.filter((edge) => edge.to_object_id === record.id && edge.type === SIGN_IN_EDGE).length;
-      if (count === 0) return "";
-      return count === 1 ? "1 item" : `${count} items`;
-    }
-    if (def.key === "used_by") {
-      const count = edges.filter((edge) => edge.to_object_id === record.id && edge.type === "uses_model").length;
-      if (count === 0) return "";
-      return count === 1 ? "1 agent" : `${count} agents`;
-    }
     if (def.key === "status_calc") return infraStatus(readRuntimeInfra(object), new Date()).label;
     return "";
   }
@@ -276,8 +259,12 @@ export function RecordFields({
   for (const def of REGISTRY[type]) {
     if (omit.includes(def.key)) continue;
     if (def.showIf && !def.showIf({ properties: record.properties, type: record.type })) continue;
-    // Sign-in for shows only on a record others sign in with.
-    if (def.key === "sign_in_for" && !edges.some((edge) => edge.to_object_id === record.id && edge.type === SIGN_IN_EDGE)) continue;
+    // Sign-in for shows on a platform, and elsewhere only on a record others already sign in with.
+    if (
+      def.key === "sign_in_for" &&
+      type !== "platform" &&
+      !edges.some((edge) => edge.to_object_id === record.id && edge.type === SIGN_IN_EDGE)
+    ) continue;
     const group = groups.find((item) => item.section === def.section);
     if (group) group.fields.push(def);
     else groups.push({ section: def.section, fields: [def] });
@@ -410,6 +397,7 @@ export function InlineField({
       return;
     }
     const created: Relationship[] = [];
+    const preexisting = new Set<string>();
     const deleted: string[] = [];
     let removed: Relationship[] = [];
     let pending: Relationship[] = [];
@@ -447,6 +435,7 @@ export function InlineField({
         properties: applied.properties,
       } as MinEAObject;
       const catalogRels = catalog.data?.relationships ?? [];
+      for (const rel of catalogRels) preexisting.add(rel.id);
       removed = (patch.removeRelIds ?? [])
         .map((id) => catalogRels.find((rel) => rel.id === id))
         .filter((rel): rel is Relationship => Boolean(rel));
@@ -488,6 +477,8 @@ export function InlineField({
       if (orgSlug && workspaceSlug) {
         if (token && deleted.length === 0) {
           for (const rel of created) {
+            // A create that matched a link that was already there returns that link: keep it.
+            if (preexisting.has(rel.id)) continue;
             try {
               await relationshipsApi.delete(orgSlug, workspaceSlug, rel.id, token);
             } catch {
@@ -503,7 +494,7 @@ export function InlineField({
         applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object });
         queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
       }
-      setError(`Couldn't save: ${err instanceof Error ? err.message : "Could not save"}`);
+      setError(`Couldn't save: ${friendlyError(err)}`);
     }
   };
 

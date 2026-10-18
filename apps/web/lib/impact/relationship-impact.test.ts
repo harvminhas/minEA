@@ -279,3 +279,18 @@ test("sign-in is a terminal lane in the shared rules", () => {
   assert.equal(RELATIONSHIP_LABELS.authenticates_via.forward, "Signs in with");
   assert.equal(RELATIONSHIP_LABELS.authenticates_via.reverse, "Sign-in for");
 });
+
+test("each path step reads from the affected item, like the API", () => {
+  const nodes = [
+    { id: "erp", name: "ERP" },
+    { id: "crm", name: "CRM" },
+    { id: "suite", name: "Suite" },
+    { id: "mod", name: "Module" },
+  ];
+  const flow = impactOf(nodes, [{ type: "sends_data_to", fromId: "erp", toId: "crm" }], "erp");
+  assert.equal(flow[0]?.path[0]?.label, "CRM gets data from ERP");
+  const part = impactOf(nodes, [{ type: "part_of", fromId: "mod", toId: "suite" }], "mod");
+  assert.equal(part[0]?.path[0]?.label, "Suite includes Module");
+  const up = impactOf(nodes, [{ type: "part_of", fromId: "mod", toId: "suite" }], "suite");
+  assert.equal(up[0]?.path[0]?.label, "Module is part of Suite");
+});

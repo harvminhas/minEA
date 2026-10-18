@@ -81,27 +81,27 @@ class ImpactTests(unittest.TestCase):
             mapped[rel_type] = lane
         self.assertEqual(mapped, loaded)
 
-    def test_labels_match_the_label_map(self) -> None:
-        import re
-        from pathlib import Path
+    def test_every_lane_has_registry_wording(self) -> None:
+        from app.services.relationship_labels import TYPES
 
-        path = (
-            Path(__file__).resolve().parents[3]
-            / "packages"
-            / "types"
-            / "src"
-            / "relationship-labels.ts"
-        )
-        source = path.read_text(encoding="utf-8")
-        found = re.findall(
-            r'^\s+(\w+): label\("[^"]+", "[^"]+", \(from, to\) => `\$\{from\} ([^`]+) \$\{to\}`\)',
-            source,
-            re.M,
-        )
-        self.assertGreater(len(found), 30)
-        middles = dict(found)
-        for rel_type, rule in RULES.items():
-            self.assertEqual(rule["label"], "{source} " + middles[rel_type] + " {target}")
+        for rel_type in RULES:
+            self.assertIn(rel_type, TYPES)
+
+    def test_path_steps_read_from_the_affected_item(self) -> None:
+        names = {"erp": "ERP", "crm": "CRM", "parent": "Suite", "mod": "Module"}
+        # Source failed, target affected: read from the target.
+        hits = {hit["name"]: hit for hit in impact_of(names, [ImpactEdge("sends_data_to", "erp", "crm")], "erp")}
+        self.assertEqual(hits["CRM"]["path"][0]["label"], "CRM gets data from ERP")
+        hits = {hit["name"]: hit for hit in impact_of(names, [ImpactEdge("part_of", "mod", "parent")], "mod")}
+        self.assertEqual(hits["Suite"]["path"][0]["label"], "Suite includes Module")
+        # Target failed, source affected: the forward sentence already leads with it.
+        hits = {hit["name"]: hit for hit in impact_of(names, [ImpactEdge("part_of", "mod", "parent")], "parent")}
+        self.assertEqual(hits["Module"]["path"][0]["label"], "Module is part of Suite")
+        hits = {
+            hit["name"]: hit
+            for hit in impact_of({"agent": "Helper", "cap": "Billing"}, [ImpactEdge("supports", "agent", "cap")], "agent")
+        }
+        self.assertEqual(hits["Billing"]["path"][0]["label"], "Billing is supported by Helper")
 
     def test_as400_fixture(self) -> None:
         names = {

@@ -14,7 +14,7 @@ import {
 import { AssignAccountabilityDialog } from "@/components/people/AssignAccountabilityDialog";
 import { EditAccountabilityDialog } from "@/components/people/EditAccountabilityDialog";
 import { ConfirmRemoveAssignmentDialog } from "@/components/people/ConfirmRemoveAssignmentDialog";
-import { PEOPLE_LAYER_COLOR, initials } from "@/lib/people-utils";
+import { PEOPLE_LAYER_COLOR, initials, accountabilityDisplayKind } from "@/lib/people-utils";
 import type { PeopleAccountability } from "@minea/types";
 
 const TEAM_DOT_COLORS = ["#e11d48", "#f59e0b", "#6366f1", "#0ea5e9", "#22c55e", "#8b5cf6"];
@@ -276,7 +276,7 @@ export function RoleDetailPanel({ roleId, onClose, onUpdate }: Props) {
       {deleteTarget && (
         <ConfirmRemoveAssignmentDialog
           entityName={deleteTarget.entity_name}
-          linkKind={deleteTarget.link_kind}
+          linkKind={accountabilityDisplayKind(deleteTarget)}
           subjectType="role"
           loading={deletingId === deleteTarget.id}
           error={deleteError}

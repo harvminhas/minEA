@@ -1,53 +1,90 @@
 import type { RelationshipType } from "./index";
+import registry from "./relationship-labels.json";
 
+/** Words for one stored relationship type, as read from either end. */
 export type RelationshipLabel = {
+  /** Read from the stored source: "Runs on". */
   forward: string;
+  /** Read from the stored target: "Hosts". */
   reverse: string;
+  /** "{from} runs on {to}". */
   sentence: (from: string, to: string) => string;
+  /** The same link from the target's side: "{to} hosts {from}". */
+  reverseSentence: (from: string, to: string) => string;
+  /** Same words both ways; a reversed link is the same link. */
+  symmetric: boolean;
+  /** A→B and B→A may both be recorded (a mutual dependency, two data flows). */
+  mutual: boolean;
 };
 
-function label(forward: string, reverse: string, sentence: (from: string, to: string) => string): RelationshipLabel {
-  return { forward, reverse, sentence };
+type Words = { forward: string; reverse: string; sentence: string; reverse_sentence: string };
+type Override = Words & { from: string[]; to: string[] };
+type Entry = Words & { symmetric?: boolean; mutual?: boolean; overrides?: Override[] };
+type AccountabilityEntry = { forward: string; reverse: string; description: string };
+
+const TYPES = registry.types as Record<string, Entry>;
+
+function fill(template: string, from: string, to: string): string {
+  return template.split("{from}").join(from).split("{to}").join(to);
 }
+
+function build(entry: Entry, words: Words): RelationshipLabel {
+  const symmetric = Boolean(entry.symmetric);
+  return {
+    forward: words.forward,
+    reverse: symmetric ? words.forward : words.reverse,
+    sentence: (from, to) => fill(words.sentence, from, to),
+    reverseSentence: (from, to) => (symmetric ? fill(words.sentence, to, from) : fill(words.reverse_sentence, from, to)),
+    symmetric,
+    mutual: symmetric || Boolean(entry.mutual),
+  };
+}
+
+/** Raw registry (packages/types/src/relationship-labels.json); the API reads its own copy. */
+export const RELATIONSHIP_REGISTRY = registry;
 
 /**
  * One label for every relationship type. Forward is the stored source → target.
- * Reverse is the same edge read from the target. Both sets are unique.
+ * Reverse is the same edge read from the target. Shared with the API through the JSON registry.
  */
-export const RELATIONSHIP_LABELS: Record<RelationshipType, RelationshipLabel> = {
-  depends_on: label("Depends on", "Needed by", (from, to) => `${from} depends on ${to}`),
-  part_of: label("Part of", "Includes", (from, to) => `${from} is part of ${to}`),
-  calls: label("Calls", "Called by", (from, to) => `${from} calls ${to}`),
-  uses: label("Makes use of", "Made use of", (from, to) => `${from} makes use of ${to}`),
-  contains: label("Contains", "Stored in", (from, to) => `${from} contains ${to}`),
-  connects: label("Uses", "Used by flow", (from, to) => `${from} uses ${to}`),
-  routes: label("Routes to", "Routed from", (from, to) => `${from} routes to ${to}`),
-  hosts: label("Gateway for", "Behind gateway", (from, to) => `${from} is gateway for ${to}`),
-  carries: label("Carries", "Carried by", (from, to) => `${from} carries ${to}`),
-  supported_by: label("Supported by", "Supports", (from, to) => `${from} is supported by ${to}`),
-  exposes: label("Exposes", "Exposed by", (from, to) => `${from} exposes ${to}`),
-  publishes: label("Publishes", "Published by", (from, to) => `${from} publishes ${to}`),
-  consumes: label("Consumes", "Consumed by", (from, to) => `${from} consumes ${to}`),
-  subscribes: label("Subscribes to", "Subscribed by", (from, to) => `${from} subscribes to ${to}`),
-  reads: label("Reads from", "Read by", (from, to) => `${from} reads from ${to}`),
-  writes: label("Writes to", "Written to by", (from, to) => `${from} writes to ${to}`),
-  creates: label("Creates", "Created by", (from, to) => `${from} creates ${to}`),
-  updates: label("Updates", "Updated by", (from, to) => `${from} updates ${to}`),
-  owns: label("Owns", "Owned by", (from, to) => `${from} owns ${to}`),
-  belongs_to: label("Belongs to", "Contains entity/store", (from, to) => `${from} belongs to ${to}`),
-  runs_on: label("Runs on", "Runs", (from, to) => `${from} runs on ${to}`),
-  built_on: label("Built on", "Platform for", (from, to) => `${from} is built on ${to}`),
-  affects: label("Affects", "Affected by", (from, to) => `${from} affects ${to}`),
-  resolves: label("Resolves", "Resolved by", (from, to) => `${from} resolves ${to}`),
-  replaces: label("Replaces", "Replaced by", (from, to) => `${from} replaces ${to}`),
-  uses_model: label("Uses model", "Used by", (from, to) => `${from} uses model ${to}`),
-  can_call: label("Can call", "Callable by", (from, to) => `${from} can call ${to}`),
-  supports: label("Provides support", "Receives support", (from, to) => `${from} provides support for ${to}`),
-  escalates_to: label("Escalates to", "Escalated from", (from, to) => `${from} escalates to ${to}`),
-  accesses: label("Accesses", "Accessed by", (from, to) => `${from} accesses ${to}`),
-  connects_to: label("Connects to", "Connected through", (from, to) => `${from} connects to ${to}`),
-  located_at: label("Located at", "Location of", (from, to) => `${from} is located at ${to}`),
-  supplied_by: label("Supplied by", "Supplies", (from, to) => `${from} is supplied by ${to}`),
-  sends_data_to: label("Sends data to", "Gets data from", (from, to) => `${from} sends data to ${to}`),
-  authenticates_via: label("Signs in with", "Sign-in for", (from, to) => `${from} signs in with ${to}`),
-};
+export const RELATIONSHIP_LABELS = Object.fromEntries(
+  Object.entries(TYPES).map(([type, entry]) => [type, build(entry, entry)]),
+) as Record<RelationshipType, RelationshipLabel>;
+
+/**
+ * Words for a type between two record types: a per-pair override when the registry has one and
+ * both ends are known
+ * ("Accessed through" for an AI model → platform), otherwise the type's own words. An unknown type
+ * (a newer build wrote it to the shared database) falls back to its own name instead of throwing.
+ */
+export function relationshipLabelFor(type: string, fromType?: string | null, toType?: string | null): RelationshipLabel {
+  const entry = TYPES[type];
+  if (!entry) {
+    const plain = String(type ?? "").replace(/_/g, " ").trim() || "linked to";
+    const words = {
+      forward: plain.charAt(0).toUpperCase() + plain.slice(1),
+      reverse: "Linked from",
+      sentence: `{from} ${plain} {to}`,
+      reverse_sentence: "{to} is linked from {from}",
+    };
+    return build(words, words);
+  }
+  // Both ends must be known: "runs on" to a platform is "Accessed through" only for an AI model.
+  const override =
+    fromType && toType
+      ? (entry.overrides ?? []).find((item) => item.from.includes(fromType) && item.to.includes(toType))
+      : undefined;
+  return override ? build(entry, override) : RELATIONSHIP_LABELS[type as RelationshipType];
+}
+
+export type AccountabilityLabel = { forward: string; reverse: string; description: string };
+
+/** People accountability verbs (team/role → item): "Owns" on the team, "Owned by" on the item. */
+export const ACCOUNTABILITY_LABELS = registry.accountability as Record<string, AccountabilityEntry>;
+
+/** The verb the owner sync wrote before "owns" (still read as ownership when the team is the owner). */
+export const ACCOUNTABILITY_OWNER_LEGACY = registry.accountability_owner_legacy as Record<string, string>;
+
+export function accountabilityLabel(kind: string): AccountabilityLabel {
+  return ACCOUNTABILITY_LABELS[kind] ?? { forward: kind.replace(/_/g, " "), reverse: kind.replace(/_/g, " "), description: "" };
+}

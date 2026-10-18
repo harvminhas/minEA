@@ -58,6 +58,9 @@ class TypeSwitchTests(unittest.TestCase):
         self.assertEqual(row.entity_kind, "cloud_service")
         self.assertEqual(row.subject_type, "team")
         self.assertTrue(unread_on_platform("cloud_service", "manages", "people_accountabilities"))
+        # The owner sync now writes "owns"; people rows can't point at a cloud_service at all.
+        self.assertTrue(unread_on_platform("cloud_service", "owns", "people_accountabilities"))
+        self.assertTrue(unread_on_platform("cloud_service", "approves", "people_accountabilities"))
         self.assertTrue(unread_on_platform("cloud_service", "managed_by", "data_links"))
         self.assertFalse(unread_on_platform("cloud_service", "stores", "data_links"))
         self.assertFalse(unread_on_platform("application", "manages", "people_accountabilities"))

@@ -1,11 +1,16 @@
 """Same traversal as apps/web/lib/impact/relationship-impact.ts.
 
 RULES is a copy of packages/types/src/impact-rules.json, held equal by tests/test_impact.py.
+Step wording comes from the shared relationship registry (app/data/relationship_labels.json) and
+reads from the affected item: "Salesforce runs on Azure" when Salesforce is hit because Azure failed,
+"CRM gets data from ERP"-style reverse wording when the stored target is the one affected.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from app.services.relationship_labels import relationship_words
 
 MAX_DEPTH = 4
 
@@ -13,33 +18,23 @@ MAX_DEPTH = 4
 # when_target_fails: the stored target failed, so the source is affected.
 # when_source_fails: the stored source failed, so the target is affected.
 RULES: dict[str, dict] = {
-    "depends_on": {"when_target_fails": "direct", "label": "{source} depends on {target}"},
-    "part_of": {
-        "when_target_fails": "direct",
-        "when_source_fails": "degraded",
-        "label": "{source} is part of {target}",
-    },
-    "runs_on": {"when_target_fails": "direct", "label": "{source} runs on {target}"},
-    "built_on": {"when_target_fails": "direct", "label": "{source} is built on {target}"},
-    "authenticates_via": {"when_target_fails": "loses_sign_in", "label": "{source} signs in with {target}"},
-    "located_at": {"when_target_fails": "direct", "label": "{source} is located at {target}"},
-    "uses_model": {"when_target_fails": "direct", "label": "{source} uses model {target}"},
-    "sends_data_to": {"when_source_fails": "degraded", "label": "{source} sends data to {target}"},
-    "reads": {"when_target_fails": "degraded", "label": "{source} reads from {target}"},
-    "writes": {"when_target_fails": "degraded", "label": "{source} writes to {target}"},
-    "owns": {"when_target_fails": "degraded", "label": "{source} owns {target}"},
-    "creates": {"when_target_fails": "degraded", "label": "{source} creates {target}"},
-    "updates": {"when_target_fails": "degraded", "label": "{source} updates {target}"},
-    "can_call": {"when_target_fails": "degraded", "label": "{source} can call {target}"},
-    "supported_by": {
-        "when_target_fails": "loses_support",
-        "label": "{source} is supported by {target}",
-    },
-    "supports": {
-        "when_source_fails": "loses_support",
-        "label": "{source} provides support for {target}",
-    },
-    "replaces": {"label": "{source} replaces {target}"},
+    "depends_on": {"when_target_fails": "direct"},
+    "part_of": {"when_target_fails": "direct", "when_source_fails": "degraded"},
+    "runs_on": {"when_target_fails": "direct"},
+    "built_on": {"when_target_fails": "direct"},
+    "authenticates_via": {"when_target_fails": "loses_sign_in"},
+    "located_at": {"when_target_fails": "direct"},
+    "uses_model": {"when_target_fails": "direct"},
+    "sends_data_to": {"when_source_fails": "degraded"},
+    "reads": {"when_target_fails": "degraded"},
+    "writes": {"when_target_fails": "degraded"},
+    "owns": {"when_target_fails": "degraded"},
+    "creates": {"when_target_fails": "degraded"},
+    "updates": {"when_target_fails": "degraded"},
+    "can_call": {"when_target_fails": "degraded"},
+    "supported_by": {"when_target_fails": "loses_support"},
+    "supports": {"when_source_fails": "loses_support"},
+    "replaces": {},
 }
 
 RISK_EDGE_TYPES = ("writes",)
@@ -109,9 +104,13 @@ def impact_of(names: dict[str, str], edges: list[ImpactEdge], failed_id: str) ->
                 and SEVERITY_ORDER[severity] < SEVERITY_ORDER[existing["severity"]]
             ):
                 continue
-            label = rule["label"].format(
-                source=names.get(edge.from_id, edge.from_id),
-                target=names.get(edge.to_id, edge.to_id),
+            words = relationship_words(edge.type)
+            source_name = names.get(edge.from_id, edge.from_id)
+            target_name = names.get(edge.to_id, edge.to_id)
+            label = (
+                words.reverse_sentence(source_name, target_name)
+                if affected == edge.to_id
+                else words.sentence(source_name, target_name)
             )
             step = {"type": edge.type, "from_id": edge.from_id, "to_id": edge.to_id, "label": label}
             next_path = [*path, step]

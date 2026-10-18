@@ -196,6 +196,18 @@ export function toPatch(
         if (legacyPlatform && !removeRelIds.includes(edge.id)) removeRelIds.push(edge.id);
       }
     }
+    if (def.key === "platform_for") {
+      // An item is built on one platform (its own Built on platform field is single), so linking it
+      // here moves it off any other platform.
+      for (const edge of edges) {
+        const elsewhere =
+          ids.includes(edge.from_object_id) &&
+          edge.type === "built_on" &&
+          edge.to_type === "cloud_service" &&
+          edge.to_object_id !== record.id;
+        if (elsewhere && !removeRelIds.includes(edge.id)) removeRelIds.push(edge.id);
+      }
+    }
     const patch: FieldPatch = { addRel, removeRelIds };
     if (def.key === "signs_in_with" && (ownLogin || isOwnLogin(record.properties))) {
       patch.object = { properties: { sign_in: ownLogin ? OWN_LOGIN : null } };

@@ -143,30 +143,12 @@ class RelationshipRulesTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             _create("sends_data_to", "data_store", "application")
 
-    def test_type_switch_labels_match_the_label_map(self):
-        import re
-        from pathlib import Path
+    def test_type_switch_lines_use_the_shared_registry(self):
+        from app.services.type_switch import _name_line
 
-        from app.services.type_switch import _LABELS
-
-        path = (
-            Path(__file__).resolve().parents[3]
-            / "packages"
-            / "types"
-            / "src"
-            / "relationship-labels.ts"
-        )
-        source = path.read_text(encoding="utf-8")
-        found = {
-            name: (forward, reverse)
-            for name, forward, reverse in re.findall(
-                r'^\s+(\w+): label\("([^"]+)", "([^"]+)"',
-                source,
-                re.M,
-            )
-        }
-        self.assertGreater(len(found), 30)
-        self.assertEqual(found, _LABELS)
+        self.assertEqual(_name_line("runs_on", False, "Salesforce"), "Hosts Salesforce")
+        self.assertEqual(_name_line("supplied_by", True, "Microsoft"), "Supplied by Microsoft")
+        self.assertEqual(_name_line("authenticates_via", False, "CRM"), "Sign-in for CRM")
 
     def test_platform_sends_data_to_a_data_store(self):
         self.assertEqual(_create("sends_data_to", "cloud_service", "data_store").type, "sends_data_to")

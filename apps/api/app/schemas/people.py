@@ -70,6 +70,23 @@ class AccountabilityRead(BaseModel):
     entity_name: str
     link_kind: str
     subtitle: str | None = None
+    # The owner-team sync row (owns, or the legacy manages / stewards verb): reads "Owns".
+    is_owner: bool = False
+
+
+class EntityAccountabilityRead(BaseModel):
+    """One accountability seen from the entity: "Owned by Finance", "Approved by CFO"."""
+
+    id: UUID
+    subject_type: str
+    subject_id: UUID
+    subject_name: str
+    link_kind: str
+    is_owner: bool = False
+
+
+class EntityAccountabilityListResponse(BaseModel):
+    items: list[EntityAccountabilityRead] = Field(default_factory=list)
 
 
 class PeopleRoleDetail(PeopleRoleRead):

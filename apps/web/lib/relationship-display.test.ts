@@ -33,7 +33,7 @@ test("a type this build doesn't know renders as plain words instead of throwing"
   const unknown = rel("some_future_link");
   assert.equal(relationshipVerb(unknown.type), "some future link");
   assert.equal(formatRelationshipTriple(unknown, "a", "A", "B").nameLine, "Some future link B");
-  assert.equal(formatRelationshipTriple(unknown, "b", "B", "A").nameLine, "Some future link (from) A");
+  assert.equal(formatRelationshipTriple(unknown, "b", "B", "A").nameLine, "Linked from A");
   assert.equal(describeRelationship(unknown, "a", "B").label, "Some future link B");
   assert.equal(relationshipWords("some_future_link").sentence("A", "B"), "A some future link B");
 });

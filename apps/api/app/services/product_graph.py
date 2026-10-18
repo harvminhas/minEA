@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.models.objects import MinEAObject
 from app.models.relationships import Relationship
 from app.models.views_graph import Product, ProductSystemOverride, Realization, RealizationSystem
+from app.services.relationship_labels import relationship_words
 
 TYPE_LAYER: dict[str, int] = {
     "capability": 1,
@@ -31,6 +32,19 @@ TYPE_LAYER: dict[str, int] = {
 }
 
 
+def systems_supporting_capabilities(
+    rows: list[tuple[uuid.UUID, uuid.UUID, str]], cap_ids: set[uuid.UUID]
+) -> list[uuid.UUID]:
+    """System ids from (from_object_id, to_object_id, type) rows: the system end of each link."""
+    found: list[uuid.UUID] = []
+    for from_id, to_id, rel_type in rows:
+        if rel_type == "supported_by" and from_id in cap_ids:
+            found.append(to_id)
+        elif rel_type == "supports" and to_id in cap_ids:
+            found.append(from_id)
+    return found
+
+
 async def build_product_graph(db: AsyncSession, product: Product) -> dict:
     nodes: dict[str, dict] = {}
     edges: list[dict] = []
@@ -47,6 +61,7 @@ async def build_product_graph(db: AsyncSession, product: Product) -> dict:
             }
 
     def add_edge(source: uuid.UUID, target: uuid.UUID, label: str, edge_id: str | None = None) -> None:
+        """label is already readable words ("Delivers", "Runs on"), never a stored code."""
         eid = edge_id or f"{source}->{target}:{label}"
         if eid in edge_ids:
             return
@@ -56,7 +71,7 @@ async def build_product_graph(db: AsyncSession, product: Product) -> dict:
                 "id": eid,
                 "source": str(source),
                 "target": str(target),
-                "label": label.replace("_", " "),
+                "label": label,
             }
         )
 
@@ -75,7 +90,7 @@ async def build_product_graph(db: AsyncSession, product: Product) -> dict:
         )
         for cap in cap_result.scalars():
             add_node(cap.id, cap.name, "capability", 1)
-            add_edge(product.id, cap.id, "delivers")
+            add_edge(product.id, cap.id, "Delivers")
 
         via_real = await db.execute(
             select(RealizationSystem.system_id, Realization.capability_id)
@@ -88,20 +103,23 @@ async def build_product_graph(db: AsyncSession, product: Product) -> dict:
         )
         for sys_id, cap_id in via_real.all():
             system_ids.add(sys_id)
-            add_edge(sys_id, cap_id, "supports")
+            add_edge(sys_id, cap_id, "Supports")
 
+        # Systems linked to a capability by a stored relationship. supported_by is stored
+        # capability -> system; supports is stored agent -> capability. (This used to look for
+        # supported_by rows pointing *at* the capability from an application, which never exist.)
+        # The real relationship rows are drawn below in their stored direction.
         via_rel = await db.execute(
             select(Relationship.from_object_id, Relationship.to_object_id, Relationship.type).where(
                 Relationship.workspace_id == product.workspace_id,
                 Relationship.org_id == product.org_id,
-                Relationship.to_object_id.in_(cap_ids),
-                Relationship.type.in_(("supports", "supported_by")),
-                Relationship.from_type == "application",
+                or_(
+                    (Relationship.type == "supported_by") & Relationship.from_object_id.in_(cap_ids),
+                    (Relationship.type == "supports") & Relationship.to_object_id.in_(cap_ids),
+                ),
             )
         )
-        for sys_id, cap_id, rel_type in via_rel.all():
-            system_ids.add(sys_id)
-            add_edge(sys_id, cap_id, rel_type)
+        system_ids |= set(systems_supporting_capabilities(via_rel.all(), set(cap_ids)))
 
     override_result = await db.execute(
         select(ProductSystemOverride.system_id).where(ProductSystemOverride.product_id == product.id)
@@ -156,7 +174,8 @@ async def build_product_graph(db: AsyncSession, product: Product) -> dict:
         for rel in rels:
             src, tgt = str(rel.from_object_id), str(rel.to_object_id)
             if src in nodes and tgt in nodes:
-                add_edge(rel.from_object_id, rel.to_object_id, rel.type, str(rel.id))
+                words = relationship_words(rel.type, rel.from_type, rel.to_type)
+                add_edge(rel.from_object_id, rel.to_object_id, words.forward, str(rel.id))
 
     return {"nodes": list(nodes.values()), "edges": edges}
 

@@ -209,14 +209,17 @@ const signsInWithField: FieldDef = {
   source: { kind: "rel", edge: SIGN_IN_EDGE, dir: "out", target: [...SIGN_IN_TARGETS], single: false },
 };
 
+// Reverse of Signs in with, edited from the provider; saved item -[authenticates_via]-> provider.
 const signInForField: FieldDef = {
   key: "sign_in_for",
   label: "Sign-in for",
   section: "hosting",
-  editor: "none",
-  source: { kind: "derived" },
-  readOnlyReason: "Count of items that sign in with this",
+  editor: "relation",
+  source: { kind: "rel", edge: SIGN_IN_EDGE, dir: "in", target: [...SIGN_IN_TARGETS], single: false },
 };
+
+/** Items a platform or server can host (runs_on / built_on sources). */
+const HOSTED_ITEM_TYPES = ["application", "solution", "technical_capability", "component"] as const;
 const platformOther = (o: { properties: Record<string, unknown> }) => o.properties.platform_type === "other";
 const infraCustom = (o: { properties: Record<string, unknown> }) => o.properties.integration_infra_kind === "custom";
 const flowManual = (o: { properties: Record<string, unknown> }) => o.properties.mechanism === "manual";
@@ -260,7 +263,8 @@ const descriptionCol: FieldDef = {
 
 const ownerField = (required = false): FieldDef => ({
   key: "owner",
-  label: "Owner",
+  // Read from the record: "Owned by Finance" (the team page reads "Finance owns ...").
+  label: "Owned by",
   section: "ownership",
   editor: "owner",
   source: { kind: "owner" },
@@ -367,7 +371,14 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
       editor: "relation",
       source: { kind: "rel", edge: "runs_on", dir: "out", target: ["model"], single: true },
     },
-    { key: "runs_on_it", label: "Runs on it", section: "hosting", editor: "none", source: { kind: "derived" }, readOnlyReason: "Count of items linked to run here" },
+    // Reverse of each item's Runs on: edited here, still saved item -[runs_on]-> server.
+    {
+      key: "hosts",
+      label: "Hosts",
+      section: "hosting",
+      editor: "relation",
+      source: { kind: "rel", edge: "runs_on", dir: "in", target: [...HOSTED_ITEM_TYPES], single: false },
+    },
     { key: "support_ends", label: "Support ends", section: "lifecycle", editor: "date", source: { kind: "prop", key: "support_ends" }, table: true },
     { key: "end_of_life", label: "End of life", section: "lifecycle", editor: "date", source: { kind: "prop", key: "end_of_life" } },
     { key: "status_calc", label: "Status", section: "lifecycle", editor: "none", source: { kind: "derived" }, readOnlyReason: "Calculated from Support ends and OS" },
@@ -407,7 +418,21 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
     },
     { key: "environments", label: "Environments", section: "hosting", editor: "tags", source: { kind: "prop", key: "environments" } },
     { key: "admin_url", label: "Admin URL", section: "hosting", editor: "text", source: { kind: "prop", key: "admin_url" } },
-    { key: "built_on_it", label: "Built on it", section: "hosting", editor: "none", source: { kind: "derived" }, readOnlyReason: "Count of items built on this" },
+    // Reverse fields, edited from the platform; saved in the canonical direction (item -> platform).
+    {
+      key: "hosts",
+      label: "Hosts",
+      section: "hosting",
+      editor: "relation",
+      source: { kind: "rel", edge: "runs_on", dir: "in", target: [...HOSTED_ITEM_TYPES], single: false },
+    },
+    {
+      key: "platform_for",
+      label: "Platform for",
+      section: "hosting",
+      editor: "relation",
+      source: { kind: "rel", edge: "built_on", dir: "in", target: [...HOSTED_ITEM_TYPES, "agent"], single: false },
+    },
     signsInWithField,
     signInForField,
     { key: "lifecycle", label: "Lifecycle", section: "lifecycle", editor: "select", source: { kind: "prop", key: "lifecycle" }, options: byValue(PLATFORM_LIFECYCLE) },
@@ -603,9 +628,8 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
       key: "used_by",
       label: "Used by",
       section: "hosting",
-      editor: "none",
-      source: { kind: "derived" },
-      readOnlyReason: "Agents linked to this model",
+      editor: "relation",
+      source: { kind: "rel", edge: "uses_model", dir: "in", target: ["agent"], single: false },
     },
     {
       key: "vendor",
