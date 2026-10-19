@@ -231,7 +231,7 @@ export function CostSection({ row, onSaved, readOnly = false }: { row: CatalogRo
   return (
     <section>
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">COST</h3>
+        <span className="text-[13px] text-[#6b7289]">Annual cost</span>
         {!readOnly && !adding && (
           <button type="button" className="text-[13px] font-medium text-[#5b4ce6]" onClick={() => setAdding(true)}>
             + Add cost line

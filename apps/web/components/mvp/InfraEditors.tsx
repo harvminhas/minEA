@@ -13,7 +13,9 @@ import { applyPatch, fieldIsRequired, readField, sameFieldValue, toPatch, type F
 import { savesWaiting, trackSave } from "@/lib/fields/save-queue";
 import { isFieldManagedEdge, relationCreateLabel } from "@/lib/fields/shared-links";
 import { formatOwnershipLabel, ownershipIsValid, type OwnershipValue } from "@/lib/owner-fields";
-import { displayVendor, formatDate, knownVendors, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
+import { displayVendor, formatDate, knownVendors, moneyLabel, rowFromObject, type CatalogRow } from "@/lib/model-catalog";
+import { missingBySection } from "@/lib/fields/section-missing";
+import { useCollapsedSections } from "@/lib/fields/collapsed-sections";
 import { dollarsFromCents, readCostLines, runCents } from "@/lib/cost/math";
 import { locationPresence } from "@/lib/infra/locations";
 import { readRuntimeInfra } from "@/lib/infra/read";
@@ -270,34 +272,69 @@ export function RecordFields({
     else groups.push({ section: def.section, fields: [def] });
   }
 
+  const missingRow = row ?? rowFromObject(object);
+  const missingCounts = missingRow ? missingBySection(missingRow.missing, groups, REGISTRY[type]) : {};
+  const [collapsed, setCollapsed] = useCollapsedSections();
+
   return (
-    <div className="space-y-6">
-      {groups.map((group) => (
-        <section key={group.section}>
-          <h3 className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">{SECTION_LABEL[group.section].toUpperCase()}</h3>
-          {group.fields.map((def) =>
-            def.editor === "costLines" && row ? (
-              <CostSection key={def.key} row={row} onSaved={() => undefined} readOnly={!canEdit} />
-            ) : def.key === "ai_features" ? (
-              <div key={def.key} data-field-key={def.key}>
-                <AiFeaturesSection object={object} edges={edges} names={names} readOnly={!canEdit} />
+    <div>
+      {groups.map((group, index) => {
+        const missing = missingCounts[group.section] ?? 0;
+        // A field opened from elsewhere (e.g. the badge or a row action) always shows.
+        const open = !collapsed.has(group.section) || group.fields.some((def) => def.key === openKey);
+        const bodyId = `record-section-${record.id}-${group.section}`;
+        return (
+          <section key={group.section} data-section={group.section} className={index === 0 ? "" : "border-t border-[#eceef3]"}>
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={bodyId}
+              onClick={() => setCollapsed(group.section, open)}
+              className="flex w-full items-center gap-1.5 rounded-md py-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5b4ce6]/40"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#8b90a0"
+                strokeWidth="2.2"
+                aria-hidden="true"
+                className={`flex-shrink-0 transition-transform ${open ? "" : "-rotate-90"}`}
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+              <h3 className="text-[13px] font-semibold text-[#1c2230]">{SECTION_LABEL[group.section]}</h3>
+              {missing > 0 && <span className="ml-auto text-[12px] text-[#b45309]">{missing} missing</span>}
+            </button>
+            {open && (
+              <div id={bodyId} className="pb-3">
+              {group.fields.map((def) =>
+                def.editor === "costLines" && row ? (
+                  <CostSection key={def.key} row={row} onSaved={() => undefined} readOnly={!canEdit} />
+                ) : def.key === "ai_features" ? (
+                  <div key={def.key} data-field-key={def.key}>
+                    <AiFeaturesSection object={object} edges={edges} names={names} readOnly={!canEdit} />
+                  </div>
+                ) : (
+                  <div key={def.key} data-field-key={def.key}>
+                    <InlineField
+                      def={def}
+                      object={object}
+                      edges={edges}
+                      names={names}
+                      suggestion={def.key === "vendor" ? row?.suggestion : null}
+                      forceOpen={openKey === def.key}
+                      onCloseEdit={() => onOpenKey?.(null)}
+                    />
+                  </div>
+                )
+              )}
               </div>
-            ) : (
-              <div key={def.key} data-field-key={def.key}>
-                <InlineField
-                  def={def}
-                  object={object}
-                  edges={edges}
-                  names={names}
-                  suggestion={def.key === "vendor" ? row?.suggestion : null}
-                  forceOpen={openKey === def.key}
-                  onCloseEdit={() => onOpenKey?.(null)}
-                />
-              </div>
-            )
-          )}
-        </section>
-      ))}
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }

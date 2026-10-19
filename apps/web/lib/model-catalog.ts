@@ -1,4 +1,5 @@
 import { resolveVendor } from "@/lib/ask/labels";
+import { countMissing } from "@/lib/fields/section-missing";
 import type { MinEAObject } from "@minea/types";
 import { annualCost, vendorAmounts } from "@/lib/cost/service";
 import { PLATFORM_VENDOR_LABEL } from "@/lib/platform-utils";
@@ -219,7 +220,7 @@ export function rowFromObject(object: MinEAObject): CatalogRow | null {
     lifecycle: !lifecycle,
     criticality: !criticality,
   };
-  const missingCount = Object.values(missing).filter(Boolean).length;
+  const missingCount = countMissing(missing);
 
   return {
     id: object.id,
@@ -336,7 +337,7 @@ export function rowForPanel(object: MinEAObject): CatalogRow | null {
     slaLabel: "",
     suggestion: null,
     missing,
-    missingCount: missing.owner ? 1 : 0,
+    missingCount: countMissing(missing),
   };
 }
 
