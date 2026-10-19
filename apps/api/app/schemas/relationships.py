@@ -95,6 +95,8 @@ ALLOWED_TRIPLES: set[tuple[str, str, str]] = {
     ("writes", "agent", "data_object"),
     ("writes", "agent", "data_store"),
     ("runs_on", "ai_model", "cloud_service"),
+    # An AI model reached through an app (e.g. ChatGPT Enterprise) reads "Accessed through".
+    ("runs_on", "ai_model", "application"),
     ("supports", "agent", "capability"),
     ("escalates_to", "agent", "application"),
     ("accesses", "tool", "data_object"),

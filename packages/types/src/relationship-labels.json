@@ -134,7 +134,10 @@
             "ai_model"
           ],
           "to": [
-            "cloud_service"
+            "cloud_service",
+            "application",
+            "solution",
+            "technical_capability"
           ],
           "forward": "Accessed through",
           "reverse": "Provides access to",

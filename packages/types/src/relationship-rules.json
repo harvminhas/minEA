@@ -647,7 +647,22 @@
   [
     "runs_on",
     "ai_model",
+    "application"
+  ],
+  [
+    "runs_on",
+    "ai_model",
     "cloud_service"
+  ],
+  [
+    "runs_on",
+    "ai_model",
+    "solution"
+  ],
+  [
+    "runs_on",
+    "ai_model",
+    "technical_capability"
   ],
   [
     "runs_on",

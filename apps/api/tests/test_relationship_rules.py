@@ -51,9 +51,16 @@ class RelationshipRulesTests(unittest.TestCase):
 
     def test_hosting_targets_are_platforms_or_servers(self):
         forbidden = {"application", "solution", "technical_capability", "component"}
-        for rel_type, _source, target in ALLOWED_TRIPLES:
+        for rel_type, source, target in ALLOWED_TRIPLES:
+            # An AI model can be accessed through an app (e.g. ChatGPT Enterprise); nothing else runs on one.
+            if rel_type == "runs_on" and source == "ai_model" and target != "component":
+                continue
             if rel_type in {"runs_on", "built_on"}:
                 self.assertNotIn(target, forbidden)
+
+    def test_ai_model_is_accessed_through_a_platform_or_an_app(self):
+        for target in ("cloud_service", "application", "solution", "technical_capability"):
+            self.assertEqual(_create("runs_on", "ai_model", target).type, "runs_on")
 
     def test_app_to_app_verbs(self):
         verbs = {

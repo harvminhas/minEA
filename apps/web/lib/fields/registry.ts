@@ -615,6 +615,7 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
   ],
   ai_model: [
     nameCol(true),
+    // Free text picked from MODEL_FAMILIES (lib/ai/model-families.ts) or typed; old values still show.
     { key: "model_family", label: "Model family", section: "basics", editor: "text", source: { kind: "prop", key: "model_family" } },
     ownerField(),
     {
@@ -622,7 +623,8 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
       label: "Accessed through",
       section: "hosting",
       editor: "relation",
-      source: { kind: "rel", edge: "runs_on", dir: "out", target: ["cloud_service"], single: true },
+      // Platforms and apps (e.g. ChatGPT Enterprise); the AI model record uses ModelAccessPopover.
+      source: { kind: "rel", edge: "runs_on", dir: "out", target: ["cloud_service", "application", "solution", "technical_capability"], single: true },
     },
     {
       key: "used_by",

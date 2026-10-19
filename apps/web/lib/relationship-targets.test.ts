@@ -16,6 +16,8 @@ const EXPECTED: Record<string, string[]> = {
   application: [
     "Applications",
     "AI agents",
+    // An AI model can be accessed through an app (ChatGPT Enterprise provides access to GPT).
+    "AI models",
     "Platforms & cloud",
     "Servers & devices",
     "Locations",
@@ -49,7 +51,7 @@ const EXPECTED: Record<string, string[]> = {
   event: ["Applications", "Flows", "Integration infra", "Data entities"],
   external_party: ["Applications", "AI models", "Platforms & cloud", "Servers & devices", "Vendors & contracts"],
   agent: ["Applications", "AI agents", "AI models", "Platforms & cloud", "Integration infra", "Capabilities", "Data stores", "Data entities"],
-  ai_model: ["AI agents", "Platforms & cloud", "Vendors & contracts"],
+  ai_model: ["Applications", "AI agents", "Platforms & cloud", "Vendors & contracts"],
 };
 
 function directions(link: LinkTarget): Array<"outbound" | "inverse"> {
@@ -73,7 +75,7 @@ test("offered sections follow the sidebar for each source", () => {
     linkGroupsFor("application").map((group) => [group.label, group.options.map((option) => option.label)]),
     [
       ["Applications", ["Applications"]],
-      ["AI", ["AI agents"]],
+      ["AI", ["AI agents", "AI models"]],
       ["Platforms & cloud", ["Platforms & cloud"]],
       ["Servers & devices", ["Servers & devices"]],
       ["Locations", ["Locations"]],

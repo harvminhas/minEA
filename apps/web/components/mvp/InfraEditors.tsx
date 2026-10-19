@@ -32,6 +32,7 @@ import { CostSection } from "@/components/mvp/CostSection";
 import { ActsAsPicker } from "@/components/mvp/ActsAsPicker";
 import { AiFeaturesSection } from "@/components/mvp/AiFeaturesSection";
 import { AddChip } from "@/components/mvp/pills";
+import { ModelAccessPopover, ModelFamilyPopover, useFillVendor, vendorToFill } from "@/components/mvp/ModelFieldPickers";
 import { usePermissions } from "@/lib/use-permissions";
 
 function stored(object: MinEAObject, key: string): string {
@@ -397,6 +398,7 @@ export function InlineField({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
+  const fillVendor = useFillVendor();
   const [dismissed, setDismissed] = useState(false);
   const cancelRef = useRef(false);
   const dirtyRef = useRef(false);
@@ -609,7 +611,24 @@ export function InlineField({
     <span className="text-[13px] text-[#6b7289]" title={shared ? "Shown in Relationships" : undefined}>{def.label}</span>
   );
   let editor: ReactNode = null;
-  if (editing && def.editor === "select") {
+  if (editing && def.key === "model_family") {
+    editor = (
+      <ModelFamilyPopover
+        modelName={object.name}
+        current={String(readField(def, record, edges) ?? "")}
+        onCancel={close}
+        onPick={(label, family) => {
+          void persist(label);
+          // Vendor follows the family only while the model has none; a set vendor is never replaced.
+          const hasVendor =
+            edges.some((edge) => edge.from_object_id === object.id && edge.type === "supplied_by") ||
+            Boolean(String((object.properties ?? {}).vendor ?? "").trim());
+          const vendor = vendorToFill(family, hasVendor);
+          if (vendor) void fillVendor(object, vendor).catch((err) => setError(`Couldn't set vendor: ${friendlyError(err)}`));
+        }}
+      />
+    );
+  } else if (editing && def.editor === "select") {
     editor = (
       <select
         aria-label={def.label}
@@ -694,6 +713,16 @@ export function InlineField({
     editor = (
       <ActsAsPicker
         value={readActsAs(readField(def, record, edges))}
+        onCancel={close}
+        onSave={(value) => void persist(value)}
+      />
+    );
+  } else if (editing && def.key === "runs_on" && object.type === "ai_model") {
+    editor = (
+      <ModelAccessPopover
+        selfId={object.id}
+        selfType={object.type}
+        value={readField(def, record, edges)}
         onCancel={close}
         onSave={(value) => void persist(value)}
       />

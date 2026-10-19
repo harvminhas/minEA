@@ -314,7 +314,11 @@ function collectPlatforms(graph: Graph, objects: readonly LandscapeObject[], age
     const isModel = object.type === "ai_model";
     const isAiPlatform = object.type === "cloud_service" && platformType === "ai_platform";
     const runsAgents = builtOn.has(object.id);
-    if (!isModel && !isAiPlatform && !runsAgents) continue;
+    // A platform or app an AI model is accessed through (e.g. ChatGPT Enterprise) is part of the AI estate.
+    const servesModels = !isModel && graph.edges.some(
+      (edge) => edge.type === "runs_on" && edge.to_object_id === object.id && graph.byId.get(edge.from_object_id)?.type === "ai_model"
+    );
+    if (!isModel && !isAiPlatform && !runsAgents && !servesModels) continue;
     if (platformType === "data_platform") continue;
     const usedBy: { id: string; name: string }[] = [];
     if (isModel) {
@@ -338,7 +342,7 @@ function collectPlatforms(graph: Graph, objects: readonly LandscapeObject[], age
       id: object.id,
       name: object.name,
       type: object.type,
-      kindLabel: isModel ? "Model" : isAiPlatform ? "AI platform" : "Runs agents",
+      kindLabel: isModel ? "Model" : isAiPlatform ? "AI platform" : servesModels && !runsAgents ? "Model access" : "Runs agents",
       counted: (isModel || isAiPlatform) && object.status !== "retired",
       vendor: str(props.vendor) || str(props.provider),
       usedBy: usedBy.sort(byName),

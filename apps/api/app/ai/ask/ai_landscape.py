@@ -298,7 +298,14 @@ def _collect_platforms(by_id: dict[str, dict], edges: list[dict], objects: list[
         is_model = obj.get("type") == "ai_model"
         is_ai_platform = obj.get("type") == "cloud_service" and platform_type == "ai_platform"
         runs_agents = obj["id"] in built_on
-        if not is_model and not is_ai_platform and not runs_agents:
+        # A platform or app an AI model is accessed through (e.g. ChatGPT Enterprise) is part of the AI estate.
+        serves_models = not is_model and any(
+            edge["type"] == "runs_on"
+            and edge["to_object_id"] == obj["id"]
+            and (by_id.get(edge["from_object_id"]) or {}).get("type") == "ai_model"
+            for edge in edges
+        )
+        if not is_model and not is_ai_platform and not runs_agents and not serves_models:
             continue
         if platform_type == "data_platform":
             continue
@@ -320,7 +327,13 @@ def _collect_platforms(by_id: dict[str, dict], edges: list[dict], objects: list[
                 "id": obj["id"],
                 "name": obj["name"],
                 "type": obj.get("type"),
-                "kindLabel": "Model" if is_model else "AI platform" if is_ai_platform else "Runs agents",
+                "kindLabel": "Model"
+                if is_model
+                else "AI platform"
+                if is_ai_platform
+                else "Model access"
+                if serves_models and not runs_agents
+                else "Runs agents",
                 "counted": (is_model or is_ai_platform) and obj.get("status") != "retired",
                 "vendor": _s(props.get("vendor")) or _s(props.get("provider")),
                 "usedBy": sorted(used_by, key=lambda item: _name_key(item["name"])),
