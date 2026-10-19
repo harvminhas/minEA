@@ -80,6 +80,8 @@ export function modelItemId(id: string): string {
   }
 }
 
-export function modelItemPath(basePath: string, section: ModelSection, id: string): string {
-  return `${basePath}/model/${section}/${encodeURIComponent(id)}`;
+export function modelItemPath(basePath: string, section: ModelSection, id: string, focus?: string | null): string {
+  const path = `${basePath}/model/${section}/${encodeURIComponent(id)}`;
+  // ?focus=<field key> opens the record with that field expanded, in view and highlighted.
+  return focus ? `${path}?focus=${encodeURIComponent(focus)}` : path;
 }

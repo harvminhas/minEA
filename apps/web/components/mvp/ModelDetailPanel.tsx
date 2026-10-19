@@ -31,6 +31,7 @@ import { toast } from "@/hooks/use-toast";
 import { HostLink } from "@/components/mvp/HostLink";
 import { AppLocationEditor } from "@/components/hosting/AppLocationEditor";
 import { InlineField, RecordFields, toFieldEdges } from "@/components/mvp/InfraEditors";
+import { FOCUS_FIELD_EVENT, flashField, prefersReducedMotion } from "@/lib/fields/field-focus";
 import { askPath } from "@/lib/mvp-paths";
 import { Pill } from "@/components/mvp/pills";
 import { VendorSupplies } from "@/components/mvp/VendorSupplies";
@@ -62,20 +63,36 @@ export function ModelDetailPanel({
       setOpenField(focusParam);
     }
   }, [tabParam, focusParam]);
+  // + Add in a table re-asks for the field this URL already focuses: flash it again.
+  const [focusRound, setFocusRound] = useState(0);
+  useEffect(() => {
+    const again = (event: Event) => {
+      const key = (event as CustomEvent<string | null>).detail;
+      if (!key) return;
+      setTab("details");
+      setOpenField(key);
+      setFocusRound((n) => n + 1);
+    };
+    window.addEventListener(FOCUS_FIELD_EVENT, again);
+    return () => window.removeEventListener(FOCUS_FIELD_EVENT, again);
+  }, []);
   useEffect(() => {
     if (!focusParam || tab !== "details") return;
+    let cancelFlash: (() => void) | undefined;
+    // Wait a beat so the section holding the field has expanded and rendered.
     const timer = window.setTimeout(() => {
       const target = document.querySelector<HTMLElement>(`[data-field-key="${CSS.escape(focusParam)}"]`);
       if (!target) return;
-      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      const reducedMotion = prefersReducedMotion();
+      target.scrollIntoView({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
       target.dataset.focused = "true";
-      target.classList.add("rounded-lg", "bg-[#f6f5ff]", "ring-2", "ring-[#5b4ce6]/40", "px-1");
-      window.setTimeout(() => {
-        target.classList.remove("bg-[#f6f5ff]", "ring-2", "ring-[#5b4ce6]/40");
-      }, 4000);
+      cancelFlash = flashField(target, { reducedMotion });
     }, 120);
-    return () => window.clearTimeout(timer);
-  }, [focusParam, tab, row.id]);
+    return () => {
+      window.clearTimeout(timer);
+      cancelFlash?.();
+    };
+  }, [focusParam, tab, row.id, focusRound]);
   const debt = useObjectTechDebtSummary(row.id, tab === "tech_debt");
   const impactGraph = useImpactGraph();
   const catalog = useModelCatalog();

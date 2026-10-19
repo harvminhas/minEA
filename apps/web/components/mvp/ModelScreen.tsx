@@ -17,6 +17,7 @@ import { objectsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { QuickCost } from "@/components/mvp/CostSection";
 import { AddChip, Pill } from "@/components/mvp/pills";
+import { fieldKeyForGap, openRecordField } from "@/lib/fields/field-focus";
 import { AppPlatformHelp } from "@/components/mvp/AppPlatformHelp";
 import { ModelDetailPanel } from "@/components/mvp/ModelDetailPanel";
 import { CapabilitiesSection } from "@/components/mvp/CapabilitiesSection";
@@ -124,6 +125,9 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
 
 
   const open = (row: CatalogRow) => router.push(modelItemPath(basePath, section, row.id));
+  // A column's + Add opens the record at that field (expanded, scrolled to, highlighted, editing).
+  const openAt = (row: CatalogRow, gap: keyof CatalogRow["missing"]) =>
+    openRecordField(modelItemPath(basePath, section, row.id, fieldKeyForGap(row.object.type, gap)), router.push);
   const close = () => router.push(modelPath(basePath, section));
 
   useEffect(() => {
@@ -292,7 +296,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                         )}
                         <td className="px-2 py-3">
                           {row.missing.owner ? (
-                            <AddChip label="Add" onClick={() => open(row)} />
+                            <AddChip label="Add" onClick={() => openAt(row, "owner")} />
                           ) : (
                             <div>
                               <div className="font-medium text-[#1c2230]">{row.ownerTeam || row.ownerPerson}</div>
@@ -301,7 +305,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                           )}
                         </td>
                         <td className="px-2 py-3">
-                          {row.vendor ? row.vendor : <AddChip label="Add" onClick={() => open(row)} />}
+                          {row.vendor ? row.vendor : <AddChip label="Add" onClick={() => openAt(row, "vendor")} />}
                         </td>
                         <td className="px-2 py-3">
                           {row.missing.cost ? (
@@ -312,7 +316,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                         </td>
                         <td className="px-2 py-3">
                           {row.missing.renewal ? (
-                            <AddChip label="Add" onClick={() => open(row)} />
+                            <AddChip label="Add" onClick={() => openAt(row, "renewal")} />
                           ) : (
                             <span className="inline-flex items-center gap-1.5">
                               {row.renewalLabel}
@@ -323,10 +327,10 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                           )}
                         </td>
                         <td className="px-2 py-3">
-                          {row.lifecycleLabel ? <Pill label={row.lifecycleLabel} tone="lifecycle" /> : <AddChip label="Add" onClick={() => open(row)} />}
+                          {row.lifecycleLabel ? <Pill label={row.lifecycleLabel} tone="lifecycle" /> : <AddChip label="Add" onClick={() => openAt(row, "lifecycle")} />}
                         </td>
                         <td className="px-2 py-3">
-                          {row.criticalityLabel ? <Pill label={row.criticalityLabel} tone="criticality" /> : <AddChip label="Add" onClick={() => open(row)} />}
+                          {row.criticalityLabel ? <Pill label={row.criticalityLabel} tone="criticality" /> : <AddChip label="Add" onClick={() => openAt(row, "criticality")} />}
                         </td>
                         {aiColumn && <td className="px-2 py-3 text-[12px] text-[#4b5163]">{aiLabels.get(row.id) || <span className="text-[#b0b4c0]">—</span>}</td>}
                       </tr>

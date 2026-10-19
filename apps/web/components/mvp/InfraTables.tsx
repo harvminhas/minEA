@@ -17,6 +17,7 @@ import { agingSummary, infraStatus, type InfraStatusResult } from "@/lib/infra/s
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { QuickCost } from "@/components/mvp/CostSection";
 import { AddChip } from "@/components/mvp/pills";
+import { fieldKeyForGap, openRecordField } from "@/lib/fields/field-focus";
 import { AddFlow } from "@/components/add/AddFlow";
 import { AppPlatformHelp } from "@/components/mvp/AppPlatformHelp";
 import { cn } from "@/lib/utils";
@@ -176,7 +177,7 @@ export function PlatformsTable({ rows, selectedId, anywhere = false }: { rows: C
                     <KindChip view={kindView} onEdit={() => router.push(modelItemPath(basePath, "platforms", row.id))} />
                   </td>
                   <td className="px-2 py-3" title={kindView.hosting || undefined}>{kindView.hosting ? <span className="inline-block rounded-full bg-[#f3f4f8] px-2 py-0.5 text-[11px] leading-snug">{kindView.hosting}</span> : dash("")}</td>
-                  <td className="px-2 py-3">{row.missing.owner ? <AddChip label="Add" onClick={() => router.push(modelItemPath(basePath, "platforms", row.id))} /> : row.ownerTeam || row.ownerPerson}</td>
+                  <td className="px-2 py-3">{row.missing.owner ? <AddChip label="Add" onClick={() => openRecordField(modelItemPath(basePath, "platforms", row.id, fieldKeyForGap(row.object.type, "owner")), router.push)} /> : row.ownerTeam || row.ownerPerson}</td>
                   <td className="px-2 py-3">{built || dash("")}</td>
                   <td className="px-2 py-3" onClick={(event) => event.stopPropagation()}>
                     {row.missing.cost ? <QuickCost row={row} onSaved={() => undefined} /> : row.annualCostLabel}
@@ -328,7 +329,7 @@ export function ServersTable({ rows, selectedId, anywhere = false }: { rows: Cat
                   </td>
                   <td className={cn("px-2 py-3", status.status === "unsupported_os" && "font-medium text-[#b42318]")}>{dash(os)}</td>
                   <td className="px-2 py-3">{runs || dash("")}</td>
-                  <td className="px-2 py-3">{row.missing.owner ? <AddChip label="Add" onClick={() => router.push(modelItemPath(basePath, "servers", row.id))} /> : row.ownerTeam || row.ownerPerson}</td>
+                  <td className="px-2 py-3">{row.missing.owner ? <AddChip label="Add" onClick={() => openRecordField(modelItemPath(basePath, "servers", row.id, fieldKeyForGap(row.object.type, "owner")), router.push)} /> : row.ownerTeam || row.ownerPerson}</td>
                   <td className={cn("px-2 py-3", status.severity === "bad" && "text-[#b42318]", status.severity === "warn" && "text-[#92400e]")} title={status.reason}>
                     {supportEnds ? <InfraControl object={row.object} field={supportEnds} compact /> : dash("")}
                   </td>

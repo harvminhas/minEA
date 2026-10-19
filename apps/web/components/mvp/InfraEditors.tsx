@@ -275,13 +275,21 @@ export function RecordFields({
   const missingRow = row ?? rowFromObject(object);
   const missingCounts = missingRow ? missingBySection(missingRow.missing, groups, REGISTRY[type]) : {};
   const [collapsed, setCollapsed] = useCollapsedSections();
+  // A field opened directly (?focus=, a table's + Add) unfolds its section for this visit
+  // only; the user's saved fold stays as it is until they click the header themselves.
+  const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
+  const openSection = openKey ? groups.find((group) => group.fields.some((def) => def.key === openKey))?.section : undefined;
+  useEffect(() => {
+    if (!openSection) return;
+    setRevealed((current) => (current.has(openSection) ? current : new Set(current).add(openSection)));
+  }, [openSection]);
 
   return (
     <div>
       {groups.map((group, index) => {
         const missing = missingCounts[group.section] ?? 0;
         // A field opened from elsewhere (e.g. the badge or a row action) always shows.
-        const open = !collapsed.has(group.section) || group.fields.some((def) => def.key === openKey);
+        const open = !collapsed.has(group.section) || revealed.has(group.section) || group.section === openSection;
         const bodyId = `record-section-${record.id}-${group.section}`;
         return (
           <section key={group.section} data-section={group.section} className={index === 0 ? "" : "border-t border-[#eceef3]"}>
@@ -289,7 +297,16 @@ export function RecordFields({
               type="button"
               aria-expanded={open}
               aria-controls={bodyId}
-              onClick={() => setCollapsed(group.section, open)}
+              onClick={() => {
+                if (revealed.has(group.section)) {
+                  setRevealed((current) => {
+                    const next = new Set(current);
+                    next.delete(group.section);
+                    return next;
+                  });
+                }
+                setCollapsed(group.section, open);
+              }}
               className="flex w-full items-center gap-1.5 rounded-md py-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5b4ce6]/40"
             >
               <svg
