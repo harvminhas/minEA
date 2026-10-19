@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { objectsApi } from "@/lib/api-client";
@@ -9,6 +9,8 @@ import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import type { CatalogRow } from "@/lib/model-catalog";
 import { applyCatalogWrite } from "@/lib/use-model-catalog";
+import { friendlyError } from "@/lib/row-saving";
+import { QUICK_AMOUNT_HINT, parseQuickAmount, quickCostIntent, withQuickCostLine } from "@/lib/cost/quick-cost";
 import {
   COST_TYPE_LABEL,
   type CostFrequency,
@@ -34,6 +36,30 @@ const TYPES: CostLineType[] = [
   "other",
 ];
 
+/**
+ * The Annual cost cell in record tables: the amount, or + Add with a quick annual estimate box.
+ * Enter or clicking away saves, Escape cancels; shows Saving… / Saved and a plain error.
+ */
+export function QuickCostCell({ row }: { row: CatalogRow }) {
+  const [justSaved, setJustSaved] = useState(false);
+  useEffect(() => {
+    if (!justSaved) return;
+    const timer = window.setTimeout(() => setJustSaved(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [justSaved]);
+  if (row.missing.cost) return <QuickCost row={row} onSaved={() => setJustSaved(true)} />;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={row.annualCostNumber == null ? "text-[#6b7289]" : "text-[#1c2230]"}>{row.annualCostLabel}</span>
+      {justSaved && (
+        <span role="status" className="text-[11px] font-medium text-[#15803d]" data-testid="quick-cost-saved">
+          Saved
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function QuickCost({ row, onSaved }: { row: CatalogRow; onSaved: () => void }) {
   const { getToken, user } = useAuth();
   const actor = user?.uid || "user";
@@ -42,43 +68,65 @@ export function QuickCost({ row, onSaved }: { row: CatalogRow; onSaved: () => vo
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
+  // Escape unmounts the box, which blurs it; that blur must not save.
+  const cancelled = useRef(false);
+  const input = useRef<HTMLInputElement>(null);
   const save = useMutation({
-    mutationFn: async (amount: string) => {
-      const cents = Math.round(Number(amount.replace(/[$,\s]/g, "")) * 100);
-      if (!Number.isFinite(cents) || cents <= 0) throw new Error("Type an annual amount, e.g. 4500");
+    mutationFn: async (cents: number) => {
       const token = await getToken();
-      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
-      const now = new Date().toISOString();
-      const line: CostLine = {
-        id: crypto.randomUUID(),
-        type: "subscription",
-        amount_cents: cents,
-        frequency: "annual",
-        calculation: { kind: "flat" },
+      if (!token || !orgSlug || !workspaceSlug) throw new Error("You're signed out. Sign in again to save.");
+      const cost_lines = withQuickCostLine(readCostLines(row.object.properties as Record<string, unknown>), {
+        cents,
         vendor: row.vendor || null,
-        source: "estimate",
-        created_at: now,
-        created_by: actor,
-        updated_at: now,
-        updated_by: actor,
-      };
-      return objectsApi.update(orgSlug, workspaceSlug, row.id, { properties: { cost_lines: [line] } }, token);
+        actor,
+        id: crypto.randomUUID(),
+        now: new Date().toISOString(),
+      });
+      return objectsApi.update(orgSlug, workspaceSlug, row.id, { properties: { cost_lines } }, token);
     },
     onSuccess: (saved) => {
+      // One catalogue write updates the table row and the open record panel together.
       if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
       setOpen(false);
       setValue("");
+      setError("");
       onSaved();
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: unknown) => setError(`Couldn't save: ${friendlyError(err)}`),
   });
+  // After a failed save the box is enabled again: put the cursor back so a retry is one Enter.
+  useEffect(() => {
+    if (error && open && !save.isPending) input.current?.focus();
+  }, [error, open, save.isPending]);
+  const commit = () => {
+    if (save.isPending) return;
+    const cents = parseQuickAmount(value);
+    if (cents === null) {
+      setOpen(false);
+      setError("");
+      return;
+    }
+    if (cents === "invalid") {
+      setError(QUICK_AMOUNT_HINT);
+      return;
+    }
+    setError("");
+    save.mutate(cents);
+  };
+  const cancel = () => {
+    cancelled.current = true;
+    setOpen(false);
+    setValue("");
+    setError("");
+  };
   if (!open) {
     return (
       <button
         type="button"
-        className="text-[13px] font-medium text-[#c2410c]"
+        className="rounded-md bg-[#fff7ed] px-2 py-0.5 text-[12px] font-medium text-[#c2410c] hover:bg-[#ffedd5]"
         onClick={(event) => {
           event.stopPropagation();
+          cancelled.current = false;
           setOpen(true);
         }}
       >
@@ -88,27 +136,49 @@ export function QuickCost({ row, onSaved }: { row: CatalogRow; onSaved: () => vo
   }
   return (
     <form
-      className="flex items-center gap-1"
+      className="flex flex-col gap-0.5"
       onClick={(event) => event.stopPropagation()}
       onSubmit={(event) => {
         event.preventDefault();
-        setError("");
-        save.mutate(value);
+        commit();
       }}
     >
-      <span className="text-[#6b7289]">$</span>
-      <input
-        autoFocus
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") setOpen(false);
-        }}
-        className="w-20 rounded border border-[#e6e8ee] px-1.5 py-1 text-[13px]"
-        placeholder="4500"
-      />
-      <span className="text-[12px] text-[#8b90a0]">/yr</span>
-      {error && <span className="text-[11px] text-[#c2410c]">{error}</span>}
+      <span className="flex items-center gap-1">
+        <span className="text-[#6b7289]">$</span>
+        <input
+          ref={input}
+          autoFocus
+          value={value}
+          disabled={save.isPending}
+          inputMode="decimal"
+          aria-label={`Annual cost for ${row.name}`}
+          aria-invalid={Boolean(error) || undefined}
+          onChange={(event) => {
+            setValue(event.target.value);
+            if (error) setError("");
+          }}
+          onKeyDown={(event) => {
+            const intent = quickCostIntent({ type: "keydown", key: event.key });
+            if (intent === "cancel") {
+              event.preventDefault();
+              event.stopPropagation();
+              cancel();
+            }
+          }}
+          onBlur={() => {
+            if (cancelled.current) return;
+            if (quickCostIntent({ type: "blur" }) === "commit") commit();
+          }}
+          className="w-20 rounded border border-[#e6e8ee] px-1.5 py-1 text-[13px] disabled:bg-[#f6f7f9] disabled:text-[#8b90a0]"
+          placeholder="4500"
+        />
+        <span className="text-[12px] text-[#8b90a0]">{save.isPending ? "Saving…" : "/yr"}</span>
+      </span>
+      {error && (
+        <span role="alert" className="max-w-[220px] text-[11px] leading-snug text-[#b42318]">
+          {error}
+        </span>
+      )}
     </form>
   );
 }

@@ -15,7 +15,7 @@ import { InfraControl } from "@/components/mvp/InfraEditors";
 import { hostSourceIds, readPlatformInfra, readRuntimeInfra } from "@/lib/infra/read";
 import { agingSummary, infraStatus, type InfraStatusResult } from "@/lib/infra/status";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
-import { QuickCost } from "@/components/mvp/CostSection";
+import { QuickCostCell } from "@/components/mvp/CostSection";
 import { AddChip } from "@/components/mvp/pills";
 import { fieldKeyForGap, openRecordField } from "@/lib/fields/field-focus";
 import { AddFlow } from "@/components/add/AddFlow";
@@ -180,7 +180,7 @@ export function PlatformsTable({ rows, selectedId, anywhere = false }: { rows: C
                   <td className="px-2 py-3">{row.missing.owner ? <AddChip label="Add" onClick={() => openRecordField(modelItemPath(basePath, "platforms", row.id, fieldKeyForGap(row.object.type, "owner")), router.push)} /> : row.ownerTeam || row.ownerPerson}</td>
                   <td className="px-2 py-3">{built || dash("")}</td>
                   <td className="px-2 py-3" onClick={(event) => event.stopPropagation()}>
-                    {row.missing.cost ? <QuickCost row={row} onSaved={() => undefined} /> : row.annualCostLabel}
+                    <QuickCostCell row={row} />
                   </td>
                   <td className="px-2 py-3">{row.renewalLabel && !row.missing.renewal ? row.renewalLabel : dash("")}</td>
                   {aiColumn && <td className="px-2 py-3 text-[12px] text-[#4b5163]">{aiLabels.get(row.id) || dash("")}</td>}

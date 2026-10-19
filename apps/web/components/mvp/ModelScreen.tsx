@@ -15,7 +15,7 @@ import { catalogStats, moneyLabel, rowForPanel, vendorPanelRow, vendorRollup, ty
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { objectsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import { QuickCost } from "@/components/mvp/CostSection";
+import { QuickCostCell } from "@/components/mvp/CostSection";
 import { AddChip, Pill } from "@/components/mvp/pills";
 import { fieldKeyForGap, openRecordField } from "@/lib/fields/field-focus";
 import { AppPlatformHelp } from "@/components/mvp/AppPlatformHelp";
@@ -307,12 +307,8 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
                         <td className="px-2 py-3">
                           {row.vendor ? row.vendor : <AddChip label="Add" onClick={() => openAt(row, "vendor")} />}
                         </td>
-                        <td className="px-2 py-3">
-                          {row.missing.cost ? (
-                            <QuickCost row={row} onSaved={() => undefined} />
-                          ) : (
-                            <span className={row.annualCostNumber == null ? "text-[#6b7289]" : "text-[#1c2230]"}>{row.annualCostLabel}</span>
-                          )}
+                        <td className="px-2 py-3" onClick={(event) => event.stopPropagation()}>
+                          <QuickCostCell row={row} />
                         </td>
                         <td className="px-2 py-3">
                           {row.missing.renewal ? (
