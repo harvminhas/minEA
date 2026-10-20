@@ -12,7 +12,7 @@ import { hasPermission } from "@/lib/permissions";
 import { primaryViewPath } from "@/lib/tenancy";
 import { billingUiEnabled } from "@/lib/billing/flags";
 import { billingErrorMessage } from "@/lib/billing/checkout";
-import { PendingInviteRow } from "@/components/org/PendingInviteRow";
+import { PEOPLE_QUERY, usePeoplePanel } from "@/components/org/PeoplePanel";
 import { MembersTable, type MembersScope } from "@/components/org/OrgMembersTable";
 import { countAdmins, workspaceMemberActions, WS_REMOVE_COPY } from "@/lib/member-actions";
 
@@ -31,11 +31,6 @@ export default function WorkspaceSettingsPage() {
   const router = useRouter();
   const [memberError, setMemberError] = useState<string | null>(null);
 
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("member");
-  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
-  const [inviteError, setInviteError] = useState<string | null>(null);
-
   const { data: workspace } = useQuery({
     queryKey: ["workspace", orgSlug, workspaceSlug],
     queryFn: async () => {
@@ -53,48 +48,10 @@ export default function WorkspaceSettingsPage() {
     enabled: canManageWorkspace,
   });
 
-  const { data: invites } = useQuery({
-    queryKey: ["workspace-invites", orgSlug, workspaceSlug],
-    queryFn: async () => {
-      const token = await getToken();
-      return workspacesApi.listInvites(orgSlug, workspaceSlug, token!);
-    },
-    enabled: canInviteWorkspaceMembers,
-  });
-
-  const inviteMutation = useMutation({
-    mutationFn: async () => {
-      const token = await getToken();
-      return workspacesApi.createInvite(
-        orgSlug,
-        workspaceSlug,
-        { email: inviteEmail, role: inviteRole },
-        token!
-      );
-    },
-    onSuccess: (data) => {
-      setInviteEmail("");
-      setInviteError(null);
-      setLastInviteUrl(`${window.location.origin}${data.invite_url}`);
-      queryClient.invalidateQueries({ queryKey: ["workspace-invites", orgSlug, workspaceSlug] });
-    },
-    // Flag on: show the API's message (e.g. licence limit) instead of raw JSON.
-    onError: (err: Error) => setInviteError(billingUiEnabled() ? billingErrorMessage(err) : err.message),
-  });
-
-  const revokeMutation = useMutation({
-    mutationFn: async (inviteId: string) => {
-      const token = await getToken();
-      return workspacesApi.revokeInvite(orgSlug, workspaceSlug, inviteId, token!);
-    },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["workspace-invites", orgSlug, workspaceSlug] }),
-  });
-
   const refreshPeople = () => {
     // Licence counts are computed from memberships; the Licences roster reads these same queries.
     void queryClient.invalidateQueries({ queryKey: ["workspace-members", orgSlug, workspaceSlug] });
-    void queryClient.invalidateQueries({ queryKey: ["workspace-invites", orgSlug, workspaceSlug] });
+    void queryClient.invalidateQueries({ queryKey: [PEOPLE_QUERY, orgSlug] });
     void queryClient.invalidateQueries({ queryKey: ["billing-status", orgSlug] });
   };
   const memberMutation = useMutation({
@@ -128,12 +85,16 @@ export default function WorkspaceSettingsPage() {
       if (action.kind === "leave") setMemberError(err.message);
     },
   });
-  const resendMutation = useMutation({
-    mutationFn: async (inviteId: string) => {
-      const token = await getToken();
-      return workspacesApi.resendInvite(orgSlug, workspaceSlug, inviteId, token!);
+  const people = usePeoplePanel({
+    orgSlug,
+    workspaceSlug,
+    enabled: canManageWorkspace && canInviteWorkspaceMembers,
+    emailVerified,
+    errorMessage: (err) => (billingUiEnabled() ? billingErrorMessage(err) : err.message),
+    onChanged: () => {
+      void queryClient.invalidateQueries({ queryKey: ["workspace-members", orgSlug, workspaceSlug] });
+      void queryClient.invalidateQueries({ queryKey: ["billing-status", orgSlug] });
     },
-    onSuccess: () => refreshPeople(),
   });
 
   const renameMutation = useMutation({
@@ -272,69 +233,17 @@ export default function WorkspaceSettingsPage() {
           onChangeRole={(userId, role) => memberMutation.mutateAsync({ kind: "role", userId, role })}
           onRemove={(userId) => memberMutation.mutateAsync({ kind: "remove", userId })}
           onLeave={() => memberMutation.mutate({ kind: "leave" })}
+          extra={people.extra}
+          after={people.after}
+          headerAction={people.headerAction}
         />
+        {!emailVerified && (
+          <p className="text-sm text-amber-700 mt-2">Verify your email in org settings before inviting others.</p>
+        )}
+        {people.dialog}
 
-        <div className="border-t border-gray-100 pt-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Invite to workspace</h3>
-          {!emailVerified && (
-            <p className="text-sm text-amber-700 mb-3">
-              Verify your email in org settings before inviting others.
-            </p>
-          )}
-          <div className="flex gap-2">
-            <input
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="email@company.com"
-              className="flex-1 border border-gray-200 rounded-md px-3 py-2 text-sm"
-            />
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value)}
-              className="border border-gray-200 rounded-md px-2 py-2 text-sm"
-            >
-              <option value="viewer">Viewer</option>
-              <option value="member">Member</option>
-              <option value="admin">Admin</option>
-            </select>
-            <button
-              onClick={() => inviteMutation.mutate()}
-              disabled={!inviteEmail || !emailVerified || inviteMutation.isPending}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
-            >
-              Invite
-            </button>
-          </div>
-          {inviteError && <p className="text-sm text-red-600 mt-2">{inviteError}</p>}
-          {lastInviteUrl && (
-            <p className="text-xs text-gray-600 mt-2 break-all">
-              Invite link:{" "}
-              <a href={lastInviteUrl} className="text-indigo-600 underline">
-                {lastInviteUrl}
-              </a>
-            </p>
-          )}
-        </div>
       </section>
 
-      <section className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="font-semibold text-gray-900 mb-4">Pending invites</h2>
-        <div className="divide-y divide-gray-100">
-          {(invites ?? [])
-            .filter((i) => i.status === "pending")
-            .map((inv) => (
-              <PendingInviteRow
-                key={inv.id}
-                invite={inv}
-                onResend={async (id) => `${window.location.origin}${(await resendMutation.mutateAsync(id)).invite_url}`}
-                onRevoke={(id) => revokeMutation.mutateAsync(id)}
-              />
-            ))}
-          {(invites ?? []).filter((i) => i.status === "pending").length === 0 && (
-            <p className="text-sm text-gray-400 py-2">No pending invites</p>
-          )}
-        </div>
-      </section>
       {canDeleteWorkspace && (
         <section className="bg-white rounded-lg border border-red-100 p-6 mt-6" data-testid="ws-danger-zone">
           <h2 className="font-semibold text-red-900 mb-2">Danger zone</h2>

@@ -47,7 +47,8 @@ export function firstWorkspace<T extends { slug: string }>(workspaces: T[] | und
 /** Where "switch to this org" lands: its first workspace's Ask page. */
 export function orgLandingPath(orgSlug: string, workspaces: { slug: string }[] | undefined): string {
   const ws = firstWorkspace(workspaces);
-  return ws ? primaryViewPath(orgSlug, ws.slug) : `/orgs/${orgSlug}/settings`;
+  // No workspace shared yet: a page that says so, not Org settings (members can't use it).
+  return ws ? primaryViewPath(orgSlug, ws.slug) : `/orgs/${orgSlug}/no-workspace`;
 }
 
 export function orgSettingsLabel(orgName: string | null | undefined): string {

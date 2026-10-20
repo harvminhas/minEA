@@ -1,6 +1,5 @@
 """Org lifecycle, membership, and onboarding."""
 import uuid
-from app.utils.time import utc_now, utc_now_plus
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -12,8 +11,6 @@ from app.database import get_db
 from app.models.objects import Workspace
 from app.models.tenancy import Invite, Org, OrgMembership, User, WorkspaceMembership
 from app.schemas.tenancy import (
-    InviteCreate,
-    InviteCreated,
     InviteRead,
     OrgCreate,
     OrgMemberRead,
@@ -22,12 +19,10 @@ from app.schemas.tenancy import (
 )
 from app.services.audit import log_audit
 from app.services.authorization import (
-    generate_invite_token,
-    require_limit,
     require_role_capacity,
     seed_org_limits,
 )
-from app.services.licences import EDITOR_ORG_ROLES, invite_grants_licence, require_licence
+from app.services.licences import EDITOR_ORG_ROLES, require_licence
 from app.services.member_guardrails import GuardrailError, check_leave, check_removal, check_role_change
 from app.services.roles import ORG_OWNER
 from app.services.tenancy import TenancyContext, get_org_context, _resolve_user, _set_rls_org
@@ -257,144 +252,7 @@ async def list_invites(
     ]
 
 
-@router.post("/{org_slug}/invites", response_model=InviteCreated, status_code=status.HTTP_201_CREATED)
-async def create_invite(
-    body: InviteCreate,
-    ctx: TenancyContext = Depends(get_org_context),
-    db: AsyncSession = Depends(get_db),
-) -> InviteCreated:
-    from app.services.plan_features import assert_plan_allows_invites
-
-    await ctx.require_permission(db, "org.member.invite")
-    assert_plan_allows_invites(ctx.org.plan)
-    await require_limit(db, ctx.org_id, "max_pending_invites", pending_delta=1)
-    await require_role_capacity(db, ctx.org_id, body.role)
-    if invite_grants_licence(workspace_id=None, role=body.role):
-        await require_licence(db, ctx.org_id, email=body.email)
-
-    if not body.workspace_slug and body.role not in ("admin", "member"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Org-level invites support admin or member roles only",
-        )
-
-    if body.workspace_slug:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Use workspace invite endpoint for workspace-scoped invites",
-        )
-
-    raw_token, token_hash = generate_invite_token()
-    invite = Invite(
-        token_hash=token_hash,
-        org_id=ctx.org_id,
-        workspace_id=None,
-        email=body.email.lower().strip(),
-        role=body.role,
-        status="pending",
-        expires_at=utc_now_plus(days=7),
-        created_by=ctx.user_id,
-    )
-    db.add(invite)
-    await db.flush()
-
-    await log_audit(
-        db,
-        org_id=ctx.org_id,
-        actor_user_id=ctx.user_id,
-        action="invite.issued",
-        target_type="invite",
-        target_id=invite.id,
-        metadata={"email": invite.email, "role": invite.role},
-    )
-    await db.commit()
-    await db.refresh(invite)
-
-    return InviteCreated(
-        id=invite.id,
-        email=invite.email,
-        role=invite.role,
-        workspace_id=invite.workspace_id,
-        status=invite.status,
-        expires_at=invite.expires_at,
-        invite_url=_invite_url(raw_token),
-        token=raw_token,
-    )
-
-
-@router.delete("/{org_slug}/invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def revoke_invite(
-    invite_id: uuid.UUID,
-    ctx: TenancyContext = Depends(get_org_context),
-    db: AsyncSession = Depends(get_db),
-) -> None:
-    await ctx.require_permission(db, "org.member.invite")
-
-    result = await db.execute(
-        select(Invite).where(Invite.id == invite_id, Invite.org_id == ctx.org_id)
-    )
-    invite = result.scalar_one_or_none()
-    if not invite:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
-    if invite.status != "pending":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invite is not pending")
-
-    invite.status = "revoked"
-    invite.revoked_at = utc_now()
-
-    await log_audit(
-        db,
-        org_id=ctx.org_id,
-        actor_user_id=ctx.user_id,
-        action="invite.revoked",
-        target_type="invite",
-        target_id=invite.id,
-        metadata={"email": invite.email},
-    )
-    await db.commit()
-
-
-@router.post("/{org_slug}/invites/{invite_id}/resend", response_model=InviteCreated)
-async def resend_invite(
-    invite_id: uuid.UUID,
-    ctx: TenancyContext = Depends(get_org_context),
-    db: AsyncSession = Depends(get_db),
-) -> InviteCreated:
-    """Issue a fresh link for a pending invite (the old link stops working) and extend it 7 days."""
-    await ctx.require_permission(db, "org.member.invite")
-    result = await db.execute(
-        select(Invite).where(Invite.id == invite_id, Invite.org_id == ctx.org_id, Invite.workspace_id.is_(None))
-    )
-    invite = result.scalar_one_or_none()
-    if not invite:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
-    if invite.status != "pending":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invite is not pending")
-
-    raw_token, token_hash = generate_invite_token()
-    invite.token_hash = token_hash
-    invite.expires_at = utc_now_plus(days=7)
-    await log_audit(
-        db,
-        org_id=ctx.org_id,
-        actor_user_id=ctx.user_id,
-        action="invite.resent",
-        target_type="invite",
-        target_id=invite.id,
-        metadata={"email": invite.email},
-    )
-    await db.commit()
-    await db.refresh(invite)
-    return InviteCreated(
-        id=invite.id,
-        email=invite.email,
-        role=invite.role,
-        workspace_id=invite.workspace_id,
-        status=invite.status,
-        expires_at=invite.expires_at,
-        invite_url=_invite_url(raw_token),
-        token=raw_token,
-    )
+# Creating, resending, revoking and copying invites: app/routers/invitations.py.
 
 
 @router.patch("/{org_slug}/members/{user_id}/role")

@@ -30,6 +30,11 @@ import type {
   InvitePreview,
   Invite,
   InviteCreated,
+  InvitesCreated,
+  InviteCreateBody,
+  InviteAccepted,
+  PeopleResponse,
+  PersonRow,
   Product,
   ProductCreate,
   ProductUpdate,
@@ -262,10 +267,26 @@ export const orgsApi = {
     apiFetch<OrgMember[]>(`/orgs/${orgSlug}/members`, { token }),
   listInvites: (orgSlug: string, token: string) =>
     apiFetch<Invite[]>(`/orgs/${orgSlug}/invites`, { token }),
-  createInvite: (orgSlug: string, body: { email: string; role: string; workspace_slug?: string }, token: string) =>
-    apiFetch<InviteCreated>(`/orgs/${orgSlug}/invites`, {
+  /** One invite per email: workspaces with a role each, and/or org admin. Emails go out from the server. */
+  createInvite: (orgSlug: string, body: InviteCreateBody, token: string) =>
+    apiFetch<InvitesCreated>(`/orgs/${orgSlug}/invites`, {
       method: "POST",
       body: JSON.stringify(body),
+      token,
+    }),
+  /** Members and pending invites merged: one row per person. */
+  people: (orgSlug: string, token: string) => apiFetch<PeopleResponse>(`/orgs/${orgSlug}/people`, { token }),
+  inviteLink: (orgSlug: string, inviteId: string, token: string) =>
+    apiFetch<{ invite_url: string }>(`/orgs/${orgSlug}/invites/${inviteId}/link`, { token }),
+  setMemberWorkspaces: (
+    orgSlug: string,
+    userId: string,
+    workspaces: { slug: string; role: string }[],
+    token: string
+  ) =>
+    apiFetch<PersonRow>(`/orgs/${orgSlug}/members/${userId}/workspaces`, {
+      method: "PUT",
+      body: JSON.stringify({ workspaces }),
       token,
     }),
   revokeInvite: (orgSlug: string, inviteId: string, token: string) =>
@@ -289,7 +310,7 @@ export const orgsApi = {
 export const invitesApi = {
   preview: (token: string) => apiFetch<InvitePreview>(`/invites/${token}`),
   accept: (token: string, authToken: string) =>
-    apiFetch<{ org_slug: string; role: string; workspace_slug?: string }>(`/invites/${token}/accept`, {
+    apiFetch<InviteAccepted>(`/invites/${token}/accept`, {
       method: "POST",
       token: authToken,
     }),
@@ -523,7 +544,7 @@ export const workspacesApi = {
     body: { email: string; role: string },
     token: string
   ) =>
-    apiFetch<InviteCreated>(`${wsBase(orgSlug, workspaceSlug)}/invites`, {
+    apiFetch<InvitesCreated>(`${wsBase(orgSlug, workspaceSlug)}/invites`, {
       method: "POST",
       body: JSON.stringify(body),
       token,

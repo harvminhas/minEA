@@ -61,7 +61,7 @@ export default function HomePage() {
         orgs,
         lastAppPath,
         getToken,
-      }).catch(() => ({ destination: `/orgs/${orgs[0].slug}/settings`, restored: false }));
+      }).catch(() => ({ destination: `/orgs/${orgs[0].slug}/no-workspace`, restored: false }));
       if (intent === "starter") {
         const slug = orgSlugFromPath(destination) ?? orgs[0].slug;
         router.replace(starterBillingHref(slug));

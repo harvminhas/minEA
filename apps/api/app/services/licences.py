@@ -49,15 +49,19 @@ def build_usage(
     pending_invites: Iterable[tuple[uuid.UUID, str]],
     *,
     exclude_invite_id: uuid.UUID | None = None,
+    exclude_invite_ids: Iterable[uuid.UUID] = (),
 ) -> LicenceUsage:
     """holders: (user_id, email); pending_invites: (invite_id, email) that grant a licence."""
+    excluded = set(exclude_invite_ids)
+    if exclude_invite_id is not None:
+        excluded.add(exclude_invite_id)
     usage = LicenceUsage()
     for user_id, email in holders:
         usage.holder_ids.add(user_id)
         if email:
             usage.holder_emails.add(email.strip().lower())
     for invite_id, email in pending_invites:
-        if exclude_invite_id is not None and invite_id == exclude_invite_id:
+        if invite_id in excluded:
             continue
         normalized = (email or "").strip().lower()
         if normalized and normalized not in usage.holder_emails:
@@ -90,7 +94,11 @@ def licence_limit_detail(used: int, cap: int) -> dict:
 
 
 async def load_usage(
-    db: AsyncSession, org_id: uuid.UUID, *, exclude_invite_id: uuid.UUID | None = None
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    *,
+    exclude_invite_id: uuid.UUID | None = None,
+    exclude_invite_ids: Iterable[uuid.UUID] = (),
 ) -> LicenceUsage:
     org_rows = await db.execute(
         select(OrgMembership.user_id, User.email)
@@ -111,11 +119,18 @@ async def load_usage(
             or_(
                 and_(Invite.workspace_id.is_(None), Invite.role.in_(EDITOR_ORG_ROLES)),
                 and_(Invite.workspace_id.is_not(None), Invite.role.in_(EDITOR_WORKSPACE_ROLES)),
+                # One-invite-per-person (055): role is the highest role on the invite.
+                and_(Invite.org_role.is_not(None), Invite.role.in_(EDITOR_WORKSPACE_ROLES)),
             ),
         )
     )
     holders = [(r[0], r[1]) for r in org_rows.all()] + [(r[0], r[1]) for r in ws_rows.all()]
-    return build_usage(holders, [(r[0], r[1]) for r in invite_rows.all()], exclude_invite_id=exclude_invite_id)
+    return build_usage(
+        holders,
+        [(r[0], r[1]) for r in invite_rows.all()],
+        exclude_invite_id=exclude_invite_id,
+        exclude_invite_ids=exclude_invite_ids,
+    )
 
 
 async def licence_cap(db: AsyncSession, org_id: uuid.UUID) -> int | None:
@@ -131,13 +146,35 @@ async def require_licence(
     user_id: uuid.UUID | None = None,
     email: str | None = None,
     exclude_invite_id: uuid.UUID | None = None,
+    exclude_invite_ids: Iterable[uuid.UUID] = (),
 ) -> None:
     """Raise 403 licence_limit if giving this person edit access would exceed the cap."""
     cap = await licence_cap(db, org_id)
     if cap is None:
         return
-    usage = await load_usage(db, org_id, exclude_invite_id=exclude_invite_id)
+    excluded = list(exclude_invite_ids)
+    if excluded:
+        usage = await load_usage(db, org_id, exclude_invite_id=exclude_invite_id, exclude_invite_ids=excluded)
+    else:
+        usage = await load_usage(db, org_id, exclude_invite_id=exclude_invite_id)
     if not needs_new_licence(usage, user_id=user_id, email=email):
         return
     if usage.used + 1 > cap:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=licence_limit_detail(usage.used, cap))
+
+
+async def require_licences_for_emails(
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    emails: Iterable[str],
+    *,
+    exclude_invite_ids: Iterable[uuid.UUID] = (),
+) -> None:
+    """Several people at once (one invite each): 403 licence_limit if they don't all fit."""
+    cap = await licence_cap(db, org_id)
+    if cap is None:
+        return
+    usage = await load_usage(db, org_id, exclude_invite_ids=exclude_invite_ids)
+    new = {e.strip().lower() for e in emails if needs_new_licence(usage, email=e)}
+    if new and usage.used + len(new) > cap:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=licence_limit_detail(usage.used, cap))

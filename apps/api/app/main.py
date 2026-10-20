@@ -28,6 +28,7 @@ from app.routers import (
     support,
     capability_map,
     data_layer,
+    invitations,
     invites,
     journeys,
     objects,
@@ -105,6 +106,7 @@ app.include_router(billing.router, prefix="/api/v1")
 app.include_router(contact.router, prefix="/api/v1")
 app.include_router(support.router, prefix="/api/v1")
 app.include_router(invites.router, prefix="/api/v1")
+app.include_router(invitations.router, prefix="/api/v1")
 app.include_router(share_data.router, prefix="/api/v1")
 app.include_router(workspaces.router, prefix="/api/v1")
 app.include_router(objects.router, prefix="/api/v1")

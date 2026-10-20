@@ -1125,6 +1125,73 @@ export interface InvitePreview {
   status: InviteStatus;
   expired: boolean;
   consumed: boolean;
+  workspaces?: InviteAccess[];
+  org_admin?: boolean;
+  inviter?: string | null;
+}
+
+export type InviteWorkspaceRole = "admin" | "member" | "viewer";
+
+/** One workspace an invite (or member) has, with its role. */
+export interface InviteAccess {
+  slug: string;
+  name: string;
+  role: InviteWorkspaceRole;
+}
+
+export interface InviteIssued {
+  id: string;
+  email: string;
+  invite_url: string;
+  email_sent: boolean;
+  merged: boolean;
+  expires_at: string;
+  org_admin: boolean;
+  workspaces: InviteAccess[];
+}
+
+export interface InvitesCreated {
+  invites: InviteIssued[];
+  invite_url?: string | null;
+}
+
+export interface InviteCreateBody {
+  emails: string[];
+  workspaces: { slug: string; role: InviteWorkspaceRole }[];
+  org_admin?: boolean;
+}
+
+export interface PendingAccess {
+  id: string;
+  org_admin: boolean;
+  workspaces: InviteAccess[];
+  expires_at: string;
+  email_sent_at?: string | null;
+  can_copy: boolean;
+  can_manage: boolean;
+}
+
+/** One person on the merged Members list: a member, an invitee, or a member with a pending invite. */
+export interface PersonRow {
+  email: string;
+  user_id?: string | null;
+  full_name?: string | null;
+  org_role?: string | null;
+  workspaces: InviteAccess[];
+  invite?: PendingAccess | null;
+}
+
+export interface PeopleResponse {
+  people: PersonRow[];
+  workspaces: { slug: string; name: string }[];
+  can_invite_org_admins: boolean;
+}
+
+export interface InviteAccepted {
+  org_slug: string;
+  role: string;
+  already?: boolean;
+  workspace_slug?: string | null;
 }
 
 export interface Invite {
@@ -1141,6 +1208,8 @@ export interface Invite {
 export interface InviteCreated extends Invite {
   invite_url: string;
   token: string;
+  /** False when the invite email didn't go out (copy the link instead). */
+  email_sent?: boolean | null;
 }
 
 // ─── Workspace ────────────────────────────────────────────────────────────────

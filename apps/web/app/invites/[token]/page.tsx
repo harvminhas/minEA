@@ -7,6 +7,9 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { invitesApi, workspacesApi } from "@/lib/api-client";
 import { primaryViewPath } from "@/lib/tenancy";
+import { orgLandingPath } from "@/lib/org-access";
+import { friendlyError } from "@/lib/row-saving";
+import { InviteCard } from "@/components/org/InviteCard";
 import { passwordSignInEnabled } from "@/lib/auth/flags";
 import { SocialSignIn } from "@/components/auth/SocialSignIn";
 import { PasswordUsersNote } from "@/components/auth/ProviderButtons";
@@ -22,24 +25,25 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     queryFn: () => invitesApi.preview(token),
   });
 
+  const [already, setAlready] = useState<{ href: string; label: string } | null>(null);
   const acceptMutation = useMutation({
     mutationFn: async () => {
       const authToken = await getToken();
       return invitesApi.accept(token, authToken!);
     },
     onSuccess: async (result) => {
-      if (result.workspace_slug) {
-        router.replace(primaryViewPath(result.org_slug, result.workspace_slug));
+      // The server picks the first chosen workspace you can open; with none, say so (not Org settings).
+      let dest = result.workspace_slug ? primaryViewPath(result.org_slug, result.workspace_slug) : null;
+      if (!dest) {
+        const authToken = await getToken();
+        const workspaces = await workspacesApi.list(result.org_slug, authToken!).catch(() => []);
+        dest = orgLandingPath(result.org_slug, workspaces);
+      }
+      if (result.already) {
+        setAlready({ href: dest, label: result.workspace_slug ? "Open workspace" : "Continue" });
         return;
       }
-      const authToken = await getToken();
-      const workspaces = await workspacesApi.list(result.org_slug, authToken!);
-      const ws = workspaces.find((w) => w.slug === "default") ?? workspaces[0];
-      if (ws) {
-        router.replace(primaryViewPath(result.org_slug, ws.slug));
-      } else {
-        router.replace(`/orgs/${result.org_slug}/settings`);
-      }
+      router.replace(dest);
     },
   });
 
@@ -53,18 +57,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md bg-white rounded-xl border border-gray-200 p-8 shadow-sm">
-        <h1 className="text-xl font-bold text-gray-900 mb-2">Join {preview.org_name}</h1>
-        <p className="text-sm text-gray-600 mb-4">
-          You&apos;ve been invited as <strong>{preview.role}</strong> for {preview.email}.
-        </p>
-
-        {preview.consumed && <p className="text-sm text-amber-600 mb-4">This invite has already been used.</p>}
-        {preview.expired && <p className="text-sm text-red-600 mb-4">This invite has expired.</p>}
-        {preview.workspace_slug && (
-          <p className="text-sm text-gray-500 mb-4">Workspace: {preview.workspace_slug}</p>
-        )}
-
+      <InviteCard preview={preview} already={already}>
         {!isSignedIn ? (
           <div className="space-y-3">
             <p className="text-sm text-gray-600">
@@ -100,18 +93,18 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
           )}
           <button
             onClick={() => acceptMutation.mutate()}
-            disabled={preview.consumed || preview.expired || acceptMutation.isPending}
+            disabled={preview.status === "revoked" || preview.expired || acceptMutation.isPending}
             className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-md py-2.5 text-sm font-medium"
           >
-            {acceptMutation.isPending ? "Accepting..." : "Accept invite"}
+            {acceptMutation.isPending ? "Accepting..." : preview.consumed ? "Continue" : "Accept and open"}
           </button>
           </>
         )}
 
         {acceptMutation.isError && (
-          <p className="mt-3 text-xs text-red-600">{(acceptMutation.error as Error).message}</p>
+          <p className="mt-3 text-xs text-red-600">{friendlyError(acceptMutation.error)}</p>
         )}
-      </div>
+      </InviteCard>
     </div>
   );
 }

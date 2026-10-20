@@ -65,9 +65,12 @@ test("both members tables and pending invites use the saving state", () => {
   assert.match(table, /Saving…/);
   const invite = readFileSync(new URL("../components/org/PendingInviteRow.tsx", import.meta.url), "utf8");
   assert.match(invite, /onResend/);
+  // Pending invites are rows in the merged Members list (PeoplePanel), on both settings pages.
+  assert.match(readFileSync(new URL("../components/org/PeoplePanel.tsx", import.meta.url), "utf8"), /<PendingInviteRow/);
   for (const page of ["../app/orgs/[orgSlug]/settings/page.tsx", "../app/orgs/[orgSlug]/workspaces/[workspaceSlug]/settings/page.tsx"]) {
     const src = readFileSync(new URL(page, import.meta.url), "utf8");
-    assert.match(src, /<PendingInviteRow/);
+    assert.match(src, /usePeoplePanel\(/);
+    assert.match(src, /after=\{people\.after\}/);
     assert.match(src, /memberMutation\.mutateAsync\(\{ kind: "role"/);
     assert.match(src, /setQueryData\(/);
   }

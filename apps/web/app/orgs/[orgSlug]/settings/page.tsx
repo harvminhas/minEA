@@ -23,7 +23,7 @@ import { parseCheckoutSessionId } from "@/lib/support";
 import { businessGetStartedHref } from "@/lib/billing/business-request";
 import { BillingPreviewSwitch } from "@/components/billing/BillingPreviewSwitch";
 import { LicencesPanel } from "@/components/billing/LicencesPanel";
-import { PendingInviteRow } from "@/components/org/PendingInviteRow";
+import { PEOPLE_QUERY, usePeoplePanel } from "@/components/org/PeoplePanel";
 import { adminWorkspaces, canEditWorkspaceSettings, workspaceSettingsPath } from "@/lib/workspace-admin";
 import { OrgMembersTable } from "@/components/org/OrgMembersTable";
 import { billingPreviewEnabled, billingUiEnabled } from "@/lib/billing/flags";
@@ -67,10 +67,6 @@ export default function OrgSettingsPage() {
   } = usePermissions();
   const { plan } = usePlanFeatures();
   const { setActiveOrg, setActiveWorkspace } = useAppStore();
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("member");
-  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
-  const [inviteError, setInviteError] = useState<string | null>(null);
   const [verifyMessage, setVerifyMessage] = useState<string | null>(null);
   const [verifyLink, setVerifyLink] = useState<string | null>(null);
   const [verifyLoading, setVerifyLoading] = useState(false);
@@ -165,15 +161,6 @@ export default function OrgSettingsPage() {
     enabled: canManageOrg,
   });
 
-  const { data: invites } = useQuery({
-    queryKey: ["invites", orgSlug],
-    queryFn: async () => {
-      const token = await getToken();
-      return orgsApi.listInvites(orgSlug, token!);
-    },
-    enabled: canManageOrg,
-  });
-
   const { data: workspaces } = useQuery({
     queryKey: ["workspaces", orgSlug],
     queryFn: async () => {
@@ -256,33 +243,11 @@ export default function OrgSettingsPage() {
   const canSeeBilling = canManageBilling || isOrgAdmin;
 
 
-  const inviteMutation = useMutation({
-    mutationFn: async () => {
-      const token = await getToken();
-      return orgsApi.createInvite(orgSlug, { email: inviteEmail, role: inviteRole }, token!);
-    },
-    onSuccess: (data) => {
-      setInviteEmail("");
-      setInviteError(null);
-      setLastInviteUrl(`${window.location.origin}${data.invite_url}`);
-      queryClient.invalidateQueries({ queryKey: ["invites", orgSlug] });
-    },
-    onError: (err: Error) => setInviteError(billingUi ? billingErrorMessage(err) : err.message),
-  });
-
-  const revokeMutation = useMutation({
-    mutationFn: async (inviteId: string) => {
-      const token = await getToken();
-      return orgsApi.revokeInvite(orgSlug, inviteId, token!);
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["invites", orgSlug] }),
-  });
-
   const [memberError, setMemberError] = useState<string | null>(null);
   const refreshPeople = () => {
     // Seats are counted live from memberships, so refetching members/invites/billing updates them.
     void queryClient.invalidateQueries({ queryKey: ["members", orgSlug] });
-    void queryClient.invalidateQueries({ queryKey: ["invites", orgSlug] });
+    void queryClient.invalidateQueries({ queryKey: [PEOPLE_QUERY, orgSlug] });
     void queryClient.invalidateQueries({ queryKey: ["billing-status", orgSlug] });
   };
   const memberMutation = useMutation({
@@ -315,12 +280,25 @@ export default function OrgSettingsPage() {
       if (action.kind === "leave") setMemberError(err.message);
     },
   });
-  const resendMutation = useMutation({
-    mutationFn: async (inviteId: string) => {
-      const token = await getToken();
-      return orgsApi.resendInvite(orgSlug, inviteId, token!);
+  const people = usePeoplePanel({
+    orgSlug,
+    enabled: canManageOrg,
+    emailVerified,
+    blocked: canInviteOrgMembers ? undefined : (
+      <Link
+        href={businessGetStartedHref({ org: orgSlug, from: "invite" })}
+        data-testid="invite-business-get-started"
+        title={inviteUpgradeMessage(plan)}
+        className="text-sm text-indigo-600 font-medium hover:text-indigo-700"
+      >
+        Invite people: get started with Business →
+      </Link>
+    ),
+    errorMessage: (err) => (billingUi ? billingErrorMessage(err) : err.message),
+    onChanged: () => {
+      void queryClient.invalidateQueries({ queryKey: ["members", orgSlug] });
+      void queryClient.invalidateQueries({ queryKey: ["billing-status", orgSlug] });
     },
-    onSuccess: () => refreshPeople(),
   });
 
   const membersBlock = (
@@ -344,7 +322,15 @@ export default function OrgSettingsPage() {
       onChangeRole={(userId, role) => memberMutation.mutateAsync({ kind: "role", userId, role })}
       onRemove={(userId) => memberMutation.mutateAsync({ kind: "remove", userId })}
       onLeave={() => memberMutation.mutate({ kind: "leave" })}
+      extra={people.extra}
+      after={people.after}
+      headerAction={people.headerAction}
     />
+    {!canInviteOrgMembers && <p className="text-xs text-gray-500 -mt-2 mb-2">{inviteUpgradeMessage(plan)}</p>}
+    {canInviteOrgMembers && !emailVerified && (
+      <p className="text-sm text-amber-700 -mt-2 mb-2">Verify your email above before inviting others.</p>
+    )}
+    {people.dialog}
     </>
   );
 
@@ -574,7 +560,7 @@ export default function OrgSettingsPage() {
               displayPlan={displayPlan}
               billingHref={billingHref}
               orgSlug={orgSlug}
-              pendingInvites={(invites ?? []).filter((i) => i.status === "pending").length}
+              pendingInvites={people.pendingCount}
             />
             <div className="mt-6">
               {membersBlock}
@@ -586,70 +572,11 @@ export default function OrgSettingsPage() {
         </>
         )}
 
-        <div className="border-t border-gray-100 pt-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Invite to org</h3>
-            {!canInviteOrgMembers ? (
-              <div className="rounded-md bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
-                <p>{inviteUpgradeMessage(plan)}</p>
-                <Link
-                  href={businessGetStartedHref({ org: orgSlug, from: "invite" })}
-                  data-testid="invite-business-get-started"
-                  className="inline-block mt-2 text-indigo-600 font-medium hover:text-indigo-700"
-                >
-                  Get started with Business →
-                </Link>
-              </div>
-            ) : (
-              <>
-                {!emailVerified && (
-                  <p className="text-sm text-amber-700 mb-3">
-                    Verify your email above before inviting others.
-                  </p>
-                )}
-                <div className="flex gap-2">
-                  <input
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="email@company.com"
-                    className="flex-1 border border-gray-200 rounded-md px-3 py-2 text-sm"
-                  />
-                  <select
-                    value={inviteRole}
-                    onChange={(e) => setInviteRole(e.target.value)}
-                    className="border border-gray-200 rounded-md px-2 py-2 text-sm"
-                  >
-                    <option value="member">
-                      {billingUi ? "Member — no workspace access until added" : "Member — contributor license"}
-                    </option>
-                    <option value="admin">
-                      {billingUi ? "Admin — uses a licence" : "Admin — contributor license"}
-                    </option>
-                  </select>
-                  <button
-                    onClick={() => inviteMutation.mutate()}
-                    disabled={!inviteEmail || !emailVerified || inviteMutation.isPending}
-                    className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
-                  >
-                    Invite
-                  </button>
-                </div>
-                {inviteError && <p className="text-sm text-red-600 mt-2">{inviteError}</p>}
-                {lastInviteUrl && (
-                  <p className="text-xs text-gray-600 mt-2 break-all">
-                    Invite link:{" "}
-                    <a href={lastInviteUrl} className="text-indigo-600 underline">
-                      {lastInviteUrl}
-                    </a>
-                  </p>
-                )}
-                <p className="text-xs text-gray-400 mt-2">
-                  {billingUi
-                    ? "Licences cover people who edit; viewers are free and unlimited. Give workspace access from each workspace's Members page."
-                    : "Business plan: contributor licenses are capped; viewers are unlimited."}
-                </p>
-              </>
-            )}
-        </div>
+        <p className="text-xs text-gray-400 border-t border-gray-100 pt-3">
+          {billingUi
+            ? "Licences cover people who edit; viewers are free and unlimited."
+            : "Business plan: contributor licenses are capped; viewers are unlimited."}
+        </p>
       </section>
       )}
 
@@ -727,24 +654,6 @@ export default function OrgSettingsPage() {
         </section>
       )}
 
-      {canManageOrg && show("licences") && (
-        <section className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="font-semibold text-gray-900 mb-4">Pending invites</h2>
-          <div className="divide-y divide-gray-100">
-            {(invites ?? []).filter((i) => i.status === "pending").map((inv) => (
-              <PendingInviteRow
-                key={inv.id}
-                invite={inv}
-                onResend={async (id) => `${window.location.origin}${(await resendMutation.mutateAsync(id)).invite_url}`}
-                onRevoke={(id) => revokeMutation.mutateAsync(id)}
-              />
-            ))}
-            {(invites ?? []).filter((i) => i.status === "pending").length === 0 && (
-              <p className="text-sm text-gray-400 py-2">No pending invites</p>
-            )}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

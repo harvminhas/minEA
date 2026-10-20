@@ -12,7 +12,7 @@ from app.models.objects import Workspace
 from app.models.shares import ShareLink
 from app.models.tenancy import Invite, User, WorkspaceMembership
 from app.schemas.shares import ShareCreate, ShareCreated, ShareRead
-from app.schemas.tenancy import InviteCreate, InviteCreated, InviteRead, WorkspaceMemberRead
+from app.schemas.tenancy import InviteCreate, InviteCreated, InviteRead, InvitesCreated, WorkspaceMemberRead
 from app.schemas.workspace_summary import WorkspaceSnapshotResponse
 from app.schemas.workspaces import (
     WorkspaceCopyPreview,
@@ -30,7 +30,7 @@ from app.services.authorization import (
     require_limit,
     require_role_capacity,
 )
-from app.services.licences import EDITOR_WORKSPACE_ROLES, invite_grants_licence, require_licence
+from app.services.licences import EDITOR_WORKSPACE_ROLES, require_licence
 from app.services.member_guardrails import (
     GuardrailError,
     check_ws_leave,
@@ -459,63 +459,20 @@ async def list_workspace_invites(
     ]
 
 
-@router.post("/{workspace_slug}/invites", response_model=InviteCreated, status_code=status.HTTP_201_CREATED)
+@router.post("/{workspace_slug}/invites", response_model=InvitesCreated, status_code=status.HTTP_201_CREATED)
 async def create_workspace_invite(
     body: InviteCreate,
     ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
-) -> InviteCreated:
-    from app.services.plan_features import assert_plan_allows_invites
+) -> InvitesCreated:
+    """Older clients: the same one-invite-per-person flow, preselecting this workspace."""
+    from app.routers.invitations import create_invites
 
     await ctx.require_permission(db, "workspace.member.invite")
     assert ctx.workspace
-    assert_plan_allows_invites(ctx.org.plan)
-
-    await require_limit(db, ctx.org_id, "max_pending_invites", pending_delta=1)
-    await require_role_capacity(db, ctx.org_id, body.role)
-    if invite_grants_licence(workspace_id=ctx.workspace.id, role=body.role):
-        await require_licence(db, ctx.org_id, email=body.email)
-
-    raw_token, token_hash = generate_invite_token()
-    invite = Invite(
-        token_hash=token_hash,
-        org_id=ctx.org_id,
-        workspace_id=ctx.workspace.id,
-        email=body.email.lower().strip(),
-        role=body.role,
-        status="pending",
-        expires_at=utc_now_plus(days=7),
-        created_by=ctx.user_id,
-    )
-    db.add(invite)
-    await db.flush()
-
-    await log_audit(
-        db,
-        org_id=ctx.org_id,
-        actor_user_id=ctx.user_id,
-        action="invite.issued",
-        target_type="invite",
-        target_id=invite.id,
-        metadata={
-            "email": invite.email,
-            "role": invite.role,
-            "workspace_id": str(ctx.workspace.id),
-        },
-    )
-    await db.commit()
-    await db.refresh(invite)
-
-    return InviteCreated(
-        id=invite.id,
-        email=invite.email,
-        role=invite.role,
-        workspace_id=invite.workspace_id,
-        status=invite.status,
-        expires_at=invite.expires_at,
-        invite_url=_invite_url(raw_token),
-        token=raw_token,
-    )
+    emails = list(body.emails) + ([body.email] if body.email else [])
+    workspaces = [(w.slug, w.role) for w in body.workspaces] or [(ctx.workspace.slug, body.role or "member")]
+    return await create_invites(db, ctx, emails, workspaces, body.org_admin)
 
 
 @router.delete("/{workspace_slug}/invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT)

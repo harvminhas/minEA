@@ -56,7 +56,8 @@ def test_routes_use_guardrails_and_removal_only_drops_memberships():
     for name in ("check_role_change", "check_removal", "check_leave"):
         assert f"_guard(\n        {name}" in src or f"_guard({name}" in src
     assert '@router.post("/{org_slug}/leave"' in src
-    assert '@router.post("/{org_slug}/invites/{invite_id}/resend"' in src
+    invites_src = (ROOT / "app/routers/invitations.py").read_text()
+    assert '@router.post("/{org_slug}/invites/{invite_id}/resend"' in invites_src
     drop = src[src.index("async def _drop_membership"): src.index("def _invite_url")]
     assert "db.delete(ws_mem)" in drop and "db.delete(membership)" in drop
     assert "User" not in drop.replace("WorkspaceMembership", "")

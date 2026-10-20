@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { applyOverrides, runRowAction, type Overrides } from "@/lib/row-saving";
 /** Org and workspace members share this shape. */
@@ -38,6 +38,18 @@ interface Props {
   onLeave: () => void;
   busy?: boolean;
   error?: string | null;
+  /** Merged People list: access line, Pending badge and Edit / Add to workspace for each member. */
+  extra?: (member: MemberRow) => MemberExtra | null;
+  /** Rows after the members (people invited but not in the org yet). */
+  after?: ReactNode;
+  /** Next to the heading (e.g. Invite people). */
+  headerAction?: ReactNode;
+}
+
+export interface MemberExtra {
+  access?: string;
+  pending?: boolean;
+  actions?: ReactNode;
 }
 
 type Pending = { kind: "remove"; member: MemberRow } | { kind: "leave" } | null;
@@ -58,7 +70,7 @@ export function OrgMembersTable(props: Omit<Props, "scope"> & { actorRole: strin
 }
 
 /** Shared Members table: role dropdown, Remove with confirm, and Leave on your own row. */
-export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLeave, busy, error, scope }: Props & { scope: MembersScope }) {
+export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLeave, busy, error, scope, extra, after, headerAction }: Props & { scope: MembersScope }) {
   const [confirm, setConfirm] = useState<Pending>(null);
   const [overrides, setOverrides] = useState<Overrides>({});
   const me = actorEmail?.toLowerCase() ?? "";
@@ -70,7 +82,10 @@ export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLe
 
   return (
     <div data-testid="org-members-table">
-      <h2 className="font-semibold text-gray-900 mb-4">Members</h2>
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 className="font-semibold text-gray-900">Members</h2>
+        {headerAction}
+      </div>
       {error && (
         <p className="text-sm text-red-600 mb-2" data-testid="member-action-error">
           {error}
@@ -84,6 +99,7 @@ export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLe
           const a = scope.actionsFor(saved, isSelf);
           const o = overrides[m.user_id];
           const saving = o?.status === "saving";
+          const x = extra?.(m) ?? null;
           return (
             <div key={m.user_id} data-testid="member-row" data-status={o?.status ?? "idle"}>
             <div className={`py-2 flex items-center justify-between gap-3 text-sm ${o?.removing ? "opacity-50" : ""}`}>
@@ -91,8 +107,14 @@ export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLe
                 <p className="font-medium truncate">
                   {m.full_name ?? m.email}
                   {isSelf && <span className="ml-1.5 text-xs font-normal text-gray-400">(you)</span>}
+                  {x?.pending && (
+                    <span className="ml-2 rounded-full bg-amber-50 border border-amber-200 px-1.5 py-px text-[11px] font-medium text-amber-800" data-testid="pending-badge" title="Has an invite for more access that isn't accepted yet">
+                      Pending
+                    </span>
+                  )}
                 </p>
                 <p className="text-gray-400 truncate">{m.email}</p>
+                {x?.access && <p className="text-xs text-gray-500 truncate" data-testid="member-access">{x.access}</p>}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {a.roles.length > 0 ? (
@@ -116,6 +138,7 @@ export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLe
                   </span>
                 )}
                 <RowStatusBadge status={o?.status} removing={!!o?.removing} />
+                {!o?.removing && x?.actions}
                 {a.canRemove && !o?.removing && (
                   <button
                     type="button"
@@ -149,6 +172,7 @@ export function MembersTable({ members, actorEmail, onChangeRole, onRemove, onLe
             </div>
           );
         })}
+        {after}
         {!members && <p className="text-sm text-gray-400 py-2">Loading members…</p>}
       </div>
 

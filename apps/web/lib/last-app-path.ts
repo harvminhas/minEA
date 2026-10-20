@@ -71,7 +71,7 @@ export async function resolvePostLoginDestination(opts: {
     const workspaces = await workspacesApi.list(org.slug, token);
     const ws = workspaces[0];
     if (ws) return { destination: primaryViewPath(org.slug, ws.slug), restored: false };
-    return { destination: `/orgs/${org.slug}/settings`, restored: false };
+    return { destination: `/orgs/${org.slug}/no-workspace`, restored: false };
   };
 
   if (!lastAppPath) return fallback();
