@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from typing import Callable
 
 from app.ai.ask.ai_landscape import JOB_LABELS, ai_landscape as build_landscape, data_access
+from app.ai.ask.cio_views import idle_licences as build_idle, overlaps as build_overlaps
 from app.ai.ask.graph import Rec, WorkspaceGraph, fold
 from app.ai.ask.impact import ImpactEdge, impact_of as traverse_impact
 from app.ai.ask.record_filters import FILTER_KEYS, OP_KEYS as OP_FIELDS, build_facts, clean_filters, filter_facts, matches, row as facts_row
@@ -439,6 +440,87 @@ def _seats(feature_item: dict, host: dict) -> int | None:
     return None
 
 
+def _dollars(cents: int | None) -> int | None:
+    return None if cents is None else int((cents + 50) // 100)
+
+
+def _note_numbers(bag: ToolBag, *values: object) -> None:
+    for value in values:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            bag.numbers.add(str(int(value)))
+            bag.numbers.add(f"{int(value):,}")
+
+
+def _cite(bag: ToolBag, record_id: str) -> None:
+    rec = bag.graph.get(record_id)
+    if rec:
+        bag.note_record(rec)
+
+
+def idle_licences(bag: ToolBag, args: dict) -> dict:
+    """The Idle licences view as data (same numbers as the web view): idle = licences − in use."""
+    result = build_idle(bag.graph.objects)
+    rows = []
+    for row in result["rows"]:
+        _cite(bag, row["id"])
+        item = {
+            "id": row["id"],
+            "name": row["name"],
+            "licences": row["bought"],
+            "in_use": row["inUse"],
+            "idle": row["idle"],
+            "cost_per_licence_per_year": _dollars(row["perLicenceCents"]),
+            "wasted_per_year": _dollars(row["wastedCents"]),
+            "owner": row["owner"] or None,
+            "renewal": row["renewal"],
+        }
+        _note_numbers(bag, item["licences"], item["in_use"], item["idle"], item["cost_per_licence_per_year"], item["wasted_per_year"])
+        rows.append(item)
+    missing = []
+    for item in result["missing"]:
+        _cite(bag, item["id"])
+        _note_numbers(bag, item["bought"])
+        missing.append({"id": item["id"], "name": item["name"], "licences": item["bought"]})
+    totals = {
+        "wasted_per_year": _dollars(result["totals"]["wastedCents"]),
+        "idle_licences": result["totals"]["idle"],
+        "licences_counted": result["totals"]["bought"],
+        "apps_counted": len(rows),
+        "apps_without_in_use_count": len(missing),
+    }
+    _note_numbers(bag, *totals.values())
+    return {"totals": totals, "apps": rows, "no_in_use_count": missing}
+
+
+def overlapping_tools(bag: ToolBag, args: dict) -> dict:
+    """The Overlapping tools view as data: capabilities with 2+ active tools, and the "up to" savings."""
+    result = build_overlaps(bag.graph.objects, [{"type": e.relation, "from_object_id": e.from_id, "to_object_id": e.to_id} for e in bag.graph.edges])
+    groups = []
+    for group in result["groups"]:
+        _cite(bag, group["id"])
+        tools = []
+        for index, tool in enumerate(group["tools"]):
+            _cite(bag, tool["id"])
+            item = {
+                "id": tool["id"],
+                "name": tool["name"],
+                "annual_cost": _dollars(tool["annualCents"]),
+                "owner": tool["owner"] or None,
+                "users": tool["users"],
+                "renewal": tool["renewal"],
+                "most_used": index == 0 and tool["users"] is not None,
+            }
+            _note_numbers(bag, item["annual_cost"], item["users"])
+            tools.append(item)
+        saving = _dollars(group["savingsCents"])
+        _note_numbers(bag, saving, len(tools))
+        groups.append({"capability_id": group["id"], "capability": group["name"], "tools": tools, "up_to_savings_per_year": saving})
+    hints = [{"category": h["category"], "apps": [t["name"] for t in h["tools"]]} for h in result["categoryHints"]]
+    total = _dollars(result["savingsCents"])
+    _note_numbers(bag, total, len(groups))
+    return {"overlap_count": len(groups), "up_to_savings_per_year": total, "overlaps": groups, "same_category_no_capability": hints}
+
+
 def ai_landscape(bag: ToolBag, args: dict) -> dict:
     """§8: the AI landscape report as data. Item ids are record ids (a feature's id is its app)."""
     objects = bag.graph.objects
@@ -747,6 +829,27 @@ TOOLS: list[AskTool] = [
             "properties": {"id": {"type": "string"}},
         },
         run=sign_in,
+    ),
+    AskTool(
+        name="idle_licences",
+        description=(
+            "Idle (unused) licences: for each app with a licence count and an in-use count, licences, in_use, idle, "
+            "cost per licence per year, wasted per year, owner and renewal, plus totals for the whole workspace and the apps "
+            "with no in-use count yet. Use the numbers as given. Do not do arithmetic."
+        ),
+        parameters={"type": "object", "properties": {}},
+        run=idle_licences,
+    ),
+    AskTool(
+        name="overlapping_tools",
+        description=(
+            "Overlapping or duplicate tools: capabilities provided by two or more active apps or platforms, each tool with "
+            "annual cost, owner, users and renewal, the most-used tool, and the 'up to' savings per year if only the most-used "
+            "tool were kept. same_category_no_capability is only a hint (same category, no capability linked), not an overlap. "
+            "Use the numbers as given."
+        ),
+        parameters={"type": "object", "properties": {}},
+        run=overlapping_tools,
     ),
     AskTool(
         name="ai_landscape",

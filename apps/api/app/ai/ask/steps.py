@@ -218,6 +218,27 @@ def _ai(args: dict, result: dict) -> tuple[str, dict]:
     return label, {"features": features, "agents": agents, "platforms_and_models": platforms, "flags": flags}
 
 
+def _idle(args: dict, result: dict) -> tuple[str, dict]:
+    t = result.get("totals") or {}
+    apps, idle = int(t.get("apps_counted") or 0), int(t.get("idle_licences") or 0)
+    if not apps:
+        return "No app has an in-use licence count yet", {"apps": 0}
+    label = f"{idle:,} idle {'licence' if idle == 1 else 'licences'} across {count_label(apps, 'app')}"
+    if t.get("wasted_per_year"):
+        label += f"; {money(t.get('wasted_per_year'))} a year"
+    return label, {"apps": apps, "idle": idle}
+
+
+def _overlaps(args: dict, result: dict) -> tuple[str, dict]:
+    n = int(result.get("overlap_count") or 0)
+    if not n:
+        return "No capability has two tools doing the same job", {"overlaps": 0}
+    label = f"{count_label(n, 'capability')} with overlapping tools"
+    if result.get("up_to_savings_per_year"):
+        label += f"; up to {money(result.get('up_to_savings_per_year'))} a year"
+    return label, {"overlaps": n}
+
+
 _BUILDERS = {
     "search_records": _search,
     "impact_of": _impact,
@@ -225,6 +246,8 @@ _BUILDERS = {
     "find_gaps": _gaps,
     "sign_in": _sign_in,
     "ai_landscape": _ai,
+    "idle_licences": _idle,
+    "overlapping_tools": _overlaps,
 }
 
 

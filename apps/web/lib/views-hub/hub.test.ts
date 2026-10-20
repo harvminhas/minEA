@@ -62,7 +62,7 @@ test("a new workspace gets empty states, not zeros dressed as alerts", () => {
 test("Open goes to the existing report or route", () => {
   const cards = viewsHub(build(hubFixture()));
   const opens = Object.fromEntries(cards.map((c) => [c.id, c.open.kind === "report" ? c.open.reportId : c.open.kind]));
-  assert.deepEqual(opens, { ai: "ai-landscape", spof: "single-points", owners: "ownership-gaps", hosting: "hosting", impact: "impact", renewals: "renewals" });
+  assert.deepEqual(opens, { ai: "ai-landscape", spof: "single-points", owners: "ownership-gaps", hosting: "hosting", impact: "impact", renewals: "renewals", licences: "idle-licences", overlaps: "overlaps" });
 });
 
 test("old /views impact links redirect to /views/impact with their params", () => {

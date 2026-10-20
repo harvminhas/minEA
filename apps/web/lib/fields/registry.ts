@@ -298,6 +298,8 @@ export const REGISTRY: Record<RecordType, FieldDef[]> = {
     },
     { key: "cost", label: "Annual cost", section: "cost", editor: "costLines", source: { kind: "prop", key: "cost_lines" } },
     { key: "licence_count", label: "Licences", section: "cost", editor: "number", source: { kind: "prop", key: "licence_count" } },
+    // Optional; only the Idle licences view reads it (idle = Licences − In use). Not required, so it adds no "missing" count.
+    { key: "licences_in_use", label: "In use", section: "cost", editor: "number", source: { kind: "prop", key: "licences_in_use" } },
     { key: "contract_renewal", label: "Renewal", section: "cost", editor: "date", source: { kind: "prop", key: "contract_renewal" } },
     { key: "hosting_model", label: "Hosting model", section: "hosting", editor: "select", source: { kind: "prop", key: "hosting_model" }, options: APPLICATION_HOSTING_OPTIONS },
     {

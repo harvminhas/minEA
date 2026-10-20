@@ -1,0 +1,539 @@
+{
+  "objects": [
+    {
+      "id": "team-it",
+      "type": "team",
+      "name": "IT Ops",
+      "status": "active",
+      "properties": {}
+    },
+    {
+      "id": "p-dana",
+      "type": "contact",
+      "name": "Dana Lee",
+      "status": "active",
+      "properties": {}
+    },
+    {
+      "id": "sf",
+      "type": "application",
+      "name": "Salesforce Sales Cloud",
+      "status": "active",
+      "properties": {
+        "licence_count": 150,
+        "licences_in_use": 110,
+        "cost_lines": [
+          {
+            "id": "l1",
+            "type": "subscription",
+            "frequency": "monthly",
+            "calculation": {
+              "kind": "per_user",
+              "seats": 150,
+              "unit_price_monthly_cents": 16500
+            },
+            "vendor": null,
+            "source": "estimate"
+          }
+        ],
+        "contract_renewal": "2027-03-01",
+        "category": "CRM"
+      },
+      "point_of_contact_id": "p-dana"
+    },
+    {
+      "id": "zoom",
+      "type": "application",
+      "name": "Zoom",
+      "status": "active",
+      "properties": {
+        "licence_count": "220",
+        "licences_in_use": 168,
+        "cost_lines": [
+          {
+            "id": "l1",
+            "type": "subscription",
+            "frequency": "annual",
+            "calculation": {
+              "kind": "flat"
+            },
+            "amount_cents": 4456000,
+            "vendor": null,
+            "source": "invoice"
+          }
+        ],
+        "contract_renewal": "2027-01-15"
+      },
+      "owner_team_id": "team-it"
+    },
+    {
+      "id": "slack",
+      "type": "application",
+      "name": "Slack Pro",
+      "status": "active",
+      "properties": {
+        "licence_count": 90,
+        "licences_in_use": 90,
+        "cost_lines": [
+          {
+            "id": "l1",
+            "type": "subscription",
+            "frequency": "monthly",
+            "calculation": {
+              "kind": "per_user",
+              "seats": 90,
+              "unit_price_monthly_cents": 875
+            },
+            "vendor": null,
+            "source": "estimate"
+          }
+        ]
+      },
+      "owner_team_id": "team-it"
+    },
+    {
+      "id": "nocost",
+      "type": "application",
+      "name": "Miro",
+      "status": "active",
+      "properties": {
+        "licence_count": 40,
+        "licences_in_use": 25,
+        "category": "Collaboration"
+      }
+    },
+    {
+      "id": "m365",
+      "type": "application",
+      "name": "Microsoft 365 E3",
+      "status": "active",
+      "properties": {
+        "licence_count": 260,
+        "category": "Collaboration"
+      },
+      "owner_team_id": "team-it"
+    },
+    {
+      "id": "old",
+      "type": "application",
+      "name": "Old CRM",
+      "status": "retired",
+      "properties": {
+        "licence_count": 50,
+        "licences_in_use": 1,
+        "cost_lines": [
+          {
+            "id": "l1",
+            "type": "subscription",
+            "frequency": "annual",
+            "calculation": {
+              "kind": "flat"
+            },
+            "amount_cents": 100000,
+            "vendor": null,
+            "source": "invoice"
+          }
+        ],
+        "category": "CRM"
+      }
+    },
+    {
+      "id": "hub",
+      "type": "application",
+      "name": "HubSpot Sales",
+      "status": "active",
+      "properties": {
+        "licence_count": 12,
+        "cost_lines": [
+          {
+            "id": "l1",
+            "type": "subscription",
+            "frequency": "annual",
+            "calculation": {
+              "kind": "flat"
+            },
+            "amount_cents": 1920000,
+            "vendor": null,
+            "source": "invoice"
+          }
+        ],
+        "category": "CRM"
+      },
+      "owner": "Marketing"
+    },
+    {
+      "id": "box",
+      "type": "application",
+      "name": "Box Business",
+      "status": "active",
+      "properties": {
+        "licence_count": 45,
+        "annual_cost": "$18,000"
+      },
+      "owner_team_id": "t-legal",
+      "owner_team_name": "Legal"
+    },
+    {
+      "id": "dbx",
+      "type": "application",
+      "name": "Dropbox Business",
+      "status": "active",
+      "properties": {
+        "licence_count": 18,
+        "cost_lines": [
+          {
+            "id": "l1",
+            "type": "subscription",
+            "frequency": "annual",
+            "calculation": {
+              "kind": "flat"
+            },
+            "amount_cents": 540000,
+            "vendor": null,
+            "source": "invoice"
+          }
+        ]
+      }
+    },
+    {
+      "id": "od",
+      "type": "cloud_service",
+      "name": "OneDrive",
+      "status": "active",
+      "properties": {},
+      "owner_team_id": "team-it"
+    },
+    {
+      "id": "teams",
+      "type": "application",
+      "name": "Microsoft Teams",
+      "status": "active",
+      "properties": {
+        "licences_in_use": 240,
+        "category": "Collaboration"
+      },
+      "owner_team_id": "team-it"
+    },
+    {
+      "id": "asana",
+      "type": "application",
+      "name": "Asana",
+      "status": "active",
+      "properties": {
+        "category": "Analytics"
+      }
+    },
+    {
+      "id": "tableau",
+      "type": "application",
+      "name": "Tableau",
+      "status": "active",
+      "properties": {
+        "category": "Analytics"
+      }
+    },
+    {
+      "id": "crm",
+      "type": "capability",
+      "name": "CRM",
+      "status": "active",
+      "properties": {}
+    },
+    {
+      "id": "files",
+      "type": "capability",
+      "name": "File storage",
+      "status": "active",
+      "properties": {}
+    },
+    {
+      "id": "video",
+      "type": "capability",
+      "name": "Video meetings",
+      "status": "active",
+      "properties": {}
+    },
+    {
+      "id": "solo",
+      "type": "capability",
+      "name": "Payroll",
+      "status": "active",
+      "properties": {}
+    },
+    {
+      "id": "gone",
+      "type": "capability",
+      "name": "Retired thing",
+      "status": "retired",
+      "properties": {}
+    }
+  ],
+  "relationships": [
+    {
+      "id": "r0",
+      "type": "supported_by",
+      "from_object_id": "crm",
+      "to_object_id": "sf"
+    },
+    {
+      "id": "r1",
+      "type": "supported_by",
+      "from_object_id": "crm",
+      "to_object_id": "hub"
+    },
+    {
+      "id": "r2",
+      "type": "supported_by",
+      "from_object_id": "crm",
+      "to_object_id": "old"
+    },
+    {
+      "id": "r3",
+      "type": "supported_by",
+      "from_object_id": "crm",
+      "to_object_id": "hub"
+    },
+    {
+      "id": "r4",
+      "type": "supported_by",
+      "from_object_id": "files",
+      "to_object_id": "od"
+    },
+    {
+      "id": "r5",
+      "type": "supported_by",
+      "from_object_id": "files",
+      "to_object_id": "box"
+    },
+    {
+      "id": "r6",
+      "type": "supported_by",
+      "from_object_id": "files",
+      "to_object_id": "dbx"
+    },
+    {
+      "id": "r7",
+      "type": "supported_by",
+      "from_object_id": "video",
+      "to_object_id": "teams"
+    },
+    {
+      "id": "r8",
+      "type": "supported_by",
+      "from_object_id": "video",
+      "to_object_id": "zoom"
+    },
+    {
+      "id": "r9",
+      "type": "supported_by",
+      "from_object_id": "solo",
+      "to_object_id": "slack"
+    },
+    {
+      "id": "r10",
+      "type": "supported_by",
+      "from_object_id": "gone",
+      "to_object_id": "sf"
+    },
+    {
+      "id": "r11",
+      "type": "supported_by",
+      "from_object_id": "gone",
+      "to_object_id": "zoom"
+    }
+  ],
+  "expected": {
+    "idle": {
+      "rows": [
+        {
+          "id": "sf",
+          "name": "Salesforce Sales Cloud",
+          "bought": 150,
+          "inUse": 110,
+          "idle": 40,
+          "perLicenceCents": 198000,
+          "wastedCents": 7920000,
+          "owner": "Dana Lee",
+          "renewal": "2027-03-01"
+        },
+        {
+          "id": "zoom",
+          "name": "Zoom",
+          "bought": 220,
+          "inUse": 168,
+          "idle": 52,
+          "perLicenceCents": 20255,
+          "wastedCents": 1053260,
+          "owner": "IT Ops",
+          "renewal": "2027-01-15"
+        },
+        {
+          "id": "slack",
+          "name": "Slack Pro",
+          "bought": 90,
+          "inUse": 90,
+          "idle": 0,
+          "perLicenceCents": 10500,
+          "wastedCents": 0,
+          "owner": "IT Ops",
+          "renewal": null
+        },
+        {
+          "id": "nocost",
+          "name": "Miro",
+          "bought": 40,
+          "inUse": 25,
+          "idle": 15,
+          "perLicenceCents": null,
+          "wastedCents": null,
+          "owner": "",
+          "renewal": null
+        }
+      ],
+      "missing": [
+        {
+          "id": "m365",
+          "name": "Microsoft 365 E3",
+          "bought": 260
+        },
+        {
+          "id": "box",
+          "name": "Box Business",
+          "bought": 45
+        },
+        {
+          "id": "dbx",
+          "name": "Dropbox Business",
+          "bought": 18
+        },
+        {
+          "id": "hub",
+          "name": "HubSpot Sales",
+          "bought": 12
+        }
+      ],
+      "totals": {
+        "wastedCents": 8973260,
+        "idle": 107,
+        "bought": 500
+      }
+    },
+    "overlaps": {
+      "groups": [
+        {
+          "id": "video",
+          "name": "Video meetings",
+          "tools": [
+            {
+              "id": "teams",
+              "name": "Microsoft Teams",
+              "type": "application",
+              "annualCents": null,
+              "owner": "IT Ops",
+              "users": 240,
+              "renewal": null
+            },
+            {
+              "id": "zoom",
+              "name": "Zoom",
+              "type": "application",
+              "annualCents": 4456000,
+              "owner": "IT Ops",
+              "users": 168,
+              "renewal": "2027-01-15"
+            }
+          ],
+          "savingsCents": 4456000
+        },
+        {
+          "id": "crm",
+          "name": "CRM",
+          "tools": [
+            {
+              "id": "sf",
+              "name": "Salesforce Sales Cloud",
+              "type": "application",
+              "annualCents": 29700000,
+              "owner": "Dana Lee",
+              "users": 110,
+              "renewal": "2027-03-01"
+            },
+            {
+              "id": "hub",
+              "name": "HubSpot Sales",
+              "type": "application",
+              "annualCents": 1920000,
+              "owner": "Marketing",
+              "users": 12,
+              "renewal": null
+            }
+          ],
+          "savingsCents": 1920000
+        },
+        {
+          "id": "files",
+          "name": "File storage",
+          "tools": [
+            {
+              "id": "box",
+              "name": "Box Business",
+              "type": "application",
+              "annualCents": 1800000,
+              "owner": "Legal",
+              "users": 45,
+              "renewal": null
+            },
+            {
+              "id": "dbx",
+              "name": "Dropbox Business",
+              "type": "application",
+              "annualCents": 540000,
+              "owner": "",
+              "users": 18,
+              "renewal": null
+            },
+            {
+              "id": "od",
+              "name": "OneDrive",
+              "type": "cloud_service",
+              "annualCents": null,
+              "owner": "IT Ops",
+              "users": null,
+              "renewal": null
+            }
+          ],
+          "savingsCents": 540000
+        }
+      ],
+      "savingsCents": 6916000,
+      "categoryHints": [
+        {
+          "category": "Analytics",
+          "tools": [
+            {
+              "id": "asana",
+              "name": "Asana"
+            },
+            {
+              "id": "tableau",
+              "name": "Tableau"
+            }
+          ]
+        },
+        {
+          "category": "Collaboration",
+          "tools": [
+            {
+              "id": "m365",
+              "name": "Microsoft 365 E3"
+            },
+            {
+              "id": "nocost",
+              "name": "Miro"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

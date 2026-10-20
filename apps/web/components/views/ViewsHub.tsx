@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CalendarClock, Cloud, HelpCircle, Monitor, Server, Sparkles, UserX, Waypoints } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarClock, Cloud, Copy, KeyRound, HelpCircle, Monitor, Server, Sparkles, UserX, Waypoints } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { modelPath, reportPath, viewsImpactPath, type ModelSection } from "@/lib/mvp-paths";
 import { useModelCatalog } from "@/lib/use-model-catalog";
@@ -29,6 +29,8 @@ const ICON: Record<HubCard["id"], React.ReactNode> = {
   hosting: <Cloud size={16} />,
   impact: <AlertTriangle size={16} />,
   renewals: <CalendarClock size={16} />,
+  licences: <KeyRound size={16} />,
+  overlaps: <Copy size={16} />,
 };
 
 export function ViewsHub() {
@@ -212,6 +214,21 @@ function Preview({ card }: { card: HubCard }) {
     case "renewals":
       return card.preview.length ? (
         <MiniList rows={card.preview.map((row) => ({ name: row.name, tag: [row.date, row.cost && row.cost !== "—" ? row.cost : ""].filter(Boolean).join(" · ") }))} />
+      ) : null;
+    case "licences":
+      if (!card.licensed) return null;
+      return (
+        <div>
+          {card.preview.length > 0 && <MiniList rows={card.preview.map((row) => ({ name: row.name, tag: [`${row.idle} idle`, row.wasted].filter(Boolean).join(" · "), tone: "amber" as const }))} />}
+          <p className="mt-2 text-[12px] text-[#6b7289]">{card.counted} of {card.licensed} licensed app{card.licensed === 1 ? " has" : "s have"} an in-use count.</p>
+        </div>
+      );
+    case "overlaps":
+      return card.preview.length ? (
+        <div>
+          <MiniList rows={card.preview.map((row) => ({ name: row.name, tag: short(row.tools.join(" · "), 34), tone: "amber" as const }))} />
+          {card.savings && <p className="mt-2 text-[12px] text-[#6b7289]">Up to {card.savings} / yr if you keep one per job.</p>}
+        </div>
       ) : null;
   }
 }

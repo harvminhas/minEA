@@ -1,9 +1,10 @@
 import { aiLandscape, FLAG_LABELS, type FlagId, type LandscapeEdge, type LandscapeObject } from "@/lib/ai/landscape";
 import { catalogStats, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 import { hostingMap, singlePoints, type HomeEdge } from "@/lib/reports/home";
+import { centsLabel, idleLicences, overlaps } from "@/lib/reports/cio-views";
 
 export type HubTone = "red" | "amber" | "ok" | "empty";
-export type HubCardId = "ai" | "spof" | "owners" | "hosting" | "impact" | "renewals";
+export type HubCardId = "ai" | "spof" | "owners" | "hosting" | "impact" | "renewals" | "licences" | "overlaps";
 
 type Base = {
   id: HubCardId;
@@ -24,7 +25,9 @@ export type HubCard =
   | (Base & { id: "owners"; preview: { name: string; type: string }[]; more: number })
   | (Base & { id: "hosting"; preview: { cloud: number; servers: number; desktop: number; unknown: number } })
   | (Base & { id: "impact"; preview: { source: string; dependents: string[] } | null })
-  | (Base & { id: "renewals"; preview: { name: string; date: string; cost: string }[] });
+  | (Base & { id: "renewals"; preview: { name: string; date: string; cost: string }[] })
+  | (Base & { id: "licences"; preview: { name: string; idle: number; wasted: string }[]; counted: number; licensed: number })
+  | (Base & { id: "overlaps"; preview: { name: string; tools: string[] }[]; savings: string });
 
 const TONE_RANK: Record<HubTone, number> = { red: 0, amber: 1, ok: 2, empty: 3 };
 
@@ -158,6 +161,48 @@ export function viewsHub(input: {
         : "No renewal dates yet. Add them on each app to see what's coming up.",
     open: { kind: "report", reportId: "renewals", label: "Open" },
     preview: soon.slice(0, 3).map((row) => ({ name: row.name, date: row.renewalLabel, cost: row.annualCostLabel })),
+  });
+
+  // Idle licences (report "idle-licences": idleLicences()).
+  const idle = idleLicences(input.objects);
+  const licensed = idle.rows.length + idle.missing.length;
+  const wasted = idle.totals.wastedCents;
+  cards.push({
+    id: "licences",
+    title: "Idle licences",
+    tone: idle.rows.length === 0 ? "empty" : idle.totals.idle > 0 ? "amber" : "ok",
+    big: idle.rows.length ? idle.totals.idle.toLocaleString("en-US") : "—",
+    unit: idle.rows.length ? `idle of ${idle.totals.bought.toLocaleString("en-US")}` : undefined,
+    pill: idle.rows.length === 0 ? (licensed ? "Add in use" : "Nothing yet") : wasted ? `${centsLabel(wasted)} / yr` : idle.totals.idle ? "Check" : "None idle",
+    line: idle.rows.length
+      ? "Licences you pay for that nobody is using."
+      : licensed
+        ? "Add how many licences are in use on each app to see what's idle."
+        : "Add licence counts on your apps to find idle licences.",
+    open: { kind: "report", reportId: "idle-licences", label: idle.rows.length ? "Open" : licensed ? "Add in-use counts" : "Open" },
+    preview: idle.rows.filter((row) => row.idle > 0).slice(0, 3).map((row) => ({ name: row.name, idle: row.idle, wasted: row.wastedCents ? centsLabel(row.wastedCents) : "" })),
+    counted: idle.rows.length,
+    licensed,
+  });
+
+  // Overlapping tools (report "overlaps": overlaps()).
+  const over = overlaps(input.objects, input.relationships);
+  const anyCapabilityLinks = input.relationships.some((edge) => edge.type === "supported_by");
+  cards.push({
+    id: "overlaps",
+    title: "Overlapping tools",
+    tone: over.groups.length ? "amber" : anyCapabilityLinks ? "ok" : "empty",
+    big: over.groups.length || anyCapabilityLinks ? String(over.groups.length) : "—",
+    unit: over.groups.length || anyCapabilityLinks ? (over.groups.length === 1 ? "capability" : "capabilities") : undefined,
+    pill: over.groups.length ? `${over.groups.length} overlap${over.groups.length === 1 ? "" : "s"}` : anyCapabilityLinks ? "None" : "Link capabilities",
+    line: over.groups.length
+      ? "Two or more tools doing the same job."
+      : anyCapabilityLinks
+        ? "No capability has two tools doing the same job."
+        : "Link capabilities to the tools that provide them to spot overlaps.",
+    open: { kind: "report", reportId: "overlaps", label: "Open" },
+    preview: over.groups.slice(0, 3).map((group) => ({ name: group.name, tools: group.tools.map((tool) => tool.name) })),
+    savings: over.savingsCents ? centsLabel(over.savingsCents) : "",
   });
 
   // Attention first: red, amber, then fine, then empty; stable within a tone.

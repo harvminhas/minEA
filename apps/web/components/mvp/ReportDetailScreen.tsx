@@ -19,6 +19,7 @@ import { Pill } from "@/components/mvp/pills";
 import { connectionPhrase, groupImpactHits, impactOf } from "@/lib/impact/relationship-impact";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { AiLandscapeReport } from "@/components/mvp/AiLandscapeReport";
+import { IdleLicencesReport, OverlapsReport } from "@/components/views/CioViews";
 
 export function ReportDetailScreen({ reportId }: { reportId: string }) {
   const { basePath } = useTenancy();
@@ -28,6 +29,8 @@ export function ReportDetailScreen({ reportId }: { reportId: string }) {
   const stats = catalogStats(rows);
 
   if (reportId === "ai-landscape") return <AiLandscapeReport />;
+  if (reportId === "idle-licences") return <IdleLicencesReport />;
+  if (reportId === "overlaps") return <OverlapsReport />;
   if (reportId === "spend") return <SpendReport rows={rows} />;
   if (reportId === "single-points") return <SpofReport rows={rows} />;
   if (reportId === "hosting") return <HostingReport rows={rows} />;
