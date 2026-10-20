@@ -303,7 +303,13 @@ async def list_users(db: AsyncSession, *, q: str = "", sort: str = "newest", lim
               'slug', o.slug, 'name', o.name, 'plan', o.plan, 'role', m.role,
               'members', (SELECT count(*) FROM org_memberships mm WHERE mm.org_id = o.id),
               'objects', (SELECT count(*) FROM objects ob WHERE ob.org_id = o.id),
-              'subscription', o.stripe_subscription_id IS NOT NULL
+              'subscription', o.stripe_subscription_id IS NOT NULL,
+              'manual', (
+                SELECT json_build_object('by', a.metadata->>'actor_email', 'at', a.created_at, 'reason', a.metadata->>'reason', 'from', a.metadata->>'from')
+                FROM audit_log a
+                WHERE a.org_id = o.id AND a.action = 'billing.manual_plan' AND a.metadata->>'to' = o.plan
+                ORDER BY a.created_at DESC LIMIT 1
+              )
             ) ORDER BY o.name)
             FROM org_memberships m JOIN orgs o ON o.id = m.org_id WHERE m.user_id = u.id
           ), '[]'::json) AS orgs

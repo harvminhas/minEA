@@ -371,7 +371,9 @@ export const workspaceSettingsApi = {
 export type CatalogEntry = import("@/lib/setup/match-tools").ToolRecord & { id: string };
 export type CatalogMiss = { key: string; name: string; count: number; lastSeen: string; suggestion: { name?: string; vendor?: string; category?: string; hosting?: string; kind?: string; confidence?: number } | null };
 
-export type AdminUserOrg = { slug: string; name: string; plan: string; role: string; members: number; objects: number; subscription: boolean };
+export type AdminUserOrg = { slug: string; name: string; plan: string; role: string; members: number; objects: number; subscription: boolean; manual?: AdminPlanChange | null };
+/** Last hand-set plan change (billing.manual_plan audit row) when it set the current plan. */
+export type AdminPlanChange = { by: string | null; at: string | null; reason: string | null; from: string | null };
 export type AdminUser = { id: string; email: string; name: string; created_at: string | null; verified: boolean; last_active: string | null; objects_created: number; orgs: AdminUserOrg[]; accounts_with_email?: number; firebase_uid_hint?: string };
 export type EraseAccount = { id: string; email: string; name: string; created_at: string | null; firebase_uid_hint: string; orgs: { slug: string; name: string; role: string | null }[] };
 export type ErasePreviewOrg = { id: string; slug: string; name: string; plan: string; role: string | null; members: number; other_admins: number; subscription: boolean; action: "delete" | "leave" | "blocked"; reason: string; workspaces: number; objects: number; relationships: number };
@@ -384,6 +386,8 @@ export const platformAdminApi = {
     apiFetch<ErasePreview>(`/platform/admin/users/${userId}/erase-preview?all_accounts=${allAccounts}`, { token }),
   erase: (userId: string, body: { confirm_email: string; acknowledge_subscriptions: boolean; all_accounts?: boolean }, token: string) =>
     apiFetch<{ erased: string; counts: Record<string, number> }>(`/platform/admin/users/${userId}/erase`, { method: "POST", token, body: JSON.stringify(body) }),
+  setPlan: (orgSlug: string, body: { plan: string; reason: string }, token: string) =>
+    apiFetch<{ slug: string; plan: string; previous: string }>(`/platform/admin/orgs/${encodeURIComponent(orgSlug)}/plan`, { method: "POST", token, body: JSON.stringify(body) }),
 };
 
 export const toolCatalogApi = {

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import AuthContext
 from app.database import get_db
 from app.routers.platform_catalog import require_platform_admin
+from app.services import manual_plan as mp
 from app.services import user_erase as ue
 
 router = APIRouter(prefix="/platform/admin", tags=["platform-admin"])
@@ -20,6 +21,11 @@ class EraseRequest(BaseModel):
     acknowledge_subscriptions: bool = False
     # Erase every account with this email (default), or only the one picked.
     all_accounts: bool = True
+
+
+class PlanRequest(BaseModel):
+    plan: str
+    reason: str = ""
 
 
 def _fail(err: ue.EraseError) -> HTTPException:
@@ -58,3 +64,12 @@ async def erase(user_id: UUID, body: EraseRequest, admin: AuthContext = Depends(
         )
     except ue.EraseError as err:
         raise _fail(err) from None
+
+
+@router.post("/orgs/{org_slug}/plan")
+async def set_plan(org_slug: str, body: PlanRequest, admin: AuthContext = Depends(require_platform_admin), db: AsyncSession = Depends(get_db)) -> dict:
+    """Set an org's plan by hand. Blocked when the org has a Stripe subscription."""
+    try:
+        return await mp.set_plan_by_hand(db, org_slug, body.plan, reason=body.reason, admin_email=admin.email, admin_uid=admin.firebase_uid)
+    except mp.ManualPlanError as err:
+        raise HTTPException(status_code=err.status, detail={"code": err.code, "message": err.message}) from None

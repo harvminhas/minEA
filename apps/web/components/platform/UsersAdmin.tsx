@@ -5,7 +5,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { platformAdminApi, type AdminUser } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { EraseUserDialog } from "@/components/platform/EraseUserDialog";
+import { OrgPlanControl } from "@/components/platform/OrgPlanControl";
 import { groupByEmail } from "@/lib/platform/erase";
+import { manualNote } from "@/lib/platform/manual-plan";
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-CA", { year: "numeric", month: "short", day: "numeric" }) : "—");
 
@@ -26,7 +28,7 @@ export function UsersAdmin() {
   return (
     <main className="p-6" data-testid="users-admin">
       <h1 className="text-[22px] font-semibold text-[#1c2230]">Users <span className="text-[14px] font-normal text-[#8b90a0]">{rows.length}</span></h1>
-      <p className="text-[13px] text-[#6b7289]">Everyone who has signed up. Erase permanently removes a person and the orgs only they belong to.</p>
+      <p className="text-[13px] text-[#6b7289]">Everyone who has signed up. Erase permanently removes a person and the orgs only they belong to. Click a plan to change it by hand.</p>
       {notice && <p className="mt-3 rounded-lg bg-[#ecfdf5] px-3 py-2 text-[13px] text-[#047857]" data-testid="erase-notice">{notice}</p>}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search email or name" aria-label="Search users" className="h-9 w-[280px] rounded-lg border border-[#e6e8ee] px-3 text-[13px] outline-none focus:border-[#5b4ce6]" />
@@ -61,7 +63,10 @@ export function UsersAdmin() {
                 <td className="px-2 py-2.5">
                   {row.orgs.length === 0 ? <span className="text-[#c5c8d4]">No org</span> : row.orgs.map((o) => (
                     <div key={o.slug} className="text-[12px]">
-                      <span className="font-medium text-[#1c2230]">{o.name}</span> · {o.role} · {o.plan}{o.subscription ? " (Stripe)" : ""} · {o.members} member{o.members === 1 ? "" : "s"} · {o.objects} objects
+                      <span className="font-medium text-[#1c2230]">{o.name}</span> · {o.role} ·{" "}
+                      <OrgPlanControl org={o} onChanged={(message) => { setNotice(message); void queryClient.invalidateQueries({ queryKey: ["platform-users"] }); }} />
+                      {o.subscription ? <span className="text-[#8b90a0]"> (Stripe)</span> : ""} · {o.members} member{o.members === 1 ? "" : "s"} · {o.objects} objects
+                      {o.manual && <span className="block text-[11px] text-[#6b7289]" data-testid="manual-note">{manualNote(o.manual)}</span>}
                     </div>
                   ))}
                 </td>
