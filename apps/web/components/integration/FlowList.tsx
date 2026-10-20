@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -169,7 +170,9 @@ export function FlowList() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // ?open=<id> (from an app's "Connected through" line) opens that record.
+  const openParam = useSearchParams()?.get("open") ?? null;
+  const [selectedId, setSelectedId] = useState<string | null>(openParam);
 
   const flowsQueryKey = ["objects", orgSlug, workspaceSlug, "integration_flow"] as const;
 

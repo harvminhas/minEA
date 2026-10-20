@@ -45,6 +45,7 @@ from app.services.data_domain_rollup import (
     sync_entity_domain_property,
     sync_store_domain_property,
 )
+from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
 
 router = APIRouter(
@@ -222,6 +223,7 @@ async def create_entity(
         await _assign_entity_data_domain(db, ctx, obj, body.data_domain_id)
     obj.properties = _props(obj)
     await db.flush()
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return await get_entity(obj.id, ctx, db)
 
 
@@ -350,6 +352,7 @@ async def update_entity(
             await _assign_entity_owner_system(db, ctx, obj, patch["owner_system_id"])
     obj.properties = props
     await db.flush()
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return await get_entity(entity_id, ctx, db)
 
 
@@ -383,6 +386,7 @@ async def add_entity_link(
         body.link_kind,
         body.role_tag,
     )
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
 
 
 # ─── Data Stores ─────────────────────────────────────────────────────────────
@@ -416,6 +420,7 @@ async def create_store(
         await _assign_store_data_domain(db, ctx, obj, body.data_domain_id)
         obj.properties = _props(obj)
         await db.flush()
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return await get_store(obj.id, ctx, db)
 
 
@@ -495,6 +500,7 @@ async def update_store(
         props = _props(obj)
     obj.properties = props
     await db.flush()
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return await get_store(store_id, ctx, db)
 
 
@@ -524,6 +530,7 @@ async def add_store_link(
         body.link_kind,
         body.role_tag,
     )
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
 
 
 # ─── Data Domains ────────────────────────────────────────────────────────────
@@ -554,6 +561,7 @@ async def create_domain(
     )
     db.add(obj)
     await db.flush()
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return await get_domain(obj.id, ctx, db)
 
 
@@ -643,6 +651,7 @@ async def update_domain(
         props["capability_domain_id"] = str(body.capability_domain_id)
     obj.properties = props
     await db.flush()
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return await get_domain(domain_id, ctx, db)
 
 
@@ -672,6 +681,7 @@ async def add_domain_link(
         body.link_kind,
         body.role_tag,
     )
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
 
 
 @router.delete("/links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -694,3 +704,4 @@ async def delete_link(
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
     await db.delete(row)
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)

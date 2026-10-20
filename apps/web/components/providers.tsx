@@ -12,6 +12,7 @@ import { LastAppPathTracker } from "@/components/LastAppPathTracker";
 import { Toaster } from "@/components/ui/toaster";
 import { ObjectLimitNotice } from "@/components/billing/ObjectLimitNotice";
 import { installDuplicateKeyProbe } from "@/lib/dev/duplicate-key-probe";
+import { CatalogWriteSync } from "@/lib/use-model-catalog";
 
 // Dev only (no-op in production): print the key and component stack of any duplicate-key warning.
 if (process.env.NODE_ENV !== "production") installDuplicateKeyProbe();
@@ -41,6 +42,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClient}>
+        <CatalogWriteSync />
         <AppBootProvider>
           <LastAppPathTracker />
           <AppBootGate>{children}</AppBootGate>

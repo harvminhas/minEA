@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { MinEAObject, Relationship } from "@minea/types";
 import { catalogApi } from "@/lib/api-client";
@@ -9,6 +10,7 @@ import { rowFromObject, type CatalogRow } from "@/lib/model-catalog";
 import { useTenancy } from "@/lib/tenancy";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
 import { savesWaiting } from "@/lib/fields/save-queue";
+import { isConnectorType, markWrittenHere, onCatalogWrite, writtenHereRecently, type CatalogWrite } from "@/lib/catalog-write-bus";
 import { compareUpdatedAt } from "@/lib/updated-at";
 
 export { shouldRefreshOnEnter };
@@ -69,7 +71,8 @@ function newerHere(local: MinEAObject, fetched: MinEAObject): boolean {
 export function mergeFreshCatalog(
   current: WorkspaceCatalog | undefined,
   fetched: WorkspaceCatalog,
-  waiting: (id: string) => boolean = (id) => savesWaiting(id) > 0
+  waiting: (id: string) => boolean = (id) => savesWaiting(id) > 0,
+  keepLocalLink: (id: string) => boolean = (id) => writtenHereRecently(id)
 ): WorkspaceCatalog {
   if (!current) return fetched;
   const local = new Map(current.objects.map((object) => [object.id, object]));
@@ -88,8 +91,10 @@ export function mergeFreshCatalog(
   }
   const seenRel = new Set(fetched.relationships.map((rel) => rel.id));
   const relationships = [...fetched.relationships];
+  // Only links this tab just wrote survive a fetch that lacks them; anything else the server dropped
+  // (an API consumer removed, a data owner changed) goes, instead of lingering until a reload.
   for (const rel of current.relationships) {
-    if (!seenRel.has(rel.id)) relationships.push(rel);
+    if (!seenRel.has(rel.id) && keepLocalLink(rel.id)) relationships.push(rel);
   }
   if (!kept && objects.length === fetched.objects.length && relationships.length === fetched.relationships.length) return fetched;
   return shapeCatalog({ ...fetched, objects, relationships });
@@ -127,6 +132,7 @@ export function applyCatalogWrite(
     }
     if (change.relationship) {
       const next = change.relationship;
+      markWrittenHere(next.id);
       relationships = relationships.some((rel) => rel.id === next.id)
         ? relationships.map((rel) => (rel.id === next.id ? next : rel))
         : [...relationships, next];
@@ -154,4 +160,57 @@ export function useModelCatalog() {
       return mergeFreshCatalog(current, fetched);
     },
   });
+}
+
+const REFETCH_DELAY_MS = 400;
+const refetchTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Mirror one reported write into the cached catalog (when there is one), then, for writes that touch
+ * connector objects (APIs, events, flows, integration infra, data), ask the server for a fresh copy
+ * shortly after, once per burst of writes.
+ */
+export function handleCatalogWrite(
+  queryClient: QueryClient,
+  write: CatalogWrite,
+  scheduleRefetch: (key: readonly unknown[], run: () => void) => void = debouncedRefetch
+): void {
+  const key = catalogQueryKey(write.orgSlug, write.workspaceSlug);
+  const current = queryClient.getQueryData<WorkspaceCatalog>(key);
+  if (!current) return;
+  let refetch = !!write.refetch;
+  if (write.removeId && isConnectorType(current.objects.find((object) => object.id === write.removeId)?.type)) refetch = true;
+  if (write.removeRelationshipId) {
+    const rel = current.relationships.find((item) => item.id === write.removeRelationshipId);
+    if (rel && (isConnectorType(rel.from_type) || isConnectorType(rel.to_type))) refetch = true;
+  }
+  if (write.object || write.removeId || write.relationship || write.removeRelationshipId) {
+    applyCatalogWrite(queryClient, write.orgSlug, write.workspaceSlug, {
+      object: write.object,
+      removeId: write.removeId,
+      relationship: write.relationship,
+      removeRelationshipId: write.removeRelationshipId,
+    });
+  }
+  if (refetch) scheduleRefetch(key, () => void queryClient.invalidateQueries({ queryKey: key }));
+}
+
+function debouncedRefetch(key: readonly unknown[], run: () => void) {
+  const id = JSON.stringify(key);
+  const pending = refetchTimers.get(id);
+  if (pending) clearTimeout(pending);
+  refetchTimers.set(
+    id,
+    setTimeout(() => {
+      refetchTimers.delete(id);
+      run();
+    }, REFETCH_DELAY_MS)
+  );
+}
+
+/** Mounted once near the QueryClientProvider: every reported write keeps the catalog current. */
+export function CatalogWriteSync() {
+  const queryClient = useQueryClient();
+  useEffect(() => onCatalogWrite((write) => handleCatalogWrite(queryClient, write)), [queryClient]);
+  return null;
 }

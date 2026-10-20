@@ -21,6 +21,7 @@ import type { CatalogRow } from "@/lib/model-catalog";
 import { applyCatalogWrite, catalogQueryKey, useModelCatalog, type WorkspaceCatalog } from "@/lib/use-model-catalog";
 import { usePermissions } from "@/lib/use-permissions";
 import { relationshipsForIds, sameNamePartyIds } from "@/lib/relationships-for-object";
+import { connectedVia, connectorHref, type ConnectedVia } from "@/lib/connected-via";
 import { formatRelationshipTriple } from "@/lib/relationship-display";
 import { suppliedByVendorClear } from "@/lib/fields/shared-links";
 import { planTypeSwitch, readableTypeConflict, type TypeSwitchPlan } from "@/lib/type-switch";
@@ -393,7 +394,7 @@ function SwitchLines({ title, lines }: { title: string; lines: { id: string; lin
 
 function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: boolean; highlight?: string | null }) {
   const { getToken } = useAuth();
-  const { orgSlug, workspaceSlug } = useTenancy();
+  const { orgSlug, workspaceSlug, basePath } = useTenancy();
   const queryClient = useQueryClient();
   const catalog = useModelCatalog();
   const [expanded, setExpanded] = useState(false);
@@ -481,6 +482,7 @@ function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: 
         onAdd={canEdit && storedObject ? open : undefined}
         onRemove={canEdit && storedObject ? remove : undefined}
       />
+      <ConnectedViaList lines={connectedVia(row.id, objects, rels)} basePath={basePath} />
       {adding && (
         <RelationshipForm
           fromObject={row.object}
@@ -494,6 +496,34 @@ function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: 
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** Apps reached through an API, event, flow, integration infra or data record; edited on that record. */
+export function ConnectedViaList({ lines, basePath }: { lines: ConnectedVia[]; basePath: string }) {
+  if (lines.length === 0) return null;
+  return (
+    <div data-testid="connected-via">
+      <h3 className="mb-2 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">CONNECTED THROUGH</h3>
+      <div className="space-y-2">
+        {lines.map((line) => {
+          const where = line.viaType === "api" ? "API" : line.viaLabel.toLowerCase();
+          return (
+            <div key={`${line.otherId}:${line.viaId}`} className="rounded-lg bg-stone-50 px-3 py-2.5">
+              <p className="text-sm leading-snug text-gray-900">
+                Connected to <span className="font-medium">{line.otherName}</span> via {where}{" "}
+                <a href={connectorHref(basePath, line.viaType, line.viaId)} className="font-medium text-[#3f35b5] hover:underline">
+                  {line.viaName}
+                </a>
+              </p>
+              <p className="mt-0.5 text-xs text-gray-500">
+                {line.sentences.join(" · ")} · Edit on the {where}
+              </p>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

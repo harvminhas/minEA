@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -279,7 +280,9 @@ export function DataLayerList({ typePath }: { typePath: string }) {
   const enabled = useAuthQueryEnabled();
 
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // ?open=<id> (from an app's "Connected through" line) opens that record.
+  const openParam = useSearchParams()?.get("open") ?? null;
+  const [selectedId, setSelectedId] = useState<string | null>(openParam);
 
   const { data, isLoading } = useQuery({
     queryKey: ["objects", orgSlug, workspaceSlug, config.objectType],

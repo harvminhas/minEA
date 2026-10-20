@@ -1,4 +1,5 @@
 import type { SupportRequestBody } from "@/lib/support";
+import { isConnectorType, reportWrite, type CatalogWrite } from "@/lib/catalog-write-bus";
 import type {
   EntityAccountability,
   MinEAObject,
@@ -577,6 +578,16 @@ export const sharesApi = {
   preview: (token: string) => apiFetch<SharePreview>(`/shares/${token}`),
 };
 
+function connectorObjectWrite(orgSlug: string, workspaceSlug: string, object: MinEAObject | null | undefined): CatalogWrite | null {
+  if (!object?.id || !isConnectorType(object.type)) return null;
+  return { orgSlug, workspaceSlug, object, refetch: true };
+}
+
+function relationshipWrite(orgSlug: string, workspaceSlug: string, rel: Relationship | null | undefined): CatalogWrite | null {
+  if (!rel?.id) return null;
+  return { orgSlug, workspaceSlug, relationship: rel, refetch: isConnectorType(rel.from_type) || isConnectorType(rel.to_type) };
+}
+
 // ─── Objects ─────────────────────────────────────────────────────────────────
 
 export const objectsApi = {
@@ -603,18 +614,24 @@ export const objectsApi = {
     apiFetch<MinEAObject>(`${wsBase(orgSlug, workspaceSlug)}/objects/${id}`, { token }),
 
   create: (orgSlug: string, workspaceSlug: string, body: ObjectCreate, token: string) =>
-    apiFetch<MinEAObject>(`${wsBase(orgSlug, workspaceSlug)}/objects`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      token,
-    }),
+    reportWrite(
+      apiFetch<MinEAObject>(`${wsBase(orgSlug, workspaceSlug)}/objects`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        token,
+      }),
+      (object) => connectorObjectWrite(orgSlug, workspaceSlug, object)
+    ),
 
   update: (orgSlug: string, workspaceSlug: string, id: string, body: ObjectUpdate, token: string) =>
-    apiFetch<MinEAObject>(`${wsBase(orgSlug, workspaceSlug)}/objects/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(body),
-      token,
-    }),
+    reportWrite(
+      apiFetch<MinEAObject>(`${wsBase(orgSlug, workspaceSlug)}/objects/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+        token,
+      }),
+      (object) => connectorObjectWrite(orgSlug, workspaceSlug, object)
+    ),
 
   switchType: (
     orgSlug: string,
@@ -629,7 +646,10 @@ export const objectsApi = {
     ),
 
   delete: (orgSlug: string, workspaceSlug: string, id: string, token: string) =>
-    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/objects/${id}`, { method: "DELETE", token }),
+    reportWrite(
+      apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/objects/${id}`, { method: "DELETE", token }),
+      () => ({ orgSlug, workspaceSlug, removeId: id })
+    ),
 
   history: (orgSlug: string, workspaceSlug: string, objectId: string, token: string) =>
     apiFetch<ObjectHistoryResponse>(
@@ -699,33 +719,45 @@ export const relationshipsApi = {
   },
 
   create: (orgSlug: string, workspaceSlug: string, body: RelationshipCreate, token: string) =>
-    apiFetch<Relationship>(`${wsBase(orgSlug, workspaceSlug)}/relationships`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      token,
-    }),
+    reportWrite(
+      apiFetch<Relationship>(`${wsBase(orgSlug, workspaceSlug)}/relationships`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        token,
+      }),
+      (rel) => relationshipWrite(orgSlug, workspaceSlug, rel)
+    ),
 
   createWithStatus: (orgSlug: string, workspaceSlug: string, body: RelationshipCreate, token: string) =>
-    apiFetch<{ body: Relationship; status: number }>(`${wsBase(orgSlug, workspaceSlug)}/relationships`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      token,
-      returnStatus: true,
-    }),
+    reportWrite(
+      apiFetch<{ body: Relationship; status: number }>(`${wsBase(orgSlug, workspaceSlug)}/relationships`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        token,
+        returnStatus: true,
+      }),
+      (result) => relationshipWrite(orgSlug, workspaceSlug, result?.body)
+    ),
 
   /** Merge into a link's attributes (None clears a key), e.g. the region on app → tenant. */
   updateAttributes: (orgSlug: string, workspaceSlug: string, id: string, attributes: Record<string, unknown>, token: string) =>
-    apiFetch<Relationship>(`${wsBase(orgSlug, workspaceSlug)}/relationships/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ attributes }),
-      token,
-    }),
+    reportWrite(
+      apiFetch<Relationship>(`${wsBase(orgSlug, workspaceSlug)}/relationships/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ attributes }),
+        token,
+      }),
+      (rel) => relationshipWrite(orgSlug, workspaceSlug, rel)
+    ),
 
   delete: (orgSlug: string, workspaceSlug: string, id: string, token: string) =>
-    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/relationships/${id}`, {
-      method: "DELETE",
-      token,
-    }),
+    reportWrite(
+      apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/relationships/${id}`, {
+        method: "DELETE",
+        token,
+      }),
+      () => ({ orgSlug, workspaceSlug, removeRelationshipId: id })
+    ),
 };
 
 // ─── Products (Product Portfolio view) ───────────────────────────────────────
@@ -1178,11 +1210,14 @@ export const dataApi = {
     apiFetch<DataObjectDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/entities/${entityId}`, { token }),
 
   createEntity: (orgSlug: string, workspaceSlug: string, body: DataObjectCreate, token: string) =>
-    apiFetch<DataObjectDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/entities`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      token,
-    }),
+    reportWrite(
+      apiFetch<DataObjectDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/entities`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        token,
+      }),
+      () => ({ orgSlug, workspaceSlug, refetch: true })
+    ),
 
   updateEntity: (
     orgSlug: string,
@@ -1191,11 +1226,14 @@ export const dataApi = {
     body: DataObjectUpdate,
     token: string
   ) =>
-    apiFetch<DataObjectDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/entities/${entityId}`, {
-      method: "PUT",
-      body: JSON.stringify(body),
-      token,
-    }),
+    reportWrite(
+      apiFetch<DataObjectDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/entities/${entityId}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+        token,
+      }),
+      () => ({ orgSlug, workspaceSlug, refetch: true })
+    ),
 
   addEntityLink: (
     orgSlug: string,
@@ -1204,21 +1242,27 @@ export const dataApi = {
     body: DataLinkCreate,
     token: string
   ) =>
-    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/entities/${entityId}/links`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      token,
-    }),
+    reportWrite(
+      apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/entities/${entityId}/links`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        token,
+      }),
+      () => ({ orgSlug, workspaceSlug, refetch: true })
+    ),
 
   getStore: (orgSlug: string, workspaceSlug: string, storeId: string, token: string) =>
     apiFetch<DataStoreDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/stores/${storeId}`, { token }),
 
   createStore: (orgSlug: string, workspaceSlug: string, body: DataStoreCreate, token: string) =>
-    apiFetch<DataStoreDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/stores`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      token,
-    }),
+    reportWrite(
+      apiFetch<DataStoreDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/stores`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        token,
+      }),
+      () => ({ orgSlug, workspaceSlug, refetch: true })
+    ),
 
   updateStore: (
     orgSlug: string,
@@ -1227,11 +1271,14 @@ export const dataApi = {
     body: DataStoreUpdate,
     token: string
   ) =>
-    apiFetch<DataStoreDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/stores/${storeId}`, {
-      method: "PUT",
-      body: JSON.stringify(body),
-      token,
-    }),
+    reportWrite(
+      apiFetch<DataStoreDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/stores/${storeId}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+        token,
+      }),
+      () => ({ orgSlug, workspaceSlug, refetch: true })
+    ),
 
   addStoreLink: (
     orgSlug: string,
@@ -1240,21 +1287,27 @@ export const dataApi = {
     body: DataLinkCreate,
     token: string
   ) =>
-    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/stores/${storeId}/links`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      token,
-    }),
+    reportWrite(
+      apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/stores/${storeId}/links`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        token,
+      }),
+      () => ({ orgSlug, workspaceSlug, refetch: true })
+    ),
 
   getDomain: (orgSlug: string, workspaceSlug: string, domainId: string, token: string) =>
     apiFetch<DataDomainDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/domains/${domainId}`, { token }),
 
   createDomain: (orgSlug: string, workspaceSlug: string, body: DataDomainCreate, token: string) =>
-    apiFetch<DataDomainDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/domains`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      token,
-    }),
+    reportWrite(
+      apiFetch<DataDomainDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/domains`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        token,
+      }),
+      () => ({ orgSlug, workspaceSlug, refetch: true })
+    ),
 
   updateDomain: (
     orgSlug: string,
@@ -1263,11 +1316,14 @@ export const dataApi = {
     body: DataDomainUpdate,
     token: string
   ) =>
-    apiFetch<DataDomainDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/domains/${domainId}`, {
-      method: "PUT",
-      body: JSON.stringify(body),
-      token,
-    }),
+    reportWrite(
+      apiFetch<DataDomainDetail>(`${wsBase(orgSlug, workspaceSlug)}/data/domains/${domainId}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+        token,
+      }),
+      () => ({ orgSlug, workspaceSlug, refetch: true })
+    ),
 
   addDomainLink: (
     orgSlug: string,
@@ -1276,17 +1332,23 @@ export const dataApi = {
     body: DataLinkCreate,
     token: string
   ) =>
-    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/domains/${domainId}/links`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      token,
-    }),
+    reportWrite(
+      apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/domains/${domainId}/links`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        token,
+      }),
+      () => ({ orgSlug, workspaceSlug, refetch: true })
+    ),
 
   deleteLink: (orgSlug: string, workspaceSlug: string, linkId: string, token: string) =>
-    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/links/${linkId}`, {
-      method: "DELETE",
-      token,
-    }),
+    reportWrite(
+      apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/data/links/${linkId}`, {
+        method: "DELETE",
+        token,
+      }),
+      () => ({ orgSlug, workspaceSlug, refetch: true })
+    ),
 
   getFlowEndpointCatalog: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<FlowEndpointCatalog>(`${wsBase(orgSlug, workspaceSlug)}/data/flow-endpoint-catalog`, {
