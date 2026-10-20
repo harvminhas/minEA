@@ -10,6 +10,7 @@ import { ChevronDown, Bell, HelpCircle, LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useAppStore } from "@/lib/store";
+import { planChipLabel } from "@/lib/billing/plan-chip";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, modelPath, reportsPath } from "@/lib/mvp-paths";
 import { ASK_BAR_ID, askShortcut, stripSplitUrl } from "@/components/nav/ask-shortcut";
@@ -173,6 +174,7 @@ export function TopNav() {
         ? [org]
         : [];
   const currentRole = org?.role ?? activeOrg?.role;
+  const planChip = orgSlug ? planChipLabel(org?.plan ?? activeOrg?.plan) : null;
   const activeTab = activeTopNavTab(pathname);
 
   const canCreateOwnWorkspace =
@@ -196,6 +198,11 @@ export function TopNav() {
       >
         <BuboMapWordmark size="sm" theme="dark" />
       </Link>
+      {planChip && (
+        <span data-testid="plan-chip" title={`${orgName} is on the ${planChip} plan`} className="-ml-1 flex-shrink-0 rounded-full border border-white/15 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-white/55">
+          {planChip}
+        </span>
+      )}
 
       {/* Org / Workspace breadcrumb */}
       {orgSlug && (

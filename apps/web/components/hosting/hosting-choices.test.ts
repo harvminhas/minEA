@@ -142,3 +142,23 @@ test("SaaS tenant picker offers the SaaS providers and the M365 geos", () => {
   assert.match(html, /<option value="m365:canada">Canada<\/option>/);
   assert.doesNotMatch(html, /Custom region/, "no + custom without onAddRegion");
 });
+
+test("+ New account works again and again: a fresh, unused name every time (never blank)", async () => {
+  const { newTenantName, startNewTenant } = await import("./CloudPicker.tsx");
+  const { pendingTenantId } = await import("../../lib/hosting/pending-tenants.ts");
+  assert.equal(newTenantName("azure", []), "Azure tenant");
+  assert.equal(newTenantName("other", ["Cloud account", "cloud account 2"]), "Cloud account 3");
+  // Another card already typed "Cloud account" (pending): this card used to get "" and snap back to "Pick one".
+  const next = startNewTenant({ provider: "other", tenantId: "t1", tenantName: "Existing", regionKey: null }, ["Existing", "Cloud account"]);
+  assert.equal(next.tenantId, undefined);
+  assert.equal(next.tenantName, "Cloud account 2");
+  const html = renderToStaticMarkup(React.createElement(CloudPicker, {
+    mode: "own_cloud", value: next, tenants: [{ id: "t1", name: "Existing", provider: "other", regionKeys: [] }], onChange() {},
+    pending: [{ id: pendingTenantId("other", "Cloud account"), provider: "other", name: "Cloud account", originKey: "card-1", count: 1 }],
+  }));
+  assert.match(html, /data-testid="tenant-new"[^>]*value="Cloud account 2"/);
+  assert.match(html, /<option value="__new" selected="">\+ New account…<\/option>/);
+  const source = readFileSync(new URL("./CloudPicker.tsx", import.meta.url), "utf8");
+  assert.match(source, /const \[creating, setCreating\] = useState\(false\)/, "clearing the name keeps the new-name box");
+  assert.match(source, /min-w-0 flex-1[^"]*border-dashed/, "custom region box can't overflow the card");
+});

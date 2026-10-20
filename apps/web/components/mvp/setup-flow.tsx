@@ -13,6 +13,7 @@ import type { AddReceipt } from "@/lib/setup/add-cards";
 import { OwnerDatalists, PERSON_PICKS_ID, TEAM_PICKS_ID, useOwnerPicks } from "@/components/ownership/OwnerPicks";
 import { canonicalOwner } from "@/lib/owner-picks";
 import { licenceCount, perSeatLine, yearlyFor } from "@/lib/setup/licence-cost";
+import { NoAiFeaturesList } from "@/components/mvp/NoAiFeaturesList";
 import { draftsFromCards } from "@/lib/setup/card-drafts";
 import { useAppStore } from "@/lib/store";
 import type { CostLine } from "@/lib/cost/math";
@@ -657,11 +658,7 @@ export function SetupFlow({ inline = false, startAt }: { inline?: boolean; start
               );
             })}
           </ul>
-          {aiOthers(drafts, aiRows).length > 0 && (
-            <p className="mt-3 text-[13px] text-[#6b7289]">
-              {aiOthers(drafts, aiRows).length} other{aiOthers(drafts, aiRows).length === 1 ? "" : "s"}: no known AI features ({aiOthers(drafts, aiRows).join(", ")})
-            </p>
-          )}
+          <NoAiFeaturesList names={aiOthers(drafts, aiRows)} />
           <p className="mt-1 text-[13px] text-[#6b7289]">
             Built your own AI agents or bots? Add them in <Link href={modelPath(basePath, "agents")} className="font-medium text-[#5b4ce6]">Model › AI agents</Link>.
           </p>
@@ -807,7 +804,7 @@ function startPick(row: AiStepRow): AiPick {
   };
 }
 
-/** Names on the list with no known AI features (servers included), for the one-line "others" note. */
+/** Names on the list with no known AI features (servers included), for the collapsed "no known AI features" list. */
 function aiOthers(drafts: Draft[], rows: AiStepRow[]): string[] {
   const shown = new Set(rows.map((row) => row.key));
   return drafts.filter((draft) => !shown.has(draft.key)).map((draft) => displayName(draft));
