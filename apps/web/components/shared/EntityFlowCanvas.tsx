@@ -182,7 +182,7 @@ function CanvasInner({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeDragStop={interactive ? handleNodeDragStop : undefined}
-        onNodeClick={interactive ? onNodeClick : undefined}
+        onNodeClick={onNodeClick}
         fitView
         fitViewOptions={{ padding: fitViewPadding }}
         nodesDraggable={interactive}

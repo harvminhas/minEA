@@ -42,6 +42,8 @@ import {
 import { flowUsesDashedConnector } from "@/lib/flow-utils";
 import { OBJECT_TYPE_LABELS, type ApplicationProperties, type FlowMechanism, type MinEAObject, type ObjectType, type Relationship } from "@minea/types";
 import { cn } from "@/lib/utils";
+import { expandSystemGraph, mapNeighbors, nodeObjectId, objectOpenHref, PER_NODE_CAP, savableLayout, type MapNodeExtras } from "@/lib/map-expand";
+import { uiTypeLabel } from "@/lib/ui-type-labels";
 
 export type { NodeLayout };
 
@@ -120,30 +122,74 @@ function SystemCenterNode({
   );
 }
 
+/** "+N" (links still off the map) or "−" (expanded) on a node, and a dashed look for revealed nodes. */
+function NodeExtras({ data, compact, children }: { data: MapNodeExtras; compact?: boolean; children: React.ReactNode }) {
+  const badge = data.badge;
+  return (
+    <div
+      className={cn(
+        "relative rounded-lg",
+        data.revealed && "[&>div]:!border-dashed [&>div]:!border-indigo-300",
+        data.selected && "ring-4 ring-indigo-500/20"
+      )}
+      data-revealed={data.revealed ? "true" : undefined}
+    >
+      {children}
+      {(data.expanded || (badge ?? 0) > 0) && (
+        <span
+          data-testid="map-badge"
+          className={cn(
+            "pointer-events-none absolute rounded-full border-2 border-white font-semibold leading-none",
+            compact ? "-right-1.5 -top-1.5 px-1 py-[1px] text-[6px]" : "-right-2.5 -top-2.5 px-1.5 py-[3px] text-[10.5px]",
+            data.expanded ? "bg-white text-indigo-600 !border-indigo-500" : "bg-indigo-600 text-white"
+          )}
+        >
+          {data.expanded ? "−" : `+${badge}`}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function FlowLinkedNode({
   data,
   compact,
 }: {
-  data: { flow: MinEAObject };
+  data: { flow: MinEAObject } & MapNodeExtras;
   compact?: boolean;
 }) {
-  return <DiagramFlowNode meta={flowDiagramNodeMeta(data.flow)} compact={compact} />;
+  return (
+    <NodeExtras data={data} compact={compact}>
+      <DiagramFlowNode meta={flowDiagramNodeMeta(data.flow)} compact={compact} />
+    </NodeExtras>
+  );
+}
+
+function MoreNode({ data }: { data: { count: number } }) {
+  return (
+    <div className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700" data-testid="map-more">
+      <Handle type="target" position={Position.Left} id="left" className="!opacity-0 !w-1 !h-1" />
+      +{data.count} more
+    </div>
+  );
 }
 
 function LinkedObjectNode({
   data,
   compact,
 }: {
-  data: { link: MergedSystemDiagramLink };
+  data: { link: MergedSystemDiagramLink } & MapNodeExtras;
   compact?: boolean;
 }) {
   return (
-    <DiagramLinkedObjectNode
-      name={data.link.name}
-      objectType={data.link.objectType}
-      compact={compact}
-      handleColor={APPLICATION_LAYER_COLOR}
-    />
+    <NodeExtras data={data} compact={compact}>
+      <DiagramLinkedObjectNode
+        name={data.link.name}
+        objectType={data.link.objectType}
+        compact={compact}
+        handleColor={APPLICATION_LAYER_COLOR}
+      />
+    </NodeExtras>
   );
 }
 
@@ -166,10 +212,14 @@ const FlowLinkedNodeCompact = memo((props: NodeProps) => (
 ));
 FlowLinkedNodeCompact.displayName = "FlowLinkedNodeCompact";
 
+const MoreNodeFull = memo((props: NodeProps) => <MoreNode data={props.data} />);
+MoreNodeFull.displayName = "MoreNodeFull";
+
 export const SYSTEM_NODE_TYPES: NodeTypes = {
   systemCenterNode: SystemCenterNodeFull,
   systemLinkedNode: LinkedObjectNodeFull,
   systemFlowNode: FlowLinkedNodeFull,
+  systemMoreNode: MoreNodeFull,
 };
 
 export const SYSTEM_NODE_TYPES_COMPACT: NodeTypes = {
@@ -504,6 +554,10 @@ interface GraphProps {
   onResetLayout?: () => void;
   exportFilename?: string;
   containerRef?: React.RefObject<HTMLDivElement | null>;
+  /** Catalog records: turns on "+N" badges and one-hop expansion around `expanded`. */
+  expansion?: { objects: MinEAObject[]; expanded?: string[]; selectedId?: string | null };
+  /** A node was clicked: the record it stands for ("+N more" reports its parent), and the node. */
+  onNodeClick?: (objectId: string | null, node: Node) => void;
 }
 
 export function SystemArchitectureGraph({
@@ -518,24 +572,31 @@ export function SystemArchitectureGraph({
   onResetLayout,
   exportFilename,
   containerRef,
+  expansion,
+  onNodeClick,
 }: GraphProps) {
   const props = (system.properties ?? {}) as ApplicationProperties;
   const savedLayout = props.node_layout;
   const hasCustomLayout = !!(savedLayout && Object.keys(savedLayout).length > 0);
 
-  const { nodes, edges } = useMemo(
-    () =>
-      buildSystemGraph(
-        system,
-        relationships,
-        nameById,
-        flows,
-        compact,
-        compact ? undefined : savedLayout,
-        accentColor
-      ),
-    [system, relationships, nameById, flows, compact, savedLayout, accentColor]
-  );
+  const { nodes, edges } = useMemo(() => {
+    const base = buildSystemGraph(
+      system,
+      relationships,
+      nameById,
+      flows,
+      compact,
+      compact ? undefined : savedLayout,
+      accentColor
+    );
+    if (!expansion) return base;
+    return expandSystemGraph(base, {
+      expanded: compact ? [] : (expansion.expanded ?? []),
+      relationships,
+      objects: expansion.objects,
+      selectedId: compact ? null : expansion.selectedId,
+    });
+  }, [system, relationships, nameById, flows, compact, savedLayout, accentColor, expansion]);
 
   return (
     <div className={cn("relative overflow-hidden", compact ? "h-[160px]" : "h-full", className)}>
@@ -551,6 +612,12 @@ export function SystemArchitectureGraph({
         hasCustomLayout={hasCustomLayout}
         exportFilename={compact ? undefined : exportFilename}
         containerRef={containerRef}
+        onNodeClick={
+          onNodeClick
+            ? (_event, node) =>
+                onNodeClick(node.type === "systemMoreNode" ? String(node.data?.parentObjectId ?? "") || null : nodeObjectId(node), node)
+            : undefined
+        }
         emptyLabel="Add connections to see the relationship map"
         className={cn("h-full rounded-lg border border-gray-200", compact && "rounded-none border-0")}
       />
@@ -569,6 +636,8 @@ export function SystemDiagramModal({
   accentColor = APPLICATION_LAYER_COLOR,
   heading = "System relationships",
   footerHint = "Drag nodes to rearrange — positions save automatically. Use Add connection to link systems, components, data objects, and technology.",
+  objects,
+  initialExpandedId,
 }: {
   system: MinEAObject;
   relationships: Relationship[];
@@ -580,9 +649,15 @@ export function SystemDiagramModal({
   accentColor?: string;
   heading?: string;
   footerHint?: string;
+  /** Catalog records: lets a click expand a node one hop and show its card. */
+  objects?: MinEAObject[];
+  /** Open with this record already expanded (a node clicked on the small map). */
+  initialExpandedId?: string | null;
 }) {
   const { getToken } = useAuth();
-  const { orgSlug, workspaceSlug } = useTenancy();
+  const { orgSlug, workspaceSlug, basePath } = useTenancy();
+  const [expanded, setExpanded] = useState<string[]>(() => (initialExpandedId ? [initialExpandedId] : []));
+  const [selectedId, setSelectedId] = useState<string | null>(initialExpandedId ?? null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [liveSystem, setLiveSystem] = useState(system);
   const [savingLayout, setSavingLayout] = useState(false);
@@ -610,12 +685,27 @@ export function SystemDiagramModal({
   });
 
   const nameById = useMemo(() => {
-    const map: Record<string, string> = { [system.id]: system.name };
+    const map: Record<string, string> = {};
+    for (const object of objects ?? []) map[object.id] = object.name;
+    map[system.id] = system.name;
     for (const query of nameQueries) {
       if (query.data) map[query.data.id] = query.data.name;
     }
     return map;
-  }, [nameQueries, system.id, system.name]);
+  }, [nameQueries, system.id, system.name, objects]);
+
+  const expansion = useMemo(
+    () => (objects ? { objects, expanded, selectedId } : undefined),
+    [objects, expanded, selectedId]
+  );
+  const handleNodeClick = (objectId: string | null, node: Node) => {
+    if (!objectId) return;
+    setSelectedId(objectId);
+    if (node.type === "systemMoreNode" || objectId === system.id) return;
+    setExpanded((prev) => (prev.includes(objectId) ? prev.filter((id) => id !== objectId) : [...prev, objectId]));
+  };
+  const toggle = (objectId: string) =>
+    setExpanded((prev) => (prev.includes(objectId) ? prev.filter((id) => id !== objectId) : [...prev, objectId]));
 
   const props = (liveSystem.properties ?? {}) as ApplicationProperties;
   const linkCount =
@@ -623,7 +713,8 @@ export function SystemDiagramModal({
     extractSystemDiagramFlows(liveSystem.id, flows).length;
   const hasCustomLayout = !!(props.node_layout && Object.keys(props.node_layout).length > 0);
 
-  const handleLayoutSave = async (layout: NodeLayout) => {
+  const handleLayoutSave = async (all: NodeLayout) => {
+    const layout = savableLayout(all);
     const currentProps = (liveSystem.properties ?? {}) as ApplicationProperties;
     setLiveSystem({
       ...liveSystem,
@@ -706,7 +797,20 @@ export function SystemDiagramModal({
             onResetLayout={handleResetLayout}
             exportFilename={liveSystem.name}
             containerRef={canvasRef}
+            expansion={expansion}
+            onNodeClick={objects ? handleNodeClick : undefined}
           />
+          {objects && selectedId && selectedId !== system.id && (
+            <MapNodeCard
+              object={objects.find((item) => item.id === selectedId) ?? null}
+              relationships={relationships}
+              objects={objects}
+              expanded={expanded.includes(selectedId)}
+              onToggle={() => toggle(selectedId)}
+              onClose={() => setSelectedId(null)}
+              basePath={basePath}
+            />
+          )}
         </div>
 
         <div className="px-6 py-2.5 border-t border-gray-100 bg-gray-50/50 flex-shrink-0 flex items-center gap-4 flex-wrap">
@@ -719,5 +823,68 @@ export function SystemDiagramModal({
         </div>
       </div>
     </>
+  );
+}
+
+/** The clicked record: what it links to (first few), Expand/Collapse in place, Open its page. */
+export function MapNodeCard({
+  object,
+  relationships,
+  objects,
+  expanded,
+  onToggle,
+  onClose,
+  basePath,
+}: {
+  object: MinEAObject | null;
+  relationships: Relationship[];
+  objects: MinEAObject[];
+  expanded: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  basePath: string;
+}) {
+  if (!object) return null;
+  const neighbors = mapNeighbors(object.id, relationships, new Map(objects.map((item) => [item.id, item])));
+  const href = objectOpenHref(basePath, object);
+  const shown = neighbors.slice(0, PER_NODE_CAP);
+  const more = neighbors.length - shown.length;
+  return (
+    <div data-testid="map-node-card" className="absolute left-3 top-14 z-10 w-64 rounded-xl border border-gray-200 bg-white p-3.5 shadow-lg">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-gray-900">{object.name}</p>
+          <p className="text-[11px] text-gray-500">{uiTypeLabel(object.type, true)}</p>
+        </div>
+        <button type="button" onClick={onClose} className="rounded p-0.5 text-gray-400 hover:bg-gray-100" aria-label="Close card">
+          <X size={14} />
+        </button>
+      </div>
+      <p className="mb-1 mt-3 text-[10px] font-semibold tracking-[0.12em] text-gray-400">CONNECTS TO</p>
+      {neighbors.length === 0 ? (
+        <p className="text-xs text-gray-500">No other links.</p>
+      ) : (
+        <ul className="space-y-0.5 text-xs text-gray-700">
+          {shown.map((item) => (
+            <li key={item.objectId} className="truncate">
+              {item.name} <span className="text-gray-400">· {item.phrase.toLowerCase()}</span>
+            </li>
+          ))}
+          {more > 0 && <li className="text-indigo-700">+{more} more</li>}
+        </ul>
+      )}
+      <div className="mt-3 flex gap-2">
+        {neighbors.length > 0 && (
+          <button type="button" onClick={onToggle} className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-800 hover:bg-gray-50">
+            {expanded ? "Collapse" : "Expand"}
+          </button>
+        )}
+        {href && (
+          <a href={href} className="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-indigo-700">
+            Open
+          </a>
+        )}
+      </div>
+    </div>
   );
 }

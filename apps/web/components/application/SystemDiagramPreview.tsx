@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useRef } from "react";
 import { Maximize2 } from "lucide-react";
 import { SystemArchitectureGraph } from "@/components/application/SystemDiagram";
 import { extractSystemDiagramFlows, extractSystemDiagramLinks } from "@/lib/system-relationship-utils";
@@ -11,8 +12,11 @@ interface Props {
   relationships: Relationship[];
   nameById: Record<string, string>;
   flows?: MinEAObject[];
-  onExpand: () => void;
+  /** Opens the full map; with the record of the node that was clicked, when one was. */
+  onExpand: (focusObjectId?: string) => void;
   disabled?: boolean;
+  /** Catalog records: shows "+N" badges and lets a node click open the full map on that node. */
+  objects?: MinEAObject[];
   accentColor?: string;
   emptyHint?: string;
 }
@@ -26,7 +30,11 @@ export function SystemDiagramPreview({
   disabled,
   accentColor,
   emptyHint = "No linked objects yet. Expand to add systems, components, data objects, and technology.",
+  objects,
 }: Props) {
+  // React Flow reports the node click first; the button's own click then opens the full map on it.
+  const clickedNode = useRef<string | null>(null);
+  const expansion = useMemo(() => (objects ? { objects } : undefined), [objects]);
   const hasLinks =
     extractSystemDiagramLinks(system.id, relationships, nameById).length > 0 ||
     extractSystemDiagramFlows(system.id, flows).length > 0;
@@ -34,7 +42,11 @@ export function SystemDiagramPreview({
   return (
     <button
       type="button"
-      onClick={onExpand}
+      onClick={() => {
+        const focus = clickedNode.current;
+        clickedNode.current = null;
+        onExpand(focus && focus !== system.id ? focus : undefined);
+      }}
       disabled={disabled}
       className={cn(
         "group relative w-full text-left rounded-lg border border-gray-200 overflow-hidden",
@@ -55,6 +67,14 @@ export function SystemDiagramPreview({
             flows={flows}
             compact
             accentColor={accentColor}
+            expansion={expansion}
+            onNodeClick={
+              objects
+                ? (objectId) => {
+                    clickedNode.current = objectId;
+                  }
+                : undefined
+            }
           />
         </div>
       ) : (

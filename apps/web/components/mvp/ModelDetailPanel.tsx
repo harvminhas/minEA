@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2, X } from "lucide-react";
+import { ChevronDown, Trash2, X } from "lucide-react";
 import type { MinEAObject, Relationship, TechDebtHostKind } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { connectionPhrase, groupImpactHits, impactOf } from "@/lib/impact/relationship-impact";
@@ -22,6 +22,7 @@ import { applyCatalogWrite, catalogQueryKey, useModelCatalog, type WorkspaceCata
 import { usePermissions } from "@/lib/use-permissions";
 import { relationshipsForIds, sameNamePartyIds } from "@/lib/relationships-for-object";
 import { connectedVia, connectorHref, type ConnectedVia } from "@/lib/connected-via";
+import { mapNeighbors, PER_NODE_CAP } from "@/lib/map-expand";
 import { formatRelationshipTriple } from "@/lib/relationship-display";
 import { suppliedByVendorClear } from "@/lib/fields/shared-links";
 import { planTypeSwitch, readableTypeConflict, type TypeSwitchPlan } from "@/lib/type-switch";
@@ -398,6 +399,7 @@ function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: 
   const queryClient = useQueryClient();
   const catalog = useModelCatalog();
   const [expanded, setExpanded] = useState(false);
+  const [mapFocus, setMapFocus] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const objects = catalog.data?.objects ?? [];
   const rels = catalog.data?.relationships ?? [];
@@ -453,7 +455,11 @@ function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: 
         flows={flows}
         accentColor={ai ? "#7c3aed" : undefined}
         emptyHint={ai ? "No links yet. Connect the apps this agent reads, writes or hands off to, and the models it uses." : undefined}
-        onExpand={() => setExpanded(true)}
+        objects={objects}
+        onExpand={(focus) => {
+          setMapFocus(focus ?? null);
+          setExpanded(true);
+        }}
       />
       {expanded && (
         <SystemDiagramModal
@@ -461,6 +467,8 @@ function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: 
           relationships={rels}
           flows={flows}
           accentColor={ai ? "#7c3aed" : undefined}
+          objects={objects}
+          initialExpandedId={mapFocus}
           onClose={() => setExpanded(false)}
           onAddConnection={canEdit ? () => { setExpanded(false); open(); } : undefined}
         />
@@ -482,7 +490,7 @@ function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: 
         onAdd={canEdit && storedObject ? open : undefined}
         onRemove={canEdit && storedObject ? remove : undefined}
       />
-      <ConnectedViaList lines={connectedVia(row.id, objects, rels)} basePath={basePath} />
+      <ConnectedViaList lines={connectedVia(row.id, objects, rels)} basePath={basePath} selfId={row.id} objects={objects} relationships={rels} />
       {adding && (
         <RelationshipForm
           fromObject={row.object}
@@ -501,25 +509,80 @@ function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: 
 }
 
 /** Apps reached through an API, event, flow, integration infra or data record; edited on that record. */
-export function ConnectedViaList({ lines, basePath }: { lines: ConnectedVia[]; basePath: string }) {
+export function ConnectedViaList({
+  lines,
+  basePath,
+  selfId,
+  objects = [],
+  relationships = [],
+}: {
+  lines: ConnectedVia[];
+  basePath: string;
+  selfId?: string;
+  objects?: MinEAObject[];
+  relationships?: Relationship[];
+}) {
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
   if (lines.length === 0) return null;
+  const objectsById = new Map(objects.map((item) => [item.id, item]));
+  const toggle = (key: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   return (
     <div data-testid="connected-via">
       <h3 className="mb-2 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">CONNECTED THROUGH</h3>
       <div className="space-y-2">
         {lines.map((line) => {
           const where = line.viaType === "api" ? "API" : line.viaLabel.toLowerCase();
+          const key = `${line.otherId}:${line.viaId}`;
+          const isOpen = open.has(key);
+          const others = mapNeighbors(line.viaId, relationships, objectsById).filter(
+            (item) => item.objectId !== selfId && item.objectId !== line.otherId
+          );
+          const shown = others.slice(0, PER_NODE_CAP);
+          const href = connectorHref(basePath, line.viaType, line.viaId);
           return (
-            <div key={`${line.otherId}:${line.viaId}`} className="rounded-lg bg-stone-50 px-3 py-2.5">
-              <p className="text-sm leading-snug text-gray-900">
-                Connected to <span className="font-medium">{line.otherName}</span> via {where}{" "}
-                <a href={connectorHref(basePath, line.viaType, line.viaId)} className="font-medium text-[#3f35b5] hover:underline">
-                  {line.viaName}
-                </a>
-              </p>
-              <p className="mt-0.5 text-xs text-gray-500">
-                {line.sentences.join(" · ")} · Edit on the {where}
-              </p>
+            <div key={key} className="rounded-lg bg-stone-50 px-3 py-2.5">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm leading-snug text-gray-900">
+                    Connected to <span className="font-medium">{line.otherName}</span> via {where}{" "}
+                    <a href={href} className="font-medium text-[#3f35b5] hover:underline">
+                      {line.viaName}
+                    </a>
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    {line.sentences.join(" · ")} · Edit on the {where}
+                  </p>
+                </div>
+                {others.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => toggle(key)}
+                    aria-expanded={isOpen}
+                    aria-label={`${isOpen ? "Hide" : "Show"} other links of ${line.viaName}`}
+                    className="rounded p-0.5 text-gray-400 hover:bg-stone-100 hover:text-gray-600"
+                  >
+                    <ChevronDown size={14} className={isOpen ? "" : "-rotate-90"} />
+                  </button>
+                )}
+              </div>
+              {isOpen && (
+                <div data-testid="connected-via-more" className="ml-3.5 mt-2 space-y-1 border-l-2 border-[#e6e8ee] pl-2.5 text-[12.5px] text-gray-700">
+                  {shown.map((item) => (
+                    <div key={item.objectId}>
+                      {item.name} <span className="text-gray-400">· {item.phrase.toLowerCase()}</span>
+                    </div>
+                  ))}
+                  <a href={href} className="block text-[#3f35b5] hover:underline">
+                    {others.length > shown.length ? `+${others.length - shown.length} more · ` : ""}Open {line.viaName}
+                  </a>
+                </div>
+              )}
             </div>
           );
         })}
