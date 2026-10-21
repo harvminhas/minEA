@@ -138,6 +138,7 @@ function NodeExtras({ data, compact, children }: { data: MapNodeExtras; compact?
       {(data.expanded || (badge ?? 0) > 0) && (
         <span
           data-testid="map-badge"
+          data-export-ignore
           className={cn(
             "pointer-events-none absolute rounded-full border-2 border-white font-semibold leading-none",
             compact ? "-right-1.5 -top-1.5 px-1 py-[1px] text-[6px]" : "-right-2.5 -top-2.5 px-1.5 py-[3px] text-[10.5px]",
