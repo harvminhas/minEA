@@ -16,7 +16,15 @@ test("Model panel full map saves and resets node_layout", () => {
   assert.match(src, /properties: \{ node_layout: layout \}/);
 });
 
-test("revealed and +N more nodes are never persisted", () => {
+test("'+N more' nodes are never persisted", () => {
   const p = { x: 1, y: 2 };
-  assert.deepEqual(Object.keys(savableLayout({ "system-center": p, "link-A-outbound": p, "x-B": p, "more-A": p })), ["system-center", "link-A-outbound"]);
+  assert.deepEqual(Object.keys(savableLayout({ "system-center": p, "link-A-outbound": p, "x-B": p, "more-A": p })), ["system-center", "link-A-outbound", "x-B"]);
+});
+
+test("full map saves expansions (debounced) and Reset clears them", () => {
+  const src = readFileSync(join(root, "components/application/SystemDiagram.tsx"), "utf8");
+  assert.match(src, /initialExpanded\(/);
+  assert.match(src, /savableLayout\(positionsRef\.current, expandedRef\.current\)/);
+  assert.match(src, /setTimeout\(\(\) => \{\s*void persist/);
+  assert.match(src, /handleResetLayout[\s\S]*setExpanded\(\[\]\)/);
 });

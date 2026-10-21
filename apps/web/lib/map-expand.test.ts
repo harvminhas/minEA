@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { MinEAObject, Relationship } from "@minea/types";
 import type { Edge, Node } from "reactflow";
-import { expandSystemGraph, mapNeighbors, nodeObjectId, objectOpenHref, PER_NODE_CAP, savableLayout, TOTAL_CAP } from "./map-expand.ts";
+import { expandSystemGraph, mapNeighbors, nodeObjectId, objectOpenHref, PER_NODE_CAP, initialExpanded, savableLayout, savedExpanded, savedPositions, TOTAL_CAP } from "./map-expand.ts";
 
 const obj = (id: string, type: string, name: string) =>
   ({ id, type, name, properties: {}, workspace_id: "w", org_id: "o", updated_at: "2026-10-21T00:00:00Z" }) as unknown as MinEAObject;
@@ -91,8 +91,37 @@ describe("map expand", () => {
     assert.ok(g.edges.some((e) => e.id === "xe-X-C"));
   });
 
-  it("only direct links keep saved positions", () => {
-    assert.deepEqual(Object.keys(savableLayout({ "system-center": 1, "link-X-outbound": 2, "x-C": 3, "more-X": 4 })), ["system-center", "link-X-outbound"]);
+  it("saves direct and revealed positions plus expanded ids; '+N more' stays auto", () => {
+    const p = { x: 1, y: 2 };
+    assert.deepEqual(savableLayout({ "system-center": p, "link-X-outbound": p, "x-C": p, "more-X": p }, ["X", "X"]), {
+      "system-center": p, "link-X-outbound": p, "x-C": p, expanded: ["X"],
+    });
+    assert.deepEqual(savableLayout({ "x-C": p }, []), { "x-C": p });
+  });
+
+  it("reads saved expansions and positions, ignoring junk", () => {
+    const layout = { "link-X-outbound": { x: 5, y: 6 }, expanded: ["X", 3, "", "X"], bad: { x: "a" } };
+    assert.deepEqual(savedExpanded(layout), ["X"]);
+    assert.deepEqual(savedPositions(layout), { "link-X-outbound": { x: 5, y: 6 } });
+    assert.deepEqual(savedExpanded(undefined), []);
+    assert.deepEqual(savedExpanded({ expanded: "X" }), []);
+  });
+
+  it("a small-map click merges with saved expansions", () => {
+    assert.deepEqual(initialExpanded({ expanded: ["X"] }, "C"), ["X", "C"]);
+    assert.deepEqual(initialExpanded({ expanded: ["X"] }, "X"), ["X"]);
+    assert.deepEqual(initialExpanded(undefined, null), []);
+  });
+
+  it("revealed nodes come back at saved spots; new ones auto-place; gone ids are ignored", () => {
+    const auto = graph(base, objects, ["X"]);
+    const autoP = byObject(auto, "P")!.position;
+    const g = expandSystemGraph(baseMap(base, objects), {
+      expanded: ["X", "GONE"], relationships: base, objects, savedLayout: { "x-C": { x: 999, y: 888 } },
+    });
+    assert.deepEqual(byObject(g, "C")!.position, { x: 999, y: 888 });
+    assert.deepEqual(byObject(g, "P")!.position, autoP);
+    assert.equal(g.nodes.length, auto.nodes.length);
   });
 
   it("Open goes to the app's model page or the connector's list", () => {

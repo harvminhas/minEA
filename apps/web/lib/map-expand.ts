@@ -88,6 +88,8 @@ export function expandSystemGraph(
     objects: readonly MinEAObject[];
     selectedId?: string | null;
     compact?: boolean;
+    /** Saved positions; revealed nodes found here keep them, the rest are auto-placed. */
+    savedLayout?: Record<string, Point>;
   }
 ): { nodes: Node[]; edges: Edge[] } {
   const objectsById = new Map(options.objects.map((object) => [object.id, object]));
@@ -138,7 +140,7 @@ export function expandSystemGraph(
       nodes.push({
         id: nodeId,
         type: "systemLinkedNode",
-        position: { x, y: y0 + i * REVEAL_DY },
+        position: options.savedLayout?.[nodeId] ?? { x, y: y0 + i * REVEAL_DY },
         data: {
           link: { objectId: item.objectId, name: item.name, objectType: item.objectType, direction: "outbound", relationshipTypes: [] },
           revealed: true,
@@ -215,9 +217,42 @@ function revealEdge(
   };
 }
 
-/** Only direct links keep a saved position; revealed and "+N more" nodes are always placed fresh. */
-export function savableLayout<T>(layout: Record<string, T>): Record<string, T> {
-  return Object.fromEntries(Object.entries(layout).filter(([id]) => !id.startsWith("x-") && !id.startsWith("more-")));
+type Point = { x: number; y: number };
+
+/** Saved positions from node_layout, keyed by node id (direct links and revealed "x-" nodes). */
+export function savedPositions(nodeLayout: unknown): Record<string, Point> {
+  if (!nodeLayout || typeof nodeLayout !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(nodeLayout as Record<string, unknown>).filter(
+      ([id, value]) =>
+        id !== "expanded" &&
+        !!value &&
+        typeof (value as Point).x === "number" &&
+        typeof (value as Point).y === "number"
+    )
+  ) as Record<string, Point>;
+}
+
+/** Expanded record ids saved in node_layout.expanded (anything malformed is ignored). */
+export function savedExpanded(nodeLayout: unknown): string[] {
+  const list = (nodeLayout as { expanded?: unknown } | null | undefined)?.expanded;
+  return Array.isArray(list) ? [...new Set(list.filter((id): id is string => typeof id === "string" && id.length > 0))] : [];
+}
+
+/** Saved expansions plus the node clicked on the small map (if any). */
+export function initialExpanded(nodeLayout: unknown, clickedId?: string | null): string[] {
+  const saved = savedExpanded(nodeLayout);
+  return clickedId && !saved.includes(clickedId) ? [...saved, clickedId] : saved;
+}
+
+/**
+ * What goes into node_layout: positions for direct links and revealed nodes ("+N more" stays auto-placed),
+ * plus the expanded record ids when there are any.
+ */
+export function savableLayout(layout: Record<string, unknown>, expanded: readonly string[] = []): Record<string, Point> {
+  const positions = Object.fromEntries(Object.entries(savedPositions(layout)).filter(([id]) => !id.startsWith("more-")));
+  const ids = [...new Set(expanded)];
+  return (ids.length ? { ...positions, expanded: ids } : positions) as Record<string, Point>;
 }
 
 /** Where "Open" goes for a record on the map, or null when it has no page of its own. */

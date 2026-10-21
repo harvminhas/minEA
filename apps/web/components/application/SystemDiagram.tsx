@@ -42,7 +42,7 @@ import {
 import { flowUsesDashedConnector } from "@/lib/flow-utils";
 import { OBJECT_TYPE_LABELS, type ApplicationProperties, type FlowMechanism, type MinEAObject, type ObjectType, type Relationship } from "@minea/types";
 import { cn } from "@/lib/utils";
-import { expandSystemGraph, mapNeighbors, nodeObjectId, objectOpenHref, PER_NODE_CAP, savableLayout, type MapNodeExtras } from "@/lib/map-expand";
+import { expandSystemGraph, mapNeighbors, nodeObjectId, objectOpenHref, PER_NODE_CAP, initialExpanded, savableLayout, savedPositions, type MapNodeExtras } from "@/lib/map-expand";
 import { uiTypeLabel } from "@/lib/ui-type-labels";
 
 export type { NodeLayout };
@@ -577,8 +577,8 @@ export function SystemArchitectureGraph({
   onNodeClick,
 }: GraphProps) {
   const props = (system.properties ?? {}) as ApplicationProperties;
-  const savedLayout = props.node_layout;
-  const hasCustomLayout = !!(savedLayout && Object.keys(savedLayout).length > 0);
+  const savedLayout = useMemo(() => (props.node_layout ? savedPositions(props.node_layout) : undefined), [props.node_layout]);
+  const hasCustomLayout = !!(props.node_layout && Object.keys(props.node_layout).length > 0);
 
   const { nodes, edges } = useMemo(() => {
     const base = buildSystemGraph(
@@ -596,6 +596,7 @@ export function SystemArchitectureGraph({
       relationships,
       objects: expansion.objects,
       selectedId: compact ? null : expansion.selectedId,
+      savedLayout: compact ? undefined : savedLayout,
     });
   }, [system, relationships, nameById, flows, compact, savedLayout, accentColor, expansion]);
 
@@ -657,7 +658,10 @@ export function SystemDiagramModal({
 }) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
-  const [expanded, setExpanded] = useState<string[]>(() => (initialExpandedId ? [initialExpandedId] : []));
+  // Saved expansions come back on open; a node clicked on the small map is added to them.
+  const [expanded, setExpanded] = useState<string[]>(() =>
+    initialExpanded((system.properties as ApplicationProperties | undefined)?.node_layout, initialExpandedId)
+  );
   const [selectedId, setSelectedId] = useState<string | null>(initialExpandedId ?? null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [liveSystem, setLiveSystem] = useState(system);
@@ -714,13 +718,18 @@ export function SystemDiagramModal({
     extractSystemDiagramFlows(liveSystem.id, flows).length;
   const hasCustomLayout = !!(props.node_layout && Object.keys(props.node_layout).length > 0);
 
-  const handleLayoutSave = async (all: NodeLayout) => {
-    const layout = savableLayout(all);
-    const currentProps = (liveSystem.properties ?? {}) as ApplicationProperties;
-    setLiveSystem({
-      ...liveSystem,
-      properties: { ...currentProps, node_layout: layout },
-    });
+  // Latest positions on the canvas (from the last drag), so an expansion save keeps them.
+  const positionsRef = useRef<NodeLayout>(savedPositions(props.node_layout));
+  const expandedRef = useRef(expanded);
+  expandedRef.current = expanded;
+  const expandSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipExpandSave = useRef(true);
+
+  const persist = async (layout: NodeLayout) => {
+    setLiveSystem((current) => ({
+      ...current,
+      properties: { ...((current.properties ?? {}) as ApplicationProperties), node_layout: layout },
+    }));
     if (!onLayoutSave) return;
     setSavingLayout(true);
     try {
@@ -730,12 +739,37 @@ export function SystemDiagramModal({
     }
   };
 
+  const handleLayoutSave = async (all: NodeLayout) => {
+    if (expandSaveTimer.current) clearTimeout(expandSaveTimer.current);
+    positionsRef.current = savedPositions(all);
+    await persist(savableLayout(all, expandedRef.current));
+  };
+
+  // Expanding or collapsing saves too (debounced; skipped for the opening state).
+  useEffect(() => {
+    if (skipExpandSave.current) {
+      skipExpandSave.current = false;
+      return;
+    }
+    if (expandSaveTimer.current) clearTimeout(expandSaveTimer.current);
+    expandSaveTimer.current = setTimeout(() => {
+      void persist(savableLayout(positionsRef.current, expandedRef.current));
+    }, 600);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
+  useEffect(() => () => {
+    if (expandSaveTimer.current) clearTimeout(expandSaveTimer.current);
+  }, []);
+
   const handleResetLayout = async () => {
-    const currentProps = (liveSystem.properties ?? {}) as ApplicationProperties;
-    setLiveSystem({
-      ...liveSystem,
-      properties: { ...currentProps, node_layout: undefined },
-    });
+    if (expandSaveTimer.current) clearTimeout(expandSaveTimer.current);
+    positionsRef.current = {};
+    skipExpandSave.current = expandedRef.current.length > 0;
+    setExpanded([]);
+    setLiveSystem((current) => ({
+      ...current,
+      properties: { ...((current.properties ?? {}) as ApplicationProperties), node_layout: undefined },
+    }));
     if (!onResetLayout) return;
     setSavingLayout(true);
     try {
