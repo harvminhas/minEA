@@ -266,3 +266,8 @@ export function objectOpenHref(basePath: string, object: MinEAObject): string | 
   }
   return null;
 }
+
+/** Changes only when the expanded set changes (not on drags or order), so the full map re-fits then. */
+export function expansionFitKey(expanded: readonly string[]): string {
+  return [...new Set(expanded)].sort().join("|");
+}

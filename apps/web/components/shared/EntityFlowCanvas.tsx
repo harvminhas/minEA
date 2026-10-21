@@ -77,6 +77,8 @@ export interface EntityFlowCanvasProps {
   /** Extra CSS classes for the outer wrapper div. */
   className?: string;
 
+  /** When this changes (and once on open when set), smoothly fit all nodes once they are measured. */
+  fitKey?: string;
   /** React Flow fitView padding. Defaults to 0.2. */
   fitViewPadding?: number;
 
@@ -104,6 +106,7 @@ function CanvasInner({
   mode = "full",
   accentColor = "#14b8a6",
   fitViewPadding = 0.2,
+  fitKey,
   hasCustomLayout = false,
   exportFilename,
   containerRef,
@@ -111,7 +114,25 @@ function CanvasInner({
 }: Omit<EntityFlowCanvasProps, "className" | "emptyLabel">) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const { fitView } = useReactFlow();
+  const { fitView, getNodes } = useReactFlow();
+
+  // Re-fit when the set of nodes changes (expand/collapse), not on drags. Waits for new nodes to be measured.
+  useEffect(() => {
+    if (fitKey === undefined) return;
+    let frame = 0;
+    let tries = 0;
+    const run = () => {
+      const current = getNodes();
+      const measured = current.length > 0 && current.every((node) => node.width && node.height);
+      if (!measured && tries++ < 30) {
+        frame = requestAnimationFrame(run);
+        return;
+      }
+      fitView({ duration: 250, padding: fitViewPadding });
+    };
+    frame = requestAnimationFrame(run);
+    return () => cancelAnimationFrame(frame);
+  }, [fitKey, fitView, getNodes, fitViewPadding]);
 
   // Tracks all current positions so each save is a full snapshot
   const layoutRef = useRef<NodeLayout>({});

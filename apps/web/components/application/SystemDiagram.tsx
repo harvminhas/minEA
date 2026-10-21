@@ -42,7 +42,7 @@ import {
 import { flowUsesDashedConnector } from "@/lib/flow-utils";
 import { OBJECT_TYPE_LABELS, type ApplicationProperties, type FlowMechanism, type MinEAObject, type ObjectType, type Relationship } from "@minea/types";
 import { cn } from "@/lib/utils";
-import { expandSystemGraph, mapNeighbors, nodeObjectId, objectOpenHref, PER_NODE_CAP, initialExpanded, savableLayout, savedPositions, type MapNodeExtras } from "@/lib/map-expand";
+import { expandSystemGraph, mapNeighbors, nodeObjectId, objectOpenHref, PER_NODE_CAP, expansionFitKey, initialExpanded, savableLayout, savedPositions, type MapNodeExtras } from "@/lib/map-expand";
 import { uiTypeLabel } from "@/lib/ui-type-labels";
 
 export type { NodeLayout };
@@ -609,6 +609,7 @@ export function SystemArchitectureGraph({
         mode={compact ? "thumbnail" : "full"}
         accentColor={accentColor}
         fitViewPadding={compact ? 0.1 : 0.2}
+        fitKey={compact || !expansion ? undefined : expansionFitKey(expansion.expanded ?? [])}
         onLayoutSave={compact ? undefined : onLayoutSave}
         onResetLayout={compact ? undefined : onResetLayout}
         hasCustomLayout={hasCustomLayout}

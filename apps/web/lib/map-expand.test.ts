@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { MinEAObject, Relationship } from "@minea/types";
 import type { Edge, Node } from "reactflow";
-import { expandSystemGraph, mapNeighbors, nodeObjectId, objectOpenHref, PER_NODE_CAP, initialExpanded, savableLayout, savedExpanded, savedPositions, TOTAL_CAP } from "./map-expand.ts";
+import { expandSystemGraph, expansionFitKey, mapNeighbors, nodeObjectId, objectOpenHref, PER_NODE_CAP, initialExpanded, savableLayout, savedExpanded, savedPositions, TOTAL_CAP } from "./map-expand.ts";
 
 const obj = (id: string, type: string, name: string) =>
   ({ id, type, name, properties: {}, workspace_id: "w", org_id: "o", updated_at: "2026-10-21T00:00:00Z" }) as unknown as MinEAObject;
@@ -105,6 +105,12 @@ describe("map expand", () => {
     assert.deepEqual(savedPositions(layout), { "link-X-outbound": { x: 5, y: 6 } });
     assert.deepEqual(savedExpanded(undefined), []);
     assert.deepEqual(savedExpanded({ expanded: "X" }), []);
+  });
+
+  it("auto-fit key changes on expand/collapse only, not order or duplicates", () => {
+    assert.equal(expansionFitKey(["X", "C"]), expansionFitKey(["C", "X", "C"]));
+    assert.notEqual(expansionFitKey(["X"]), expansionFitKey(["X", "C"]));
+    assert.equal(expansionFitKey([]), "");
   });
 
   it("a small-map click merges with saved expansions", () => {
