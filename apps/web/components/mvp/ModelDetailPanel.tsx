@@ -14,7 +14,7 @@ import { useTenancy } from "@/lib/tenancy";
 import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
 import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
 import { ObjectDrawerTabs, type ObjectDrawerTabId } from "@/components/risk/ObjectDrawerTabs";
-import { SystemDiagramModal } from "@/components/application/SystemDiagram";
+import { SystemDiagramModal, type NodeLayout } from "@/components/application/SystemDiagram";
 import { SystemDiagramPreview } from "@/components/application/SystemDiagramPreview";
 import { REGISTRY, recordTypeOf } from "@/lib/fields/registry";
 import type { CatalogRow } from "@/lib/model-catalog";
@@ -440,6 +440,26 @@ function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: 
     }
   };
 
+  // Dragging nodes on the full map saves their positions on the record (node_layout), so the map
+  // opens the same way next time. Only that one property is sent; the server merges it in.
+  const saveLayout = async (layout: NodeLayout | null) => {
+    if (!orgSlug || !workspaceSlug) return;
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const updated = await objectsApi.update(orgSlug, workspaceSlug, row.id, { properties: { node_layout: layout } }, token);
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, {
+        object: { ...updated, properties: { ...(updated.properties ?? {}), node_layout: layout ?? undefined } },
+      });
+    } catch (err) {
+      toast({
+        title: "Couldn't save the map layout",
+        description: err instanceof Error ? err.message : "Could not save",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Every record gets the graphical map (both directions), not only applications: AI agents and
   // models, servers, platforms, locations and vendors all used to show the list alone.
   const nameById = { ...relatedNameOverrides, [row.id]: row.name };
@@ -469,6 +489,8 @@ function Relationships({ row, canEdit, highlight }: { row: CatalogRow; canEdit: 
           accentColor={ai ? "#7c3aed" : undefined}
           objects={objects}
           initialExpandedId={mapFocus}
+          onLayoutSave={storedObject ? (layout) => saveLayout(layout) : undefined}
+          onResetLayout={storedObject ? () => saveLayout(null) : undefined}
           onClose={() => setExpanded(false)}
           onAddConnection={canEdit ? () => { setExpanded(false); open(); } : undefined}
         />
