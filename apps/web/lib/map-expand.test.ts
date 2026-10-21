@@ -62,7 +62,10 @@ describe("map expand", () => {
     assert.equal((parent.data as { expanded?: boolean; badge?: number }).expanded, true);
     assert.equal((parent.data as { badge?: number }).badge, 0);
     const edge = g.edges.find((e) => e.target === byObject(g, "C")!.id)!;
-    assert.equal(edge.label, "Consumed by");
+    // Line drawn API → CRM; the link is CRM consumes API, so the arrowhead sits at the API end.
+    assert.equal(edge.label, "consumes");
+    assert.ok(edge.markerStart);
+    assert.equal(edge.markerEnd, undefined);
     assert.equal((edge.style as { strokeDasharray?: string }).strokeDasharray, "5 4");
   });
 
@@ -107,5 +110,35 @@ describe("map expand placement", () => {
     map.nodes.push({ id: "peer-Q", type: "systemLinkedNode", position: { x: 860, y: 0 }, data: { link: { objectId: "Q", name: "Q", objectType: "application", direction: "outbound", relationshipTypes: [] } } });
     const g = expandSystemGraph(map, { expanded: ["X"], relationships: rels, objects: [dyna, api, crm] });
     assert.equal(g.nodes.find((node) => node.id === "x-C")!.position.x, 560 + 280 * 2);
+  });
+});
+
+describe("revealed edge arrows", () => {
+  it("every revealed edge, and the +N more edge, has an arrowhead in the link's true direction", () => {
+    const vm = obj("V", "model", "VM 1");
+    const rels = [rel("exposes", dyna, api), rel("consumes", crm, api), rel("hosts", kong, api), rel("runs_on", api, vm)];
+    const g = expandSystemGraph(baseMap(rels, [dyna, api, crm, kong, vm]), { expanded: ["X"], relationships: rels, objects: [dyna, api, crm, kong, vm] });
+    const revealed = g.edges.filter((e) => e.id.startsWith("xe-"));
+    assert.equal(revealed.length, 3);
+    for (const e of revealed) assert.ok(e.markerEnd || e.markerStart, e.id);
+    const runsOn = revealed.find((e) => e.id === "xe-X-V")!;
+    assert.equal(runsOn.label, "runs on");
+    assert.ok(runsOn.markerEnd, "API runs on the VM: arrow at the VM");
+    assert.equal(runsOn.markerStart, undefined);
+    const gateway = revealed.find((e) => e.id === "xe-X-K")!;
+    assert.ok(gateway.markerStart && !gateway.markerEnd, "Kong is the source: arrow at the API");
+  });
+
+  it("links both ways get both heads; the +N more edge carries heads too", () => {
+    const hub = obj("H", "api", "Hub API");
+    const apps = Array.from({ length: 7 }, (_, i) => obj(`a${i}`, "application", `App ${i}`));
+    const rels = [rel("exposes", dyna, hub), ...apps.map((a) => rel("consumes", a, hub)), rel("sends_data_to", hub, apps[0])];
+    const g = expandSystemGraph(baseMap(rels, [dyna, hub, ...apps]), { expanded: ["H"], relationships: rels, objects: [dyna, hub, ...apps] });
+    const both = g.edges.find((e) => e.id === "xe-H-a0")!;
+    assert.ok(both.markerStart && both.markerEnd);
+    assert.equal(both.label, "consumes, sends data to");
+    const more = g.edges.find((e) => e.id === "xe-H-more")!;
+    assert.equal(more.target, "more-H");
+    assert.ok(more.markerStart);
   });
 });

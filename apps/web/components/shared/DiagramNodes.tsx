@@ -187,7 +187,7 @@ export function DiagramLinkedObjectNode({
           <div className={cn("h-5 w-5 rounded flex items-center justify-center flex-shrink-0", accent.bg)}>
             <DiagramTypeIcon type={objectType} />
           </div>
-          <p className="text-xs font-semibold text-gray-900 truncate">{name}</p>
+          <p className="max-w-[200px] text-xs font-semibold leading-snug text-gray-900 line-clamp-2 break-words" title={name}>{name}</p>
         </div>
         <p className={cn("text-[9px] font-medium pl-7 mt-0.5", accent.text)}>{typeLabel}</p>
         {subtitle && <p className="text-[9px] text-gray-400 pl-7 mt-0.5 truncate">{subtitle}</p>}

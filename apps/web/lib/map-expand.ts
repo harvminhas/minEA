@@ -1,4 +1,4 @@
-import type { Edge, Node } from "reactflow";
+import { MarkerType, type Edge, type Node } from "reactflow";
 import type { MinEAObject, Relationship } from "@minea/types";
 import { relationshipPhrase } from "@/lib/relationship-display";
 import { isTechDebtRelationship } from "@/lib/relationship-display";
@@ -20,6 +20,11 @@ export type MapNeighbor = {
   phrase: string;
   /** Read from the expanded node's side: "Consumed by", "Hosted on". */
   edgeLabel: string;
+  /** The forward words, read along the arrow ("consumes" on warehouse → API). */
+  edgeWords: string;
+  /** Some link runs from the expanded record to this one / from this one to the expanded record. */
+  towardNeighbor: boolean;
+  fromNeighbor: boolean;
 };
 
 /** Everything one record links to, tech debt left out, one entry per record, A–Z. */
@@ -38,13 +43,27 @@ export function mapNeighbors(
     if (!other) continue;
     const phrase = relationshipPhrase(rel, otherId);
     const edgeLabel = relationshipPhrase(rel, objectId);
+    const words = relationshipPhrase(rel, rel.from_object_id).toLowerCase();
+    const fromNeighbor = rel.from_object_id === otherId;
     const seen = byId.get(otherId);
     if (seen) {
       if (!seen.phrase.split(", ").includes(phrase)) seen.phrase += `, ${phrase}`;
       if (!seen.edgeLabel.split(", ").includes(edgeLabel)) seen.edgeLabel += `, ${edgeLabel}`;
+      if (!seen.edgeWords.split(", ").includes(words)) seen.edgeWords += `, ${words}`;
+      if (fromNeighbor) seen.fromNeighbor = true;
+      else seen.towardNeighbor = true;
       continue;
     }
-    byId.set(otherId, { objectId: otherId, name: other.name?.trim() || "Untitled", objectType: other.type, phrase, edgeLabel });
+    byId.set(otherId, {
+      objectId: otherId,
+      name: other.name?.trim() || "Untitled",
+      objectType: other.type,
+      phrase,
+      edgeLabel,
+      edgeWords: words,
+      fromNeighbor,
+      towardNeighbor: !fromNeighbor,
+    });
   }
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name) || a.objectId.localeCompare(b.objectId));
 }
@@ -107,11 +126,11 @@ export function expandSystemGraph(
         x += REVEAL_DX;
       }
     }
-    const dashed = { stroke: "#a5b4fc", strokeWidth: 1.5, strokeDasharray: "5 4" };
+    const dashed = { stroke: REVEAL_EDGE_COLOR, strokeWidth: 1.5, strokeDasharray: "5 4" };
     for (const item of neighbors) {
       const shownId = nodeIdByObject.get(item.objectId);
       if (shownId && !linked(parentNodeId, shownId)) {
-        edges.push(revealEdge(`xe-${objectId}-${item.objectId}`, parentNodeId, shownId, item.edgeLabel, dashed));
+        edges.push(revealEdge(`xe-${objectId}-${item.objectId}`, parentNodeId, shownId, item, dashed));
       }
     }
     reveal.forEach((item, i) => {
@@ -126,7 +145,7 @@ export function expandSystemGraph(
         },
       });
       nodeIdByObject.set(item.objectId, nodeId);
-      edges.push(revealEdge(`xe-${objectId}-${item.objectId}`, parentNodeId, nodeId, item.edgeLabel, dashed));
+      edges.push(revealEdge(`xe-${objectId}-${item.objectId}`, parentNodeId, nodeId, item, dashed));
     });
     if (overflow > 0) {
       nodes.push({
@@ -135,6 +154,14 @@ export function expandSystemGraph(
         position: { x, y: y0 + reveal.length * REVEAL_DY },
         data: { count: overflow, parentObjectId: objectId },
       });
+      const rest = hidden.slice(reveal.length);
+      edges.push(
+        revealEdge(`xe-${objectId}-more`, parentNodeId, `more-${objectId}`, {
+          edgeWords: "",
+          towardNeighbor: rest.some((item) => item.towardNeighbor),
+          fromNeighbor: rest.some((item) => item.fromNeighbor),
+        }, dashed)
+      );
     }
   }
 
@@ -155,7 +182,21 @@ export function expandSystemGraph(
   return { nodes, edges };
 }
 
-function revealEdge(id: string, source: string, target: string, label: string, style: Record<string, string | number>): Edge {
+export const REVEAL_EDGE_COLOR = "#818cf8";
+
+/**
+ * The line is drawn expanded node → revealed node (that is where the handles sit), and the arrowhead
+ * marks the link's true direction: at the revealed end when the link runs to it, at the expanded end
+ * when it runs from it (both for links each way). The label is the forward words, read along the arrow.
+ */
+function revealEdge(
+  id: string,
+  source: string,
+  target: string,
+  item: Pick<MapNeighbor, "edgeWords" | "towardNeighbor" | "fromNeighbor">,
+  style: Record<string, string | number>
+): Edge {
+  const marker = { type: MarkerType.ArrowClosed, color: REVEAL_EDGE_COLOR, width: 12, height: 12 };
   return {
     id,
     source,
@@ -164,7 +205,9 @@ function revealEdge(id: string, source: string, target: string, label: string, s
     targetHandle: "left",
     type: "smoothstep",
     style,
-    label,
+    markerEnd: item.towardNeighbor ? marker : undefined,
+    markerStart: item.fromNeighbor ? marker : undefined,
+    label: item.edgeWords,
     labelStyle: { fill: "#64748b", fontSize: 10, fontWeight: 500 },
     labelBgStyle: { fill: "#f8fafc", fillOpacity: 0.92 },
     labelBgPadding: [4, 2],
