@@ -73,6 +73,10 @@ import type {
   TeamUpdate,
   TeamDetail,
   TeamListResponse,
+  ObjectOwnership,
+  ObjectOwnershipWrite,
+  OwnershipBulkRequest,
+  OwnershipListResponse,
   PeopleContact,
   PeopleContactCreate,
   PeopleContactDetail,
@@ -1041,6 +1045,29 @@ export const peopleApi = {
   ) =>
     apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/roles/${roleId}/accountabilities`, {
       method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  listOwnership: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<OwnershipListResponse>(`${wsBase(orgSlug, workspaceSlug)}/ownership`, { token }),
+
+  bulkOwnership: (orgSlug: string, workspaceSlug: string, body: OwnershipBulkRequest, token: string) =>
+    apiFetch<{ changed: number }>(`${wsBase(orgSlug, workspaceSlug)}/ownership/bulk`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  setObjectOwnership: (
+    orgSlug: string,
+    workspaceSlug: string,
+    objectId: string,
+    body: ObjectOwnershipWrite,
+    token: string
+  ) =>
+    apiFetch<ObjectOwnership>(`${wsBase(orgSlug, workspaceSlug)}/ownership/objects/${objectId}`, {
+      method: "PUT",
       body: JSON.stringify(body),
       token,
     }),

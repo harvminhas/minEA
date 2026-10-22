@@ -223,6 +223,8 @@ async def load_accountabilities(
             PeopleAccountability.workspace_id == workspace_id,
             PeopleAccountability.org_id == org_id,
             PeopleAccountability.subject_type == subject_type,
+            # Per-record roles (Business / Technical / Support) are listed on Owners & Teams, not here.
+            PeopleAccountability.entity_kind != "object",
             PeopleAccountability.subject_id == subject_id,
         )
         .order_by(PeopleAccountability.entity_kind, PeopleAccountability.link_kind)

@@ -2050,6 +2050,8 @@ export interface Team {
   description?: string | null;
   lead_name?: string | null;
   lead_email?: string | null;
+  /** Lead as a contact; shown as the contact when a record has only this team. */
+  lead_contact_id?: string | null;
   role_count: number;
   created_at: string;
   updated_at: string;
@@ -2060,6 +2062,7 @@ export interface TeamCreate {
   description?: string;
   lead_name?: string;
   lead_email?: string;
+  lead_contact_id?: string | null;
 }
 
 export interface TeamUpdate {
@@ -2067,6 +2070,54 @@ export interface TeamUpdate {
   description?: string | null;
   lead_name?: string | null;
   lead_email?: string | null;
+  lead_contact_id?: string | null;
+}
+
+// ─── Owners & Teams: per-record roles ───
+
+export type OwnershipRole = "business_owner" | "technical_owner" | "support_team";
+export type OwnerRefType = "team" | "contact";
+
+export interface OwnerRef {
+  type: OwnerRefType;
+  id: string;
+}
+
+export interface RoleOwner {
+  team_id?: string | null;
+  team_name?: string | null;
+  contact_id?: string | null;
+  contact_name?: string | null;
+  /** No named contact: this is the team's lead. */
+  contact_is_lead?: boolean;
+}
+
+export interface ObjectOwnership {
+  object_id: string;
+  name: string;
+  type: string;
+  /** Applications only. */
+  category?: string | null;
+  roles: Partial<Record<OwnershipRole, RoleOwner>>;
+  legacy_owner?: string | null;
+  owned: boolean;
+}
+
+export interface OwnershipListResponse {
+  items: ObjectOwnership[];
+  unowned_count: number;
+}
+
+export interface OwnershipBulkRequest {
+  action: "assign" | "move" | "remove";
+  object_ids: string[];
+  role?: OwnershipRole | null;
+  owner: OwnerRef;
+  target?: OwnerRef | null;
+}
+
+export interface ObjectOwnershipWrite {
+  roles: Partial<Record<OwnershipRole, { team_id?: string | null; contact_id?: string | null } | null>>;
 }
 
 export interface TeamDetail extends Team {

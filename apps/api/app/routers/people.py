@@ -31,6 +31,7 @@ from app.schemas.people import (
     TeamUpdate,
 )
 from app.services.contact_assignments import load_contact_assignments
+from app.services.ownership_roles import remove_owner_everywhere
 from app.services.people import (
     load_accountabilities,
     load_entity_accountabilities,
@@ -75,10 +76,31 @@ async def _team_read(db: AsyncSession, team: Team) -> TeamRead:
         description=team.description,
         lead_name=team.lead_name,
         lead_email=team.lead_email,
+        lead_contact_id=team.lead_contact_id,
         role_count=role_count or 0,
         created_at=team.created_at,
         updated_at=team.updated_at,
     )
+
+
+async def _set_lead_contact(db: AsyncSession, ctx: TenancyContext, team: Team, contact_id: UUID | None) -> None:
+    """Point the team lead at a contact; lead_name / lead_email follow it for older readers."""
+    assert ctx.workspace
+    if contact_id is None:
+        team.lead_contact_id = None
+        return
+    contact = await db.scalar(
+        select(PeopleContact).where(
+            PeopleContact.id == contact_id,
+            PeopleContact.workspace_id == ctx.workspace.id,
+            PeopleContact.org_id == ctx.org_id,
+        )
+    )
+    if not contact:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Lead contact not found")
+    team.lead_contact_id = contact.id
+    team.lead_name = contact.name
+    team.lead_email = contact.email
 
 
 # ─── Roles ───────────────────────────────────────────────────────────────────
@@ -461,6 +483,7 @@ async def delete_contact(
     contact = result.scalar_one_or_none()
     if not contact:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    await remove_owner_everywhere(db, ctx.workspace.id, ctx.org_id, "contact", contact.id, user_id=ctx.user_id)
     await db.delete(contact)
 
 
@@ -503,6 +526,8 @@ async def create_team(
         lead_email=body.lead_email,
         created_by=ctx.user_id,
     )
+    if body.lead_contact_id:
+        await _set_lead_contact(db, ctx, team, body.lead_contact_id)
     db.add(team)
     await db.flush()
     return await _team_read(db, team)
@@ -563,7 +588,10 @@ async def update_team(
         team.lead_name = body.lead_name
     if body.lead_email is not None:
         team.lead_email = body.lead_email
+    if "lead_contact_id" in body.model_fields_set:
+        await _set_lead_contact(db, ctx, team, body.lead_contact_id)
     await db.flush()
+    await db.refresh(team)
     return await _team_read(db, team)
 
 
@@ -586,6 +614,7 @@ async def delete_team(
     team = result.scalar_one_or_none()
     if not team:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
+    await remove_owner_everywhere(db, ctx.workspace.id, ctx.org_id, "team", team.id, user_id=ctx.user_id)
     await db.delete(team)
 
 

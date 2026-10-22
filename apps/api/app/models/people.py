@@ -38,6 +38,10 @@ class Team(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     lead_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     lead_email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The lead as a contact (056). When set, lead_name / lead_email mirror it for older readers.
+    lead_contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("people_contacts.id", ondelete="SET NULL"), nullable=True
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())

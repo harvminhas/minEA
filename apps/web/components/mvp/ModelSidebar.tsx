@@ -173,7 +173,7 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
     },
     {
       label: "Owners & teams",
-      href: `${basePath}/people/teams`,
+      href: modelPath(basePath, "owners"),
       icon: Users,
       count: people,
       match: ["/people/", "/model/owners"],

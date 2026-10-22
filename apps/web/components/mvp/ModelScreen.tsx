@@ -20,6 +20,7 @@ import { AddChip, Pill } from "@/components/mvp/pills";
 import { fieldKeyForGap, openRecordField } from "@/lib/fields/field-focus";
 import { AppPlatformHelp } from "@/components/mvp/AppPlatformHelp";
 import { ModelDetailPanel } from "@/components/mvp/ModelDetailPanel";
+import { OwnersPage } from "@/components/mvp/OwnersPage";
 import { CapabilitiesSection } from "@/components/mvp/CapabilitiesSection";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
@@ -170,7 +171,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
         {section === "capabilities" && <CapabilitiesSection selectedId={selectedId} />}
         {section === "connections" && <ConnectionsList items={connections} basePath={basePath} />}
         {section === "vendors" && <VendorsTable vendors={vendors} anywhere={anywhere} selectedId={selectedId} />}
-        {section === "owners" && <OwnersTable rows={rows} basePath={basePath} />}
+        {section === "owners" && <OwnersPage />}
         {(section === "applications" || section === "infrastructure") && (
           <div className="px-6 py-5">
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -614,30 +615,6 @@ function VendorsTable({
         </tbody>
       </table>
       {vendors.length === 0 && <p className="py-8 text-[13px] text-[#8b90a0]">No vendors yet. Add a vendor on an application or infrastructure item.</p>}
-    </div>
-  );
-}
-
-function OwnersTable({ rows, basePath }: { rows: CatalogRow[]; basePath: string }) {
-  const groups = new Map<string, CatalogRow[]>();
-  for (const row of rows) {
-    const key = row.ownerTeam || row.ownerPerson || "No owner";
-    groups.set(key, [...(groups.get(key) ?? []), row]);
-  }
-  return (
-    <div className="px-6 py-5">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-[22px] font-semibold text-[#1c2230]">Owners & teams</h1>
-        <Link href={`${basePath}/people/teams`} className="text-[13px] font-medium text-[#5b4ce6]">Open people directory</Link>
-      </div>
-      <div className="divide-y divide-[#f0f1f5] rounded-xl border border-[#e6e8ee]">
-        {[...groups.entries()].map(([owner, items]) => (
-          <div key={owner} className="flex items-center justify-between px-4 py-3 text-[13px]">
-            <span className="font-medium text-[#1c2230]">{owner}</span>
-            <span className="text-[#8b90a0]">{describeTypes(items.map((row) => row.typeLabel))}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

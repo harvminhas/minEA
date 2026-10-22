@@ -104,6 +104,7 @@ class TeamCreate(BaseModel):
     description: str | None = None
     lead_name: str | None = None
     lead_email: str | None = None
+    lead_contact_id: UUID | None = None
 
 
 class TeamUpdate(BaseModel):
@@ -111,6 +112,8 @@ class TeamUpdate(BaseModel):
     description: str | None = None
     lead_name: str | None = None
     lead_email: str | None = None
+    # Send null to clear the lead contact (only fields that are sent change).
+    lead_contact_id: UUID | None = None
 
 
 class TeamRead(BaseModel):
@@ -121,6 +124,7 @@ class TeamRead(BaseModel):
     description: str | None
     lead_name: str | None
     lead_email: str | None
+    lead_contact_id: UUID | None = None
     role_count: int = 0
     created_at: datetime
     updated_at: datetime

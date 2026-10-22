@@ -38,6 +38,7 @@ import { askPath } from "@/lib/mvp-paths";
 import { Pill } from "@/components/mvp/pills";
 import { VendorSupplies } from "@/components/mvp/VendorSupplies";
 import { EntityAccountabilities } from "@/components/people/EntityAccountabilities";
+import { OwnershipCard } from "@/components/mvp/OwnershipCard";
 
 export function ModelDetailPanel({
   row,
@@ -206,11 +207,12 @@ export function ModelDetailPanel({
                 object={row.object}
                 edges={edges}
                 row={row}
-                omit={["name"]}
+                omit={storedObject ? ["name", "owner"] : ["name"]}
                 openKey={openField}
                 onOpenKey={setOpenField}
               />
             )}
+            {storedObject && <OwnershipCard objectId={row.object.id} canEdit={canEdit} openEditor={openField === "owner"} />}
             {storedObject && <EntityAccountabilities object={row.object} />}
             <section>
               <h3 className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">DEPENDS ON THIS</h3>
