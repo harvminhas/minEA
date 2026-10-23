@@ -29,6 +29,15 @@ _OBJECT_OWNER_ACCOUNTABILITY: dict[str, tuple[str, str]] = {
 OWNER_LEGACY_LINK_KINDS: dict[str, str] = dict(ACCOUNTABILITY_OWNER_LEGACY)
 
 
+# entity_kinds whose owner rows mirror a records-table object; Owners & Teams (GET /ownership) lists those.
+OBJECT_OWNER_ENTITY_KINDS: frozenset[str] = frozenset(k for k, _ in _OBJECT_OWNER_ACCOUNTABILITY.values())
+
+
+def is_object_owner_row(entity_kind: str, link_kind: str) -> bool:
+    """True for an owns / legacy-owner row on a record that the ownership roles already cover."""
+    return entity_kind in OBJECT_OWNER_ENTITY_KINDS and link_kind in owner_link_kinds(entity_kind)
+
+
 def owner_link_kinds(entity_kind: str) -> tuple[str, ...]:
     """Verbs that mean "this team owns it" for one entity kind: owns, plus any legacy sync verb."""
     legacy = OWNER_LEGACY_LINK_KINDS.get(entity_kind)

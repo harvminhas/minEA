@@ -33,7 +33,7 @@ const SECTION_ICON: Record<string, typeof Box> = {
   data_stores: HardDrive,
 };
 
-function AccountabilityRow({
+export function AccountabilityRow({
   item,
   onEdit,
   onDelete,

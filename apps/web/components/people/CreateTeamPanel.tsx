@@ -6,6 +6,8 @@ import { useMutation } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { peopleApi } from "@/lib/api-client";
+import { useOwnershipData } from "@/components/mvp/OwnersPage";
+import { LeadPicker } from "@/components/people/LeadPicker";
 
 interface Props {
   onClose: () => void;
@@ -17,8 +19,8 @@ export function CreateTeamPanel({ onClose, onSuccess }: Props) {
   const { orgSlug, workspaceSlug } = useTenancy();
 
   const [name, setName] = useState("");
-  const [leadName, setLeadName] = useState("");
-  const [leadEmail, setLeadEmail] = useState("");
+  const [leadContactId, setLeadContactId] = useState<string | null>(null);
+  const { contacts } = useOwnershipData();
   const [description, setDescription] = useState("");
 
   const createMutation = useMutation({
@@ -27,8 +29,7 @@ export function CreateTeamPanel({ onClose, onSuccess }: Props) {
       return peopleApi.createTeam(orgSlug, workspaceSlug, {
         name: name.trim(),
         description,
-        lead_name: leadName || undefined,
-        lead_email: leadEmail || undefined,
+        lead_contact_id: leadContactId,
       }, token!);
     },
     onSuccess: (team) => onSuccess(team.id),
@@ -88,20 +89,12 @@ export function CreateTeamPanel({ onClose, onSuccess }: Props) {
                 <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
                   Team Lead
                 </label>
-                <div className="rounded-md border border-gray-200 overflow-hidden">
-                  <input
-                    value={leadName}
-                    onChange={(e) => setLeadName(e.target.value)}
-                    placeholder="Name"
-                    className="w-full px-3 py-2.5 text-sm text-gray-800 border-b border-gray-100 focus:outline-none focus:bg-gray-50"
-                  />
-                  <input
-                    value={leadEmail}
-                    onChange={(e) => setLeadEmail(e.target.value)}
-                    placeholder="Email"
-                    className="w-full px-3 py-2.5 text-sm text-gray-500 focus:outline-none focus:bg-gray-50"
-                  />
-                </div>
+                <LeadPicker
+                  contacts={contacts}
+                  value={leadContactId}
+                  onChange={setLeadContactId}
+                  className="w-full py-2.5"
+                />
               </div>
 
               {/* Description */}
@@ -144,7 +137,7 @@ export function CreateTeamPanel({ onClose, onSuccess }: Props) {
               {name || "New Team"}
             </p>
             <p className="text-xs text-gray-400 max-w-xs">
-              After creating, you can add roles with assignees and link this team to products, capability domains, processes, and systems.
+              After creating, assign the records this team owns as Business, Technical or Support owner.
             </p>
           </div>
         </div>

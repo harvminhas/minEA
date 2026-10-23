@@ -99,3 +99,28 @@ export function holderLabel(h?: RoleOwner | null): string {
     : "";
   return [h.team_name, contact].filter(Boolean).join(" · ");
 }
+
+export const ROLE_CHIP: Record<OwnershipRole, { label: string; className: string }> = {
+  business_owner: { label: "Business", className: "bg-[#f1efff] text-[#5b4ce6]" },
+  technical_owner: { label: "Technical", className: "bg-[#e7f3ff] text-[#1769c2]" },
+  support_team: { label: "Support", className: "bg-[#e9f7ef] text-[#1f8a4c]" },
+};
+
+export interface TeamOwnedRow {
+  item: ObjectOwnership;
+  roles: { role: OwnershipRole; contact: string; isLead: boolean }[];
+}
+
+/** Records a team holds any role on (roles, or owner_team_id read as Business owner), with the contact per role. */
+export function teamOwnedRows(items: ObjectOwnership[], teamId: string): TeamOwnedRow[] {
+  return ownedBy(items, { type: "team", id: teamId }).map(({ item, roles }) => ({
+    item,
+    roles: roles.map((role) => {
+      const h = item.roles[role];
+      return { role, contact: h?.contact_name ?? "", isLead: Boolean(h?.contact_is_lead) };
+    }),
+  }));
+}
+
+export const membersOf = (contacts: { team_id?: string | null }[], teamId: string) =>
+  contacts.filter((c) => c.team_id === teamId).length;

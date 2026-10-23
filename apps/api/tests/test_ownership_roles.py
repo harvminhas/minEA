@@ -184,3 +184,96 @@ def test_bulk_flow_syncs_primary_owner_and_audits():
             await _cleanup(engine, org, user)
 
     asyncio.run(go())
+
+
+def test_team_page_skips_only_object_owner_rows():
+    from app.services.owner_accountability_sync import is_object_owner_row
+
+    assert is_object_owner_row("application", "owns") and is_object_owner_row("application", "manages")
+    assert is_object_owner_row("data_store", "stewards") and is_object_owner_row("capability", "owns")
+    assert not is_object_owner_row("application", "informed")
+    assert not is_object_owner_row("process", "owns")  # processes are not on Owners & Teams; keep the row
+    assert not is_object_owner_row("capability", "manages")
+
+
+@pg
+def test_team_page_reads_roles_lead_and_owner_team_for_every_type():
+    """What the team detail page reads: GET /ownership for owned records, team detail for other verbs only."""
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    from app.auth import AuthContext, get_auth_context
+    from app.database import get_db
+    from app.main import app
+    from app.models.objects import MinEAObject
+    from app.models.people import PeopleAccountability, PeopleContact, Team
+
+    async def go():
+        engine = create_async_engine(DB_URL)
+        tag = uuid.uuid4().hex[:8]
+        org, ws, user = await _seed(engine, tag)
+        try:
+            async with AsyncSession(engine, expire_on_commit=False) as db:
+                integ = Team(workspace_id=ws, org_id=org, name="Integration Team")
+                db.add(integ)
+                await db.flush()
+                lead = PeopleContact(workspace_id=ws, org_id=org, name="Priya Shah", team_id=integ.id)
+                db.add(lead)
+                await db.flush()
+                objs = {}
+                for name, kind, extra in [
+                    ("MuleSoft", "application", {"owner": "Integration Team", "owner_team_id": integ.id}),
+                    ("Orders API", "api", {"owner": "Integration Team", "owner_team_id": integ.id}),
+                    ("Customer API", "api", {}),
+                    ("Billing", "capability", {}),
+                ]:
+                    o = MinEAObject(workspace_id=ws, org_id=org, type=kind, name=name, properties={}, **extra)
+                    db.add(o)
+                    objs[name] = o
+                await db.flush()
+                db.add_all([
+                    # Old sync row for MuleSoft (would duplicate the owned list) and an unrelated verb.
+                    PeopleAccountability(workspace_id=ws, org_id=org, subject_type="team", subject_id=integ.id,
+                                         entity_kind="application", entity_id=objs["MuleSoft"].id, link_kind="manages"),
+                    PeopleAccountability(workspace_id=ws, org_id=org, subject_type="team", subject_id=integ.id,
+                                         entity_kind="capability", entity_id=objs["Billing"].id, link_kind="informed"),
+                ])
+                await db.commit()
+
+            async def scratch_db():
+                async with AsyncSession(engine, expire_on_commit=False) as session:
+                    try:
+                        yield session
+                        await session.commit()
+                    except Exception:
+                        await session.rollback()
+                        raise
+
+            app.dependency_overrides[get_db] = scratch_db
+            app.dependency_overrides[get_auth_context] = lambda: AuthContext("fb-" + tag, email=f"h-{tag}@example.com", email_verified=True)
+            base = f"/api/v1/orgs/ow-{tag}/workspaces/default"
+            try:
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+                    r = await c.put(f"{base}/people/teams/{integ.id}", json={"lead_contact_id": str(lead.id), "description": "Runs the APIs"})
+                    assert r.status_code == 200 and r.json()["lead_name"] == "Priya Shah", r.text
+                    # Technical role only, on an API.
+                    r = await c.post(base + "/ownership/bulk", json={"action": "assign", "object_ids": [str(objs["Customer API"].id)],
+                                                                      "role": "technical_owner", "owner": {"type": "team", "id": str(integ.id)}})
+                    assert r.json() == {"changed": 1}, r.text
+                    by = {i["name"]: i for i in (await c.get(base + "/ownership")).json()["items"]}
+                    held = {n: [k for k, h in i["roles"].items() if h["team_id"] == str(integ.id)] for n, i in by.items()}
+                    assert held["MuleSoft"] == ["business_owner"] and held["Orders API"] == ["business_owner"]  # owner_team_id only
+                    assert held["Customer API"] == ["technical_owner"] and held["Billing"] == []
+                    tech = by["Customer API"]["roles"]["technical_owner"]
+                    assert tech["contact_name"] == "Priya Shah" and tech["contact_is_lead"]
+
+                    r = await c.get(f"{base}/people/teams/{integ.id}")
+                    assert r.status_code == 200, r.text
+                    kinds = [(a["entity_kind"], a["link_kind"]) for a in r.json()["accountabilities"]]
+                    assert kinds == [("capability", "informed")], kinds  # no MuleSoft "manages", no role rows
+            finally:
+                app.dependency_overrides.clear()
+        finally:
+            await _cleanup(engine, org, user)
+
+    asyncio.run(go())

@@ -3,19 +3,36 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { peopleApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
-import { AccountabilitiesPanel, type AssignTarget } from "@/components/people/AccountabilitiesPanel";
-import { AssignAccountabilityDialog } from "@/components/people/AssignAccountabilityDialog";
+import { AccountabilityRow } from "@/components/people/AccountabilitiesPanel";
 import { EditAccountabilityDialog } from "@/components/people/EditAccountabilityDialog";
 import { ConfirmRemoveAssignmentDialog } from "@/components/people/ConfirmRemoveAssignmentDialog";
-import { ASSIGNMENT_KIND_STYLE, PEOPLE_LAYER_COLOR, initials, accountabilityDisplayKind } from "@/lib/people-utils";
+import { LeadPicker } from "@/components/people/LeadPicker";
+import {
+  BulkAssignDialog,
+  ownerOptions,
+  useOwnershipData,
+  useOwnershipWrite,
+} from "@/components/mvp/OwnersPage";
+import { ROLE_CHIP, groupByType, membersOf, roleLabel, teamOwnedRows } from "@/lib/ownership";
+import { ASSIGNMENT_KIND_STYLE, accountabilityDisplayKind } from "@/lib/people-utils";
+import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type { AssignmentKind, PeopleAccountability, PeopleRole } from "@minea/types";
+import type {
+  AssignmentKind,
+  OwnerRef,
+  OwnershipBulkRequest,
+  PeopleAccountability,
+  PeopleRole,
+  TeamUpdate,
+} from "@minea/types";
 
-const ROLES_PREVIEW_COUNT = 2;
+const selectClass =
+  "rounded-md border border-[#e6e8ee] bg-white px-2 py-1.5 text-[13px] text-[#1c2230]";
+const sectionLabel = "text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8b90a0]";
 
 interface Props {
   teamId: string;
@@ -23,18 +40,84 @@ interface Props {
   onUpdate: () => void;
 }
 
+/** Click to edit; Enter or leaving the field saves, Escape cancels. */
+function InlineText({
+  value,
+  placeholder,
+  multiline,
+  label,
+  onSave,
+  className,
+}: {
+  value: string;
+  placeholder: string;
+  multiline?: boolean;
+  label: string;
+  onSave: (next: string) => void;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    setEditing(false);
+    if (draft.trim() !== value.trim()) onSave(draft.trim());
+  };
+  if (editing) {
+    const common = {
+      "aria-label": label,
+      autoFocus: true,
+      value: draft,
+      onBlur: commit,
+      onKeyDown: (e: React.KeyboardEvent) => {
+        if (e.key === "Escape") {
+          setDraft(value);
+          setEditing(false);
+        } else if (e.key === "Enter" && (!multiline || !e.shiftKey)) {
+          e.preventDefault();
+          commit();
+        }
+      },
+      className: cn(
+        "w-full rounded-md border border-[#c9c3f7] bg-white px-2 py-1 outline-none",
+        className,
+      ),
+    };
+    return multiline ? (
+      <textarea
+        {...common}
+        rows={2}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+    ) : (
+      <input {...common} onChange={(e) => setDraft(e.target.value)} />
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-label={`Edit ${label.toLowerCase()}`}
+      onClick={() => setEditing(true)}
+      className={cn("group inline-flex items-center gap-1.5 text-left", className)}
+    >
+      <span className={value ? "" : "text-[#8b90a0]"}>{value || placeholder}</span>
+      <Pencil size={12} className="shrink-0 text-[#b4b8c4] group-hover:text-[#5b4ce6]" />
+    </button>
+  );
+}
+
 export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const enabled = useAuthQueryEnabled(teamId);
+  const data = useOwnershipData();
+  const write = useOwnershipWrite();
 
-  const [leadName, setLeadName] = useState("");
-  const [leadEmail, setLeadEmail] = useState("");
-  const [description, setDescription] = useState("");
-  const [showAllRoles, setShowAllRoles] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [moveTo, setMoveTo] = useState("");
+  const [assigning, setAssigning] = useState(false);
   const [showAddRole, setShowAddRole] = useState(false);
-  const [assignTarget, setAssignTarget] = useState<AssignTarget | null>(null);
   const [editTarget, setEditTarget] = useState<PeopleAccountability | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PeopleAccountability | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -63,40 +146,25 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
     enabled: addRoleEnabled,
   });
 
-  useEffect(() => {
-    if (!team) return;
-    setLeadName(team.lead_name ?? "");
-    setLeadEmail(team.lead_email ?? "");
-    setDescription(team.description ?? "");
-  }, [team]);
+  const refreshTeam = () =>
+    queryClient.invalidateQueries({ queryKey: ["people-team", orgSlug, workspaceSlug, teamId] });
 
   const saveMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (body: TeamUpdate) => {
       const token = await getToken();
-      return peopleApi.updateTeam(orgSlug, workspaceSlug, teamId, {
-        description: description || null,
-        lead_name: leadName || null,
-        lead_email: leadEmail || null,
-      }, token!);
+      return peopleApi.updateTeam(orgSlug, workspaceSlug, teamId, body, token!);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["people-team", orgSlug, workspaceSlug, teamId] });
+      refreshTeam();
       queryClient.invalidateQueries({ queryKey: ["people-teams", orgSlug, workspaceSlug] });
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      // The lead shows as the contact on records that have only this team.
+      queryClient.invalidateQueries({ queryKey: ["ownership"] });
       onUpdate();
-      onClose();
     },
+    onError: (e: Error) =>
+      toast({ title: "Could not save team", description: e.message, variant: "destructive" }),
   });
-
-  const refreshAccountabilities = async () => {
-    await queryClient.invalidateQueries({
-      queryKey: ["people-team", orgSlug, workspaceSlug, teamId],
-    });
-  };
-
-  const handleDeleteAssignment = (item: PeopleAccountability) => {
-    setDeleteError(null);
-    setDeleteTarget(item);
-  };
 
   const confirmDeleteAssignment = async () => {
     if (!deleteTarget) return;
@@ -107,7 +175,7 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
       if (!token) throw new Error("Not signed in");
       await peopleApi.deleteAccountability(orgSlug, workspaceSlug, deleteTarget.id, token);
       setDeleteTarget(null);
-      await refreshAccountabilities();
+      await refreshTeam();
     } catch {
       setDeleteError("Could not remove assignment. Please try again.");
     } finally {
@@ -130,290 +198,357 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
       setSelectedRoleId("");
       setAssigneeName("");
       setAssigneeEmail("");
-      queryClient.invalidateQueries({ queryKey: ["people-team", orgSlug, workspaceSlug, teamId] });
+      refreshTeam();
       onUpdate();
     },
   });
 
+  const owner: OwnerRef = { type: "team", id: teamId };
+  const owned = teamOwnedRows(data.items, teamId);
+  const groups = groupByType(owned, (r) => r.item.type, (r) => r.item.name);
+  const members = membersOf(data.contacts, teamId);
+  const targets = ownerOptions(data.teams, data.contacts).filter(
+    (o) => o.value !== `team:${teamId}`,
+  );
+  const others = team?.accountabilities ?? [];
   const availableRoles =
-    allRoles?.items.filter(
-      (role) => !team?.roles.some((r) => r.people_role_id === role.id)
-    ) ?? [];
+    allRoles?.items.filter((role) => !team?.roles.some((r) => r.people_role_id === role.id)) ?? [];
 
-  const visibleRoles = team
-    ? showAllRoles
-      ? team.roles
-      : team.roles.slice(0, ROLES_PREVIEW_COUNT)
-    : [];
-  const hiddenCount = team ? Math.max(0, team.roles.length - ROLES_PREVIEW_COUNT) : 0;
+  const run = (body: Omit<OwnershipBulkRequest, "owner">, done: string) =>
+    write.mutate(
+      { ...body, owner },
+      {
+        onSuccess: () => {
+          toast({ title: done });
+          setPicked(new Set());
+          setMoveTo("");
+        },
+      },
+    );
+
+  const toggle = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
 
-      {/* Full overlay (sidebar-aware) */}
-      <div className="fixed inset-y-0 right-0 left-[200px] bg-[#faf8f5] z-50 flex flex-col overflow-hidden">
-
-        {/* Top bar: breadcrumb + close */}
-        <div className="flex items-center justify-between px-8 pt-6 pb-2 bg-[#faf8f5]">
-          <div>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-              People · Teams
-            </p>
-            <h1 className="text-xl font-semibold text-gray-900">
-              {isLoading ? "Loading…" : team?.name ?? "Team"}
-            </h1>
+      <div className="fixed inset-y-0 right-0 left-[200px] z-50 flex flex-col overflow-hidden bg-white text-[#1c2230]">
+        <div className="flex-1 overflow-y-auto px-8 pb-24 pt-6">
+          <div className="flex items-start justify-between">
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">PEOPLE · TEAM</p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md p-1.5 text-[#8b90a0] hover:bg-black/5"
+              aria-label="Close"
+            >
+              <X size={16} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-md hover:bg-black/5 text-gray-400 transition-colors"
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
-        </div>
 
-        {/* Divider */}
-        <div className="h-px bg-gray-200/80 mx-8 mt-3" />
-
-        {/* Two-column body */}
-        <div className="flex flex-1 min-h-0">
-
-          {/* ─── Left panel ──────────────────────────────────── */}
-          <div className="w-[340px] flex-shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
-
-            {isLoading || !team ? (
-              <div className="flex-1 flex items-center justify-center">
-                <p className="text-sm text-gray-400">Loading team…</p>
+          {isLoading || !team ? (
+            <p className="mt-6 text-[13px] text-[#8b90a0]">Loading team…</p>
+          ) : (
+            <>
+              <h1 className="mt-1 text-[22px] font-semibold">
+                <InlineText
+                  label="Team name"
+                  value={team.name}
+                  placeholder="Team name"
+                  onSave={(name) => name && saveMutation.mutate({ name })}
+                />
+              </h1>
+              <div className="mt-1.5 flex flex-wrap items-center gap-4 text-[13px] text-[#5b6170]">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[#8b90a0]">Lead</span>
+                  <LeadPicker
+                    contacts={data.contacts}
+                    value={team.lead_contact_id}
+                    legacyName={team.lead_name}
+                    disabled={saveMutation.isPending}
+                    onChange={(id) => saveMutation.mutate({ lead_contact_id: id })}
+                  />
+                </span>
+                <span>
+                  <span className="text-[#8b90a0]">Members</span> {members}
+                </span>
+                <span>
+                  <span className="text-[#8b90a0]">Owns</span>{" "}
+                  {owned.length ? `${owned.length} record${owned.length === 1 ? "" : "s"}` : "nothing yet"}
+                </span>
               </div>
-            ) : (
-              <>
-                {/* Team header */}
-                <div className="px-6 pt-6 pb-5">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="h-10 w-10 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                      style={{ backgroundColor: "#f97316" }}
-                    >
-                      {initials(team.name)}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900">{team.name}</p>
-                      <p className="text-xs text-gray-400">
-                        {team.roles.length} role{team.roles.length === 1 ? "" : "s"}
-                        {team.lead_name ? ` · Lead: ${team.lead_name}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+              <div className="mt-3 max-w-3xl text-[13px] text-[#5b6170]">
+                <InlineText
+                  label="Description"
+                  multiline
+                  value={team.description ?? ""}
+                  placeholder="Add a description"
+                  onSave={(description) => saveMutation.mutate({ description: description || null })}
+                />
+              </div>
 
-                {/* Form fields */}
-                <div className="flex-1 overflow-y-auto px-6 pb-4 space-y-5">
-
-                  {/* Team Lead — single combined field */}
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                      Team Lead
-                    </label>
-                    <div className="rounded-md border border-gray-200 overflow-hidden">
-                      <input
-                        value={leadName}
-                        onChange={(e) => setLeadName(e.target.value)}
-                        placeholder="Name"
-                        className="w-full px-3 py-2.5 text-sm text-gray-800 border-b border-gray-100 focus:outline-none focus:bg-gray-50"
-                      />
-                      <input
-                        value={leadEmail}
-                        onChange={(e) => setLeadEmail(e.target.value)}
-                        placeholder="Email"
-                        className="w-full px-3 py-2.5 text-sm text-gray-500 focus:outline-none focus:bg-gray-50"
-                      />
-                    </div>
-                    {(leadName || leadEmail) && (
-                      <p className="text-xs text-gray-400 mt-1">
-                        {[leadName, leadEmail].filter(Boolean).join(" · ")}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Description */}
-                  <div>
-                    <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                      Description
-                    </label>
-                    <textarea
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      rows={4}
-                      className="w-full rounded-md border border-gray-200 px-3 py-2.5 text-sm text-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-gray-300"
-                      placeholder="What this team owns…"
-                    />
-                  </div>
-
-                  {/* Roles */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                        Roles · {team.roles.length}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setShowAddRole((v) => !v)}
-                        className="rounded-md border border-gray-200 px-2.5 py-0.5 text-xs text-gray-500 hover:bg-gray-50 transition-colors"
-                      >
-                        + Add
-                      </button>
-                    </div>
-
-                    {/* Add role form */}
-                    {showAddRole && (
-                      <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
-                        <select
-                          value={selectedRoleId}
-                          onChange={(e) => setSelectedRoleId(e.target.value)}
-                          className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm focus:outline-none"
-                        >
-                          <option value="">Select role…</option>
-                          {availableRoles.map((role: PeopleRole) => (
-                            <option key={role.id} value={role.id}>
-                              {role.name}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          value={assigneeName}
-                          onChange={(e) => setAssigneeName(e.target.value)}
-                          placeholder="Assignee name"
-                          className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm focus:outline-none"
-                        />
-                        <input
-                          value={assigneeEmail}
-                          onChange={(e) => setAssigneeEmail(e.target.value)}
-                          placeholder="Assignee email"
-                          className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm focus:outline-none"
-                        />
-                        <select
-                          value={assignmentKind}
-                          onChange={(e) => setAssignmentKind(e.target.value as AssignmentKind)}
-                          className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm capitalize focus:outline-none"
-                        >
-                          <option value="owner">Owner</option>
-                          <option value="performer">Performer</option>
-                        </select>
-                        <div className="flex gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => addRoleMutation.mutate()}
-                            disabled={!selectedRoleId || addRoleMutation.isPending}
-                            className="flex-1 bg-gray-900 text-white rounded-md py-1.5 text-xs font-medium disabled:opacity-50 transition-colors"
-                          >
-                            {addRoleMutation.isPending ? "Adding…" : "Add role"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setShowAddRole(false)}
-                            className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {team.roles.length === 0 ? (
-                      <p className="text-sm text-gray-400">No roles on this team yet</p>
-                    ) : (
-                      <>
-                        <ul className="space-y-2">
-                          {visibleRoles.map((role) => (
-                            <li
-                              key={role.id}
-                              className="flex items-center gap-3 rounded-lg border border-gray-200/80 bg-[#faf8f5] px-3 py-2.5"
-                            >
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-gray-900 truncate">
-                                  {role.role_name}
-                                </p>
-                                <p className="text-xs text-gray-400 mt-0.5 truncate">
-                                  {role.assignee_name ?? "Unassigned"}
-                                </p>
-                              </div>
-                              <span
-                                className={cn(
-                                  "rounded-full px-2.5 py-0.5 text-[10px] font-semibold capitalize flex-shrink-0",
-                                  ASSIGNMENT_KIND_STYLE[role.assignment_kind] ??
-                                    "bg-gray-100 text-gray-600"
-                                )}
-                              >
-                                {role.assignment_kind.charAt(0).toUpperCase() +
-                                  role.assignment_kind.slice(1)}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-
-                        {hiddenCount > 0 && !showAllRoles && (
-                          <button
-                            type="button"
-                            onClick={() => setShowAllRoles(true)}
-                            className="mt-2 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                          >
-                            + {hiddenCount} more role{hiddenCount === 1 ? "" : "s"}
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Save */}
-                <div className="px-6 py-5 border-t border-gray-100">
+              <div className="mb-3 mt-6 flex items-center justify-between">
+                <h2 className="text-[15px] font-semibold">What this team owns</h2>
+                {owned.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => saveMutation.mutate()}
-                    disabled={saveMutation.isPending}
-                    className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white rounded-md py-3 text-sm font-semibold transition-colors"
+                    onClick={() => setAssigning(true)}
+                    className="rounded-md bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-medium text-white"
                   >
-                    {saveMutation.isPending ? "Saving…" : "Save"}
+                    Assign objects
                   </button>
-                </div>
-              </>
-            )}
-          </div>
+                )}
+              </div>
 
-          {/* ─── Right panel: accountabilities ─────────────────── */}
-          <div className="flex-1 min-w-0 overflow-y-auto">
-            {team && (
-              <AccountabilitiesPanel
-                accountabilities={team.accountabilities}
-                subjectLabel="team"
-                includeDomains
-                onAssign={setAssignTarget}
-                onEdit={setEditTarget}
-                onDelete={handleDeleteAssignment}
-                deletingId={deletingId}
-              />
-            )}
-          </div>
+              {data.loading ? (
+                <p className="text-[13px] text-[#8b90a0]">Loading…</p>
+              ) : data.failed ? (
+                <p className="text-[13px] text-red-600">Could not load owners. Reload to try again.</p>
+              ) : owned.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-[#d6d9e2] px-6 py-10 text-center text-[13px] text-[#5b6170]">
+                  <p className="mb-1 text-[15px] font-semibold text-[#1c2230]">
+                    This team doesn&apos;t own anything yet
+                  </p>
+                  <p>Assign records as Business, Technical or Support owner.</p>
+                  <button
+                    type="button"
+                    onClick={() => setAssigning(true)}
+                    className="mt-4 rounded-md bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-medium text-white"
+                  >
+                    Assign objects
+                  </button>
+                  {data.unowned > 0 && (
+                    <p className="mt-2 text-[12px] text-[#8b90a0]">{data.unowned} records have no owner</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {groups.map((g) => (
+                    <section key={g.label}>
+                      <p className={cn(sectionLabel, "mb-1.5")}>
+                        {g.label} · {g.items.length}
+                      </p>
+                      <ul className="divide-y divide-[#f0f1f5] rounded-lg border border-[#e6e8ee]">
+                        {g.items.map(({ item, roles }) => (
+                          <li key={item.object_id}>
+                            <label
+                              className={cn(
+                                "flex cursor-pointer items-center gap-3 px-3 py-2 text-[13px]",
+                                picked.has(item.object_id) && "bg-[#fafaff]",
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={picked.has(item.object_id)}
+                                onChange={() => toggle(item.object_id)}
+                              />
+                              <span className="flex-1 font-medium">{item.name}</span>
+                              <span className="flex flex-col items-end gap-1">
+                                {roles.map((r) => (
+                                  <span key={r.role} className="flex items-center gap-3">
+                                    <span
+                                      title={roleLabel(r.role)}
+                                      className={cn(
+                                        "w-[72px] rounded-full px-2 py-0.5 text-center text-[11px] font-semibold",
+                                        ROLE_CHIP[r.role].className,
+                                      )}
+                                    >
+                                      {ROLE_CHIP[r.role].label}
+                                    </span>
+                                    <span className="w-[190px] truncate text-[#5b6170]">
+                                      {r.contact || <span className="text-[#b4b8c4]">No contact</span>}
+                                      {r.isLead && <span className="text-[#8b90a0]"> (lead)</span>}
+                                    </span>
+                                  </span>
+                                ))}
+                              </span>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))}
+                </div>
+              )}
+
+              <details className="mt-6 border-t border-[#e6e8ee] pt-3 text-[13px]">
+                <summary className="cursor-pointer font-semibold">
+                  Other accountabilities · {others.length}
+                </summary>
+                {others.length === 0 ? (
+                  <p className="mt-2 text-[#8b90a0]">None.</p>
+                ) : (
+                  <div className="mt-2 space-y-1.5">
+                    {others.map((a) => (
+                      <AccountabilityRow
+                        key={a.id}
+                        item={a}
+                        onEdit={setEditTarget}
+                        onDelete={(item) => {
+                          setDeleteError(null);
+                          setDeleteTarget(item);
+                        }}
+                        isDeleting={deletingId === a.id}
+                      />
+                    ))}
+                  </div>
+                )}
+              </details>
+
+              <details className="mt-3 border-t border-[#e6e8ee] pt-3 text-[13px]">
+                <summary className="cursor-pointer font-semibold">Team roles · {team.roles.length}</summary>
+                <ul className="mt-2 space-y-1.5">
+                  {team.roles.map((role) => (
+                    <li
+                      key={role.id}
+                      className="flex items-center gap-3 rounded-lg border border-[#e6e8ee] px-3 py-2"
+                    >
+                      <span className="flex-1">
+                        <span className="font-medium">{role.role_name}</span>
+                        <span className="text-[#8b90a0]"> · {role.assignee_name ?? "Unassigned"}</span>
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full px-2.5 py-0.5 text-[10px] font-semibold capitalize",
+                          ASSIGNMENT_KIND_STYLE[role.assignment_kind] ?? "bg-gray-100 text-gray-600",
+                        )}
+                      >
+                        {role.assignment_kind}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {showAddRole ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <select
+                      aria-label="Role"
+                      value={selectedRoleId}
+                      onChange={(e) => setSelectedRoleId(e.target.value)}
+                      className={selectClass}
+                    >
+                      <option value="">Select role…</option>
+                      {availableRoles.map((role: PeopleRole) => (
+                        <option key={role.id} value={role.id}>
+                          {role.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={assigneeName}
+                      onChange={(e) => setAssigneeName(e.target.value)}
+                      placeholder="Assignee name"
+                      className={selectClass}
+                    />
+                    <input
+                      value={assigneeEmail}
+                      onChange={(e) => setAssigneeEmail(e.target.value)}
+                      placeholder="Assignee email"
+                      className={selectClass}
+                    />
+                    <select
+                      aria-label="Kind"
+                      value={assignmentKind}
+                      onChange={(e) => setAssignmentKind(e.target.value as AssignmentKind)}
+                      className={selectClass}
+                    >
+                      <option value="owner">Owner</option>
+                      <option value="performer">Performer</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => addRoleMutation.mutate()}
+                      disabled={!selectedRoleId || addRoleMutation.isPending}
+                      className="rounded-md bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-40"
+                    >
+                      Add
+                    </button>
+                    <button type="button" onClick={() => setShowAddRole(false)} className="text-[#8b90a0]">
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddRole(true)}
+                    className="mt-2 text-[12px] text-[#5b4ce6]"
+                  >
+                    + Add role
+                  </button>
+                )}
+              </details>
+            </>
+          )}
         </div>
+
+        {picked.size > 0 && (
+          <div className="flex items-center gap-2 border-t border-[#e6e8ee] bg-white px-8 py-3 text-[13px]">
+            <span className="font-semibold">{picked.size} selected</span>
+            <select
+              aria-label="Move to"
+              value={moveTo}
+              onChange={(e) => setMoveTo(e.target.value)}
+              className={cn(selectClass, "ml-auto")}
+            >
+              <option value="">Move to…</option>
+              {targets.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!moveTo || write.isPending}
+              onClick={() => {
+                const [type, id] = moveTo.split(":") as [OwnerRef["type"], string];
+                run({ action: "move", object_ids: [...picked], target: { type, id } }, `Moved ${picked.size}`);
+              }}
+              className="rounded-md bg-[#5b4ce6] px-3 py-1.5 font-medium text-white disabled:opacity-40"
+            >
+              Move
+            </button>
+            <button
+              type="button"
+              disabled={write.isPending}
+              onClick={() => run({ action: "remove", object_ids: [...picked] }, `Removed from ${picked.size}`)}
+              className="rounded-md border border-[#e6e8ee] px-3 py-1.5 font-medium text-red-600"
+            >
+              Remove
+            </button>
+            <button
+              type="button"
+              onClick={() => setPicked(new Set())}
+              className="rounded-md border border-[#e6e8ee] px-3 py-1.5"
+            >
+              Clear
+            </button>
+          </div>
+        )}
       </div>
 
-      {assignTarget && team && (
-        <AssignAccountabilityDialog
-          subjectType="team"
-          subjectId={teamId}
-          entityKind={assignTarget.entityKind}
-          sectionTitle={assignTarget.sectionTitle}
-          existingPairs={team.accountabilities
-            .filter((a) => a.entity_kind === assignTarget.entityKind)
-            .map((a) => ({ entityId: a.entity_id, linkKind: a.link_kind }))}
-          onClose={() => setAssignTarget(null)}
-          onSuccess={async () => {
-            setAssignTarget(null);
-            await refreshAccountabilities();
-          }}
+      {assigning && team && (
+        <BulkAssignDialog
+          title={`Assign to ${team.name}`}
+          items={data.items}
+          onClose={() => setAssigning(false)}
+          pending={write.isPending}
+          onSave={(ids, role) =>
+            write.mutate(
+              { action: "assign", object_ids: ids, role, owner },
+              {
+                onSuccess: () => {
+                  toast({ title: `Assigned ${ids.length} as ${roleLabel(role)}` });
+                  setAssigning(false);
+                },
+              },
+            )
+          }
         />
       )}
 
@@ -427,7 +562,7 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
           onClose={() => setEditTarget(null)}
           onSuccess={async () => {
             setEditTarget(null);
-            await refreshAccountabilities();
+            await refreshTeam();
           }}
         />
       )}

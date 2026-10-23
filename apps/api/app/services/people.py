@@ -216,7 +216,11 @@ async def load_accountabilities(
     org_id: UUID,
     subject_type: str,
     subject_id: UUID,
+    *,
+    skip_object_owner_rows: bool = False,
 ) -> list[AccountabilityRead]:
+    """skip_object_owner_rows: leave out owns / manages / stewards rows on records; the team page lists
+    those from the ownership roles instead, so they would show twice."""
     result = await db.execute(
         select(PeopleAccountability)
         .where(
@@ -230,6 +234,10 @@ async def load_accountabilities(
         .order_by(PeopleAccountability.entity_kind, PeopleAccountability.link_kind)
     )
     rows = list(result.scalars().all())
+    if skip_object_owner_rows:
+        from app.services.owner_accountability_sync import is_object_owner_row
+
+        rows = [r for r in rows if not is_object_owner_row(r.entity_kind, r.link_kind)]
     return await resolve_accountability_labels(db, workspace_id, org_id, rows)
 
 

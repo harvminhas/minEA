@@ -555,7 +555,9 @@ async def get_team(
 
     base = await _team_read(db, team)
     roles = await load_team_roles(db, team)
-    accountabilities = await load_accountabilities(db, ctx.workspace.id, ctx.org_id, "team", team.id)
+    accountabilities = await load_accountabilities(
+        db, ctx.workspace.id, ctx.org_id, "team", team.id, skip_object_owner_rows=True
+    )
     return TeamDetail(**base.model_dump(), roles=roles, accountabilities=accountabilities)
 
 
