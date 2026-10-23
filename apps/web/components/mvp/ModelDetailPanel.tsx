@@ -212,7 +212,13 @@ export function ModelDetailPanel({
                 onOpenKey={setOpenField}
               />
             )}
-            {storedObject && <OwnershipCard objectId={row.object.id} canEdit={canEdit} openEditor={openField === "owner"} />}
+            {storedObject && <OwnershipCard
+                objectId={row.object.id}
+                canEdit={canEdit}
+                openEditor={openField === "owner"}
+                openRound={focusRound}
+                onDone={() => setOpenField((key) => (key === "owner" ? null : key))}
+              />}
             {storedObject && <EntityAccountabilities object={row.object} />}
             <section>
               <h3 className="mb-1 text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">DEPENDS ON THIS</h3>

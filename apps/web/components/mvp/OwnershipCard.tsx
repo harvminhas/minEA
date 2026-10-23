@@ -20,10 +20,17 @@ export function OwnershipCard({
   objectId,
   canEdit,
   openEditor,
+  openRound = 0,
+  onDone,
 }: {
   objectId: string;
   canEdit: boolean;
+  /** The record was opened at its owner (Owner column "+ Add", ?focus=owner): open the editor. */
   openEditor?: boolean;
+  /** Bumps when "+ Add" asks again for the panel already open, so the editor reopens. */
+  openRound?: number;
+  /** Editor closed (saved or cancelled). */
+  onDone?: () => void;
 }) {
   const data = useOwnershipData();
   const item = data.items.find((i) => i.object_id === objectId);
@@ -35,20 +42,27 @@ export function OwnershipCard({
 
   useEffect(() => {
     if (openEditor && canEdit) setEditing(true);
-  }, [openEditor, canEdit]);
+  }, [openEditor, openRound, canEdit]);
 
+  const close = () => {
+    setEditing(false);
+    setDraft(null);
+    onDone?.();
+  };
+
+  // Start the draft once per edit; an unowned record (or one the list has not loaded yet) starts empty.
   useEffect(() => {
-    if (!editing || !item) return;
+    if (!editing || draft) return;
     const d = {} as Draft;
     for (const r of OWNERSHIP_ROLES) {
-      const h = item.roles[r.key];
+      const h = item?.roles[r.key];
       d[r.key] = {
         team_id: h?.team_id ?? "",
         contact_id: h && !h.contact_is_lead ? (h.contact_id ?? "") : "",
       };
     }
     setDraft(d);
-  }, [editing, item]);
+  }, [editing, item, draft]);
 
   const save = useMutation({
     mutationFn: async (d: Draft) => {
@@ -71,7 +85,7 @@ export function OwnershipCard({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ownership"] });
       qc.invalidateQueries({ queryKey: ["model-catalog"] });
-      setEditing(false);
+      close();
     },
     onError: (e: Error) =>
       toast({
@@ -82,7 +96,8 @@ export function OwnershipCard({
   });
 
   return (
-    <section>
+    // data-field-key: the panel scrolls to and flashes this when opened at ?focus=owner.
+    <section data-field-key="owner">
       <div className="mb-1 flex items-center justify-between">
         <h3 className="text-[11px] font-semibold tracking-[0.12em] text-[#8b90a0]">
           OWNERSHIP
@@ -97,6 +112,9 @@ export function OwnershipCard({
           </button>
         )}
       </div>
+      {data.failed && (
+        <p className="text-[12px] text-amber-700">Couldn't load owners. Try again in a moment.</p>
+      )}
       {!editing && (
         <dl className="space-y-1 text-[13px]">
           {OWNERSHIP_ROLES.map((r) => (
@@ -166,7 +184,7 @@ export function OwnershipCard({
           <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
-              onClick={() => setEditing(false)}
+              onClick={close}
               className="rounded-md px-2.5 py-1 text-[12px] text-[#5b6170]"
             >
               Cancel

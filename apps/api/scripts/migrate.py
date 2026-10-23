@@ -68,6 +68,7 @@ MIGRATION_FILES = [
     "053_ai_question_usage.sql",
     "054_add_batch_requests.sql",
     "055_invite_workspaces.sql",
+    "056_ownership_roles.sql",
 ]
 
 

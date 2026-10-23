@@ -62,6 +62,7 @@ export function useOwnershipData() {
     teams: teams.data?.items ?? [],
     contacts: contacts.data?.items ?? [],
     loading: ownership.isPending,
+    failed: ownership.isError,
   };
 }
 

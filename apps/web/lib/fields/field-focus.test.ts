@@ -111,3 +111,17 @@ test("a focused field unfolds its section for the visit without changing the sav
   assert.match(panel, /behavior: reducedMotion \? "auto" : "smooth"/);
   assert.match(panel, /FOCUS_FIELD_EVENT/);
 });
+
+test("Owner + Add lands on the Ownership card now that the owner field is not in the record fields", () => {
+  // Regression: the Owner column's + Add opens ?focus=owner, but RecordFields omits "owner" for saved
+  // records, so nothing had data-field-key="owner" to scroll to, and the card's editor never reopened.
+  assert.equal(fieldKeyForGap("application", "owner"), "owner");
+  const panel = src("../../components/mvp/ModelDetailPanel.tsx");
+  assert.match(panel, /omit=\{storedObject \? \["name", "owner"\] : \["name"\]\}/);
+  assert.match(panel, /openEditor=\{openField === "owner"\}\s+openRound=\{focusRound\}/);
+  const card = src("../../components/mvp/OwnershipCard.tsx");
+  assert.match(card, /<section data-field-key="owner">/);
+  assert.match(card, /\}, \[openEditor, openRound, canEdit\]\);/);
+  // An unowned record still gets an editor: the draft does not wait for list data.
+  assert.match(card, /if \(!editing \|\| draft\) return;/);
+});

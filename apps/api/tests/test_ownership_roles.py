@@ -127,6 +127,10 @@ def test_bulk_flow_syncs_primary_owner_and_audits():
             base = f"/api/v1/orgs/ow-{tag}/workspaces/default"
             try:
                 async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+                    # Create team (the panel sends no lead_contact_id) works with 056 applied.
+                    r = await c.post(base + "/people/teams", json={"name": "Service Desk", "description": ""})
+                    assert r.status_code == 201, r.text
+                    assert r.json()["lead_contact_id"] is None
                     r = await c.get(base + "/ownership")
                     assert r.status_code == 200, r.text
                     by = {i["name"]: i for i in r.json()["items"]}
