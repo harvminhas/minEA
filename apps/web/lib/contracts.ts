@@ -148,3 +148,18 @@ export function nextRenewal(contracts: readonly VendorContract[], now = new Date
   }
   return best;
 }
+
+export const DRAFT_CONTRACT_ID = "draft";
+
+/** What the drawer shows the instant '+ Contract' is clicked, while the create is still on its way. */
+export function draftContract(vendorName: string | null, vendorId: string | null = null): VendorContract {
+  const name = vendorName?.trim() ? `${vendorName.trim()} contract` : "New contract";
+  return {
+    id: DRAFT_CONTRACT_ID, vendor_id: vendorId, vendor_name: vendorName, name, annual_cost_cents: null, start_date: null, end_date: null,
+    notice_days: null, auto_renew: false, owner_contact_id: null, document_url: null, items: [],
+  };
+}
+
+export function isDraftContract(contract: Pick<VendorContract, "id">): boolean {
+  return contract.id === DRAFT_CONTRACT_ID;
+}

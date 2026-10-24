@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Pencil, Plus } from "lucide-react";
 import type { MinEAObject } from "@minea/types";
@@ -9,7 +9,7 @@ import { useResolvePerson } from "@/components/people/usePeople";
 import { ContractDrawer } from "@/components/vendors/ContractDrawer";
 import { usePeopleContacts, useVendorActions } from "@/components/vendors/useVendorActions";
 import { VendorRelationships } from "@/components/vendors/VendorRelationships";
-import { renewalInfo, type VendorContract } from "@/lib/contracts";
+import { DRAFT_CONTRACT_ID, draftContract, renewalInfo, type VendorContract } from "@/lib/contracts";
 import { moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 import { modelItemId, modelItemPath, modelPath } from "@/lib/mvp-paths";
 import { idleLicences } from "@/lib/reports/cio-views";
@@ -237,6 +237,8 @@ function VendorDetail({ id }: { id: string }) {
   const resolvePerson = useResolvePerson();
   const [tab, setTab] = useState<"overview" | "relationships" | "contracts">("overview");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<VendorContract | null>(null);
+  const creating = useRef(false);
   const [allProducts, setAllProducts] = useState(false);
   const [error, setError] = useState("");
   const vendor = findVendor(data.vendors, id);
@@ -259,11 +261,25 @@ function VendorDetail({ id }: { id: string }) {
   const party = async (): Promise<MinEAObject> => vendor.party ?? actions.ensureVendor(vendor.name);
   const props = (vendor.party?.properties ?? {}) as Record<string, unknown>;
   const setProp = (key: string, value: unknown) => run(async () => actions.saveVendor(await party(), { [key]: value }));
-  const addContract = () => run(async () => {
-    const p = await party();
-    const made = await actions.contract.create({ vendor_id: p.id });
-    setOpenId(made.id);
-  });
+  // Open the drawer at once with a draft; the vendor record (if new) and the contract are created behind it.
+  const addContract = async () => {
+    if (creating.current) return;
+    creating.current = true;
+    setError("");
+    setDraft(draftContract(vendor.name, vendor.partyId));
+    setOpenId(DRAFT_CONTRACT_ID);
+    try {
+      const p = await party();
+      const made = await actions.contract.create({ vendor_id: p.id });
+      setOpenId((current) => (current === DRAFT_CONTRACT_ID ? made.id : current));
+    } catch (err) {
+      setOpenId((current) => (current === DRAFT_CONTRACT_ID ? null : current));
+      setError(err instanceof Error ? err.message : "Could not add the contract");
+    } finally {
+      creating.current = false;
+      setDraft(null);
+    }
+  };
   const addProduct = (tool: CatalogTool) => run(async () => {
     await actions.createApp(tool.name, await party(), { catalog_tool: tool.name, ...(tool.category ? { category: tool.category } : {}) });
   });
@@ -272,7 +288,7 @@ function VendorDetail({ id }: { id: string }) {
     const person = people.find((p) => p.id === contactId);
     await actions.saveVendor(await party(), { owner_contact_id: contactId, owner_name: person?.name ?? ("create" in choice ? choice.create.name : null) });
   });
-  const open = data.contracts.find((c) => c.id === openId) ?? null;
+  const open = openId === DRAFT_CONTRACT_ID ? draft : data.contracts.find((c) => c.id === openId) ?? null;
   const byId = new Map(data.rows.map((r) => [r.id, r]));
   const idleById = new Map(data.idle.rows.map((r) => [r.id, r.idle]));
   const seatsLabel = (row: CatalogRow) => {
@@ -318,9 +334,9 @@ function VendorDetail({ id }: { id: string }) {
         </table>
       )}
       {vendor.contracts.length > 0 && (
-        <div className="border-t border-[#f3f4f8] px-3 py-2 text-[12px] text-[#8b90a0]">
-          <button type="button" onClick={addContract} className="font-medium text-[#5b4ce6]">+ Add contract</button> name, cost, renewal — pick or create the apps it covers
-        </div>
+        <button type="button" onClick={addContract} className="block w-full border-t border-[#f3f4f8] px-3 py-2 text-left text-[12px] text-[#8b90a0] hover:bg-[#fafafb]">
+          <span className="font-medium text-[#5b4ce6]">+ Add contract</span> name, cost, renewal — pick or create the apps it covers
+        </button>
       )}
     </div>
   );

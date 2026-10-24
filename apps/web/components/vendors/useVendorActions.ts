@@ -104,6 +104,8 @@ export function usePeopleContacts(): PeopleContact[] {
   const query = useQuery({
     queryKey: ["people-contacts", orgSlug, workspaceSlug, "vendors"],
     enabled: Boolean(orgSlug && workspaceSlug),
+    // Opening a contract drawer mounts another reader; don't refetch the people list each time.
+    staleTime: 5 * 60_000,
     queryFn: async () => (await peopleApi.listContacts(orgSlug!, workspaceSlug!, (await getToken())!)).items,
   });
   return query.data ?? [];

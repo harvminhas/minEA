@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import type { MinEAObject } from "@minea/types";
 import { PersonPicker, type PersonChoice } from "@/components/people/PersonPicker";
 import { useResolvePerson } from "@/components/people/usePeople";
 import { AppPicker } from "@/components/vendors/AppPicker";
 import { usePeopleContacts, useVendorActions } from "@/components/vendors/useVendorActions";
-import { contractShares, formatDay, renewalInfo, type VendorContract } from "@/lib/contracts";
+import { contractShares, formatDay, isDraftContract, renewalInfo, type VendorContract } from "@/lib/contracts";
 import { moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 import { cn } from "@/lib/utils";
 
@@ -66,19 +67,31 @@ export function ContractDrawer({
   const byId = new Map(rows.map((row) => [row.id, row]));
   const pickOwner = (choice: PersonChoice) => run(async () => actions.contract.update(contract.id, { owner_contact_id: await resolvePerson(choice) }));
 
-  return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/20" onClick={onClose}>
-      <aside className="h-full w-[460px] overflow-y-auto bg-white px-6 py-5 shadow-2xl" onClick={(e) => e.stopPropagation()} aria-label="Contract">
-        <div className="flex items-start justify-between">
+  const pending = isDraftContract(contract);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Portalled to <body> and stacked above the fixed top nav (z-50), so the header is never hidden;
+  // the header and buttons stay put and only the middle scrolls, at any window height.
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex justify-end bg-black/20" onClick={onClose} data-testid="contract-drawer">
+      <aside className="flex h-[100dvh] max-h-screen w-full max-w-[460px] flex-col bg-white shadow-2xl" onClick={(e) => e.stopPropagation()} aria-label="Contract" aria-busy={pending}>
+        <div className="flex shrink-0 items-start justify-between border-b border-[#f3f4f8] px-6 pb-3 pt-5">
           <div className="min-w-0 flex-1">
             <p className="text-[10.5px] font-semibold tracking-[0.12em] text-[#8b90a0]">CONTRACT{vendor ? ` · ${vendor.name.toUpperCase()}` : ""}</p>
             <input
               aria-label="Contract name"
+              disabled={pending}
               defaultValue={contract.name}
               key={contract.name}
               onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== contract.name && save({ name: e.target.value.trim() })}
               className="mt-0.5 w-full border-0 bg-transparent p-0 text-[19px] font-semibold text-[#1c2230] outline-none"
             />
+            {pending && <span className="mt-1 inline-block rounded-full bg-[#f3f4f8] px-2 py-0.5 text-[11px] font-medium text-[#6b7289]">Creating…</span>}
             {info && (
               <span className={cn("mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium", info.urgent ? "bg-[#fdecec] text-[#b42318]" : "bg-[#f3f4f8] text-[#4b5163]")}>
                 {info.text}
@@ -88,7 +101,8 @@ export function ContractDrawer({
           <button type="button" aria-label="Close" onClick={onClose} className="text-[#8b90a0] hover:text-[#1c2230]"><X size={16} /></button>
         </div>
 
-        <div className="mt-4">
+        <fieldset disabled={pending} className="min-h-0 flex-1 overflow-y-auto px-6 py-4 disabled:opacity-60" data-testid="contract-drawer-body">
+        <div>
           <Row label="Annual cost">
             <input aria-label="Annual cost" value={cost} placeholder="$0" onChange={(e) => setCost(e.target.value)} onBlur={() => {
               const cents = dollarsToCents(cost);
@@ -175,12 +189,16 @@ export function ContractDrawer({
           />
         </div>
         <p className="mt-4 text-[12px] text-[#8b90a0]">Cost here is split across the apps it covers, so app costs and vendor spend stay in step.</p>
-        {error && <p className="mt-2 text-[12px] text-[#b42318]">{error}</p>}
-        <div className="mt-4 flex gap-2">
-          <button type="button" onClick={onClose} className="rounded-md bg-[#5b4ce6] px-3 py-1.5 text-[12.5px] font-semibold text-white">Done</button>
-          <button type="button" onClick={() => window.confirm(`Delete ${contract.name}?`) && run(async () => { await actions.contract.remove(contract); onClose(); })} className="rounded-md border border-[#e6e8ee] px-3 py-1.5 text-[12.5px] text-[#4b5163]">Delete contract</button>
+        </fieldset>
+        <div className="shrink-0 border-t border-[#f3f4f8] px-6 py-3">
+          {error && <p className="mb-2 text-[12px] text-[#b42318]">{error}</p>}
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="rounded-md bg-[#5b4ce6] px-3 py-1.5 text-[12.5px] font-semibold text-white">Done</button>
+            <button type="button" disabled={pending} onClick={() => window.confirm(`Delete ${contract.name}?`) && run(async () => { await actions.contract.remove(contract); onClose(); })} className="rounded-md border border-[#e6e8ee] px-3 py-1.5 text-[12.5px] text-[#4b5163] disabled:opacity-50">Delete contract</button>
+          </div>
         </div>
       </aside>
-    </div>
+    </div>,
+    document.body
   );
 }
