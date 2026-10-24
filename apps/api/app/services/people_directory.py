@@ -221,7 +221,8 @@ async def delete(db: AsyncSession, kind: str, workspace_id: uuid.UUID, row_id: s
     """Owned records keep their shown name; their link is cleared by ON DELETE SET NULL / CASCADE."""
     if not await _row(db, kind, workspace_id, row_id):
         raise LookupError("Not found")
-    if kind in ("team", "role"):
-        await db.execute(text("DELETE FROM people_accountabilities WHERE subject_type = :s AND subject_id = CAST(:id AS UUID)"), {"s": kind, "id": row_id})
+    # subject_id has no FK, so clear the person's/team's/role's links here or they outlive it.
+    subject = "contact" if kind == "person" else kind
+    await db.execute(text("DELETE FROM people_accountabilities WHERE subject_type = :s AND subject_id = CAST(:id AS UUID)"), {"s": subject, "id": row_id})
     await db.execute(text(f"DELETE FROM {_table(kind)} WHERE id = CAST(:id AS UUID)"), {"id": row_id})
     await db.commit()

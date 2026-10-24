@@ -12,7 +12,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Iterable
 
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.objects import ChangeLog, MinEAObject
@@ -98,6 +98,13 @@ async def load_role_rows(
     )
     if object_ids is not None:
         query = query.where(PeopleAccountability.entity_id.in_(object_ids))
+    # Skip rows whose team or person is gone (subject_id has no FK); they would count a record as owned.
+    query = query.where(
+        or_(
+            and_(PeopleAccountability.subject_type == "team", exists().where(Team.id == PeopleAccountability.subject_id)),
+            and_(PeopleAccountability.subject_type == "contact", exists().where(PeopleContact.id == PeopleAccountability.subject_id)),
+        )
+    )
     by_object: dict[uuid.UUID, list[PeopleAccountability]] = {}
     for row in (await db.execute(query.order_by(PeopleAccountability.created_at))).scalars():
         by_object.setdefault(row.entity_id, []).append(row)
