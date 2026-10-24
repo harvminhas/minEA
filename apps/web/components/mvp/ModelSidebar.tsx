@@ -72,7 +72,7 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
 
   const connections = countTypes(["integration_flow", "api", "event", "tool"]);
   const people = extras
-    ? (extras["people/teams"] ?? 0) + (extras["people/roles"] ?? 0) + (extras["people/contacts"] ?? 0)
+    ? (extras["people/teams"] ?? 0) + (extras["people/contacts"] ?? 0)
     : undefined;
 
   const estate: NavItem[] = [
@@ -172,12 +172,18 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
       match: ["/model/vendors"],
     },
     {
-      label: "Owners & teams",
+      label: "People & teams",
       href: modelPath(basePath, "owners"),
       icon: Users,
       count: people,
       match: ["/people/", "/model/owners"],
       children: [
+        {
+          label: "People",
+          href: `${basePath}/people/contacts`,
+          count: extra("people/contacts"),
+          match: ["/people/contacts"],
+        },
         {
           label: "Teams",
           href: `${basePath}/people/teams`,
@@ -185,16 +191,9 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
           match: ["/people/teams"],
         },
         {
-          label: "Roles",
+          label: "Ownership roles",
           href: `${basePath}/people/roles`,
-          count: extra("people/roles"),
           match: ["/people/roles"],
-        },
-        {
-          label: "Contacts",
-          href: `${basePath}/people/contacts`,
-          count: extra("people/contacts"),
-          match: ["/people/contacts"],
         },
       ],
     },

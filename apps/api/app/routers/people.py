@@ -22,6 +22,10 @@ from app.schemas.people import (
     PeopleRoleListResponse,
     PeopleRoleRead,
     PeopleRoleUpdate,
+    RoleRetire,
+    TeamMemberAdd,
+    TeamMemberRead,
+    TeamMemberUpdate,
     TeamCreate,
     TeamDetail,
     TeamListResponse,
@@ -38,6 +42,15 @@ from app.services.people import (
     load_role_teams,
     load_team_roles,
     validate_accountability_entity,
+)
+from app.services.team_members import (
+    add_member,
+    member_counts,
+    members_of,
+    remove_member,
+    set_primary,
+    set_title,
+    teams_of,
 )
 from app.services.tenancy import TenancyContext, get_workspace_context
 
@@ -61,6 +74,7 @@ async def _role_read(db: AsyncSession, role: PeopleRole) -> PeopleRoleRead:
         team_count=team_count or 0,
         created_at=role.created_at,
         updated_at=role.updated_at,
+        retired_at=role.retired_at,
     )
 
 
@@ -68,6 +82,7 @@ async def _team_read(db: AsyncSession, team: Team) -> TeamRead:
     role_count = await db.scalar(
         select(func.count()).select_from(TeamRoleAssignment).where(TeamRoleAssignment.team_id == team.id)
     )
+    members = await member_counts(db, [team.id])
     return TeamRead(
         id=team.id,
         workspace_id=team.workspace_id,
@@ -78,6 +93,7 @@ async def _team_read(db: AsyncSession, team: Team) -> TeamRead:
         lead_email=team.lead_email,
         lead_contact_id=team.lead_contact_id,
         role_count=role_count or 0,
+        member_count=members.get(team.id, 0),
         created_at=team.created_at,
         updated_at=team.updated_at,
     )
@@ -101,13 +117,25 @@ async def _set_lead_contact(db: AsyncSession, ctx: TenancyContext, team: Team, c
     team.lead_contact_id = contact.id
     team.lead_name = contact.name
     team.lead_email = contact.email
+    if team.id:
+        await add_member(db, team.id, contact.id)
 
 
 # ─── Roles ───────────────────────────────────────────────────────────────────
+# The old roles list is retired (057): rows stay readable for the one-time review, new writes are refused.
+# Who owns what is the three ownership roles (Business / Technical / Support) on each record.
+
+
+def _roles_retired() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Roles are retired. Give the person a title, or use the ownership roles on the record.",
+    )
 
 
 @router.get("/roles", response_model=PeopleRoleListResponse)
 async def list_roles(
+    include_retired: bool = False,
     ctx: TenancyContext = Depends(get_workspace_context),
     db: AsyncSession = Depends(get_db),
 ) -> PeopleRoleListResponse:
@@ -117,6 +145,7 @@ async def list_roles(
     result = await db.execute(
         select(PeopleRole)
         .where(PeopleRole.workspace_id == ctx.workspace.id, PeopleRole.org_id == ctx.org_id)
+        .where(True if include_retired else PeopleRole.retired_at.is_(None))
         .order_by(PeopleRole.name)
     )
     roles = result.scalars().all()
@@ -131,6 +160,7 @@ async def create_role(
     db: AsyncSession = Depends(get_db),
 ) -> PeopleRoleRead:
     await ctx.require_write(db)
+    _roles_retired()
     assert ctx.workspace
 
     role = PeopleRole(
@@ -180,6 +210,7 @@ async def update_role(
     db: AsyncSession = Depends(get_db),
 ) -> PeopleRoleRead:
     await ctx.require_write(db)
+    _roles_retired()
     assert ctx.workspace
 
     result = await db.execute(
@@ -233,6 +264,7 @@ async def link_role_to_team(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await ctx.require_write(db)
+    _roles_retired()
     assert ctx.workspace
 
     role_result = await db.execute(
@@ -283,6 +315,7 @@ async def add_role_accountability(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await ctx.require_write(db)
+    _roles_retired()
     assert ctx.workspace
 
     result = await db.execute(
@@ -315,19 +348,26 @@ async def add_role_accountability(
     )
 
 
-async def _contact_read(db: AsyncSession, contact: PeopleContact) -> PeopleContactRead:
+async def _contact_read(
+    db: AsyncSession, contact: PeopleContact, teams: dict[UUID, list[dict]] | None = None
+) -> PeopleContactRead:
     team_name: str | None = None
     if contact.team_id:
         result = await db.execute(select(Team.name).where(Team.id == contact.team_id))
         team_name = result.scalar_one_or_none()
+    if teams is None:
+        teams = await teams_of(db, [contact.id])
     return PeopleContactRead(
         id=contact.id,
         workspace_id=contact.workspace_id,
         org_id=contact.org_id,
         name=contact.name,
         email=contact.email,
+        phone=contact.phone,
+        title=contact.title,
         team_id=contact.team_id,
         team_name=team_name,
+        teams=teams.get(contact.id, []),
         created_at=contact.created_at,
         updated_at=contact.updated_at,
     )
@@ -361,7 +401,8 @@ async def list_contacts(
         q = q.where((PeopleContact.team_id == team_id) | (PeopleContact.team_id.is_(None)))
     result = await db.execute(q.order_by(PeopleContact.name))
     contacts = result.scalars().all()
-    items = [await _contact_read(db, contact) for contact in contacts]
+    teams = await teams_of(db, [c.id for c in contacts])
+    items = [await _contact_read(db, contact, teams) for contact in contacts]
     return PeopleContactListResponse(items=items, total=len(items))
 
 
@@ -389,12 +430,16 @@ async def create_contact(
         workspace_id=ctx.workspace.id,
         org_id=ctx.org_id,
         name=body.name.strip(),
-        email=body.email,
+        email=(body.email or "").strip() or None,
+        phone=(body.phone or "").strip() or None,
+        title=(body.title or "").strip() or None,
         team_id=body.team_id,
         created_by=ctx.user_id,
     )
     db.add(contact)
     await db.flush()
+    if body.team_id:
+        await add_member(db, body.team_id, contact.id)
     await db.refresh(contact)
     return await _contact_read(db, contact)
 
@@ -453,11 +498,16 @@ async def update_contact(
             )
             if not team_result.scalar_one_or_none():
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Team not found")
+        await set_primary(db, contact.id, contact.team_id, body.team_id)
         contact.team_id = body.team_id
     if body.name is not None:
         contact.name = body.name.strip()
     if body.email is not None:
-        contact.email = body.email
+        contact.email = body.email.strip() or None
+    if "phone" in body.model_fields_set:
+        contact.phone = (body.phone or "").strip() or None
+    if "title" in body.model_fields_set:
+        contact.title = (body.title or "").strip() or None
 
     await db.flush()
     await db.refresh(contact)
@@ -530,6 +580,8 @@ async def create_team(
         await _set_lead_contact(db, ctx, team, body.lead_contact_id)
     db.add(team)
     await db.flush()
+    if team.lead_contact_id:
+        await add_member(db, team.id, team.lead_contact_id)
     return await _team_read(db, team)
 
 
@@ -558,7 +610,8 @@ async def get_team(
     accountabilities = await load_accountabilities(
         db, ctx.workspace.id, ctx.org_id, "team", team.id, skip_object_owner_rows=True
     )
-    return TeamDetail(**base.model_dump(), roles=roles, accountabilities=accountabilities)
+    members = await members_of(db, team.id)
+    return TeamDetail(**base.model_dump(), members=members, roles=roles, accountabilities=accountabilities)
 
 
 @router.put("/teams/{team_id}", response_model=TeamRead)
@@ -620,6 +673,119 @@ async def delete_team(
     await db.delete(team)
 
 
+async def _team_or_404(db: AsyncSession, ctx: TenancyContext, team_id: UUID) -> Team:
+    assert ctx.workspace
+    team = await db.scalar(
+        select(Team).where(Team.id == team_id, Team.workspace_id == ctx.workspace.id, Team.org_id == ctx.org_id)
+    )
+    if not team:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
+    return team
+
+
+async def _contact_or_404(db: AsyncSession, ctx: TenancyContext, contact_id: UUID) -> PeopleContact:
+    assert ctx.workspace
+    contact = await db.scalar(
+        select(PeopleContact).where(
+            PeopleContact.id == contact_id,
+            PeopleContact.workspace_id == ctx.workspace.id,
+            PeopleContact.org_id == ctx.org_id,
+        )
+    )
+    if not contact:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Person not found")
+    return contact
+
+
+@router.post("/teams/{team_id}/members", response_model=TeamMemberRead, status_code=status.HTTP_201_CREATED)
+async def add_team_member(
+    team_id: UUID,
+    body: TeamMemberAdd,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> TeamMemberRead:
+    """Add a person to the team. Without contact_id a new person is created from name (+ email)."""
+    await ctx.require_write(db)
+    assert ctx.workspace
+    team = await _team_or_404(db, ctx, team_id)
+    if body.contact_id:
+        contact = await _contact_or_404(db, ctx, body.contact_id)
+    else:
+        name = " ".join((body.name or "").split())
+        if not name:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pick a person or type a name")
+        contact = PeopleContact(
+            workspace_id=ctx.workspace.id,
+            org_id=ctx.org_id,
+            name=name,
+            email=(body.email or "").strip() or None,
+            created_by=ctx.user_id,
+        )
+        db.add(contact)
+        await db.flush()
+    await add_member(db, team.id, contact.id, body.title)
+    members = await members_of(db, team.id)
+    return TeamMemberRead(**next(m for m in members if m["contact_id"] == contact.id))
+
+
+@router.patch("/teams/{team_id}/members/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def update_team_member(
+    team_id: UUID,
+    contact_id: UUID,
+    body: TeamMemberUpdate,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await ctx.require_write(db)
+    team = await _team_or_404(db, ctx, team_id)
+    if not await set_title(db, team.id, contact_id, body.title):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not a member of this team")
+
+
+@router.delete("/teams/{team_id}/members/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_team_member(
+    team_id: UUID,
+    contact_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Take a person off the team. Leading the team does not stop this; the lead stays as set."""
+    await ctx.require_write(db)
+    team = await _team_or_404(db, ctx, team_id)
+    if not await remove_member(db, team.id, contact_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not a member of this team")
+
+
+@router.post("/roles/{role_id}/retire", status_code=status.HTTP_204_NO_CONTENT)
+async def retire_role(
+    role_id: UUID,
+    body: RoleRetire,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Old-roles review: keep the name as a title on a person (or on their membership of team_id), or just drop
+    it. Either way the role is marked retired and hidden; nothing is deleted."""
+    await ctx.require_write(db)
+    assert ctx.workspace
+    role = await db.scalar(
+        select(PeopleRole).where(
+            PeopleRole.id == role_id, PeopleRole.workspace_id == ctx.workspace.id, PeopleRole.org_id == ctx.org_id
+        )
+    )
+    if not role:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+    if body.title_contact_id:
+        contact = await _contact_or_404(db, ctx, body.title_contact_id)
+        if body.team_id:
+            team = await _team_or_404(db, ctx, body.team_id)
+            await add_member(db, team.id, contact.id)
+            await set_title(db, team.id, contact.id, role.name)
+        else:
+            contact.title = role.name
+    role.retired_at = func.now()
+    await db.flush()
+
+
 @router.post("/teams/{team_id}/roles", status_code=status.HTTP_204_NO_CONTENT)
 async def add_team_role(
     team_id: UUID,
@@ -628,6 +794,7 @@ async def add_team_role(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await ctx.require_write(db)
+    _roles_retired()
     assert ctx.workspace
 
     team_result = await db.execute(
@@ -679,6 +846,7 @@ async def update_team_role(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await ctx.require_write(db)
+    _roles_retired()
     assert ctx.workspace
 
     result = await db.execute(

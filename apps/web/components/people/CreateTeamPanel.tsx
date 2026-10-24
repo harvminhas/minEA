@@ -7,7 +7,8 @@ import { X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { peopleApi } from "@/lib/api-client";
 import { useOwnershipData } from "@/components/mvp/OwnersPage";
-import { LeadPicker } from "@/components/people/LeadPicker";
+import { PersonPicker } from "@/components/people/PersonPicker";
+import { useResolvePerson } from "@/components/people/usePeople";
 
 interface Props {
   onClose: () => void;
@@ -21,6 +22,7 @@ export function CreateTeamPanel({ onClose, onSuccess }: Props) {
   const [name, setName] = useState("");
   const [leadContactId, setLeadContactId] = useState<string | null>(null);
   const { contacts } = useOwnershipData();
+  const resolvePerson = useResolvePerson();
   const [description, setDescription] = useState("");
 
   const createMutation = useMutation({
@@ -89,11 +91,15 @@ export function CreateTeamPanel({ onClose, onSuccess }: Props) {
                 <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
                   Team Lead
                 </label>
-                <LeadPicker
-                  contacts={contacts}
+                <PersonPicker
+                  label="Team lead"
+                  people={contacts}
                   value={leadContactId}
-                  onChange={setLeadContactId}
-                  className="w-full py-2.5"
+                  placeholder="No lead"
+                  noneLabel="No lead"
+                  createLabel="Create and make lead"
+                  onPick={async (choice) => setLeadContactId(await resolvePerson(choice))}
+                  className="w-full"
                 />
               </div>
 

@@ -72,6 +72,8 @@ import type {
   TeamCreate,
   TeamUpdate,
   TeamDetail,
+  TeamMember,
+  TeamMemberAdd,
   TeamListResponse,
   ObjectOwnership,
   ObjectOwnershipWrite,
@@ -1143,6 +1145,34 @@ export const peopleApi = {
   ) =>
     apiFetch<Team>(`${wsBase(orgSlug, workspaceSlug)}/people/teams/${teamId}`, {
       method: "PUT",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  addTeamMember: (orgSlug: string, workspaceSlug: string, teamId: string, body: TeamMemberAdd, token: string) =>
+    apiFetch<TeamMember>(`${wsBase(orgSlug, workspaceSlug)}/people/teams/${teamId}/members`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  updateTeamMember: (orgSlug: string, workspaceSlug: string, teamId: string, contactId: string, title: string | null, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/teams/${teamId}/members/${contactId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+      token,
+    }),
+
+  removeTeamMember: (orgSlug: string, workspaceSlug: string, teamId: string, contactId: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/teams/${teamId}/members/${contactId}`, {
+      method: "DELETE",
+      token,
+    }),
+
+  /** Old-roles review: keep the name as a person's title (optionally on one team), or drop it. */
+  retireRole: (orgSlug: string, workspaceSlug: string, roleId: string, body: { title_contact_id?: string; team_id?: string }, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/roles/${roleId}/retire`, {
+      method: "POST",
       body: JSON.stringify(body),
       token,
     }),

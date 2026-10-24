@@ -9,15 +9,14 @@ import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/use-permissions";
 
 const TABS: { kind: DirectoryKind; label: string; key: keyof Pick<PeopleDirectory, "teams" | "people" | "roles"> }[] = [
-  { kind: "team", label: "Owner teams", key: "teams" },
-  { kind: "person", label: "Named owners", key: "people" },
-  { kind: "role", label: "Roles", key: "roles" },
+  { kind: "team", label: "Teams", key: "teams" },
+  { kind: "person", label: "People", key: "people" },
 ];
 
 /** Attribute fields per kind (name is edited inline on every kind). */
 export const DIRECTORY_FIELDS: Record<DirectoryKind, { key: keyof DirectoryRow; label: string; needsExtras?: boolean }[]> = {
   team: [{ key: "description", label: "Notes" }, { key: "lead_name", label: "Lead" }, { key: "lead_email", label: "Lead email" }],
-  person: [{ key: "email", label: "Email" }, { key: "phone", label: "Phone", needsExtras: true }, { key: "title", label: "Title / role", needsExtras: true }, { key: "notes", label: "Notes", needsExtras: true }],
+  person: [{ key: "email", label: "Email" }, { key: "phone", label: "Phone", needsExtras: true }, { key: "title", label: "Title", needsExtras: true }, { key: "notes", label: "Notes", needsExtras: true }],
   role: [{ key: "description", label: "Description" }],
 };
 
@@ -86,7 +85,7 @@ export function PeopleTeamsPage() {
     <main className="mx-auto max-w-5xl p-6" data-testid="people-teams">
       <Link href={`/orgs/${orgSlug}/settings`} className="text-[13px] text-[#5b4ce6]">← Org settings</Link>
       <h1 className="mt-2 text-[22px] font-semibold text-[#1c2230]">People &amp; teams</h1>
-      <p className="mt-1 text-[13px] text-[#6b7289]">Owner teams, named owners and roles used on apps. They belong to a workspace, so pick one. Names that differ only in case or spaces are reused, never duplicated.</p>
+      <p className="mt-1 text-[13px] text-[#6b7289]">Teams and people who own your apps. They belong to a workspace, so pick one. Names that differ only in case or spaces are reused, never duplicated.</p>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <label className="text-[13px] text-[#6b7289]">Workspace{" "}
           <select aria-label="Workspace" value={workspace} onChange={(event) => { setWorkspace(event.target.value); setSelected([]); }} className="ml-1 rounded-lg border border-[#e6e8ee] px-2 py-1 text-[13px] text-[#1c2230]">

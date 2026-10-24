@@ -1979,6 +1979,8 @@ export interface PeopleRole {
   team_count: number;
   created_at: string;
   updated_at: string;
+  /** Set once the old role was turned into a title or dropped (hidden from lists). */
+  retired_at?: string | null;
 }
 
 export interface PeopleRoleCreate {
@@ -2053,6 +2055,7 @@ export interface Team {
   /** Lead as a contact; shown as the contact when a record has only this team. */
   lead_contact_id?: string | null;
   role_count: number;
+  member_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -2120,7 +2123,26 @@ export interface ObjectOwnershipWrite {
   roles: Partial<Record<OwnershipRole, { team_id?: string | null; contact_id?: string | null } | null>>;
 }
 
+export interface TeamMember {
+  contact_id: string;
+  name: string;
+  email?: string | null;
+  /** Title on this team. */
+  title?: string | null;
+  /** The person's own title. */
+  job_title?: string | null;
+}
+
+/** Add an existing person (contact_id) or create one inline (name, optional email). */
+export interface TeamMemberAdd {
+  contact_id?: string;
+  name?: string;
+  email?: string | null;
+  title?: string | null;
+}
+
 export interface TeamDetail extends Team {
+  members?: TeamMember[];
   roles: TeamRoleOnTeam[];
   accountabilities: PeopleAccountability[];
 }
@@ -2136,8 +2158,12 @@ export interface PeopleContact {
   org_id: string;
   name: string;
   email?: string | null;
+  phone?: string | null;
+  title?: string | null;
+  /** Primary team (the first team joined). */
   team_id?: string | null;
   team_name?: string | null;
+  teams?: { id: string; name: string; title?: string | null }[];
   created_at: string;
   updated_at: string;
 }
@@ -2145,12 +2171,16 @@ export interface PeopleContact {
 export interface PeopleContactCreate {
   name: string;
   email?: string | null;
+  phone?: string | null;
+  title?: string | null;
   team_id?: string | null;
 }
 
 export interface PeopleContactUpdate {
   name?: string;
   email?: string | null;
+  phone?: string | null;
+  title?: string | null;
   team_id?: string | null;
 }
 

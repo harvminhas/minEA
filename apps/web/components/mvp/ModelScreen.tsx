@@ -48,7 +48,7 @@ const SECTION_TITLE: Record<ModelSection, string> = {
   infrastructure: "Infrastructure",
   connections: "Connections",
   vendors: "Vendors & contracts",
-  owners: "Owners & teams",
+  owners: "People & teams",
 };
 
 export function ModelScreen({ section, selectedId }: { section: ModelSection; selectedId?: string }) {

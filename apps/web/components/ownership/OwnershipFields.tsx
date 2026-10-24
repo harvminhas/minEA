@@ -101,7 +101,7 @@ export function OwnershipFields({
           options={teamOptions}
           placeholder="Select or type a team…"
           required={required}
-          hint="Fed from People → Teams. Type a new name to create on save."
+          hint="From People & teams. Type a new name to create the team on save."
         />
       </div>
 
@@ -114,9 +114,9 @@ export function OwnershipFields({
           value={value.pointOfContactName}
           onChange={handlePocChange}
           options={contactOptions}
-          placeholder="Select or type a contact…"
+          placeholder="Select or type a person…"
           required={pocRequired}
-          hint="Fed from People → Contacts. Type a new name to create on save."
+          hint="From People & teams. Type a new name to add them to People on save."
         />
       </div>
     </div>

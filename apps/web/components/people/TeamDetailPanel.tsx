@@ -1,34 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useTenancy } from "@/lib/tenancy";
 import { peopleApi } from "@/lib/api-client";
 import { useAuthQueryEnabled } from "@/lib/use-auth-query-enabled";
-import { AccountabilityRow } from "@/components/people/AccountabilitiesPanel";
-import { EditAccountabilityDialog } from "@/components/people/EditAccountabilityDialog";
-import { ConfirmRemoveAssignmentDialog } from "@/components/people/ConfirmRemoveAssignmentDialog";
-import { LeadPicker } from "@/components/people/LeadPicker";
+import { InlineText } from "@/components/people/InlineText";
+import { PersonPicker, type PersonChoice } from "@/components/people/PersonPicker";
+import { useRefreshPeople, useResolvePerson } from "@/components/people/usePeople";
 import {
   BulkAssignDialog,
   ownerOptions,
   useOwnershipData,
   useOwnershipWrite,
 } from "@/components/mvp/OwnersPage";
-import { ROLE_CHIP, groupByType, membersOf, roleLabel, teamOwnedRows } from "@/lib/ownership";
-import { ASSIGNMENT_KIND_STYLE, accountabilityDisplayKind } from "@/lib/people-utils";
+import { ROLE_CHIP, groupByType, roleLabel, teamOwnedRows } from "@/lib/ownership";
+import { alsoLinked } from "@/lib/people";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type {
-  AssignmentKind,
-  OwnerRef,
-  OwnershipBulkRequest,
-  PeopleAccountability,
-  PeopleRole,
-  TeamUpdate,
-} from "@minea/types";
+import type { OwnerRef, OwnershipBulkRequest, TeamUpdate } from "@minea/types";
 
 const selectClass =
   "rounded-md border border-[#e6e8ee] bg-white px-2 py-1.5 text-[13px] text-[#1c2230]";
@@ -38,72 +30,6 @@ interface Props {
   teamId: string;
   onClose: () => void;
   onUpdate: () => void;
-}
-
-/** Click to edit; Enter or leaving the field saves, Escape cancels. */
-function InlineText({
-  value,
-  placeholder,
-  multiline,
-  label,
-  onSave,
-  className,
-}: {
-  value: string;
-  placeholder: string;
-  multiline?: boolean;
-  label: string;
-  onSave: (next: string) => void;
-  className?: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  const commit = () => {
-    setEditing(false);
-    if (draft.trim() !== value.trim()) onSave(draft.trim());
-  };
-  if (editing) {
-    const common = {
-      "aria-label": label,
-      autoFocus: true,
-      value: draft,
-      onBlur: commit,
-      onKeyDown: (e: React.KeyboardEvent) => {
-        if (e.key === "Escape") {
-          setDraft(value);
-          setEditing(false);
-        } else if (e.key === "Enter" && (!multiline || !e.shiftKey)) {
-          e.preventDefault();
-          commit();
-        }
-      },
-      className: cn(
-        "w-full rounded-md border border-[#c9c3f7] bg-white px-2 py-1 outline-none",
-        className,
-      ),
-    };
-    return multiline ? (
-      <textarea
-        {...common}
-        rows={2}
-        onChange={(e) => setDraft(e.target.value)}
-      />
-    ) : (
-      <input {...common} onChange={(e) => setDraft(e.target.value)} />
-    );
-  }
-  return (
-    <button
-      type="button"
-      aria-label={`Edit ${label.toLowerCase()}`}
-      onClick={() => setEditing(true)}
-      className={cn("group inline-flex items-center gap-1.5 text-left", className)}
-    >
-      <span className={value ? "" : "text-[#8b90a0]"}>{value || placeholder}</span>
-      <Pencil size={12} className="shrink-0 text-[#b4b8c4] group-hover:text-[#5b4ce6]" />
-    </button>
-  );
 }
 
 export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
@@ -117,15 +43,8 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [moveTo, setMoveTo] = useState("");
   const [assigning, setAssigning] = useState(false);
-  const [showAddRole, setShowAddRole] = useState(false);
-  const [editTarget, setEditTarget] = useState<PeopleAccountability | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<PeopleAccountability | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [selectedRoleId, setSelectedRoleId] = useState("");
-  const [assigneeName, setAssigneeName] = useState("");
-  const [assigneeEmail, setAssigneeEmail] = useState("");
-  const [assignmentKind, setAssignmentKind] = useState<AssignmentKind>("performer");
+  const resolvePerson = useResolvePerson();
+  const refreshPeople = useRefreshPeople();
 
   const { data: team, isLoading } = useQuery({
     queryKey: ["people-team", orgSlug, workspaceSlug, teamId],
@@ -134,16 +53,6 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
       return peopleApi.getTeam(orgSlug, workspaceSlug, teamId, token!);
     },
     enabled,
-  });
-
-  const addRoleEnabled = useAuthQueryEnabled(showAddRole);
-  const { data: allRoles } = useQuery({
-    queryKey: ["people-roles", orgSlug, workspaceSlug],
-    queryFn: async () => {
-      const token = await getToken();
-      return peopleApi.listRoles(orgSlug, workspaceSlug, token!);
-    },
-    enabled: addRoleEnabled,
   });
 
   const refreshTeam = () =>
@@ -166,53 +75,44 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
       toast({ title: "Could not save team", description: e.message, variant: "destructive" }),
   });
 
-  const confirmDeleteAssignment = async () => {
-    if (!deleteTarget) return;
-    setDeletingId(deleteTarget.id);
-    setDeleteError(null);
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("Not signed in");
-      await peopleApi.deleteAccountability(orgSlug, workspaceSlug, deleteTarget.id, token);
-      setDeleteTarget(null);
-      await refreshTeam();
-    } catch {
-      setDeleteError("Could not remove assignment. Please try again.");
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const addRoleMutation = useMutation({
-    mutationFn: async () => {
-      const token = await getToken();
-      return peopleApi.addTeamRole(orgSlug, workspaceSlug, teamId, {
-        people_role_id: selectedRoleId,
-        assignee_name: assigneeName || undefined,
-        assignee_email: assigneeEmail || undefined,
-        assignment_kind: assignmentKind,
-      }, token!);
-    },
+  const memberCall = useMutation({
+    mutationFn: async (fn: (token: string) => Promise<unknown>) => fn((await getToken())!),
     onSuccess: () => {
-      setShowAddRole(false);
-      setSelectedRoleId("");
-      setAssigneeName("");
-      setAssigneeEmail("");
       refreshTeam();
+      refreshPeople();
       onUpdate();
     },
+    onError: (e: Error) => toast({ title: "Could not update members", description: e.message, variant: "destructive" }),
   });
+
+  const addMember = (choice: PersonChoice) =>
+    memberCall.mutate((t) =>
+      peopleApi.addTeamMember(
+        orgSlug,
+        workspaceSlug,
+        teamId,
+        "create" in choice ? choice.create : { contact_id: choice.contactId! },
+        t,
+      ),
+    );
+
+  const pickLead = async (choice: PersonChoice) => {
+    try {
+      const id = await resolvePerson(choice);
+      saveMutation.mutate({ lead_contact_id: id });
+    } catch (e) {
+      toast({ title: "Could not add person", description: (e as Error).message, variant: "destructive" });
+    }
+  };
 
   const owner: OwnerRef = { type: "team", id: teamId };
   const owned = teamOwnedRows(data.items, teamId);
   const groups = groupByType(owned, (r) => r.item.type, (r) => r.item.name);
-  const members = membersOf(data.contacts, teamId);
+  const members = team?.members ?? [];
   const targets = ownerOptions(data.teams, data.contacts).filter(
     (o) => o.value !== `team:${teamId}`,
   );
-  const others = team?.accountabilities ?? [];
-  const availableRoles =
-    allRoles?.items.filter((role) => !team?.roles.some((r) => r.people_role_id === role.id)) ?? [];
+  const linked = alsoLinked(team?.accountabilities ?? []);
 
   const run = (body: Omit<OwnershipBulkRequest, "owner">, done: string) =>
     write.mutate(
@@ -267,16 +167,20 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
               <div className="mt-1.5 flex flex-wrap items-center gap-4 text-[13px] text-[#5b6170]">
                 <span className="flex items-center gap-1.5">
                   <span className="text-[#8b90a0]">Lead</span>
-                  <LeadPicker
-                    contacts={data.contacts}
+                  <PersonPicker
+                    label="Team lead"
+                    people={data.contacts}
                     value={team.lead_contact_id}
                     legacyName={team.lead_name}
+                    placeholder="No lead"
+                    noneLabel="No lead"
+                    createLabel="Create and make lead"
                     disabled={saveMutation.isPending}
-                    onChange={(id) => saveMutation.mutate({ lead_contact_id: id })}
+                    onPick={pickLead}
                   />
                 </span>
                 <span>
-                  <span className="text-[#8b90a0]">Members</span> {members}
+                  <span className="text-[#8b90a0]">Members</span> {members.length}
                 </span>
                 <span>
                   <span className="text-[#8b90a0]">Owns</span>{" "}
@@ -293,7 +197,68 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
                 />
               </div>
 
-              <div className="mb-3 mt-6 flex items-center justify-between">
+              <div className="mb-2 mt-6 flex items-center justify-between">
+                <h2 className="text-[15px] font-semibold">Members</h2>
+                <PersonPicker
+                  label="Add member"
+                  align="right"
+                  people={data.contacts}
+                  excludeIds={members.map((m) => m.contact_id)}
+                  placeholder="+ Add member…"
+                  withTitle="Title on this team"
+                  createLabel="Create and add"
+                  onPick={addMember}
+                  className="min-w-[180px]"
+                />
+              </div>
+              {members.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-[#d6d9e2] px-4 py-4 text-[13px] text-[#8b90a0]">
+                  No members yet. Add people already in People, or type a new name.
+                </p>
+              ) : (
+                <table className="w-full overflow-hidden rounded-lg border border-[#e6e8ee] text-[13px]">
+                  <thead className="bg-[#fafbfc] text-left text-[11px] uppercase tracking-[0.1em] text-[#8b90a0]">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold">Member</th>
+                      <th className="px-3 py-2 font-semibold">Title on this team</th>
+                      <th className="px-3 py-2 font-semibold">Email</th>
+                      <th className="w-20 px-3 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f0f1f5]">
+                    {members.map((m) => (
+                      <tr key={m.contact_id}>
+                        <td className="px-3 py-2 font-medium">
+                          {m.name}
+                          {m.contact_id === team.lead_contact_id && <span className="ml-1.5 text-[12px] font-normal text-[#8b90a0]">lead</span>}
+                        </td>
+                        <td className="px-3 py-2 text-[#5b6170]">
+                          <InlineText
+                            label={`Title for ${m.name}`}
+                            value={m.title ?? ""}
+                            placeholder={m.job_title || "Add title"}
+                            onSave={(title) =>
+                              memberCall.mutate((t) => peopleApi.updateTeamMember(orgSlug, workspaceSlug, teamId, m.contact_id, title || null, t))
+                            }
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-[#5b6170]">{m.email || <span className="text-[#b4b8c4]">—</span>}</td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => memberCall.mutate((t) => peopleApi.removeTeamMember(orgSlug, workspaceSlug, teamId, m.contact_id, t))}
+                            className="text-[12px] text-[#8b90a0] hover:text-red-600"
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              <div className="mb-3 mt-7 flex items-center justify-between">
                 <h2 className="text-[15px] font-semibold">What this team owns</h2>
                 {owned.length > 0 && (
                   <button
@@ -377,111 +342,11 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
                 </div>
               )}
 
-              <details className="mt-6 border-t border-[#e6e8ee] pt-3 text-[13px]">
-                <summary className="cursor-pointer font-semibold">
-                  Other accountabilities · {others.length}
-                </summary>
-                {others.length === 0 ? (
-                  <p className="mt-2 text-[#8b90a0]">None.</p>
-                ) : (
-                  <div className="mt-2 space-y-1.5">
-                    {others.map((a) => (
-                      <AccountabilityRow
-                        key={a.id}
-                        item={a}
-                        onEdit={setEditTarget}
-                        onDelete={(item) => {
-                          setDeleteError(null);
-                          setDeleteTarget(item);
-                        }}
-                        isDeleting={deletingId === a.id}
-                      />
-                    ))}
-                  </div>
-                )}
-              </details>
-
-              <details className="mt-3 border-t border-[#e6e8ee] pt-3 text-[13px]">
-                <summary className="cursor-pointer font-semibold">Team roles · {team.roles.length}</summary>
-                <ul className="mt-2 space-y-1.5">
-                  {team.roles.map((role) => (
-                    <li
-                      key={role.id}
-                      className="flex items-center gap-3 rounded-lg border border-[#e6e8ee] px-3 py-2"
-                    >
-                      <span className="flex-1">
-                        <span className="font-medium">{role.role_name}</span>
-                        <span className="text-[#8b90a0]"> · {role.assignee_name ?? "Unassigned"}</span>
-                      </span>
-                      <span
-                        className={cn(
-                          "rounded-full px-2.5 py-0.5 text-[10px] font-semibold capitalize",
-                          ASSIGNMENT_KIND_STYLE[role.assignment_kind] ?? "bg-gray-100 text-gray-600",
-                        )}
-                      >
-                        {role.assignment_kind}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                {showAddRole ? (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <select
-                      aria-label="Role"
-                      value={selectedRoleId}
-                      onChange={(e) => setSelectedRoleId(e.target.value)}
-                      className={selectClass}
-                    >
-                      <option value="">Select role…</option>
-                      {availableRoles.map((role: PeopleRole) => (
-                        <option key={role.id} value={role.id}>
-                          {role.name}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      value={assigneeName}
-                      onChange={(e) => setAssigneeName(e.target.value)}
-                      placeholder="Assignee name"
-                      className={selectClass}
-                    />
-                    <input
-                      value={assigneeEmail}
-                      onChange={(e) => setAssigneeEmail(e.target.value)}
-                      placeholder="Assignee email"
-                      className={selectClass}
-                    />
-                    <select
-                      aria-label="Kind"
-                      value={assignmentKind}
-                      onChange={(e) => setAssignmentKind(e.target.value as AssignmentKind)}
-                      className={selectClass}
-                    >
-                      <option value="owner">Owner</option>
-                      <option value="performer">Performer</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => addRoleMutation.mutate()}
-                      disabled={!selectedRoleId || addRoleMutation.isPending}
-                      className="rounded-md bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-40"
-                    >
-                      Add
-                    </button>
-                    <button type="button" onClick={() => setShowAddRole(false)} className="text-[#8b90a0]">
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowAddRole(true)}
-                    className="mt-2 text-[12px] text-[#5b4ce6]"
-                  >
-                    + Add role
-                  </button>
-                )}
-              </details>
+              {linked && (
+                <p className="mt-6 border-t border-[#e6e8ee] pt-3 text-[13px] text-[#5b6170]">
+                  <span className="text-[#8b90a0]">Also linked:</span> {linked}
+                </p>
+              )}
             </>
           )}
         </div>
@@ -552,36 +417,6 @@ export function TeamDetailPanel({ teamId, onClose, onUpdate }: Props) {
         />
       )}
 
-      {editTarget && team && (
-        <EditAccountabilityDialog
-          item={editTarget}
-          subjectType="team"
-          existingPairs={team.accountabilities
-            .filter((a) => a.entity_kind === editTarget.entity_kind)
-            .map((a) => ({ entityId: a.entity_id, linkKind: a.link_kind }))}
-          onClose={() => setEditTarget(null)}
-          onSuccess={async () => {
-            setEditTarget(null);
-            await refreshTeam();
-          }}
-        />
-      )}
-
-      {deleteTarget && (
-        <ConfirmRemoveAssignmentDialog
-          entityName={deleteTarget.entity_name}
-          linkKind={accountabilityDisplayKind(deleteTarget)}
-          subjectType="team"
-          loading={deletingId === deleteTarget.id}
-          error={deleteError}
-          onConfirm={confirmDeleteAssignment}
-          onClose={() => {
-            if (deletingId) return;
-            setDeleteTarget(null);
-            setDeleteError(null);
-          }}
-        />
-      )}
     </>
   );
 }

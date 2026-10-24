@@ -32,6 +32,7 @@ class PeopleRoleRead(BaseModel):
     team_count: int = 0
     created_at: datetime
     updated_at: datetime
+    retired_at: datetime | None = None
 
 
 class TeamRoleAssignmentRead(BaseModel):
@@ -126,11 +127,41 @@ class TeamRead(BaseModel):
     lead_email: str | None
     lead_contact_id: UUID | None = None
     role_count: int = 0
+    member_count: int = 0
     created_at: datetime
     updated_at: datetime
 
 
+class TeamMemberRead(BaseModel):
+    contact_id: UUID
+    name: str
+    email: str | None = None
+    title: str | None = None  # title on this team
+    job_title: str | None = None  # the person's own title
+
+
+class TeamMemberAdd(BaseModel):
+    """Add an existing person (contact_id) or create one inline (name, optional email)."""
+
+    contact_id: UUID | None = None
+    name: str | None = Field(default=None, max_length=200)
+    email: str | None = None
+    title: str | None = Field(default=None, max_length=200)
+
+
+class TeamMemberUpdate(BaseModel):
+    title: str | None = Field(default=None, max_length=200)
+
+
+class RoleRetire(BaseModel):
+    """Old-roles review: optionally keep the role name as a title on a person (on one team when team_id is set)."""
+
+    title_contact_id: UUID | None = None
+    team_id: UUID | None = None
+
+
 class TeamDetail(TeamRead):
+    members: list[TeamMemberRead] = Field(default_factory=list)
     roles: list[TeamRoleOnTeamRead] = Field(default_factory=list)
     accountabilities: list[AccountabilityRead] = Field(default_factory=list)
 
@@ -182,13 +213,23 @@ class AccountabilityUpdate(BaseModel):
 class PeopleContactCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     email: str | None = None
+    phone: str | None = None
+    title: str | None = Field(default=None, max_length=200)
     team_id: UUID | None = None
 
 
 class PeopleContactUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     email: str | None = None
+    phone: str | None = None
+    title: str | None = Field(default=None, max_length=200)
     team_id: UUID | None = None
+
+
+class ContactTeamRead(BaseModel):
+    id: UUID
+    name: str
+    title: str | None = None
 
 
 class PeopleContactRead(BaseModel):
@@ -197,8 +238,11 @@ class PeopleContactRead(BaseModel):
     org_id: UUID
     name: str
     email: str | None
+    phone: str | None = None
+    title: str | None = None
     team_id: UUID | None
     team_name: str | None = None
+    teams: list[ContactTeamRead] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

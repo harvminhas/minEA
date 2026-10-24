@@ -9,6 +9,8 @@ import { useTenancy } from "@/lib/tenancy";
 import { toast } from "@/hooks/use-toast";
 import { OWNERSHIP_ROLES, holderLabel } from "@/lib/ownership";
 import { useOwnershipData } from "@/components/mvp/OwnersPage";
+import { PersonPicker } from "@/components/people/PersonPicker";
+import { useResolvePerson } from "@/components/people/usePeople";
 
 const selectClass =
   "min-w-0 flex-1 rounded-md border border-[#e6e8ee] bg-white px-2 py-1 text-[12px] text-[#1c2230]";
@@ -39,6 +41,7 @@ export function OwnershipCard({
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const qc = useQueryClient();
+  const resolvePerson = useResolvePerson();
 
   useEffect(() => {
     if (openEditor && canEdit) setEditing(true);
@@ -159,26 +162,23 @@ export function OwnershipCard({
                   </option>
                 ))}
               </select>
-              <select
-                aria-label={`${r.label} contact`}
-                value={draft[r.key].contact_id}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    [r.key]: { ...draft[r.key], contact_id: e.target.value },
-                  })
-                }
-                className={selectClass}
-              >
-                <option value="">
-                  {draft[r.key].team_id ? "Team lead" : "No contact"}
-                </option>
-                {data.contacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <PersonPicker
+                label={`${r.label} person`}
+                people={data.contacts}
+                value={draft[r.key].contact_id || null}
+                placeholder={draft[r.key].team_id ? "Team lead" : "No person"}
+                noneLabel={draft[r.key].team_id ? "Team lead" : "No person"}
+                createLabel="Create and pick"
+                className="min-w-0 flex-1 text-[12px]"
+                onPick={async (choice) => {
+                  try {
+                    const id = await resolvePerson(choice);
+                    setDraft((d) => d && { ...d, [r.key]: { ...d[r.key], contact_id: id ?? "" } });
+                  } catch (e) {
+                    toast({ title: "Could not add person", description: (e as Error).message, variant: "destructive" });
+                  }
+                }}
+              />
             </div>
           ))}
           <div className="flex justify-end gap-2 pt-1">

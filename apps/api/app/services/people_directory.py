@@ -37,7 +37,7 @@ def duplicate_groups(rows: list[dict[str, Any]]) -> list[list[str]]:
 def _usage_sql(kind: str) -> str:
     if kind == "team":
         parts = [f"(SELECT count(*) FROM {t} WHERE owner_team_id = x.id)" for t in OWNABLE_TABLES]
-        parts += ["(SELECT count(*) FROM people_contacts c WHERE c.team_id = x.id)",
+        parts += ["(SELECT count(*) FROM team_members m WHERE m.team_id = x.id)",
                   "(SELECT count(*) FROM people_accountabilities a WHERE a.subject_type = 'team' AND a.subject_id = x.id)"]
     elif kind == "person":
         parts = [f"(SELECT count(*) FROM {t} WHERE point_of_contact_id = x.id)" for t in OWNABLE_TABLES]
@@ -70,7 +70,7 @@ async def list_directory(db: AsyncSession, workspace_id: uuid.UUID) -> dict[str,
         " FROM people_contacts x LEFT JOIN teams t ON t.id = x.team_id WHERE x.workspace_id = :ws ORDER BY lower(x.name)"), ws)).mappings().all()
     roles = (await db.execute(text(
         f"SELECT x.id, x.name, x.role_kind, x.description, ({_usage_sql('role')}) AS usage"
-        " FROM people_roles x WHERE x.workspace_id = :ws ORDER BY lower(x.name)"), ws)).mappings().all()
+        " FROM people_roles x WHERE x.workspace_id = :ws AND x.retired_at IS NULL ORDER BY lower(x.name)"), ws)).mappings().all()
     as_list = lambda rows: [{**{k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in dict(r).items()}} for r in rows]  # noqa: E731
     t, p, r = as_list(teams), as_list(people), as_list(roles)
     return {
@@ -89,6 +89,8 @@ async def find_by_name(db: AsyncSession, kind: str, workspace_id: uuid.UUID, nam
 
 async def create(db: AsyncSession, kind: str, workspace_id: uuid.UUID, org_id: uuid.UUID, user_id: uuid.UUID | None, body: dict[str, Any]) -> tuple[str, bool]:
     """(id, created). An existing name (case/space-insensitive) is reused, never duplicated."""
+    if kind == "role":
+        raise ValueError("Roles are retired. Give the person a title, or use the ownership roles on the record.")
     name = clean_name(body.get("name"))
     if not name:
         raise ValueError("Name is required")
@@ -143,6 +145,11 @@ async def update(db: AsyncSession, kind: str, workspace_id: uuid.UUID, row_id: s
         return
     assignments = ", ".join(f"{key} = CAST(:{key} AS UUID)" if key == "team_id" else f"{key} = :{key}" for key in sets)
     await db.execute(text(f"UPDATE {_table(kind)} SET {assignments}, updated_at = now() WHERE id = CAST(:id AS UUID)"), {**sets, "id": row_id})
+    if kind == "person" and "team_id" in sets:
+        from app.services.team_members import set_primary
+
+        new_team = uuid.UUID(sets["team_id"]) if sets["team_id"] else None
+        await set_primary(db, uuid.UUID(row_id), current["team_id"], new_team)
     if "name" in sets and kind == "team":
         for table in OWNABLE_TABLES:
             await db.execute(text(f"UPDATE {table} SET owner = :name WHERE owner_team_id = CAST(:id AS UUID)"), {"name": sets["name"], "id": row_id})
@@ -168,6 +175,9 @@ async def merge(db: AsyncSession, kind: str, workspace_id: uuid.UUID, into_id: s
                 await db.execute(text(f"UPDATE {table} SET owner_team_id = CAST(:into AS UUID), owner = :name WHERE owner_team_id = CAST(:src AS UUID)"), p)
             await db.execute(text("UPDATE people_contacts SET team_id = CAST(:into AS UUID) WHERE team_id = CAST(:src AS UUID)"), p)
             await db.execute(text(
+                "INSERT INTO team_members (team_id, contact_id, title) SELECT CAST(:into AS UUID), contact_id, title"
+                " FROM team_members WHERE team_id = CAST(:src AS UUID) ON CONFLICT DO NOTHING"), p)
+            await db.execute(text(
                 "UPDATE team_role_assignments a SET team_id = CAST(:into AS UUID) WHERE a.team_id = CAST(:src AS UUID)"
                 " AND NOT EXISTS (SELECT 1 FROM team_role_assignments b WHERE b.team_id = CAST(:into AS UUID) AND b.people_role_id = a.people_role_id)"), p)
             await _move_accountabilities(db, "team", p)
@@ -180,6 +190,11 @@ async def merge(db: AsyncSession, kind: str, workspace_id: uuid.UUID, into_id: s
             if fills:
                 sets = ", ".join(f"{k} = COALESCE({k}, CAST(:{k} AS UUID))" if k == "team_id" else f"{k} = COALESCE({k}, :{k})" for k in fills)
                 await db.execute(text(f"UPDATE people_contacts SET {sets} WHERE id = CAST(:into AS UUID)"), {**p, **{k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in fills.items()}})
+            await db.execute(text(
+                "INSERT INTO team_members (team_id, contact_id, title) SELECT team_id, CAST(:into AS UUID), title"
+                " FROM team_members WHERE contact_id = CAST(:src AS UUID) ON CONFLICT DO NOTHING"), p)
+            await db.execute(text("UPDATE teams SET lead_contact_id = CAST(:into AS UUID) WHERE lead_contact_id = CAST(:src AS UUID)"), p)
+            await _move_accountabilities(db, "contact", p)
         else:
             await db.execute(text(
                 "UPDATE team_role_assignments a SET people_role_id = CAST(:into AS UUID) WHERE a.people_role_id = CAST(:src AS UUID)"

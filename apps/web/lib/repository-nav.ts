@@ -133,12 +133,12 @@ export const REPOSITORY_LAYERS: RepositoryLayer[] = [
   },
   {
     id: "people",
-    label: "People",
+    label: "People & teams",
     color: "#64748b",
     items: [
-      { label: "Roles", segment: "people/roles", countSource: { kind: "people-roles" } },
+      { label: "People", segment: "people/contacts", countSource: { kind: "people-contacts" } },
       { label: "Teams", segment: "people/teams", countSource: { kind: "people-teams" } },
-      { label: "Contacts", segment: "people/contacts", countSource: { kind: "people-contacts" } },
+      { label: "Ownership roles", segment: "people/roles" },
     ],
   },
   {

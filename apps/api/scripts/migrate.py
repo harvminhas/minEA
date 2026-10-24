@@ -69,6 +69,7 @@ MIGRATION_FILES = [
     "054_add_batch_requests.sql",
     "055_invite_workspaces.sql",
     "056_ownership_roles.sql",
+    "057_team_members.sql",
 ]
 
 

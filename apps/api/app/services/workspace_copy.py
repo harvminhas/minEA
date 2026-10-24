@@ -441,6 +441,7 @@ async def _copy_people(
                 role_kind=role.role_kind,
                 description=role.description,
                 created_by=role.created_by,
+                retired_at=role.retired_at,
             )
         )
 

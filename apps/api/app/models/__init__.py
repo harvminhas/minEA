@@ -8,7 +8,7 @@ from app.models.shares import ShareLink
 from app.models.tenancy import AuditLog, Invite, InviteWorkspace, Org, OrgMembership, User, WorkspaceMembership
 from app.models.views_graph import CustomerJourney, Investment, JourneyMoment, Process, Product, Realization
 from app.models.data_layer import DataLink
-from app.models.people import PeopleAccountability, PeopleRole, Team, TeamRoleAssignment
+from app.models.people import PeopleAccountability, PeopleRole, Team, TeamMember, TeamRoleAssignment
 
 __all__ = [
     "BusinessPlanRequest",
@@ -42,6 +42,7 @@ __all__ = [
     "PeopleRole",
     "Team",
     "TeamRoleAssignment",
+    "TeamMember",
     "PeopleAccountability",
     "DataLink",
 ]
