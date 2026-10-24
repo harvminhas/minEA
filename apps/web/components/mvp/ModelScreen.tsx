@@ -11,6 +11,7 @@ import { AgingTile, PlatformsTable, ServersTable } from "@/components/mvp/InfraT
 import { LocationsTable } from "@/components/mvp/LocationsTable";
 import { AiTable } from "@/components/mvp/AiTables";
 import { describeTypes } from "@/lib/ask/deterministic";
+import { VendorsHub } from "@/components/vendors/VendorsHub";
 import { catalogStats, moneyLabel, rowForPanel, vendorPanelRow, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { objectsApi } from "@/lib/api-client";
@@ -25,7 +26,6 @@ import { CapabilitiesSection } from "@/components/mvp/CapabilitiesSection";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { ObjectForm } from "@/components/objects/ObjectForm";
-import { AddFlow } from "@/components/add/AddFlow";
 import { RESTORE_PARAM, RESTORE_VALUE } from "@/lib/add-draft";
 import { AppAddPanel } from "@/components/add/AppAddPanel";
 import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
@@ -170,7 +170,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
         {section === "ai-models" && <AiTable type="ai_model" selectedId={selectedId} />}
         {section === "capabilities" && <CapabilitiesSection selectedId={selectedId} />}
         {section === "connections" && <ConnectionsList items={connections} basePath={basePath} />}
-        {section === "vendors" && <VendorsTable vendors={vendors} anywhere={anywhere} selectedId={selectedId} />}
+        {section === "vendors" && <VendorsHub selectedId={selectedId} />}
         {section === "owners" && <OwnersPage />}
         {(section === "applications" || section === "infrastructure") && (
           <div className="px-6 py-5">
@@ -369,7 +369,7 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
         )}
       </div>
 
-      {selected && <ModelDetailPanel key={selected.id} row={selected} onClose={close} />}
+      {selected && section !== "vendors" && <ModelDetailPanel key={selected.id} row={selected} onClose={close} />}
 
       {creating === "runtime" && (
         <CreateRuntimePanel
@@ -553,69 +553,4 @@ function ConnectionsList({ items, basePath }: { items: { id: string; name: strin
   );
 }
 
-function VendorsTable({
-  vendors,
-  anywhere = false,
-  selectedId,
-}: {
-  vendors: ReturnType<typeof vendorRollup>;
-  anywhere?: boolean;
-  selectedId?: string;
-}) {
-  const router = useRouter();
-  const { basePath } = useTenancy();
-  const catalog = useModelCatalog();
-  const [open, setOpen] = useState(false);
-  const total = vendors.reduce((sum, vendor) => sum + vendor.annual, 0);
-  const partyId = (name: string) =>
-    (catalog.data?.objects ?? []).find(
-      (object) => object.type === "external_party" && object.name.trim().toLowerCase() === name.trim().toLowerCase()
-    )?.id;
-  return (
-    <div className="px-6 py-5">
-      <div className="mb-1 flex items-center justify-between gap-3">
-        <h1 className="text-[22px] font-semibold text-[#1c2230]">Vendors & contracts</h1>
-        {anywhere && (
-          <button type="button" onClick={() => setOpen((value) => !value)} className="inline-flex items-center gap-1 rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white">
-            <Plus size={14} /> Add
-          </button>
-        )}
-      </div>
-      {open && <div className="mb-4"><AddFlow origin="model" kind="vendor" compact onClose={() => setOpen(false)} /></div>}
-      <p className="mb-4 mt-1 text-[13px] text-[#6b7289]">
-        Derived from the vendor field on applications and infrastructure. {vendors.length} vendors
-        {total > 0 ? ` · ${moneyLabel(total)} tracked` : ""}.
-      </p>
-      <table className="w-full text-left text-[13px]">
-        <thead>
-          <tr className="border-b border-[#eef0f4] text-[12px] text-[#8b90a0]">
-            {["Vendor", "Annual cost", "Renewal", "Owner", "Items"].map((heading) => (
-              <th key={heading} className="h-11 px-2 font-medium">{heading}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {vendors.map((vendor) => {
-            const rowId = partyId(vendor.vendor) ?? vendor.vendor;
-            const selectedKey = selectedId ? modelItemId(selectedId) : "";
-            return (
-            <tr
-              key={vendor.vendor}
-              onClick={() => router.push(modelItemPath(basePath, "vendors", rowId))}
-              className={cn("cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]", selectedKey === rowId && "bg-[#f6f5ff]")}
-            >
-              <td className="px-2 py-3 font-medium">{vendor.vendor}</td>
-              <td className="px-2 py-3">{vendor.annual ? moneyLabel(vendor.annual) : "—"}</td>
-              <td className="px-2 py-3">{vendor.renewal?.renewalLabel || "—"}</td>
-              <td className="px-2 py-3">{[...vendor.owners].join(", ") || "—"}</td>
-              <td className="px-2 py-3">{vendor.items.length}</td>
-            </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {vendors.length === 0 && <p className="py-8 text-[13px] text-[#8b90a0]">No vendors yet. Add a vendor on an application or infrastructure item.</p>}
-    </div>
-  );
-}
 

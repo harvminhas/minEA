@@ -147,6 +147,7 @@ async def copy_workspace_layers(
 
     await db.flush()
     await _copy_relationships(db, source, target, object_id_map, actor_user_id)
+    await _copy_contracts(db, source, target, object_id_map, actor_user_id)
 
     # Remap JSONB references now that all ID maps are populated.
     await _remap_object_properties(db, target.id, object_id_map)
@@ -198,6 +199,53 @@ async def _copy_objects(
             updated_by=actor_user_id,
         )
         db.add(clone)
+
+
+async def _copy_contracts(
+    db: AsyncSession,
+    source: Workspace,
+    target: Workspace,
+    object_id_map: dict[uuid.UUID, uuid.UUID],
+    actor_user_id: uuid.UUID | None,
+) -> None:
+    """Vendor contracts follow the apps they cover: a contract is copied when at least one covered app
+    was copied, with only those apps. Vendors are not copied, so vendor/owner links stay unset."""
+    if not object_id_map:
+        return
+    from sqlalchemy.exc import ProgrammingError
+
+    from app.models.contracts import VendorContract, VendorContractItem
+
+    try:
+        async with db.begin_nested():
+            contracts = (await db.execute(select(VendorContract).where(VendorContract.workspace_id == source.id))).scalars().all()
+            if not contracts:
+                return
+            items = (await db.execute(
+                select(VendorContractItem).where(VendorContractItem.contract_id.in_([c.id for c in contracts]))
+            )).scalars().all()
+            by_contract: dict[uuid.UUID, list] = {}
+            for item in items:
+                if item.object_id in object_id_map:
+                    by_contract.setdefault(item.contract_id, []).append(item)
+            for contract in contracts:
+                kept = by_contract.get(contract.id)
+                if not kept:
+                    continue
+                new_id = uuid.uuid4()
+                db.add(VendorContract(
+                    id=new_id, workspace_id=target.id, org_id=target.org_id,
+                    vendor_id=object_id_map.get(contract.vendor_id) if contract.vendor_id else None,
+                    name=contract.name, annual_cost_cents=contract.annual_cost_cents,
+                    start_date=contract.start_date, end_date=contract.end_date, notice_days=contract.notice_days,
+                    auto_renew=contract.auto_renew, document_url=contract.document_url, created_by=actor_user_id,
+                ))
+                await db.flush()
+                for item in kept:
+                    db.add(VendorContractItem(contract_id=new_id, object_id=object_id_map[item.object_id], seats=item.seats, in_use=item.in_use))
+            await db.flush()
+    except ProgrammingError:  # tables missing before migration 058: nothing to copy
+        return
 
 
 async def _copy_relationships(

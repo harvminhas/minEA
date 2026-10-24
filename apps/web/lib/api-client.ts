@@ -1,4 +1,5 @@
 import type { SupportRequestBody } from "@/lib/support";
+import type { ContractInput, VendorContract } from "@/lib/contracts";
 import { isConnectorType, reportWrite, type CatalogWrite } from "@/lib/catalog-write-bus";
 import type {
   EntityAccountability,
@@ -991,6 +992,21 @@ export const capabilityMapApi = {
 };
 
 // ─── People (Roles & Teams) ──────────────────────────────────────────────────
+
+export const contractsApi = {
+  list: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<VendorContract[]>(`${wsBase(orgSlug, workspaceSlug)}/contracts`, { token }),
+  create: (orgSlug: string, workspaceSlug: string, body: ContractInput, token: string) =>
+    apiFetch<VendorContract>(`${wsBase(orgSlug, workspaceSlug)}/contracts`, { method: "POST", body: JSON.stringify(body), token }),
+  update: (orgSlug: string, workspaceSlug: string, id: string, body: ContractInput, token: string) =>
+    apiFetch<VendorContract>(`${wsBase(orgSlug, workspaceSlug)}/contracts/${id}`, { method: "PATCH", body: JSON.stringify(body), token }),
+  setItem: (orgSlug: string, workspaceSlug: string, id: string, objectId: string, body: { seats?: number | null; in_use?: number | null }, token: string) =>
+    apiFetch<VendorContract>(`${wsBase(orgSlug, workspaceSlug)}/contracts/${id}/items/${objectId}`, { method: "PUT", body: JSON.stringify(body), token }),
+  removeItem: (orgSlug: string, workspaceSlug: string, id: string, objectId: string, token: string) =>
+    apiFetch<VendorContract>(`${wsBase(orgSlug, workspaceSlug)}/contracts/${id}/items/${objectId}`, { method: "DELETE", token }),
+  remove: (orgSlug: string, workspaceSlug: string, id: string, token: string) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/contracts/${id}`, { method: "DELETE", token }),
+};
 
 export const peopleApi = {
   listRoles: (orgSlug: string, workspaceSlug: string, token: string) =>

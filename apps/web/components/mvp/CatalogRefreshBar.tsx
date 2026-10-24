@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { catalogApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
-import { catalogQueryKey, shapeCatalog } from "@/lib/use-model-catalog";
+import { catalogQueryKey, shapeCatalog, type WorkspaceCatalog } from "@/lib/use-model-catalog";
 
 type Phase = "idle" | "refreshing" | "complete";
 
@@ -24,7 +24,8 @@ export function CatalogRefreshBar() {
     try {
       const token = await getToken();
       if (!token) throw new Error("Not signed in");
-      const next = shapeCatalog(await catalogApi.refresh(orgSlug, workspaceSlug, token));
+      const contracts = queryClient.getQueryData<WorkspaceCatalog>(catalogQueryKey(orgSlug, workspaceSlug))?.contracts;
+      const next = shapeCatalog({ ...(await catalogApi.refresh(orgSlug, workspaceSlug, token)), contracts });
       queryClient.setQueryData(catalogQueryKey(orgSlug, workspaceSlug), next);
       const elapsed = Date.now() - started;
       if (elapsed < 700) await new Promise((resolve) => setTimeout(resolve, 700 - elapsed));

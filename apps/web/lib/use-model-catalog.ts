@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { MinEAObject, Relationship } from "@minea/types";
-import { catalogApi } from "@/lib/api-client";
+import { catalogApi, contractsApi } from "@/lib/api-client";
+import { effectiveObjects, type VendorContract } from "@/lib/contracts";
 import { useAuth } from "@/lib/auth-context";
 import { shouldRefreshOnEnter } from "@/lib/catalog-refresh";
 import { rowFromObject, type CatalogRow } from "@/lib/model-catalog";
@@ -25,9 +26,14 @@ export type WorkspaceCatalog = {
   connections: MinEAObject[];
   locations: MinEAObject[];
   parties: MinEAObject[];
+  /** Vendor contracts (058). Empty before the migration runs or when the read fails. */
+  contracts: VendorContract[];
+  /** `objects` with contracts applied: use for totals (spend, idle licences, overlaps, renewals). */
+  effective: MinEAObject[];
 };
 
 type CatalogBody = {
+  contracts?: VendorContract[];
   version?: number;
   builtAt?: string | null;
   dirty?: boolean;
@@ -44,7 +50,15 @@ export function shapeCatalog(body: CatalogBody): WorkspaceCatalog {
   // A link whose end is not in the catalogue (record deleted) is never shown: no "Unnamed …" cards.
   const ids = new Set(objects.map((object) => object.id));
   const relationships = (body.relationships ?? []).filter((rel) => ids.has(rel.from_object_id) && ids.has(rel.to_object_id));
-  const rows = objects.map(rowFromObject).filter((row): row is CatalogRow => row != null);
+  const contracts = body.contracts ?? [];
+  const effective = effectiveObjects(objects, contracts);
+  const rows = effective
+    .map((item, index) => {
+      const row = rowFromObject(item);
+      if (row && item !== objects[index]) return { ...row, object: objects[index], effective: item };
+      return row;
+    })
+    .filter((row): row is CatalogRow => row != null);
   return {
     version: body.version ?? 0,
     builtAt: body.builtAt ?? null,
@@ -57,6 +71,8 @@ export function shapeCatalog(body: CatalogBody): WorkspaceCatalog {
     ),
     locations: objects.filter((object) => object.type === "location"),
     parties: objects.filter((object) => object.type === "external_party"),
+    contracts,
+    effective,
   };
 }
 
@@ -98,6 +114,24 @@ export function mergeFreshCatalog(
   }
   if (!kept && objects.length === fetched.objects.length && relationships.length === fetched.relationships.length) return fetched;
   return shapeCatalog({ ...fetched, objects, relationships });
+}
+
+/** Put a saved (or deleted) contract into the cached catalog, re-applying the cost split. */
+export function applyContractWrite(
+  queryClient: QueryClient,
+  orgSlug: string,
+  workspaceSlug: string,
+  change: { contract?: VendorContract; removeId?: string }
+) {
+  queryClient.setQueryData<WorkspaceCatalog>(catalogQueryKey(orgSlug, workspaceSlug), (current) => {
+    const base = current ?? shapeCatalog({});
+    let contracts = base.contracts.filter((item) => item.id !== change.removeId);
+    if (change.contract) {
+      const next = change.contract;
+      contracts = contracts.some((item) => item.id === next.id) ? contracts.map((item) => (item.id === next.id ? next : item)) : [...contracts, next];
+    }
+    return shapeCatalog({ ...base, contracts });
+  });
 }
 
 export function applyCatalogWrite(
@@ -155,7 +189,11 @@ export function useModelCatalog() {
     queryFn: async () => {
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
-      const fetched = shapeCatalog(await catalogApi.get(orgSlug, workspaceSlug, token));
+      const [body, contracts] = await Promise.all([
+        catalogApi.get(orgSlug, workspaceSlug, token),
+        contractsApi.list(orgSlug, workspaceSlug, token).catch(() => [] as VendorContract[]),
+      ]);
+      const fetched = shapeCatalog({ ...body, contracts });
       const current = queryClient.getQueryData<WorkspaceCatalog>(catalogQueryKey(orgSlug, workspaceSlug));
       return mergeFreshCatalog(current, fetched);
     },

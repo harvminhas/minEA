@@ -19,6 +19,9 @@ export type CatalogMissing = {
 export type CatalogRow = {
   id: string;
   object: MinEAObject;
+  /** The object with vendor contracts applied (cost split, seats, renewal), when a contract covers it.
+   * Totals read this; edit forms keep reading `object` so contract values are never saved onto the app. */
+  effective?: MinEAObject;
   kind: CatalogKind;
   name: string;
   typeLabel: string;
@@ -387,7 +390,7 @@ function addVendor(map: Map<string, VendorBucket>, name: string, amount: number,
 export function vendorRollup(rows: CatalogRow[]) {
   const map = new Map<string, VendorBucket>();
   for (const row of rows) {
-    const amounts = vendorAmounts((row.object.properties ?? {}) as Record<string, unknown>, row.vendor);
+    const amounts = vendorAmounts(((row.effective ?? row.object).properties ?? {}) as Record<string, unknown>, row.vendor);
     const seen = new Set<string>();
     for (const amount of amounts) {
       const name = displayVendor(amount.vendor);

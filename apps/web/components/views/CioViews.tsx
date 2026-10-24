@@ -58,7 +58,7 @@ const monthly = (cents: number | null) => (cents == null ? "—" : `$${(cents / 
 export function IdleLicencesReport() {
   const { basePath } = useTenancy();
   const catalog = useModelCatalog();
-  const objects = catalog.data?.objects;
+  const objects = catalog.data?.effective ?? catalog.data?.objects;
   const result = useMemo(() => idleLicences(objects ?? []), [objects]);
   const add = (id: string) => modelItemPath(basePath, "applications", id, "licences_in_use");
   const header = <Header title="Idle licences" sub="Licences you pay for that nobody is using. Idle = licences − in use." />;
@@ -148,7 +148,7 @@ function withinDays(iso: string, days: number) {
 export function OverlapsReport() {
   const { basePath } = useTenancy();
   const catalog = useModelCatalog();
-  const objects = catalog.data?.objects;
+  const objects = catalog.data?.effective ?? catalog.data?.objects;
   const relationships = catalog.data?.relationships;
   const result = useMemo(() => overlaps(objects ?? [], relationships ?? []), [objects, relationships]);
   const [hints, setHints] = useState(false);

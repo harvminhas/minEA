@@ -24,6 +24,7 @@ from app.routers import (
     platform_catalog,
     people_directory,
     ownership_roles,
+    contracts,
     clouds,
     contact,
     support,
@@ -115,6 +116,7 @@ app.include_router(products.router, prefix="/api/v1")
 app.include_router(processes.router, prefix="/api/v1")
 app.include_router(people.router, prefix="/api/v1")
 app.include_router(ownership_roles.router, prefix="/api/v1")
+app.include_router(contracts.router, prefix="/api/v1")
 app.include_router(data_layer.router, prefix="/api/v1")
 app.include_router(capability_map.router, prefix="/api/v1")
 app.include_router(journeys.router, prefix="/api/v1")

@@ -9,6 +9,7 @@ from app.models.tenancy import AuditLog, Invite, InviteWorkspace, Org, OrgMember
 from app.models.views_graph import CustomerJourney, Investment, JourneyMoment, Process, Product, Realization
 from app.models.data_layer import DataLink
 from app.models.people import PeopleAccountability, PeopleRole, Team, TeamMember, TeamRoleAssignment
+from app.models.contracts import VendorContract, VendorContractItem
 
 __all__ = [
     "BusinessPlanRequest",
@@ -45,4 +46,6 @@ __all__ = [
     "TeamMember",
     "PeopleAccountability",
     "DataLink",
+    "VendorContract",
+    "VendorContractItem",
 ]

@@ -279,6 +279,11 @@ async def load_graph(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUI
     # Catalogue first: when its table is missing, load_tools rolls the session back, which would
     # expire ORM rows loaded before it (then reading obj.properties fails with MissingGreenlet).
     vendor_by_name = await catalogue_vendors(db)
+    # Contracts next, for the same reason (a missing table rolls back a savepoint). Their cost is split
+    # across covered apps so spend, renewals, idle licences and overlaps count each contract once.
+    from app.services.contracts import covering_by_object, effective_properties, load_contracts
+
+    covering = covering_by_object(await load_contracts(db, workspace_id))
     objects = (
         await db.execute(
             select(MinEAObject).where(MinEAObject.workspace_id == workspace_id, MinEAObject.org_id == org_id)
@@ -298,6 +303,8 @@ async def load_graph(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUI
     edges: list[Edge] = []
     raw: list[dict] = []
     for obj in objects:
+        if str(obj.id) in covering:
+            obj = _Effective(obj, effective_properties(obj.properties, covering[str(obj.id)], str(obj.id)))
         rec = _record(obj, team_names)
         if rec:
             if not rec.vendor_names:
@@ -307,6 +314,17 @@ async def load_graph(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUI
     for rel in relationships:
         edges.append(Edge(str(rel.from_object_id), str(rel.to_object_id), rel.type, "", dict(getattr(rel, "attributes", None) or {})))
     return WorkspaceGraph(records=records, edges=edges, objects=raw)
+
+
+class _Effective:
+    """Read-only view of an ORM object with contract-applied properties. Never mutates the row."""
+
+    def __init__(self, obj: MinEAObject, properties: dict) -> None:
+        self._obj = obj
+        self.properties = properties
+
+    def __getattr__(self, name: str):
+        return getattr(self._obj, name)
 
 
 def _raw(obj: MinEAObject, team_names: dict[str, str]) -> dict:
@@ -381,9 +399,28 @@ _FINGERPRINT_SQL = text(
 )
 
 
+_CONTRACTS_FINGERPRINT_SQL = text(
+    """
+    SELECT coalesce(md5(string_agg(c.id::text || c.updated_at::text || coalesce(i.object_id::text, '') || coalesce(i.seats::text, '')
+                                   || '/' || coalesce(i.in_use::text, ''), ',' ORDER BY c.id, i.object_id)), '')
+    FROM vendor_contracts c LEFT JOIN vendor_contract_items i ON i.contract_id = c.id
+    WHERE c.workspace_id = :ws
+    """
+)
+
+
+async def _contracts_fingerprint(db: AsyncSession, workspace_id: uuid.UUID) -> str:
+    try:
+        async with db.begin_nested():
+            return str((await db.execute(_CONTRACTS_FINGERPRINT_SQL, {"ws": workspace_id})).scalar() or "")
+    except Exception:  # before migration 058: no contracts to fingerprint
+        return "-"
+
+
 async def workspace_fingerprint(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID) -> str | None:
     try:
-        return str((await db.execute(_FINGERPRINT_SQL, {"ws": workspace_id, "org": org_id})).scalar() or "")
+        base = str((await db.execute(_FINGERPRINT_SQL, {"ws": workspace_id, "org": org_id})).scalar() or "")
+        return base + "|c:" + await _contracts_fingerprint(db, workspace_id)
     except Exception:  # never let the cache break Ask: load normally
         try:
             await db.rollback()

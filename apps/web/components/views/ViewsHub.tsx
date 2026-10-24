@@ -38,7 +38,7 @@ export function ViewsHub() {
   const catalog = useModelCatalog();
   const impact = useImpactGraph();
   const rows = catalog.data?.rows;
-  const objects = catalog.data?.objects;
+  const objects = catalog.data?.effective ?? catalog.data?.objects;
   const relationships = catalog.data?.relationships;
   const cards = useMemo(
     () => viewsHub({ rows: rows ?? [], edges: impact.edges, objects: objects ?? [], relationships: relationships ?? [] }),

@@ -70,6 +70,7 @@ MIGRATION_FILES = [
     "055_invite_workspaces.sql",
     "056_ownership_roles.sql",
     "057_team_members.sql",
+    "058_vendor_contracts.sql",
 ]
 
 
