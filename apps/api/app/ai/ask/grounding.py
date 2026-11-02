@@ -38,8 +38,8 @@ def harvest(value: object, out: set[str]) -> None:
     if isinstance(value, (int, float)):
         _add(out, float(value))
     elif isinstance(value, str):
-        for token in re.findall(r"\d+(?:\.\d+)?", value):
-            _add(out, float(token))
+        for token in re.findall(r"\d[\d,]*(?:\.\d+)?", value):  # "$156,000/yr" is 156000, not 156 and 0
+            _add(out, float(token.replace(",", "")))
     elif isinstance(value, dict):
         numeric = [v for v in value.values() if isinstance(v, (int, float)) and not isinstance(v, bool)]
         if len(numeric) > 1:
