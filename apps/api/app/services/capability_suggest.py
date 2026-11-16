@@ -1,6 +1,7 @@
 """AI-suggested 3-level capability maps and app-to-capability links. Nothing is saved here."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from collections import defaultdict
@@ -11,8 +12,8 @@ from google.genai import types
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.gemini_client import format_api_error, get_client, is_configured, model_name, not_configured_message
-from app.ai.json_parse import parse_json_object
+from app.ai.gemini_client import format_api_error, get_client, is_configured, model_name, not_configured_message, thinking_config
+from app.ai.json_parse import parse_json_object, parse_partial_json_object
 from app.models.objects import ChangeLog, MinEAObject
 from app.models.relationships import Relationship
 from app.services.capability_map import is_l3, load_capability_map
@@ -48,63 +49,144 @@ Use only names from the lists. Prefer Level 3. An app may appear more than once 
 """
 
 
+# A 3-level map (~8 domains, ~25 capabilities, ~50 activities) is a couple of thousand
+# tokens of JSON. Gemini 2.5 Flash thinks by default, and thinking tokens count against
+# max_output_tokens — Ask already turns thinking off for this reason. 4096 with thinking
+# on routinely truncated the tree; the parser then accepted an inner object and returned
+# an empty map with no warning.
+MAX_OUTPUT_TOKENS = 16384
+GENERATE_TIMEOUT_SECONDS = 90
+EMPTY_SUGGESTION = "No suggestion came back. Try a bit more detail, or add one capability yourself."
+UNUSABLE_REPLY = "The AI's reply wasn't usable. Try again, or add capabilities yourself."
+CUT_SHORT = "The suggestion was cut short. You can edit what came back, or try again."
+
+
+
 def _norm(name: str) -> str:
     return re.sub(r"\s+", " ", (name or "").strip()).lower()
+
+
+def _payload_list(raw: object, keys: tuple[str, ...], depth: int = 0) -> list | None:
+    if not isinstance(raw, dict) or depth > 3:
+        return None
+    lowered = {str(k).lower(): v for k, v in raw.items()}
+    for key in keys:
+        val = lowered.get(key)
+        if isinstance(val, list):
+            return val
+        if isinstance(val, dict):
+            found = _payload_list(val, keys, depth + 1)
+            if found is not None:
+                return found
+    return None
+
+
+def _item_name(item: dict) -> str:
+    for key in ("name", "domain", "capability", "activity", "title"):
+        val = item.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return ""
 
 
 def _as_tree(raw: object) -> list[dict]:
     if not isinstance(raw, dict):
         return []
-    domains = raw.get("domains")
+    domains = _payload_list(raw, ("domains", "business_domains", "capability_map", "map", "result", "data"))
     if not isinstance(domains, list):
         return []
     out = []
     for domain in domains:
         if not isinstance(domain, dict):
             continue
-        name = str(domain.get("name") or "").strip()
+        name = _item_name(domain)
         if not name:
             continue
+        cap_list = domain.get("capabilities") or domain.get("caps") or domain.get("children") or []
         caps = []
-        for cap in domain.get("capabilities") or []:
+        for cap in cap_list:
             if not isinstance(cap, dict):
                 continue
-            cname = str(cap.get("name") or "").strip()
+            cname = _item_name(cap)
             if not cname:
                 continue
             acts = []
-            for act in cap.get("activities") or []:
+            for act in cap.get("activities") or cap.get("children") or []:
                 if isinstance(act, str) and act.strip():
                     acts.append(act.strip())
-                elif isinstance(act, dict) and str(act.get("name") or "").strip():
-                    acts.append(str(act["name"]).strip())
+                elif isinstance(act, dict):
+                    aname = _item_name(act)
+                    if aname:
+                        acts.append(aname)
             caps.append({"name": cname, "id": cap.get("id"), "activities": acts})
-        out.append({"name": name, "id": domain.get("id"), "capabilities": caps})
+        if caps:
+            out.append({"name": name, "id": domain.get("id"), "capabilities": caps})
     return out
+
+
+def _response_text(response: object) -> tuple[str, str]:
+    """Visible model text and finish reason. Ignores thought parts; never raises."""
+    finish = ""
+    try:
+        candidates = getattr(response, "candidates", None) or []
+        if candidates:
+            finish = str(getattr(candidates[0], "finish_reason", "") or "")
+    except Exception:
+        finish = ""
+    try:
+        text = getattr(response, "text", None) or ""
+        if text:
+            return str(text), finish
+    except Exception:
+        text = ""
+    parts: list[str] = []
+    try:
+        for candidate in getattr(response, "candidates", None) or []:
+            content = getattr(candidate, "content", None)
+            for part in getattr(content, "parts", None) or []:
+                if getattr(part, "thought", False):
+                    continue
+                chunk = getattr(part, "text", None)
+                if chunk:
+                    parts.append(str(chunk))
+    except Exception:
+        pass
+    return "".join(parts), finish
 
 
 async def _generate(system: str, user: str) -> tuple[dict | None, str | None]:
     if not is_configured():
         return None, not_configured_message()
     try:
-        response = await get_client().aio.models.generate_content(
-            model=model_name(),
-            contents=[types.Content(role="user", parts=[types.Part.from_text(text=user)])],
-            config=types.GenerateContentConfig(
-                system_instruction=system,
-                temperature=0,
-                max_output_tokens=4096,
-                response_mime_type="application/json",
+        response = await asyncio.wait_for(
+            get_client().aio.models.generate_content(
+                model=model_name(),
+                contents=[types.Content(role="user", parts=[types.Part.from_text(text=user)])],
+                config=types.GenerateContentConfig(
+                    system_instruction=system,
+                    temperature=0,
+                    max_output_tokens=MAX_OUTPUT_TOKENS,
+                    response_mime_type="application/json",
+                    **thinking_config(model_name()),
+                ),
             ),
+            timeout=GENERATE_TIMEOUT_SECONDS,
         )
-        text = response.text or ""
+        text, finish = _response_text(response)
+    except TimeoutError:
+        log.exception("capability suggest model call timed out")
+        return None, "The AI took too long to reply. Try again, or add capabilities yourself."
     except Exception as exc:
         log.exception("capability suggest model call failed")
         return None, format_api_error(exc)
-    parsed = parse_json_object(text)
+    strict = parse_json_object(text)
+    parsed = strict if strict is not None else parse_partial_json_object(text)
+    cut = (strict is None and parsed is not None) or ("MAX_TOKENS" in finish.upper())
     if not parsed:
-        return None, "The AI's reply wasn't usable. Try again, or add capabilities yourself."
-    return parsed, None
+        return None, UNUSABLE_REPLY
+    if not _as_tree(parsed):
+        return parsed, UNUSABLE_REPLY if cut else None
+    return parsed, CUT_SHORT if cut else None
 
 
 def existing_tree(domains: list[MinEAObject], capabilities: list[MinEAObject]) -> list[dict]:
@@ -192,7 +274,13 @@ async def suggest_map(
 ) -> dict:
     domains, capabilities = await load_capability_map(db, workspace_id, org_id)
     tree = existing_tree(domains, capabilities)
-    website_text = await fetch_public_page(website) if website else None
+    website_text = None
+    if website:
+        try:
+            website_text = await fetch_public_page(website)
+        except Exception:
+            log.exception("website fetch failed; continuing without it")
+            website_text = None
     website_used = bool(website_text)
     brief = _brief(about, industry, size, services, website_text)
 
@@ -205,6 +293,8 @@ async def suggest_map(
                 listing.append(f"  - {cap['name']}{have}")
         parsed, warning = await _generate(ACTIVITIES_SYSTEM, brief + "\n\nExisting map:\n" + "\n".join(listing))
         suggested = _as_tree(parsed) if parsed else []
+        if not suggested and warning is None:
+            warning = EMPTY_SUGGESTION
         return {
             "mode": "activities",
             "domains": _merge_activities(tree, suggested),
@@ -213,9 +303,12 @@ async def suggest_map(
         }
 
     parsed, warning = await _generate(FULL_SYSTEM, brief)
+    domains_out = _as_tree(parsed) if parsed else []
+    if not domains_out and not warning:
+        warning = EMPTY_SUGGESTION
     return {
         "mode": "full",
-        "domains": _as_tree(parsed) if parsed else [],
+        "domains": domains_out,
         "warning": warning,
         "website_used": website_used,
     }

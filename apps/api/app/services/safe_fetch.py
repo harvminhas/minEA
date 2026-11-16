@@ -1,6 +1,7 @@
 """Fetch a public web page safely: timeouts, size limits, no private/link-local hosts."""
 from __future__ import annotations
 
+import concurrent.futures
 import ipaddress
 import socket
 from html.parser import HTMLParser
@@ -63,8 +64,9 @@ def public_hostname(host: str) -> bool:
     except ValueError:
         pass
     try:
-        infos = socket.getaddrinfo(host, None)
-    except socket.gaierror:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            infos = pool.submit(socket.getaddrinfo, host, None).result(timeout=2.0)
+    except (socket.gaierror, TimeoutError, concurrent.futures.TimeoutError, OSError):
         return False
     addrs = {info[4][0] for info in infos}
     return bool(addrs) and all(_is_public_ip(ip) for ip in addrs)

@@ -128,6 +128,8 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
   const shownGroups = gapsOnly ? groups.map((group) => ({ ...group, rows: group.rows.filter((row) => row.gap) })).filter((group) => group.rows.length) : groups;
   const flat = groups.length === 1 && groups[0]!.domain === NO_DOMAIN;
   const focused = mode === "review" || mode === "mapping" || mode === "edit" || mode === "interview";
+  // Empty-map interview lives in mode "none"; hide the page-top error so it only appears under the form.
+  const interviewVisible = mode === "interview" || (empty && mode === "none" && canCreate);
 
   return (
     <div className="px-6 py-5" data-testid="capabilities-section">
@@ -172,7 +174,7 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
           </div>
         )}
       </div>
-      {error && mode !== "interview" && mode !== "review" && <p className="mb-3 text-[12px] text-[#b42318]">{error}</p>}
+      {error && !interviewVisible && mode !== "review" && <p className="mb-3 text-[12px] text-[#b42318]">{error}</p>}
 
       {mode === "add" && (
         <AddCapability

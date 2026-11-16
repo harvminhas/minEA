@@ -64,6 +64,18 @@ def model_name() -> str:
     return _resolve_model(os.getenv("GEMINI_MODEL"))
 
 
+def thinking_config(name: str, budget: int = 0) -> dict:
+    """Thinking tokens count against max_output_tokens. Default is off (budget 0).
+    gemini-2.5-pro cannot go to 0, so it gets at least 128."""
+    n = (name or "").lower()
+    if "2.5-pro" in n:
+        return {"thinking_config": types.ThinkingConfig(thinking_budget=max(budget, 128))}
+    if "2.5" in n or "flash" in n or n.startswith(("gemini-3", "models/gemini-3")):
+        return {"thinking_config": types.ThinkingConfig(thinking_budget=budget)}
+    return {}
+
+
+
 def not_configured_message() -> str:
     if os.getenv("VERCEL") == "1":
         return (

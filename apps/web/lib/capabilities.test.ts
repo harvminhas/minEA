@@ -108,6 +108,10 @@ test("empty state offers an AI interview and add-one-yourself; nothing saves bef
   assert.match(interview, /Nothing is saved until you use the suggestion/);
   assert.match(interview, /What does the company do/);
   assert.doesNotMatch(interview, /Industry/);
+  // Interview error is the only copy of the message (page-top banner is hidden while the form is shown).
+  assert.match(src, /const interviewVisible/);
+  assert.match(src, /error && !interviewVisible && mode !== "review"/);
+  assert.match(src, /result.warning \|\| "No suggestion came back/);
   const review = readFileSync(new URL("../components/capability-map/CapabilityReview.tsx", import.meta.url), "utf8");
   assert.match(review, /Use this map/);
   assert.match(review, /Try again/);

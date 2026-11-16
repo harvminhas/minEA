@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.ai.json_parse import parse_json_object
+from app.ai.json_parse import parse_json_object, parse_partial_json_object
 from app.services.capability_map import is_l3
 from app.services.capability_suggest import _as_tree, _merge_activities, existing_tree
 from app.services.safe_fetch import public_hostname
@@ -77,6 +77,179 @@ def test_public_hostname_blocks_private_and_local():
 def test_as_tree_skips_blank_names():
     tree = _as_tree({"domains": [{"name": " ", "capabilities": []}, {"name": "Finance", "capabilities": [{"name": "AP", "activities": ["Invoice capture", ""]}]}]})
     assert len(tree) == 1 and tree[0]["capabilities"][0]["activities"] == ["Invoice capture"]
+
+
+def test_as_tree_accepts_wrapped_payloads_and_skips_empty_domains():
+    wrapped = {"result": {"domains": [{"name": "Finance", "caps": [{"title": "AP", "activities": [{"name": "Invoice capture"}]}]}, {"name": "Sales", "capabilities": []}]}}
+    tree = _as_tree(wrapped)
+    assert [d["name"] for d in tree] == ["Finance"]
+    assert tree[0]["capabilities"][0]["activities"] == ["Invoice capture"]
+
+
+def test_parse_json_object_does_not_return_an_inner_object_from_truncated_tree():
+    """Root cause: a 4096-token cap (plus default thinking) cut the 3-level JSON mid-tree.
+    The parser then returned a complete inner capability object, _as_tree saw no 'domains',
+    and the API sent an empty map with no warning."""
+    text = (
+        '{"domains":[{"name":"Home Building","capabilities":['
+        '{"name":"Land Acquisition","activities":["Site evaluation","Due diligence"]},'
+        '{"name":"Home Construction","activities":["Permit appl'
+    )
+    assert parse_json_object(text) is None
+    assert _as_tree(parse_json_object(text)) == []
+
+
+def test_parse_partial_json_object_keeps_complete_branches_of_a_truncated_tree():
+    text = (
+        '{"domains":['
+        '{"name":"Finance","capabilities":[{"name":"AP","activities":["Invoice capture","Vendor payments"]}]},'
+        '{"name":"Sales","capabilities":[{"name":"Lead management","activities":["Lead cap'
+    )
+    parsed = parse_partial_json_object(text)
+    tree = _as_tree(parsed)
+    assert tree[0]["name"] == "Finance"
+    assert tree[0]["capabilities"][0]["activities"] == ["Invoice capture", "Vendor payments"]
+    # The next domain may appear if its capability name was complete but its activities were cut.
+    assert all(d["name"] in {"Finance", "Sales"} for d in tree)
+
+
+def _realistic_map(domains=8, caps_per=3, acts_per=3):
+    tree = []
+    for i in range(domains):
+        caps = []
+        for j in range(caps_per):
+            acts = [f"Activity {i}-{j}-{k} work" for k in range(acts_per)]
+            caps.append({"name": f"Capability {i}-{j}", "activities": acts})
+        tree.append({"name": f"Business domain {i}", "capabilities": caps})
+    return {"domains": tree}
+
+
+def test_parse_partial_recovers_a_long_truncated_capability_map():
+    import json
+
+    raw = json.dumps(_realistic_map(8, 3, 3))
+    assert len(raw) > 2000
+    # Cut mid-string well after several complete domains (~40% through).
+    cut = raw[: int(len(raw) * 0.4)]
+    assert parse_json_object(cut) is None
+    tree = _as_tree(parse_partial_json_object(cut))
+    assert len(tree) >= 2
+    assert tree[0]["name"] == "Business domain 0"
+    assert tree[0]["capabilities"][0]["activities"]
+
+
+def test_normalize_url_accepts_a_bare_domain(monkeypatch):
+    from app.services import safe_fetch
+
+    monkeypatch.setattr(safe_fetch, "public_hostname", lambda host: host == "mattamyhomes.com")
+    assert safe_fetch._normalize_url("mattamyhomes.com") == "https://mattamyhomes.com"
+    assert safe_fetch._normalize_url("https://mattamyhomes.com") == "https://mattamyhomes.com"
+    assert safe_fetch._normalize_url("http://mattamyhomes.com/about") == "http://mattamyhomes.com/about"
+    assert safe_fetch._normalize_url("") is None
+
+
+def test_suggest_map_continues_when_website_fetch_fails(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from app.services import capability_suggest as mod
+
+    async def fake_load(db, workspace_id, org_id):
+        return [], []
+
+    async def boom(url):
+        assert url == "mattamyhomes.com"
+        raise RuntimeError("dns blocked")
+
+    async def fake_generate(system, user):
+        assert "We build homes" in user
+        return {"domains": [{"name": "Home Building", "capabilities": [{"name": "Land Acquisition", "activities": ["Site evaluation"]}]}]}, None
+
+    monkeypatch.setattr(mod, "load_capability_map", fake_load)
+    monkeypatch.setattr(mod, "fetch_public_page", boom)
+    monkeypatch.setattr(mod, "_generate", fake_generate)
+
+    about = (
+        "We build homes in US and Canada. Overall we have 14 new divisions. "
+        "IT department is segmented into towers i.e. Home Buildiing, Finance, Sales & Marketing, Infrastructure and Platform engineering"
+    )
+    result = asyncio.run(mod.suggest_map(SimpleNamespace(), uuid.uuid4(), uuid.uuid4(), about=about, website="mattamyhomes.com"))
+    assert result["mode"] == "full"
+    assert result["website_used"] is False
+    assert result["warning"] is None
+    assert result["domains"][0]["name"] == "Home Building"
+    assert result["domains"][0]["capabilities"][0]["activities"] == ["Site evaluation"]
+
+
+def test_suggest_map_surfaces_warning_when_result_is_empty(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from app.services import capability_suggest as mod
+
+    async def fake_load(db, workspace_id, org_id):
+        return [], []
+
+    async def fake_generate(system, user):
+        return {"name": "Land Acquisition", "activities": ["Site evaluation"]}, None
+
+    monkeypatch.setattr(mod, "load_capability_map", fake_load)
+    monkeypatch.setattr(mod, "_generate", fake_generate)
+    result = asyncio.run(mod.suggest_map(SimpleNamespace(), uuid.uuid4(), uuid.uuid4(), about="We build homes", website=None))
+    assert result["domains"] == []
+    assert result["warning"] == mod.EMPTY_SUGGESTION
+
+
+def test_generate_uses_high_token_limit_and_disables_thinking(monkeypatch):
+    import asyncio
+    from app.services import capability_suggest as mod
+
+    captured = {}
+
+    class FakeModels:
+        async def generate_content(self, model, contents, config):
+            captured["model"] = model
+            captured["config"] = config
+            payload = _realistic_map(8, 3, 3)
+            import json
+            return SimpleNamespace(text=json.dumps(payload), candidates=[SimpleNamespace(finish_reason="STOP")])
+
+    class FakeClient:
+        def __init__(self):
+            self.aio = SimpleNamespace(models=FakeModels())
+
+    monkeypatch.setattr(mod, "is_configured", lambda: True)
+    monkeypatch.setattr(mod, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(mod, "model_name", lambda: "gemini-2.5-flash")
+    parsed, warning = asyncio.run(mod._generate("sys", "We build homes in US and Canada."))
+    assert captured["model"] == "gemini-2.5-flash"
+    assert captured["config"].max_output_tokens >= 8192
+    assert captured["config"].thinking_config.thinking_budget == 0
+    assert captured["config"].response_mime_type == "application/json"
+    assert warning is None
+    assert len(_as_tree(parsed)) == 8
+
+
+def test_generate_accepts_truncated_json_and_warns(monkeypatch):
+    import asyncio, json
+    from app.services import capability_suggest as mod
+
+    raw = json.dumps(_realistic_map(8, 3, 3))
+    cut = raw[: int(len(raw) * 0.45)]
+
+    class FakeModels:
+        async def generate_content(self, model, contents, config):
+            return SimpleNamespace(text=cut, candidates=[SimpleNamespace(finish_reason="MAX_TOKENS")])
+
+    class FakeClient:
+        def __init__(self):
+            self.aio = SimpleNamespace(models=FakeModels())
+
+    monkeypatch.setattr(mod, "is_configured", lambda: True)
+    monkeypatch.setattr(mod, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(mod, "model_name", lambda: "gemini-2.5-flash")
+    parsed, warning = asyncio.run(mod._generate("sys", "We build homes"))
+    tree = _as_tree(parsed)
+    assert len(tree) >= 2
+    assert warning == mod.CUT_SHORT
 
 
 async def _seed(engine, tag):

@@ -24,7 +24,7 @@ from app.ai.ask.timing import AskTiming
 from app.ai.ask.grounding import graph_numbers, harvest, is_grounded, ungrounded
 from app.ai.ask.steps import checking_step, estate_step, same_step, step, tool_step
 from app.ai.ask.tools import ToolBag, run_tool, tool_specs
-from app.ai.gemini_client import build_gemini_tools, get_client, is_configured, model_name
+from app.ai.gemini_client import build_gemini_tools, get_client, is_configured, model_name, thinking_config as model_thinking_config
 from app.services.tenancy import TenancyContext
 
 MAX_ROUNDS = 4
@@ -47,12 +47,7 @@ THINKING_BUDGET = int(os.getenv("ASK_THINKING_BUDGET", "0") or 0)
 def thinking_config(name: str) -> dict:
     """Thinking off wherever the model allows it. Before, only names starting "gemini-2.5" got the
     config, so "models/gemini-2.5-flash" or a "-latest" alias ran with dynamic thinking (seconds)."""
-    n = name.lower()
-    if "2.5-pro" in n:
-        return {"thinking_config": types.ThinkingConfig(thinking_budget=max(THINKING_BUDGET, 128))}  # pro can't go to 0
-    if "2.5" in n or "flash" in n or n.startswith(("gemini-3", "models/gemini-3")):
-        return {"thinking_config": types.ThinkingConfig(thinking_budget=THINKING_BUDGET)}
-    return {}
+    return model_thinking_config(name, THINKING_BUDGET)
 # finish reasons that mean the reply was cut or withheld, not a normal stop
 _BLOCKED = {"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY", "LANGUAGE"}
 WORDS = {
