@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { LayoutGrid, Plus, Table2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { modelItemId, modelItemPath, modelPath, type ModelSection } from "@/lib/mvp-paths";
+import { capabilityDetailPath } from "@/lib/capability-detail";
+import { isActivity } from "@/lib/capability-tree";
 import { AgingTile, PlatformsTable, ServersTable } from "@/components/mvp/InfraTables";
 import { LocationsTable } from "@/components/mvp/LocationsTable";
 import { AiTable } from "@/components/mvp/AiTables";
@@ -23,6 +25,7 @@ import { AppPlatformHelp } from "@/components/mvp/AppPlatformHelp";
 import { ModelDetailPanel } from "@/components/mvp/ModelDetailPanel";
 import { OwnersPage } from "@/components/mvp/OwnersPage";
 import { CapabilitiesSection } from "@/components/mvp/CapabilitiesSection";
+import { CapabilityDetailPage } from "@/components/capability-map/CapabilityDetailPage";
 import { CreatePlatformPanel } from "@/components/infrastructure/CreatePlatformPanel";
 import { CreateRuntimePanel } from "@/components/infrastructure/CreateRuntimePanel";
 import { ObjectForm } from "@/components/objects/ObjectForm";
@@ -53,6 +56,7 @@ const SECTION_TITLE: Record<ModelSection, string> = {
 
 export function ModelScreen({ section, selectedId }: { section: ModelSection; selectedId?: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { basePath } = useTenancy();
   const catalog = useModelCatalog();
   const setup = useWorkspaceSetup();
@@ -129,7 +133,36 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   // A column's + Add opens the record at that field (expanded, scrolled to, highlighted, editing).
   const openAt = (row: CatalogRow, gap: keyof CatalogRow["missing"]) =>
     openRecordField(modelItemPath(basePath, section, row.id, fieldKeyForGap(row.object.type, gap)), router.push);
-  const close = () => router.push(modelPath(basePath, section));
+  const capObject = section === "capabilities" && selectedKey
+    ? catalog.data?.objects.find((item) => item.id === selectedKey)
+    : undefined;
+  const isCapabilityRecord = capObject?.type === "capability";
+  const isActivityRecord = Boolean(isCapabilityRecord && isActivity(capObject?.properties));
+  const detailsOpen =
+    isCapabilityRecord &&
+    (searchParams.get("tab") === "details" || Boolean(searchParams.get("focus")) || Boolean(searchParams.get("details")));
+  const waitingForCap = section === "capabilities" && Boolean(selectedKey) && catalog.isLoading && !capObject;
+  const close = () => {
+    if (isCapabilityRecord && capObject && !isActivityRecord) {
+      router.push(capabilityDetailPath(basePath, capObject.id, { activity: searchParams.get("activity") }));
+      return;
+    }
+    router.push(modelPath(basePath, section));
+  };
+
+  useEffect(() => {
+    if (!isCapabilityRecord || !capObject || !isActivityRecord) return;
+    const parentId = String(capObject.properties?.parent_id ?? "");
+    if (!parentId) return;
+    router.replace(
+      capabilityDetailPath(basePath, parentId, {
+        activity: capObject.id,
+        tab: searchParams.get("tab"),
+        details: searchParams.get("details"),
+        focus: searchParams.get("focus"),
+      })
+    );
+  }, [isCapabilityRecord, isActivityRecord, capObject, basePath, router, searchParams]);
 
   useEffect(() => {
     if (section !== "infrastructure") return;
@@ -168,7 +201,10 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
         {section === "locations" && <LocationsTable anywhere={anywhere} selectedId={selectedId} />}
         {section === "agents" && <AiTable type="agent" selectedId={selectedId} />}
         {section === "ai-models" && <AiTable type="ai_model" selectedId={selectedId} />}
-        {section === "capabilities" && <CapabilitiesSection selectedId={selectedId} />}
+        {section === "capabilities" && !isCapabilityRecord && !waitingForCap && <CapabilitiesSection selectedId={selectedId} />}
+        {section === "capabilities" && isCapabilityRecord && !isActivityRecord && (
+          <CapabilityDetailPage capabilityId={capObject.id} />
+        )}
         {section === "connections" && <ConnectionsList items={connections} basePath={basePath} />}
         {section === "vendors" && <VendorsHub selectedId={selectedId} />}
         {section === "owners" && <OwnersPage />}
@@ -369,7 +405,20 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
         )}
       </div>
 
-      {selected && section !== "vendors" && <ModelDetailPanel key={selected.id} row={selected} onClose={close} />}
+      {(() => {
+        const detailsId = searchParams.get("details");
+        const panelId = isCapabilityRecord && detailsOpen ? (detailsId || selectedKey) : selectedKey;
+        const panelRow = panelId && panelId !== selected?.id
+          ? (() => {
+              const fromRows = rows.find((row) => row.id === panelId);
+              if (fromRows) return fromRows;
+              const object = catalog.data?.objects.find((item) => item.id === panelId);
+              return object ? rowForPanel(object) : selected;
+            })()
+          : selected;
+        const showPanel = Boolean(panelRow) && section !== "vendors" && (!isCapabilityRecord || detailsOpen);
+        return showPanel && panelRow ? <ModelDetailPanel key={panelRow.id} row={panelRow} onClose={close} /> : null;
+      })()}
 
       {creating === "runtime" && (
         <CreateRuntimePanel

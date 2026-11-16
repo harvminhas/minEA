@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search } from "lucide-react";
 import {
   type ApplicationProperties,
   type ObjectType,
@@ -22,12 +21,8 @@ import {
   platformRefFromObject,
   syncSystemPlatformRelation,
 } from "@/lib/platform-relationship-utils";
-import {
-  flattenMapCapabilities,
-  invalidateSystemCaches,
-  loadSystemCapabilityIds,
-  syncSystemCapabilityRelations,
-} from "@/lib/system-capability-utils";
+import { invalidateSystemCaches, loadSystemCapabilityIds, syncSystemCapabilityRelations } from "@/lib/system-capability-utils";
+import { MapTargetPicker } from "@/components/objects/MapTargetPicker";
 import {
   APPLICATION_HOSTING_OPTIONS,
   OBJECT_FORM_FLOW_DIRECTION,
@@ -208,7 +203,6 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
   const initGovernanceFields = readSystemGovernanceFields(initAppProps);
   const [platformId, setPlatformId] = useState(initAppProps.platform?.platform_id ?? "");
   const [selectedCapabilityIds, setSelectedCapabilityIds] = useState<string[]>([]);
-  const [capSearch, setCapSearch] = useState("");
   const [category, setCategory] = useState(initCategoryFields.category);
   const [isCustomBuilt, setIsCustomBuilt] = useState(initCategoryFields.isCustomBuilt);
   const [governanceStatus, setGovernanceStatus] = useState<SystemGovernanceStatus>(
@@ -265,29 +259,6 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
     },
     enabled: enabled && isApplication,
   });
-
-  const mapCapabilityRows = useMemo(
-    () => (capabilityMapData ? flattenMapCapabilities(capabilityMapData) : []),
-    [capabilityMapData]
-  );
-
-  const filteredMapCapabilities = useMemo(() => {
-    const query = capSearch.trim().toLowerCase();
-    if (!query) return mapCapabilityRows;
-    return mapCapabilityRows.filter(
-      (row) =>
-        row.capability.name.toLowerCase().includes(query) ||
-        row.domainName.toLowerCase().includes(query)
-    );
-  }, [mapCapabilityRows, capSearch]);
-
-  const groupedCapabilities = useMemo(() => {
-    const groups: Record<string, typeof mapCapabilityRows> = {};
-    for (const row of filteredMapCapabilities) {
-      (groups[row.domainName] ??= []).push(row);
-    }
-    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
-  }, [filteredMapCapabilities]);
 
   const toggleCapability = (id: string, checked: boolean) =>
     setSelectedCapabilityIds((prev) =>
@@ -482,54 +453,11 @@ export function ObjectForm({ objectType, initialValues, onClose, onSuccess }: Pr
                 <span className="text-xs font-medium text-indigo-600">{selectedCapabilityIds.length} selected</span>
               )}
             </div>
-            <p className="text-[11px] text-gray-400 mb-2">
-              Pick L2 capabilities from your capability map (e.g. Products → Success management). These drive the domain mapping matrix.
-            </p>
-            <div className="relative mb-2">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              <input
-                value={capSearch}
-                onChange={(e) => setCapSearch(e.target.value)}
-                placeholder="Search capabilities…"
-                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            {mapCapabilityRows.length === 0 ? (
-              <p className="text-xs text-gray-400 py-2">
-                No capabilities on the capability map yet. Add domains and L2 capabilities under Strategy → Capability map first.
-              </p>
-            ) : (
-              <div className="border border-gray-200 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
-                {groupedCapabilities.length === 0 ? (
-                  <p className="text-xs text-gray-400 px-3 py-3">No results for &ldquo;{capSearch}&rdquo;</p>
-                ) : (
-                  groupedCapabilities.map(([group, items]) => (
-                    <div key={group}>
-                      <div className="bg-gray-50 px-3 py-1.5 sticky top-0">
-                        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{group}</span>
-                      </div>
-                      {items.map(({ capability }) => {
-                        const maturity = capability.maturity;
-                        return (
-                          <label key={capability.id} className="flex items-center justify-between px-3 py-2.5 hover:bg-indigo-50/50 cursor-pointer border-t border-gray-100">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <input
-                                type="checkbox"
-                                checked={selectedCapabilityIds.includes(capability.id)}
-                                onChange={(e) => toggleCapability(capability.id, e.target.checked)}
-                                className="accent-indigo-600 flex-shrink-0"
-                              />
-                              <span className="text-sm text-gray-800 truncate">{capability.name}</span>
-                            </div>
-                            {maturity && <span className="text-xs text-gray-400 flex-shrink-0 ml-2">maturity {maturity}</span>}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
+            <MapTargetPicker
+              map={capabilityMapData}
+              selectedIds={selectedCapabilityIds}
+              onToggle={toggleCapability}
+            />
           </FormField>
         );
       case "tags":

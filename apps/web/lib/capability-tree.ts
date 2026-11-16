@@ -59,7 +59,7 @@ function riskOf(row: CatalogRow | undefined, object: CapObj): RiskKind {
 
 function coverage(coveredLeaves: number, leafCount: number, hasApps: boolean): CoverageKind {
   if (leafCount === 0) return hasApps ? "covered" : "gap";
-  if (coveredLeaves === 0) return "gap";
+  if (coveredLeaves === 0) return hasApps ? "partial" : "gap";
   if (coveredLeaves === leafCount) return "covered";
   if (coveredLeaves / leafCount >= 0.6) return "mostly";
   return "partial";
@@ -198,10 +198,11 @@ export function heatMeta(node: TreeNode, metric: HeatMetric): string {
   if (metric === "apps") return `${node.uniqueAppIds.length} app${node.uniqueAppIds.length === 1 ? "" : "s"}`;
   if (metric === "cost") return node.cost ? `$${Math.round(node.cost).toLocaleString("en-US")}` : "—";
   if (metric === "risk") return { none: "No apps", low: "Low", med: "Medium", high: "Critical app" }[node.risk];
-  if (node.coverage === "gap") return node.uniqueAppIds.length ? "Partial" : "No app";
+  if (node.coverage === "gap") return "No app";
   if (node.coverage === "covered") return "Covered";
   if (node.coverage === "mostly") return "Mostly covered";
-  return `${node.coveredLeaves} of ${node.leafCount} covered`;
+  if (node.leafCount) return `${node.coveredLeaves} of ${node.leafCount} activities covered`;
+  return "Partial";
 }
 
 export function moneyLabel(value: number): string {

@@ -7,7 +7,7 @@ import type { SuggestedDomain } from "@minea/types";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { useAuth } from "@/lib/auth-context";
-import { modelItemPath } from "@/lib/mvp-paths";
+import { capabilityOpenPath } from "@/lib/capability-detail";
 import { capabilityMapApi, objectsApi } from "@/lib/api-client";
 import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
 import { usePermissions } from "@/lib/use-permissions";
@@ -50,7 +50,7 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => setView(capabilityViewFrom(window.location.search)), []);
-  const openCapability = (id: string) => router.push(modelItemPath(basePath, "capabilities", id));
+  const openCapability = (id: string) => router.push(capabilityOpenPath(basePath, id, objects));
   const refreshMap = () => {
     void queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
     void queryClient.invalidateQueries({ queryKey: ["capability-map-status", orgSlug, workspaceSlug] });

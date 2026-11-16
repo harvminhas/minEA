@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildCapabilityTree, flatten, heatClass, isActivity } from "./capability-tree";
+import { buildCapabilityTree, flatten, heatClass, heatMeta, isActivity } from "./capability-tree";
 import type { CatalogRow } from "./model-catalog";
 
 const o = (id: string, type: string, name: string, properties: Record<string, unknown> = {}) => ({ id, type, name, properties });
@@ -50,4 +50,19 @@ test("a parent with no covered children is a gap; mixed children are partial", (
   const tree = buildCapabilityTree([d, ap, inv, pay, qb], [{ type: "supported_by", from_object_id: "pay", to_object_id: "qb" }]);
   assert.equal(tree[0]!.children[0]!.coverage, "partial");
   assert.equal(tree[0]!.children[0]!.children.find((c) => c.id === "inv")!.coverage, "gap");
+});
+
+test("a capability with an app but no covered activities is partial, not a gap", () => {
+  const d = o("d", "business_domain", "Finance");
+  const ap = o("ap", "capability", "AP", { domain_id: "d" });
+  const inv = o("inv", "capability", "Invoice capture", { domain_id: "d", parent_id: "ap" });
+  const pay = o("pay", "capability", "Vendor payments", { domain_id: "d", parent_id: "ap" });
+  const sage = o("sage", "application", "Sage");
+  const tree = buildCapabilityTree([d, ap, inv, pay, sage], [{ type: "supported_by", from_object_id: "ap", to_object_id: "sage" }]);
+  const node = tree[0]!.children[0]!;
+  assert.equal(node.uniqueAppIds.length, 1);
+  assert.equal(node.coveredLeaves, 0);
+  assert.equal(node.coverage, "partial");
+  assert.equal(heatClass(node, "coverage"), "c-fair");
+  assert.equal(heatMeta(node, "coverage"), "0 of 2 activities covered");
 });
