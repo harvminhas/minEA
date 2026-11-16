@@ -180,7 +180,30 @@ test("assessment summaries follow weakest-link fitness and inherited redundancy"
   assert.equal(fitness.tone, "gap");
   const redundancy = redundancySummary(node);
   assert.equal(redundancy.headline, "Overlap");
-  assert.equal(redundancy.detail, "Invoice capture: QuickBooks, Epic");
+  assert.equal(redundancy.detail, "QuickBooks and Epic overlap on Invoice capture");
   assert.equal(redundancy.tone, "fair");
   assert.equal(overlapNote(["QuickBooks", "Epic"]), "QuickBooks and Epic both support this activity.");
+  assert.equal(
+    overlapNote(["Power BI", "Dynamics 365"], "capability"),
+    "Power BI and Dynamics 365 both support this capability."
+  );
+});
+
+test("redundancy summary does not repeat this record's own name", () => {
+  const d = o("d", "business_domain", "Customer");
+  const home = o("home", "capability", "Homebuyer Experience", { domain_id: "d" });
+  const pbi = o("pbi", "application", "Power BI");
+  const dyn = o("dyn", "application", "Dynamics 365");
+  const tree = buildCapabilityTree(
+    [d, home, pbi, dyn],
+    [
+      { type: "supported_by", from_object_id: "home", to_object_id: "pbi", attributes: { fitness: "strong" } },
+      { type: "supported_by", from_object_id: "home", to_object_id: "dyn", attributes: { fitness: "adequate" } },
+    ]
+  );
+  const node = tree[0]!.children[0]!;
+  const redundancy = redundancySummary(node);
+  assert.equal(redundancy.headline, "Overlap");
+  assert.equal(redundancy.detail, "Power BI and Dynamics 365 overlap");
+  assert.doesNotMatch(redundancy.detail, /^Homebuyer Experience:/);
 });

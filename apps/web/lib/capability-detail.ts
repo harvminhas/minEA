@@ -150,13 +150,18 @@ export function linkFitnessOf(link: { attributes?: Record<string, unknown> | nul
   return fitness === "none" ? "adequate" : fitness;
 }
 
-export function overlapNote(appNames: string[]): string {
-  const names = [...appNames];
-  if (names.length === 2) return `${names[0]} and ${names[1]} both support this activity.`;
-  if (names.length > 2) {
-    return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]} all support this activity.`;
-  }
-  return "";
+export function overlapList(appNames: string[]): string {
+  const names = appNames.filter(Boolean);
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
+export function overlapNote(appNames: string[], level: "activity" | "capability" = "activity"): string {
+  const phrase = overlapList(appNames);
+  if (!phrase || appNames.filter(Boolean).length < 2) return "";
+  const verb = appNames.filter(Boolean).length === 2 ? "both support" : "all support";
+  return `${phrase} ${verb} this ${level}.`;
 }
 
 export function fitnessSummary(node: TreeNode): CoverageSummary {
@@ -185,11 +190,14 @@ export function fitnessSummary(node: TreeNode): CoverageSummary {
 export function redundancySummary(node: TreeNode): CoverageSummary {
   if (node.redundancy === "gap") return { headline: "—", detail: "No app", tone: "gap" };
   if (node.redundancy === "none") return { headline: "None", detail: "No overlap", tone: "good" };
-  const apps = node.redundancyApps.join(", ");
-  const detail =
-    node.redundancyPlace && apps
-      ? `${node.redundancyPlace}: ${apps}`
-      : node.redundancyHint ?? "Two or more apps support the same activity";
+  const phrase = overlapList(node.redundancyApps);
+  let detail = node.redundancyHint ?? "Two or more apps support the same activity";
+  if (phrase) {
+    // Don't lead with this record's own name ("Homebuyer Experience: Power BI, Dynamics 365").
+    detail = node.redundancyPlace && node.redundancyPlace !== node.name
+      ? `${phrase} overlap on ${node.redundancyPlace}`
+      : `${phrase} overlap`;
+  }
   return { headline: "Overlap", detail, tone: node.redundancy === "many" ? "gap" : "fair" };
 }
 

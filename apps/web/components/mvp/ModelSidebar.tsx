@@ -3,7 +3,28 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, Cable, ChevronRight, Cloud, LayoutGrid, MapPin, Server, Shield, Sparkles, Users } from "lucide-react";
+import {
+  Boxes,
+  Cable,
+  Calendar,
+  ChevronRight,
+  Cloud,
+  Database,
+  Landmark,
+  Layers,
+  LayoutGrid,
+  Lock,
+  Map,
+  MapPin,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Server,
+  Shield,
+  SlidersHorizontal,
+  Sparkles,
+  Users,
+  Workflow,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { modelPath, type ModelSection } from "@/lib/mvp-paths";
@@ -13,20 +34,25 @@ import { AI_GROUP_LABEL, UI_TYPE_LABEL } from "@/lib/relationship-targets";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { architectureItems, visibleArchitectureItems, type HiddenCounts } from "@/lib/architecture-nav";
 import { useArchitectureAdvanced } from "@/lib/use-architecture-advanced";
+import { useOptionalAuth } from "@/lib/auth-context";
+import { readSidebarCollapsed, writeSidebarCollapsed } from "@/lib/model-sidebar-collapsed";
+import { ModelSidebarView, type SidebarNavItem } from "@/components/mvp/ModelSidebarView";
 
 type IconType = typeof LayoutGrid;
 
-type NavItem = {
-  label: string;
-  href: string;
-  icon?: IconType;
-  count?: number;
-  /** Pathname fragments that mark this row active. */
-  match: string[];
-  children?: NavItem[];
-};
+type NavItem = SidebarNavItem;
 
 const SUBNAV_KEY = "bubomap-model-subnav";
+
+const ARCH_RAIL_ICONS: Record<string, IconType> = {
+  capabilities: Map,
+  roadmap: Calendar,
+  "sensitive-data": Lock,
+  processes: Workflow,
+  investments: Landmark,
+  "data-stores": Database,
+  "data-domains": Layers,
+};
 
 function isActive(pathname: string, match: string[]): boolean {
   return match.some((fragment) => pathname.includes(fragment));
@@ -55,13 +81,37 @@ function useSubnavOpen() {
   return { open, toggle };
 }
 
-export function ModelSidebar({ active }: { active?: ModelSection }) {
+export function ModelSidebar({
+  active,
+  collapsed: collapsedProp,
+  onCollapsedChange,
+  showcaseTooltip,
+}: {
+  active?: ModelSection;
+  collapsed?: boolean;
+  onCollapsedChange?: (next: boolean) => void;
+  showcaseTooltip?: string;
+}) {
   const pathname = usePathname();
   const { orgSlug, workspaceSlug, basePath } = useTenancy();
   const { data: extras } = useModelNavExtras(orgSlug ?? "", workspaceSlug ?? "");
   const catalog = useModelCatalog();
   const stats = catalogStats(catalog.data?.rows ?? []);
   const subnav = useSubnavOpen();
+  const uid = useOptionalAuth()?.user?.uid ?? null;
+  const [storedCollapsed, setStoredCollapsed] = useState(false);
+
+  useEffect(() => {
+    setStoredCollapsed(readSidebarCollapsed(window.localStorage, uid));
+  }, [uid]);
+
+  const collapsed = collapsedProp ?? storedCollapsed;
+  const setCollapsed = (next: boolean) => {
+    setStoredCollapsed(next);
+    writeSidebarCollapsed(window.localStorage, next, uid);
+    onCollapsedChange?.(next);
+  };
+
   const objects = catalog.data?.objects;
   const countTypes = (types: string[]) => {
     if (!objects) return undefined;
@@ -216,145 +266,36 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
   const architecture: NavItem[] = visibleArchitectureItems(architectureItems(basePath), arch.advanced, pathname).map((item) => ({
     label: item.label,
     href: item.href,
+    icon: ARCH_RAIL_ICONS[item.key],
+    railIconOnly: true,
     count: archCount[item.key],
     match: item.match,
   }));
 
+  const completenessLabel = catalog.data
+    ? `Model ${stats.completeness}% complete`
+    : catalog.isError
+      ? "Model didn't load"
+      : "Loading the model…";
+
   return (
-    <aside className="flex h-full w-[232px] flex-shrink-0 flex-col border-r border-[#e7e8ee] bg-[#f6f7f9]">
-      <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-4">
-        <Section label="Your estate" items={estate} pathname={pathname} active={active} subnav={subnav} />
-        <div>
-          <Section label="Architecture" items={architecture} pathname={pathname} active={active} subnav={subnav} />
-          <label className="mt-1 flex cursor-pointer items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-[12px] text-[#6b7289] hover:bg-[#eceef3]">
-            <span title="Processes, Products, Journeys, Investments, Data stores and Data domains">Show advanced</span>
-            <input
-              type="checkbox"
-              role="switch"
-              data-testid="arch-advanced-toggle"
-              aria-label="Show advanced architecture"
-              checked={arch.advanced}
-              onChange={(event) => arch.setAdvanced(event.target.checked)}
-              className="h-3.5 w-3.5 accent-[#5b4ce6]"
-            />
-          </label>
-          {arch.error && <p className="px-2.5 text-[11px] text-[#b42318]">{arch.error}</p>}
-        </div>
-      </nav>
-      <div className="border-t border-[#e7e8ee] px-4 py-3">
-        {catalog.data ? (
-          <>
-            <p className="text-[12px] font-medium text-[#3c4254]">Model {stats.completeness}% complete</p>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#e6e8ee]">
-              <div className="h-full rounded-full bg-[#5b4ce6]" style={{ width: `${stats.completeness}%` }} />
-            </div>
-            <Link href={modelPath(basePath)} className="mt-1 inline-block text-[12px] text-[#5b4ce6]">
-              {stats.missing} key fields missing
-            </Link>
-          </>
-        ) : (
-          <p className="text-[12px] text-[#8b90a0]">{catalog.isError ? "Model didn't load" : "Loading the model…"}</p>
-        )}
-      </div>
-    </aside>
+    <ModelSidebarView
+      pathname={pathname}
+      active={active}
+      basePath={basePath}
+      collapsed={collapsed}
+      onToggle={() => setCollapsed(!collapsed)}
+      estate={estate}
+      architecture={architecture}
+      advanced={arch.advanced}
+      onAdvanced={arch.setAdvanced}
+      advancedError={arch.error}
+      subnav={subnav}
+      completeness={catalog.data ? stats.completeness : null}
+      completenessLabel={completenessLabel}
+      missing={catalog.data ? stats.missing : null}
+      showcaseTooltip={showcaseTooltip}
+    />
   );
 }
 
-function Section({
-  label,
-  items,
-  pathname,
-  active,
-  subnav,
-}: {
-  label: string;
-  items: NavItem[];
-  pathname: string;
-  active?: ModelSection;
-  subnav: { open: Record<string, boolean>; toggle: (key: string, next: boolean) => void };
-}) {
-  return (
-    <div>
-      <p className="px-2.5 pb-1.5 text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">
-        {label.toUpperCase()}
-      </p>
-      <div className="space-y-0.5">
-        {items.map((item) => (
-          <NavRows key={item.label} item={item} pathname={pathname} active={active} depth={0} subnav={subnav} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function NavRows({
-  item,
-  pathname,
-  active,
-  depth,
-  subnav,
-}: {
-  item: NavItem;
-  pathname: string;
-  active?: ModelSection;
-  depth: number;
-  subnav: { open: Record<string, boolean>; toggle: (key: string, next: boolean) => void };
-}) {
-  const childActive = item.children?.some((child) => isActive(pathname, child.match)) ?? false;
-  const expanded = Boolean(item.children) && subnav.open[item.label] !== false;
-
-  useEffect(() => {
-    if (childActive && subnav.open[item.label] === false) {
-      subnav.toggle(item.label, true);
-    }
-    // Open a collapsed group when the route moves into it. A click to collapse stays put.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
-  const selected =
-    !childActive &&
-    (isActive(pathname, item.match) ||
-      (active === "overview" && item.label === "Overview") ||
-      (active === "vendors" && item.label === UI_TYPE_LABEL.external_party));
-  const Icon = item.icon;
-  const className = cn(
-    "flex w-full items-center gap-2 rounded-lg py-1.5 text-left text-[13.5px]",
-    depth === 0 ? "px-2.5" : "py-1.5 pl-9 pr-2.5 text-[13px]",
-    selected ? "bg-[#ece9ff] font-semibold text-[#3f35b5]" : "text-[#3c4254] hover:bg-white"
-  );
-  const body = (
-    <>
-      {Icon && <Icon size={16} className={cn("shrink-0", selected || childActive ? "text-[#5b4ce6]" : "text-[#8b90a0]")} />}
-      {item.children && (
-        <ChevronRight
-          size={14}
-          className={cn("shrink-0 text-[#8b90a0] transition-transform", expanded && "rotate-90")}
-        />
-      )}
-      <span className={cn("flex-1 truncate", childActive && "font-medium text-[#1f2430]")}>{item.label}</span>
-      {item.count != null && <span className="text-[12px] text-[#8b90a0]">{item.count}</span>}
-    </>
-  );
-
-  return (
-    <>
-      {item.children ? (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          onClick={() => subnav.toggle(item.label, !expanded)}
-          className={className}
-        >
-          {body}
-        </button>
-      ) : (
-        <Link href={item.href} className={className}>
-          {body}
-        </Link>
-      )}
-      {expanded &&
-        item.children?.map((child) => (
-          <NavRows key={child.href} item={child} pathname={pathname} active={active} depth={depth + 1} subnav={subnav} />
-        ))}
-    </>
-  );
-}

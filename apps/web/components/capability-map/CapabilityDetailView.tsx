@@ -372,7 +372,12 @@ function TargetBlock({
       </div>
       {uniqueApps.length >= 2 ? (
         <p className="mt-2 text-[12px] text-[#9a3412] group-has-[[data-fitness-open]]:invisible" data-testid={`overlap-note-${node.id}`}>
-          {overlapNote(node.redundancyApps.length ? node.redundancyApps : uniqueApps.map((id) => links.find((link) => link.appId === id)?.appName).filter((name): name is string => Boolean(name)))}
+          {overlapNote(
+            node.redundancyApps.length
+              ? node.redundancyApps
+              : uniqueApps.map((id) => links.find((link) => link.appId === id)?.appName).filter((name): name is string => Boolean(name)),
+            kind
+          )}
         </p>
       ) : null}
     </section>

@@ -66,6 +66,6 @@ test("pages are renamed and fintech examples are gone", () => {
 test("the sidebar uses the shared list and the per-workspace toggle", () => {
   const sidebar = src("components/mvp/ModelSidebar.tsx");
   assert.match(sidebar, /visibleArchitectureItems\(architectureItems\(basePath\), arch\.advanced, pathname\)/);
-  assert.match(sidebar, /data-testid="arch-advanced-toggle"/);
+  assert.match(src("components/mvp/ModelSidebarView.tsx"), /data-testid="arch-advanced-toggle"/);
   assert.match(src("lib/use-architecture-advanced.ts"), /workspaceSettingsApi\.save/);
 });
