@@ -193,6 +193,18 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
       applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: updated });
     });
 
+  const onSetFitness = (link: AppLink, fitness: "strong" | "adequate" | "weak") =>
+    run(async (token) => {
+      const updated = await relationshipsApi.updateAttributes(
+        orgSlug,
+        workspaceSlug,
+        link.relId,
+        { ...link.attributes, fitness },
+        token
+      );
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: updated });
+    });
+
   const onAddActivity = (name: string) =>
     run(async (token) => {
       const created = await objectsApi.create(
@@ -254,6 +266,7 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
       onRemove={(link) => void onRemove(link)}
       onMove={(link, targetId) => void onMove(link, targetId)}
       onRename={(id, name) => onRename(id, name)}
+      onSetFitness={(link, fitness) => void onSetFitness(link, fitness)}
       onAddActivity={(name) => onAddActivity(name)}
       addDialog={
         addFor ? (

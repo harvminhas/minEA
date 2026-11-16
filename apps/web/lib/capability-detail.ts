@@ -4,7 +4,7 @@
  * link first, then deleting the old one — never a bare delete+recreate.
  */
 import type { ObjectType } from "@minea/types";
-import { isActivity, type TreeNode } from "@/lib/capability-tree";
+import { isActivity, parseLinkFitness, type FitnessKind, type TreeNode } from "@/lib/capability-tree";
 import { modelItemPath, modelPath } from "@/lib/mvp-paths";
 
 export type CapabilityDetailQuery = {
@@ -144,6 +144,54 @@ export type CoverageSummary = {
   detail: string;
   tone: "good" | "fair" | "gap";
 };
+
+export function linkFitnessOf(link: { attributes?: Record<string, unknown> | null }): Exclude<FitnessKind, "none"> {
+  const fitness = parseLinkFitness(link.attributes);
+  return fitness === "none" ? "adequate" : fitness;
+}
+
+export function overlapNote(appNames: string[]): string {
+  const names = [...appNames];
+  if (names.length === 2) return `${names[0]} and ${names[1]} both support this activity.`;
+  if (names.length > 2) {
+    return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]} all support this activity.`;
+  }
+  return "";
+}
+
+export function fitnessSummary(node: TreeNode): CoverageSummary {
+  if (node.fitness === "none") {
+    return {
+      headline: "—",
+      detail: node.uniqueAppIds.length ? "No scored app link" : "No app to score",
+      tone: "gap",
+    };
+  }
+  if (node.fitness === "strong") return { headline: "Strong", detail: "All scored links are strong", tone: "good" };
+  if (node.fitness === "adequate") {
+    return {
+      headline: "Adequate",
+      detail: node.fitnessHint ? `Weakest link: ${node.fitnessHint}` : "Weakest scored link is adequate",
+      tone: "fair",
+    };
+  }
+  return {
+    headline: "Weak",
+    detail: node.fitnessHint ? `Weakest link: ${node.fitnessHint}` : "A scored link is weak",
+    tone: "gap",
+  };
+}
+
+export function redundancySummary(node: TreeNode): CoverageSummary {
+  if (node.redundancy === "gap") return { headline: "—", detail: "No app", tone: "gap" };
+  if (node.redundancy === "none") return { headline: "None", detail: "No overlap", tone: "good" };
+  const apps = node.redundancyApps.join(", ");
+  const detail =
+    node.redundancyPlace && apps
+      ? `${node.redundancyPlace}: ${apps}`
+      : node.redundancyHint ?? "Two or more apps support the same activity";
+  return { headline: "Overlap", detail, tone: node.redundancy === "many" ? "gap" : "fair" };
+}
 
 export function coverageSummary(node: TreeNode): CoverageSummary {
   const total = node.leafCount;

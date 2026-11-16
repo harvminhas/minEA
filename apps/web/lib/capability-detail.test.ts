@@ -6,6 +6,9 @@ import {
   capabilityDetailPath,
   capabilityOpenPath,
   coverageSummary,
+  fitnessSummary,
+  overlapNote,
+  redundancySummary,
   linksOn,
   moveTargetsFor,
   planMoveRelationship,
@@ -135,6 +138,13 @@ test("capability detail view and app form picker stay in source", () => {
   assert.match(view, /borderLeftColor/);
   assert.match(view, /domain-theme-icon/);
   assert.match(view, /themeForDomain/);
+  assert.match(view, /data-testid="capability-assessment"/);
+  assert.match(view, /fitness-setter/);
+  assert.match(view, /onSetFitness/);
+  assert.match(page, /updateAttributes/);
+  const heat = readFileSync(new URL("../components/capability-map/CapabilityHeatMap.tsx", import.meta.url), "utf8");
+  assert.match(heat, /label: "Fitness"/);
+  assert.match(heat, /label: "Redundancy"/);
   assert.match(dialog, /Activity/);
   assert.match(dialog, /data-testid="add-relationship-dialog"/);
   assert.match(dialog, /Create a new app/);
@@ -144,4 +154,33 @@ test("capability detail view and app form picker stay in source", () => {
   assert.doesNotMatch(form, /Pick L2 capabilities from your capability map/);
   assert.match(screen, /CapabilityDetailPage/);
   assert.match(page, /tab=details|tab: "details"/);
+});
+
+test("assessment summaries follow weakest-link fitness and inherited redundancy", () => {
+  const d = o("d", "business_domain", "Finance");
+  const ap = o("ap", "capability", "Accounts Payable", { domain_id: "d" });
+  const inv = o("inv", "capability", "Invoice capture", { domain_id: "d", parent_id: "ap" });
+  const pay = o("pay", "capability", "Vendor payments", { domain_id: "d", parent_id: "ap" });
+  const sage = o("sage", "application", "Sage");
+  const qb = o("qb", "application", "QuickBooks");
+  const epic = o("epic", "application", "Epic");
+  const tree = buildCapabilityTree(
+    [d, ap, inv, pay, sage, qb, epic],
+    [
+      { type: "supported_by", from_object_id: "ap", to_object_id: "sage", attributes: { fitness: "strong" } },
+      { type: "supported_by", from_object_id: "inv", to_object_id: "qb", attributes: { fitness: "adequate" } },
+      { type: "supported_by", from_object_id: "inv", to_object_id: "epic", attributes: { fitness: "weak" } },
+      { type: "supported_by", from_object_id: "pay", to_object_id: "qb", attributes: { fitness: "strong" } },
+    ]
+  );
+  const node = tree[0]!.children[0]!;
+  const fitness = fitnessSummary(node);
+  assert.equal(fitness.headline, "Weak");
+  assert.equal(fitness.detail, "Weakest link: Epic on Invoice capture");
+  assert.equal(fitness.tone, "gap");
+  const redundancy = redundancySummary(node);
+  assert.equal(redundancy.headline, "Overlap");
+  assert.equal(redundancy.detail, "Invoice capture: QuickBooks, Epic");
+  assert.equal(redundancy.tone, "fair");
+  assert.equal(overlapNote(["QuickBooks", "Epic"]), "QuickBooks and Epic both support this activity.");
 });

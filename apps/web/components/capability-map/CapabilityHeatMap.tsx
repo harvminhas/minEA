@@ -25,6 +25,8 @@ const METRICS: { id: HeatMetric; label: string }[] = [
   { id: "apps", label: "Apps" },
   { id: "cost", label: "Cost" },
   { id: "risk", label: "Criticality" },
+  { id: "fitness", label: "Fitness" },
+  { id: "redundancy", label: "Redundancy" },
 ];
 const LEGEND: Record<HeatMetric, [string, string][]> = {
   coverage: [
@@ -50,6 +52,33 @@ const LEGEND: Record<HeatMetric, [string, string][]> = {
     ["#fff7ed", "Medium"],
     ["#fef2f2", "Has a critical app"],
   ],
+  fitness: [
+    ["#fef2f2", "Weak"],
+    ["#fff7ed", "Adequate"],
+    ["#ecfdf5", "Strong"],
+    ["#fafafb", "No app"],
+  ],
+  redundancy: [
+    ["#ecfdf5", "No overlap"],
+    ["#fff7ed", "2 apps"],
+    ["#fef2f2", "3+ apps"],
+    ["#fafafb", "No app"],
+  ],
+};
+
+const FOOTNOTE: Record<HeatMetric, string> = {
+  coverage:
+    "Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, add, or move anything later with Edit structure.",
+  apps:
+    "Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, add, or move anything later with Edit structure.",
+  cost:
+    "Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, add, or move anything later with Edit structure.",
+  risk:
+    "Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, add, or move anything later with Edit structure.",
+  fitness:
+    "Fitness is the weakest app link under the tile. Activities with no app stay a coverage gap — they are not scored as weak fitness.",
+  redundancy:
+    "An activity is flagged when two or more apps support it directly. Capabilities and domains inherit that flag. Two activities with one app each is not overlap — and the same app linked at two levels still counts once.",
 };
 
 const TILE: Record<string, string> = {
@@ -75,14 +104,18 @@ export function CapabilityHeatMap({
   edges,
   rows,
   onOpen,
+  initialDepth = "l2",
+  initialMetric = "coverage",
 }: {
   objects: readonly MinEAObject[];
   edges: readonly Relationship[];
   rows: readonly CatalogRow[];
   onOpen?: (id: string) => void;
+  initialDepth?: HeatDepth;
+  initialMetric?: HeatMetric;
 }) {
-  const [depth, setDepth] = useState<HeatDepth>("l2");
-  const [metric, setMetric] = useState<HeatMetric>("coverage");
+  const [depth, setDepth] = useState<HeatDepth>(initialDepth);
+  const [metric, setMetric] = useState<HeatMetric>(initialMetric);
   const tree = useMemo(
     () => buildCapabilityTree(objects, edges, rows),
     [objects, edges, rows],
@@ -111,7 +144,13 @@ export function CapabilityHeatMap({
           {LEGEND[metric].map(([color, label], i) => (
             <span key={label} className="inline-flex items-center gap-1">
               {i > 0 && <span className="text-[#c0c3cc]">·</span>}
-              <span className="inline-block h-3.5 w-3.5 rounded-sm border border-black/5" style={{ background: color }} />
+              <span
+                className={cn(
+                  "inline-block h-3.5 w-3.5 rounded-sm border border-black/5",
+                  label === "No app" && "border-dashed bg-[#fafafb]",
+                )}
+                style={label === "No app" ? undefined : { background: color }}
+              />
               {label}
             </span>
           ))}
@@ -122,9 +161,7 @@ export function CapabilityHeatMap({
           <Tile key={node.id} node={node} metric={metric} depth={depth} onOpen={onOpen} />
         ))}
       </div>
-      <p className="mt-4 text-[12px] text-[#8b90a0]">
-        Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, add, or move anything later with Edit structure.
-      </p>
+      <p className="mt-4 max-w-[820px] text-[12px] text-[#8b90a0]">{FOOTNOTE[metric]}</p>
     </div>
   );
 }
@@ -142,7 +179,7 @@ function Tabs<T extends string>({ label, value, options, onChange, testIdPrefix 
   return (
     <div className="flex items-center gap-2">
       <span className="text-[11px] text-[#8b90a0]">{label}</span>
-      <div className="flex gap-0.5 rounded-lg bg-[#f3f4f8] p-0.5">
+      <div className="flex flex-wrap gap-0.5 rounded-lg bg-[#f3f4f8] p-0.5">
         {options.map((option) => (
           <button
             key={option.id}
