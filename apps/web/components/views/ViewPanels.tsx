@@ -12,7 +12,6 @@ import { usePermissions } from "@/lib/use-permissions";
 import type { Journey, Process } from "@minea/types";
 import { ViewShell } from "@/components/views/ViewShell";
 import { PortfolioView } from "@/components/views/PortfolioView";
-import { CapabilityHeatmapView } from "@/components/views/CapabilityHeatmapView";
 import { InvestmentPipelineView } from "@/components/views/InvestmentPipelineView";
 import { TechDebtView } from "@/components/views/TechDebtView";
 import { IntegrationHealthView } from "@/components/views/IntegrationHealthView";
@@ -22,18 +21,6 @@ import { ProcessBuilder } from "@/components/views/ProcessBuilder";
 
 export function ProductsViewPanel() {
   return <PortfolioView />;
-}
-
-export function CapabilityHeatmapViewPanel() {
-  const view = getView("capability-heatmap");
-  return (
-    <ViewShell
-      view={view}
-      subtitle="Product × capability matrix colored by supporting system fitness."
-    >
-      <CapabilityHeatmapView />
-    </ViewShell>
-  );
 }
 
 function JourneyCard({ journey, onClick }: { journey: Journey; onClick: () => void }) {

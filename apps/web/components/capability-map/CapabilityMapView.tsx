@@ -104,7 +104,6 @@ export function CapabilityMapView({ map, onRefresh, embedded = false, onOpenCapa
     queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
     queryClient.invalidateQueries({ queryKey: ["capability-map-status", orgSlug, workspaceSlug] });
     queryClient.invalidateQueries({ queryKey: ["capability-library-domains", orgSlug, workspaceSlug] });
-    queryClient.invalidateQueries({ queryKey: ["capability-heatmap", orgSlug, workspaceSlug] });
     queryClient.invalidateQueries({ queryKey: ["metric-drawer"] });
     queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
     void invalidateWorkspaceSummary(queryClient, orgSlug, workspaceSlug);

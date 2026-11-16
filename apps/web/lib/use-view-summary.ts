@@ -29,8 +29,6 @@ export function viewHasRepositoryData(
   switch (viewId) {
     case "products":
       return metrics.productCount > 0;
-    case "capability-heatmap":
-      return metrics.capabilityCount > 0 && metrics.productCount > 0;
     case "processes":
       return metrics.processCount > 0;
     case "journeys":

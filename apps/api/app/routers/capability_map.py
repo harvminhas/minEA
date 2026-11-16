@@ -8,7 +8,6 @@ from app.schemas.capability_map import (
     AdoptTemplateRequest,
     AdoptTemplateResponse,
     AddDomainMappingSystemRequest,
-    CapabilityHeatmapRead,
     CapabilityMapCapability,
     CapabilityMapDomain,
     CapabilityMapRead,
@@ -16,16 +15,20 @@ from app.schemas.capability_map import (
     CapabilityPickerSuggestions,
     CapabilityTemplateDetail,
     CapabilityTemplateSummary,
+    AcceptMapRequest,
+    AcceptMapResponse,
     CreateDomainMappingSystemRequest,
     DomainDetailRead,
     DomainHistoryEntry,
     DomainHistoryResponse,
     DomainProductsRead,
     LibraryDomainGroup,
+    SuggestLinksResponse,
+    SuggestMapRequest,
+    SuggestMapResponse,
     UpsertDomainMappingRequest,
 )
 from app.services.authorization import require_object_room
-from app.services.capability_heatmap import build_capability_heatmap
 from app.services.capability_map import (
     add_domain_mapping_system,
     NO_DOMAIN_ID,
@@ -54,34 +57,50 @@ router = APIRouter(
 )
 
 
+def _cap_read(cap, domain_id: str, rollups: dict[str, dict]) -> CapabilityMapCapability:
+    cid = str(cap.id)
+    extra = rollups.get(cid, {})
+    parent = (cap.properties or {}).get("parent_id")
+    parent_id = str(parent) if parent and str(parent) != str(domain_id) else None
+    return CapabilityMapCapability(
+        id=cid,
+        name=cap.name,
+        domain_id=domain_id,
+        parent_id=parent_id,
+        order_index=cap.properties.get("order_index"),
+        maturity=cap.properties.get("maturity"),
+        investment=cap.properties.get("investment"),
+        owner=extra.get("owner"),
+        object_status=extra.get("object_status"),
+        system_count=extra.get("system_count", 0),
+        product_count=extra.get("product_count", 0),
+        coverage_status=extra.get("coverage_status", "no_system"),
+        children=[],
+    )
+
+
 def _map_to_read(
     domains, capabilities, rollups: dict[str, dict] | None = None
 ) -> CapabilityMapRead:
     rollups = rollups or {}
     caps_by_domain: dict[str, list[CapabilityMapCapability]] = {}
     known = {str(domain.id) for domain in domains}
+    raw: list[tuple[str, CapabilityMapCapability]] = []
     for cap in capabilities:
-        domain_id = str(cap.properties.get("domain_id") or "")
+        domain_id = str((cap.properties or {}).get("domain_id") or "")
         if domain_id not in known:
             # No (or a dangling) domain: shown on the map in a "No domain" card.
             domain_id = NO_DOMAIN_ID
-        cid = str(cap.id)
-        extra = rollups.get(cid, {})
-        caps_by_domain.setdefault(domain_id, []).append(
-            CapabilityMapCapability(
-                id=cid,
-                name=cap.name,
-                domain_id=domain_id,
-                order_index=cap.properties.get("order_index"),
-                maturity=cap.properties.get("maturity"),
-                investment=cap.properties.get("investment"),
-                owner=extra.get("owner"),
-                object_status=extra.get("object_status"),
-                system_count=extra.get("system_count", 0),
-                product_count=extra.get("product_count", 0),
-                coverage_status=extra.get("coverage_status", "no_system"),
-            )
-        )
+        raw.append((domain_id, _cap_read(cap, domain_id, rollups)))
+    by_id = {item.id: item for _, item in raw}
+    for domain_id, item in raw:
+        if item.parent_id and item.parent_id in by_id:
+            by_id[item.parent_id].children.append(item)
+        else:
+            item.parent_id = None
+            caps_by_domain.setdefault(domain_id, []).append(item)
+    for item in by_id.values():
+        item.children.sort(key=lambda c: (c.order_index if c.order_index is not None else 999, c.name))
 
     domain_reads: list[CapabilityMapDomain] = []
     for domain in domains:
@@ -145,18 +164,6 @@ async def get_capability_map(
         db, ctx.workspace.id, ctx.org_id, domains, capabilities
     )
     return _map_to_read(domains, capabilities, rollups)
-
-
-@router.get("/heatmap", response_model=CapabilityHeatmapRead)
-async def get_capability_heatmap(
-    ctx: TenancyContext = Depends(get_workspace_context),
-    db: AsyncSession = Depends(get_db),
-) -> CapabilityHeatmapRead:
-    await ctx.require_read(db)
-    assert ctx.workspace
-
-    data = await build_capability_heatmap(db, ctx.workspace.id, ctx.org_id)
-    return CapabilityHeatmapRead(**data)
 
 
 @router.get("/templates", response_model=list[CapabilityTemplateSummary])
@@ -395,3 +402,61 @@ async def adopt_capability_template(
         domain_count=len(domains),
         capability_count=len(capabilities),
     )
+
+
+@router.post("/suggest", response_model=SuggestMapResponse)
+async def suggest_capability_map(
+    body: SuggestMapRequest,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> SuggestMapResponse:
+    """Propose a map (or L3 activities under the existing one). Does not write anything."""
+    await ctx.require_permission(db, "object.create")
+    assert ctx.workspace
+    from app.services.capability_suggest import suggest_map
+
+    result = await suggest_map(
+        db,
+        ctx.workspace.id,
+        ctx.org_id,
+        about=body.about,
+        industry=body.industry,
+        size=body.size,
+        services=body.services,
+        website=body.website,
+    )
+    return SuggestMapResponse(**result)
+
+
+@router.post("/accept", response_model=AcceptMapResponse)
+async def accept_capability_map(
+    body: AcceptMapRequest,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> AcceptMapResponse:
+    await ctx.require_permission(db, "object.create")
+    assert ctx.workspace
+    from app.services.capability_suggest import accept_map
+
+    result = await accept_map(
+        db,
+        ctx.workspace.id,
+        ctx.org_id,
+        ctx.user_id,
+        [d.model_dump() for d in body.domains],
+    )
+    await db.commit()
+    return AcceptMapResponse(**result)
+
+
+@router.post("/suggest-links", response_model=SuggestLinksResponse)
+async def suggest_capability_links(
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> SuggestLinksResponse:
+    await ctx.require_permission(db, "object.create")
+    assert ctx.workspace
+    from app.services.capability_suggest import suggest_links
+
+    result = await suggest_links(db, ctx.workspace.id, ctx.org_id)
+    return SuggestLinksResponse(**result)

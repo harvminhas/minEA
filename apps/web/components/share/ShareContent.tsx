@@ -12,9 +12,6 @@ import { APPLICATION_LAYER_COLOR } from "@/lib/component-utils";
 const VIEW_PAGES: Record<string, React.ComponentType> = {
   "views/products": dynamic(() => import("@/app/orgs/[orgSlug]/workspaces/[workspaceSlug]/views/products/page")),
   "views/journeys": dynamic(() => import("@/app/orgs/[orgSlug]/workspaces/[workspaceSlug]/views/journeys/page")),
-  "views/capability-heatmap": dynamic(
-    () => import("@/app/orgs/[orgSlug]/workspaces/[workspaceSlug]/views/capability-heatmap/page")
-  ),
   "views/investments": dynamic(
     () => import("@/app/orgs/[orgSlug]/workspaces/[workspaceSlug]/views/investments/page")
   ),

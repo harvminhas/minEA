@@ -71,6 +71,7 @@ MIGRATION_FILES = [
     "056_ownership_roles.sql",
     "057_team_members.sql",
     "058_vendor_contracts.sql",
+    "059_capability_parent.sql",
 ]
 
 

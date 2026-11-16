@@ -227,7 +227,7 @@ export function ModelSidebar({ active }: { active?: ModelSection }) {
         <div>
           <Section label="Architecture" items={architecture} pathname={pathname} active={active} subnav={subnav} />
           <label className="mt-1 flex cursor-pointer items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-[12px] text-[#6b7289] hover:bg-[#eceef3]">
-            <span title="Processes, Products, Journeys, Investments, Capability heatmap, Data stores and Data domains">Show advanced</span>
+            <span title="Processes, Products, Journeys, Investments, Data stores and Data domains">Show advanced</span>
             <input
               type="checkbox"
               role="switch"

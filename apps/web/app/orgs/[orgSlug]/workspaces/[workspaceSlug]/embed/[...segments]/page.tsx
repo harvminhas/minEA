@@ -8,7 +8,6 @@ const VIEW_PAGES: Record<string, React.ComponentType> = {
   "views/products": dynamic(() => import("../../views/products/page")),
   "views/journeys": dynamic(() => import("../../views/journeys/page")),
   "views/processes": dynamic(() => import("../../views/processes/page")),
-  "views/capability-heatmap": dynamic(() => import("../../views/capability-heatmap/page")),
   "views/investments": dynamic(() => import("../../views/investments/page")),
   "views/tech-debt": dynamic(() => import("../../views/tech-debt/page")),
   "views/integration-health": dynamic(() => import("../../views/integration-health/page")),

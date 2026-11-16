@@ -48,6 +48,14 @@ async def get_domain(
     return result.scalar_one_or_none()
 
 
+def is_l3(properties: dict | None) -> bool:
+    """L3 activities have a parent_id pointing at an L2 capability, not at the domain itself."""
+    props = properties or {}
+    parent = props.get("parent_id")
+    domain = props.get("domain_id")
+    return bool(parent) and str(parent) != str(domain or "")
+
+
 async def capability_name_exists_in_domain(
     db: AsyncSession,
     workspace_id: UUID,
@@ -56,7 +64,8 @@ async def capability_name_exists_in_domain(
     name: str,
     exclude_id: UUID | None = None,
 ) -> bool:
-    q = select(MinEAObject.id).where(
+    """True if an L2 capability in this domain already has this name (L3 siblings are out of scope)."""
+    q = select(MinEAObject.id, MinEAObject.properties).where(
         MinEAObject.workspace_id == workspace_id,
         MinEAObject.org_id == org_id,
         MinEAObject.type == "capability",
@@ -65,8 +74,30 @@ async def capability_name_exists_in_domain(
     )
     if exclude_id:
         q = q.where(MinEAObject.id != exclude_id)
-    result = await db.execute(q)
-    return result.scalar_one_or_none() is not None
+    for row in (await db.execute(q)).all():
+        if not is_l3(row.properties if hasattr(row, "properties") else row[1]):
+            return True
+    return False
+
+
+async def capability_name_exists_under_parent(
+    db: AsyncSession,
+    workspace_id: UUID,
+    org_id: UUID,
+    parent_id: UUID,
+    name: str,
+    exclude_id: UUID | None = None,
+) -> bool:
+    q = select(MinEAObject.id).where(
+        MinEAObject.workspace_id == workspace_id,
+        MinEAObject.org_id == org_id,
+        MinEAObject.type == "capability",
+        MinEAObject.properties["parent_id"].astext == str(parent_id),
+        func.lower(MinEAObject.name) == name.strip().lower(),
+    )
+    if exclude_id:
+        q = q.where(MinEAObject.id != exclude_id)
+    return (await db.execute(q)).scalar_one_or_none() is not None
 
 
 async def domain_name_exists(
@@ -104,7 +135,7 @@ async def enrich_map_capability_rollups(
         domain_id = str((cap.properties or {}).get("domain_id") or "")
         caps_by_domain[domain_id if domain_id in known else NO_DOMAIN_ID].append(cap)
 
-    system_counts: dict[str, int] = defaultdict(int)
+    system_ids_map: dict[str, set[str]] = defaultdict(set)
     product_counts: dict[str, int] = defaultdict(int)
 
     for domain_id, domain_caps in caps_by_domain.items():
@@ -163,7 +194,7 @@ async def enrich_map_capability_rollups(
             seen_pairs[canonical].add(str(to_id))
 
         for canonical, system_ids in seen_pairs.items():
-            system_counts[canonical] = len(system_ids)
+            system_ids_map[canonical].update(system_ids)
 
         pc_result = await db.execute(
             select(ProductCapability.product_id, ProductCapability.capability_id).where(
@@ -184,10 +215,17 @@ async def enrich_map_capability_rollups(
         for canonical, product_ids in products_by_canonical.items():
             product_counts[canonical] = len(product_ids)
 
+    for cap in capabilities:
+        if not is_l3(cap.properties):
+            continue
+        parent = str((cap.properties or {}).get("parent_id") or "")
+        if parent:
+            system_ids_map[parent].update(system_ids_map.get(str(cap.id), set()))
+
     rollups: dict[str, dict] = {}
     for cap in capabilities:
         cid = str(cap.id)
-        count = system_counts.get(cid, 0)
+        count = len(system_ids_map.get(cid, set()))
         obj_status = cap.status or "active"
         if count == 0:
             coverage = "no_system"

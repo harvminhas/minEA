@@ -19,7 +19,6 @@ export function invalidateSystemCaches(
     queryClient.invalidateQueries({ queryKey: ["objects", orgSlug, workspaceSlug, "capability"] }),
     queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] }),
     queryClient.invalidateQueries({ queryKey: ["capability-map-status", orgSlug, workspaceSlug] }),
-    queryClient.invalidateQueries({ queryKey: ["capability-heatmap", orgSlug, workspaceSlug] }),
     queryClient.invalidateQueries({ queryKey: ["domain-detail", orgSlug, workspaceSlug] }),
     queryClient.invalidateQueries({ queryKey: ["domain-products", orgSlug, workspaceSlug] }),
     queryClient.invalidateQueries({ queryKey: ["portfolio-capability-map", orgSlug, workspaceSlug] }),

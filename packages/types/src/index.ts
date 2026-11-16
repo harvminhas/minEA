@@ -1663,6 +1663,7 @@ export interface CapabilityMapCapability {
   id: string;
   name: string;
   domain_id: string;
+  parent_id?: string | null;
   order_index?: number | null;
   maturity?: number | null;
   investment?: string | null;
@@ -1671,6 +1672,47 @@ export interface CapabilityMapCapability {
   system_count?: number;
   product_count?: number;
   coverage_status?: CapabilityCoverageStatus;
+  children?: CapabilityMapCapability[];
+}
+
+export interface SuggestedCapability {
+  name: string;
+  id?: string | null;
+  activities: string[];
+}
+
+export interface SuggestedDomain {
+  name: string;
+  id?: string | null;
+  capabilities: SuggestedCapability[];
+}
+
+export interface SuggestMapResponse {
+  mode: "full" | "activities";
+  domains: SuggestedDomain[];
+  warning?: string | null;
+  website_used?: boolean;
+}
+
+export interface AcceptMapResponse {
+  domain_count: number;
+  capability_count: number;
+  activity_count: number;
+}
+
+export interface SuggestedCapabilityLink {
+  app_id: string;
+  app_name: string;
+  capability_id: string;
+  capability_name: string;
+  path: string;
+  confidence: string;
+}
+
+export interface SuggestLinksResponse {
+  suggestions: SuggestedCapabilityLink[];
+  unmapped: { id: string; name: string }[];
+  warning?: string | null;
 }
 
 export interface CapabilityMapDomain {
@@ -1685,86 +1727,6 @@ export interface CapabilityMapDomain {
 export interface CapabilityMap {
   initialized: boolean;
   domains: CapabilityMapDomain[];
-}
-
-export type HeatmapCellLevel =
-  | "empty"
-  | "gap"
-  | "unrated"
-  | "strong"
-  | "good"
-  | "fair"
-  | "poor"
-  | "eol";
-
-export interface HeatmapCell {
-  level: HeatmapCellLevel | string;
-  label: string;
-}
-
-export interface HeatmapClaimingProduct {
-  id: string;
-  name: string;
-  color: string;
-}
-
-export interface HeatmapCapabilityRow {
-  id: string;
-  name: string;
-  status?: string | null;
-  is_planned: boolean;
-  cells: Record<string, HeatmapCell>;
-  overlap: boolean;
-  realising_count: number;
-  domain_name?: string;
-  domain_id?: string;
-  claiming_products?: HeatmapClaimingProduct[];
-  unmapped_system_count?: number;
-  gap_detail?: string;
-}
-
-export interface HeatmapDomainGroup {
-  id: string;
-  name: string;
-  icon?: string | null;
-  capabilities: HeatmapCapabilityRow[];
-}
-
-export interface HeatmapProductColumn {
-  id: string;
-  name: string;
-  short_code: string;
-  abbrev: string;
-  lifecycle: string;
-  color: string;
-  capability_ids: string[];
-}
-
-export interface HeatmapGapItem {
-  capability_name: string;
-  domain_name: string;
-  detail: string;
-}
-
-export interface HeatmapHotSpot {
-  capability_name: string;
-  detail: string;
-}
-
-export interface HeatmapSummary {
-  capability_count: number;
-  product_count: number;
-  gap_count: number;
-  overlap_count: number;
-  gaps: HeatmapGapItem[];
-  overlaps: { count: number; names: string[] };
-  hot_spots: HeatmapHotSpot[];
-}
-
-export interface CapabilityHeatmap {
-  products: HeatmapProductColumn[];
-  domains: HeatmapDomainGroup[];
-  summary: HeatmapSummary;
 }
 
 export type MappingFitness = "none" | "weak" | "adequate" | "strong";

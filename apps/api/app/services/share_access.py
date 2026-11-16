@@ -20,7 +20,6 @@ from app.services.plan_features import plan_allows_share as _plan_allows_share
 # View keys shareable on starter+
 SHAREABLE_VIEW_KEYS = {
     "views/products",
-    "views/capability-heatmap",
     "views/tech-debt",
     "views/journeys",
     "views/investments",
@@ -33,14 +32,6 @@ SHARE_DATA_ALLOWLIST: dict[tuple[str, str | None], set[str]] = {
         "products",
         "objects",
         "relationships",
-        "capability-map/heatmap",
-    },
-    ("view", "views/capability-heatmap"): {
-        "workspace/summary",
-        "capability-map",
-        "capability-map/heatmap",
-        "products",
-        "objects",
     },
     ("view", "views/tech-debt"): {
         "workspace/summary",
@@ -64,7 +55,6 @@ SHARE_DATA_ALLOWLIST: dict[tuple[str, str | None], set[str]] = {
     ("object", None): {"objects", "relationships"},
     ("capability_map", None): {
         "capability-map",
-        "capability-map/heatmap",
         "capability-map/status",
         "objects",
         "products",

@@ -3,7 +3,6 @@
 import type { ViewId } from "@/lib/views";
 import { ViewEmbedProvider } from "@/lib/view-embed-context";
 import {
-  CapabilityHeatmapViewPanel,
   InvestmentsViewPanel,
   JourneysViewPanel,
   ProcessesViewPanel,
@@ -17,7 +16,6 @@ const VIEW_PANELS: Record<ViewId, React.ComponentType> = {
   products: ProductsViewPanel,
   journeys: JourneysViewPanel,
   processes: ProcessesViewPanel,
-  "capability-heatmap": CapabilityHeatmapViewPanel,
   investments: InvestmentsViewPanel,
   "tech-debt": TechDebtViewPanel,
   "integration-health": IntegrationHealthViewPanel,

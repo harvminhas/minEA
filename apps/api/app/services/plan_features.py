@@ -25,7 +25,6 @@ EDITOR_SEATS_KEY = "max_editor_seats"
 ALL_VIEW_KEYS = frozenset(
     {
         "views/products",
-        "views/capability-heatmap",
         "views/journeys",
         "views/investments",
         "views/tech-debt",

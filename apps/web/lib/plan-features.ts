@@ -165,7 +165,6 @@ export function planAllowsShareResource(
   if (resourceType === "view") {
     const shareable = new Set([
       "views/products",
-      "views/capability-heatmap",
       "views/tech-debt",
       "views/journeys",
       "views/investments",

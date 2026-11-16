@@ -50,7 +50,7 @@ export const useAppStore = create<AppStore>()(
       viewMode: "repository",
       setViewMode: (mode) => set({ viewMode: mode }),
 
-      splitViewId: "capability-heatmap",
+      splitViewId: "investments",
       setSplitViewId: (id) => set({ splitViewId: id }),
 
       chatOpen: false,

@@ -1,12 +1,11 @@
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, ArrowLeftRight, GitBranch, Grid3X3, Layers, Map, Package, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, GitBranch, Layers, Map, Package, TrendingUp } from "lucide-react";
 
 /** v1 fixed views — not user-defined (spec §2). */
 export type ViewId =
   | "products"
   | "processes"
   | "journeys"
-  | "capability-heatmap"
   | "investments"
   | "tech-debt"
   | "integration-health"
@@ -66,20 +65,6 @@ export const PROCESSES_VIEW: ViewConfig = {
 /** Product portfolio + v1 views — used in Views sidebar and split panel picker. */
 export const VIEWS_V1: ViewConfig[] = [
   {
-    id: "capability-heatmap",
-    label: "Capability heatmap",
-    description: "System health across domains",
-    drawerDescription:
-      "A heat-mapped grid of all capabilities across domains — showing investment coverage, system support, and ownership gaps at a glance.",
-    segment: "views/capability-heatmap",
-    icon: Grid3X3,
-    color: "#22c55e",
-    anchorQuestion: "Show me a one-screen map of our business, colored by automation maturity.",
-    emptyTitle: "Nothing to heatmap yet",
-    emptyDescription:
-      "Populate business capabilities and their realizations in the repository. This view colors each capability by maturity (manual → automated) — read-only over data created elsewhere.",
-  },
-  {
     id: "journeys",
     label: "Journeys",
     description: "Customer experience paths",
@@ -106,7 +91,7 @@ export const VIEWS_V1: ViewConfig[] = [
     anchorQuestion: "Show me our active and proposed investments, ranked by impact.",
     emptyTitle: "No investments yet",
     emptyDescription:
-      "An investment targets a realization with a hypothesis and expected impact. Start from a bottleneck in Processes or the Capability heatmap, or create one here.",
+      "An investment targets a realization with a hypothesis and expected impact. Start from a bottleneck in Processes or the Capability map, or create one here.",
     emptyCta: "Propose an investment",
   },
   {
@@ -165,7 +150,6 @@ const NAV_VIEW_IDS: ViewId[] = [
   "integration-health",
   "tech-debt",
   "products",
-  "capability-heatmap",
   "journeys",
   "investments",
 ];
@@ -184,13 +168,13 @@ export function isViewsAreaPath(pathname: string): boolean {
 }
 
 /** Views pages that render in the Model layout and sidebar, not the old Views shell. */
-export const MODEL_LAYOUT_VIEWS = ["processes", "investments", "capability-heatmap"] as const;
+export const MODEL_LAYOUT_VIEWS = ["processes", "investments"] as const;
 const MODEL_LAYOUT_VIEW_RE = new RegExp(`/views/(${MODEL_LAYOUT_VIEWS.join("|")})(/|$)`);
 export function isModelLayoutViewPath(pathname: string): boolean {
   return MODEL_LAYOUT_VIEW_RE.test(pathname);
 }
 
-/** Views tab routes. Processes, Investments and the heatmap stay with Model, not this nav. */
+/** Views tab routes. Processes and Investments stay with Model, not this nav. */
 export function isViewsModePath(pathname: string): boolean {
   return isViewsAreaPath(pathname) && !isModelLayoutViewPath(pathname);
 }

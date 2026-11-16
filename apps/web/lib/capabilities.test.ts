@@ -95,11 +95,15 @@ test("Applications list: Capabilities column and filter", () => {
   assert.match(screen, /<CapabilitiesSection/);
 });
 
-test("empty state offers a template and a draft; neither saves before confirm", () => {
+test("empty state offers an AI interview and add-one-yourself; nothing saves before accept", () => {
   const src = readFileSync(new URL("../components/mvp/CapabilitiesSection.tsx", import.meta.url), "utf8");
-  assert.match(src, /Start from a template/);
-  assert.match(src, /Draft from my apps/);
-  assert.match(src, /adoptTemplate/);
-  assert.match(src, /capability-template-confirm/);
-  assert.match(src, /capability-draft-confirm/);
+  const interview = readFileSync(new URL("../components/capability-map/CapabilityInterview.tsx", import.meta.url), "utf8");
+  assert.match(src, /CapabilityInterview/);
+  assert.match(src, /onAddYourself/);
+  assert.match(interview, /Or add one capability yourself/);
+  assert.match(src, /capabilityMapApi.suggest/);
+  assert.match(src, /capabilityMapApi.accept/);
+  assert.doesNotMatch(src, /Start from a template/);
+  assert.doesNotMatch(src, /adoptTemplate/);
+  assert.match(interview, /Nothing is saved until you accept/);
 });

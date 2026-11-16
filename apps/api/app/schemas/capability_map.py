@@ -41,6 +41,7 @@ class CapabilityMapCapability(BaseModel):
     id: str
     name: str
     domain_id: str
+    parent_id: str | None = None
     order_index: int | None = None
     maturity: int | None = None
     investment: str | None = None
@@ -49,6 +50,7 @@ class CapabilityMapCapability(BaseModel):
     system_count: int = 0
     product_count: int = 0
     coverage_status: str = "no_system"  # active | planned | no_system
+    children: list["CapabilityMapCapability"] = Field(default_factory=list)
 
 
 class CapabilityMapRead(BaseModel):
@@ -188,75 +190,58 @@ class CreateDomainMappingSystemRequest(BaseModel):
     hosting_model: str | None = None
 
 
-class HeatmapCell(BaseModel):
-    level: str
-    label: str
-
-
-class HeatmapClaimingProduct(BaseModel):
-    id: str
+class SuggestedActivity(BaseModel):
     name: str
-    color: str
+    id: str | None = None
 
 
-class HeatmapCapabilityRow(BaseModel):
-    id: str
+class SuggestedCapability(BaseModel):
     name: str
-    status: str | None = None
-    is_planned: bool = False
-    cells: dict[str, HeatmapCell]
-    overlap: bool = False
-    realising_count: int = 0
-    domain_name: str | None = None
-    claiming_products: list[HeatmapClaimingProduct] = Field(default_factory=list)
-    unmapped_system_count: int = 0
-    gap_detail: str | None = None
+    id: str | None = None
+    activities: list[str] = Field(default_factory=list)
 
 
-class HeatmapDomainGroup(BaseModel):
-    id: str
+class SuggestedDomain(BaseModel):
     name: str
-    icon: str | None = None
-    capabilities: list[HeatmapCapabilityRow]
+    id: str | None = None
+    capabilities: list[SuggestedCapability] = Field(default_factory=list)
 
 
-class HeatmapProductColumn(BaseModel):
-    id: str
-    name: str
-    short_code: str
-    abbrev: str
-    lifecycle: str
-    color: str
-    capability_ids: list[str] = Field(default_factory=list)
+class SuggestMapRequest(BaseModel):
+    about: str = ""
+    industry: str | None = None
+    size: str | None = None
+    services: str | None = None
+    website: str | None = None
 
 
-class HeatmapGapItem(BaseModel):
-    capability_name: str
-    domain_name: str
-    detail: str
+class SuggestMapResponse(BaseModel):
+    mode: str  # "full" | "activities"
+    domains: list[SuggestedDomain]
+    warning: str | None = None
+    website_used: bool = False
 
 
-class HeatmapHotSpot(BaseModel):
-    capability_name: str
-    detail: str
+class AcceptMapRequest(BaseModel):
+    domains: list[SuggestedDomain]
 
 
-class HeatmapOverlapSummary(BaseModel):
-    count: int
-    names: list[str] = Field(default_factory=list)
-
-
-class HeatmapSummary(BaseModel):
+class AcceptMapResponse(BaseModel):
+    domain_count: int
     capability_count: int
-    product_count: int
-    gap_count: int
-    overlap_count: int
-    gaps: list[HeatmapGapItem] = Field(default_factory=list)
-    overlaps: HeatmapOverlapSummary
-    hot_spots: list[HeatmapHotSpot] = Field(default_factory=list)
+    activity_count: int
 
 
-class CapabilityHeatmapRead(BaseModel):
-    products: list[HeatmapProductColumn]
-    domains: list[HeatmapDomainGroup]
-    summary: HeatmapSummary
+class SuggestedLink(BaseModel):
+    app_id: str
+    app_name: str
+    capability_id: str
+    capability_name: str
+    path: str
+    confidence: str = "medium"
+
+
+class SuggestLinksResponse(BaseModel):
+    suggestions: list[SuggestedLink] = Field(default_factory=list)
+    unmapped: list[dict] = Field(default_factory=list)
+    warning: str | None = None

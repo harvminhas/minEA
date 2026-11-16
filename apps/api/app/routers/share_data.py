@@ -17,7 +17,6 @@ from app.routers.products import _to_read as product_to_read
 from app.schemas.objects import ObjectListResponse
 from app.schemas.products import ProductListResponse
 from app.schemas.relationships import RelationshipRead
-from app.services.capability_heatmap import build_capability_heatmap
 from app.services.capability_map import (
     enrich_map_capability_rollups,
     load_capability_map,
@@ -202,14 +201,6 @@ async def share_capability_map(token: str, db: AsyncSession = Depends(get_db)):
     )
     return _map_to_read(domains, capabilities, rollups)
 
-
-@router.get("/{token}/data/capability-map/heatmap")
-async def share_capability_heatmap(token: str, db: AsyncSession = Depends(get_db)):
-    ctx = await _share_ctx(token, "capability-map/heatmap", db)
-    from app.schemas.capability_map import CapabilityHeatmapRead
-
-    data = await build_capability_heatmap(db, ctx.workspace.id, ctx.org.id)
-    return CapabilityHeatmapRead(**data)
 
 
 @router.get("/{token}/data/capability-map/domains/{domain_id}")

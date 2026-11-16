@@ -710,7 +710,23 @@ async def delete_object(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
 
     if obj.type == "capability":
+        from app.services.capability_map import is_l3
         from app.services.domain_history import capability_domain_id, log_capability_removed
+        from sqlalchemy import select as _select
+
+        if not is_l3(obj.properties):
+            children = (
+                await db.execute(
+                    _select(MinEAObject).where(
+                        MinEAObject.workspace_id == ctx.workspace.id,
+                        MinEAObject.org_id == ctx.org_id,
+                        MinEAObject.type == "capability",
+                        MinEAObject.properties["parent_id"].astext == str(obj.id),
+                    )
+                )
+            ).scalars().all()
+            for child in children:
+                await db.delete(child)
 
         domain_id = capability_domain_id(obj)
         if domain_id:

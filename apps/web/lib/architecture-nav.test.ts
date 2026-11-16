@@ -32,8 +32,8 @@ test("existing records in hidden types turn Advanced on; an explicit choice wins
   assert.equal(advancedEnabled(true, {}), true);
 });
 
-test("Products, Journeys and the heatmap are never listed, even with Advanced on or on their page", () => {
-  for (const path of ["", `${B}/views/journeys`, `${B}/strategy/products`, `${B}/views/capability-heatmap`]) {
+test("Products, Journeys and the retired heatmap are never listed, even with Advanced on or on their page", () => {
+  for (const path of ["", `${B}/views/journeys`, `${B}/strategy/products`]) {
     for (const advanced of [false, true]) {
       const shown = labels(advanced, path);
       for (const gone of ["Products", "Journeys", "Capability heatmap"]) assert.ok(!shown.includes(gone), `${gone} @ ${path}`);
@@ -47,7 +47,7 @@ test("Products, Journeys and the heatmap are never listed, even with Advanced on
 test("hidden routes still work by direct URL and stay highlighted", () => {
   assert.ok(labels(false, `${B}/views/investments`).includes("Investments"));
   assert.ok(!labels(false, `${B}/views/investments`).includes("Processes"));
-  for (const page of ["views/processes", "views/journeys", "views/investments", "views/capability-heatmap", "views/products", "strategy/products"]) {
+  for (const page of ["views/processes", "views/journeys", "views/investments", "views/products", "strategy/products"]) {
     readFileSync(new URL(`../app/orgs/[orgSlug]/workspaces/[workspaceSlug]/${page}/page.tsx`, import.meta.url));
   }
 });

@@ -71,21 +71,6 @@ export function buildViewRequirements(
   const investments = `${basePath}/views/investments`;
 
   switch (viewId) {
-    case "capability-heatmap":
-      return [
-        {
-          label: "At least one capability",
-          met: metrics.capabilityCount > 0,
-          actionLabel: "Add",
-          actionHref: capMap,
-        },
-        {
-          label: "At least one domain",
-          met: metrics.domainCount > 0,
-          actionLabel: metrics.domainCount > 0 ? undefined : "Add",
-          actionHref: metrics.domainCount > 0 ? undefined : capMap,
-        },
-      ];
     case "products":
       return [
         {
@@ -478,7 +463,7 @@ export function dashboardPrimaryCta(
   if (metrics.domainCount > 0) {
     return {
       message:
-        "Add capabilities to unlock Capability heatmap and Product portfolio — your two most useful views.",
+        "Add capabilities to unlock Product portfolio.",
       actionLabel: "Add capabilities",
       actionHref: `${basePath}/business/capabilities`,
     };
@@ -494,16 +479,14 @@ export function buildZeroStateViewCards(
   metrics: WorkspaceMetrics
 ): DashboardViewCard[] {
   const galleryHref = `${basePath}/views`;
-  const pick = (viewId: "products" | "capability-heatmap") => {
+  const pick = (viewId: "products") => {
     const view = NAV_VIEWS.find((v) => v.id === viewId)!;
     const statusLabel =
       viewId === "products"
         ? metrics.systemCount === 0
           ? "Needs systems"
           : "Needs products"
-        : metrics.capabilityCount === 0
-          ? "Needs capabilities"
-          : "Needs data";
+        : "Needs data";
     return {
       id: view.id,
       label: view.label,
@@ -518,7 +501,7 @@ export function buildZeroStateViewCards(
       icon: view.icon,
     };
   };
-  return [pick("products"), pick("capability-heatmap")];
+  return [pick("products")];
 }
 
 export function buildDashboardViewCards(
@@ -567,20 +550,6 @@ export function viewReadiness(
         statusLabel: `${metrics.productCount} product${metrics.productCount === 1 ? "" : "s"} · all mapped`,
         statusTone: "healthy",
       };
-    case "capability-heatmap":
-      if (metrics.capabilityCount === 0) {
-        return { ready: false, statusLabel: "Add capabilities", statusTone: "needs" };
-      }
-      if (metrics.capabilitiesWithoutSystemCount > 0 || metrics.incompleteDomainCount > 0) {
-        const gapCount =
-          metrics.capabilitiesWithoutSystemCount + metrics.incompleteDomainCount;
-        return {
-          ready: true,
-          statusLabel: `${gapCount} gap${gapCount === 1 ? "" : "s"} detected`,
-          statusTone: "action",
-        };
-      }
-      return { ready: true, statusLabel: "No gaps detected", statusTone: "healthy" };
     case "processes":
       return metrics.processCount > 0
         ? {

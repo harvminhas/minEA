@@ -14,7 +14,7 @@ export type HiddenCountKey = "processes" | "dataStores" | "dataDomains";
 export type HiddenCounts = Partial<Record<HiddenCountKey, number | undefined>>;
 
 /**
- * Products, Journeys and the Capability heatmap are not listed at all (not even with Advanced on):
+ * Products, Journeys and the retired product-capability heatmap are not listed at all (not even with Advanced on):
  * the heatmap's columns are Products. Their direct URLs still render.
  */
 export function architectureItems(basePath: string): ArchNavItem[] {

@@ -12,24 +12,6 @@ import { cn } from "@/lib/utils";
 
 // ─── Miniature illustrations per view ────────────────────────────────────
 
-function CapabilityHeatmapIllustration() {
-  return (
-    <div className="flex flex-col gap-1.5 p-3">
-      {[
-        ["bg-emerald-400", "bg-amber-300", "bg-emerald-400"],
-        ["bg-red-400", "bg-emerald-400", "bg-gray-200"],
-        ["bg-amber-300", "bg-emerald-400", "bg-emerald-400"],
-      ].map((row, r) => (
-        <div key={r} className="flex gap-1.5">
-          {row.map((cls, c) => (
-            <div key={c} className={`h-6 flex-1 rounded-sm ${cls} opacity-80`} />
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function JourneysIllustration() {
   return (
     <div className="flex items-center justify-center gap-2 px-4 py-5">
@@ -150,7 +132,6 @@ function FoundationsIllustration() {
 }
 
 const ILLUSTRATIONS: Record<string, () => React.ReactElement> = {
-  "capability-heatmap": CapabilityHeatmapIllustration,
   journeys: JourneysIllustration,
   products: ProductsIllustration,
   investments: InvestmentsIllustration,

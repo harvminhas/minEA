@@ -21,9 +21,12 @@ test("Map is the default view, List the secondary one", () => {
   assert.equal(capabilityViewFrom("?view=list"), "list");
   const section = src("components/mvp/CapabilitiesSection.tsx");
   assert.match(section, /capability-view-\$\{item\}/);
-  assert.match(section, /<CapabilityMapPage embedded onOpenCapability=\{openCapability\}/);
-  assert.match(section, /Start from a template/);
-  assert.match(section, /Draft from my apps/);
+  assert.match(section, /<CapabilityHeatMap /);
+  assert.match(section, /CapabilityInterview/);
+  assert.match(section, /onAddYourself/);
+  const interview = src("components/capability-map/CapabilityInterview.tsx");
+  assert.match(interview, /Or add one capability yourself/);
+  assert.doesNotMatch(section, /Start from a template/);
 });
 
 test("the No domain card has no page or domain actions; real domains open their page", () => {

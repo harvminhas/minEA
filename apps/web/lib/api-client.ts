@@ -50,7 +50,10 @@ import type {
   JourneyCreate,
   JourneyListResponse,
   DerivedSystemsResponse,
-  CapabilityHeatmap,
+  SuggestMapResponse,
+  AcceptMapResponse,
+  SuggestLinksResponse,
+  SuggestedDomain,
   CapabilityMap,
   CapabilityMapStatus,
   CapabilityTemplateDetail,
@@ -899,8 +902,25 @@ export const capabilityMapApi = {
   get: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<CapabilityMap>(`${wsBase(orgSlug, workspaceSlug)}/capability-map`, { token }),
 
-  heatmap: (orgSlug: string, workspaceSlug: string, token: string) =>
-    apiFetch<CapabilityHeatmap>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/heatmap`, { token }),
+  suggest: (orgSlug: string, workspaceSlug: string, body: { about?: string; industry?: string | null; size?: string | null; services?: string | null; website?: string | null }, token: string) =>
+    apiFetch<SuggestMapResponse>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/suggest`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  accept: (orgSlug: string, workspaceSlug: string, domains: SuggestedDomain[], token: string) =>
+    apiFetch<AcceptMapResponse>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/accept`, {
+      method: "POST",
+      body: JSON.stringify({ domains }),
+      token,
+    }),
+
+  suggestLinks: (orgSlug: string, workspaceSlug: string, token: string) =>
+    apiFetch<SuggestLinksResponse>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/suggest-links`, {
+      method: "POST",
+      token,
+    }),
 
   listTemplates: (orgSlug: string, workspaceSlug: string, token: string) =>
     apiFetch<CapabilityTemplateSummary[]>(`${wsBase(orgSlug, workspaceSlug)}/capability-map/templates`, {
