@@ -26,6 +26,12 @@ test("Map is the default view, List the secondary one", () => {
   assert.match(section, /onAddYourself/);
   const interview = src("components/capability-map/CapabilityInterview.tsx");
   assert.match(interview, /Or add one capability yourself/);
+  assert.match(section, /Edit structure/);
+  const review = src("components/capability-map/CapabilityReview.tsx");
+  assert.match(review, /Use this map/);
+  assert.match(review, /Try again/);
+  assert.match(review, /preview-add-activity-btn/);
+  assert.doesNotMatch(review, /Accept all/);
   assert.doesNotMatch(section, /Start from a template/);
 });
 

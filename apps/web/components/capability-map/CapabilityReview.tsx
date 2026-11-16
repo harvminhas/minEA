@@ -1,9 +1,14 @@
 "use client";
 
-import type { SuggestedDomain } from "@minea/types";
+import { useState } from "react";
+import type { SuggestedCapability, SuggestedDomain } from "@minea/types";
 
 function updateDomain(domains: SuggestedDomain[], index: number, patch: Partial<SuggestedDomain>): SuggestedDomain[] {
   return domains.map((domain, i) => (i === index ? { ...domain, ...patch } : domain));
+}
+
+function updateCap(domain: SuggestedDomain, index: number, patch: Partial<SuggestedCapability>): SuggestedCapability[] {
+  return domain.capabilities.map((cap, i) => (i === index ? { ...cap, ...patch } : cap));
 }
 
 export function CapabilityReview({
@@ -15,7 +20,6 @@ export function CapabilityReview({
   error,
   warning,
   existing,
-  title,
 }: {
   domains: SuggestedDomain[];
   onChange: (next: SuggestedDomain[]) => void;
@@ -25,31 +29,40 @@ export function CapabilityReview({
   error?: string;
   warning?: string | null;
   existing?: boolean;
-  title?: string;
 }) {
+  const [adding, setAdding] = useState<{ domain: number; cap: number } | null>(null);
+  const [draft, setDraft] = useState("");
   const capCount = domains.reduce((n, d) => n + d.capabilities.length, 0);
   const actCount = domains.reduce((n, d) => n + d.capabilities.reduce((m, c) => m + c.activities.length, 0), 0);
 
-  const moveDomain = (from: number, to: number) => {
-    if (to < 0 || to >= domains.length) return;
-    const next = [...domains];
-    const [item] = next.splice(from, 1);
-    next.splice(to, 0, item!);
-    onChange(next);
+  const closeAdd = () => {
+    setAdding(null);
+    setDraft("");
+  };
+  const saveAdd = (domainIndex: number, capIndex: number) => {
+    const name = draft.trim();
+    if (name) {
+      const domain = domains[domainIndex];
+      if (domain) {
+        const cap = domain.capabilities[capIndex];
+        if (cap) onChange(updateDomain(domains, domainIndex, { capabilities: updateCap(domain, capIndex, { activities: [...cap.activities, name] }) }));
+      }
+    }
+    closeAdd();
   };
 
   return (
     <section data-testid="capability-review">
-      <div className="mb-3 flex flex-wrap items-start gap-2">
+      <div className="mb-3.5 flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-[22px] font-semibold text-[#1c2230]">{title ?? "Suggested map"}</h2>
+          <h2 className="text-[22px] font-semibold text-[#1c2230]">Suggested map</h2>
           <p className="text-[13px] text-[#6b7289]">
-            {domains.length} domain{domains.length === 1 ? "" : "s"} · {capCount} capabilit{capCount === 1 ? "y" : "ies"} · {actCount} activit{actCount === 1 ? "y" : "ies"}
-            {existing ? ". Only new activities will be added." : "."} Click a name to rename. Nothing is saved until you accept.
+            {domains.length} domain{domains.length === 1 ? "" : "s"}, {capCount} capabilit{capCount === 1 ? "y" : "ies"}, {actCount} activit{actCount === 1 ? "y" : "ies"}
+            {existing ? ". Only new activities will be added." : ". Use it now — you can rename or rearrange anything later."}
           </p>
         </div>
-        <button type="button" onClick={onCancel} className="inline-flex h-8 items-center rounded-md border border-[#e6e8ee] px-3 text-[12.5px] text-[#4b5163]">
-          Start over
+        <button type="button" onClick={onCancel} className="text-[12.5px] font-medium text-[#5b4ce6]">
+          Try again
         </button>
         <button
           type="button"
@@ -57,126 +70,95 @@ export function CapabilityReview({
           onClick={onAccept}
           className="inline-flex h-8 items-center rounded-md bg-[#5b4ce6] px-3 text-[12.5px] font-semibold text-white disabled:opacity-50"
         >
-          {busy ? "Saving…" : "Accept all"}
+          {busy ? "Saving…" : "Use this map"}
         </button>
       </div>
       {warning && <p className="mb-3 text-[12.5px] text-[#9a3412]">{warning}</p>}
       {error && <p className="mb-3 text-[12.5px] text-[#b42318]">{error}</p>}
-      <div className="space-y-2">
-        {domains.map((domain, di) => (
-          <article key={domain.id ?? `d${di}`} className="overflow-hidden rounded-xl border border-[#e6e8ee] bg-white">
-            <header className="flex items-center gap-2 border-b border-[#f3f4f8] bg-[#fafafb] px-2.5 py-2">
-              <button type="button" className="text-[#8b90a0]" aria-label="Move domain up" onClick={() => moveDomain(di, di - 1)}>::</button>
-              <input
-                aria-label="Domain name"
-                value={domain.name}
-                onChange={(e) => onChange(updateDomain(domains, di, { name: e.target.value }))}
-                className="min-w-[140px] flex-1 border-0 bg-transparent text-[13.5px] font-semibold outline-none"
-              />
-              <span className="text-[11px] text-[#8b90a0]">{domain.capabilities.length} capabilities</span>
-              <button
-                type="button"
-                className="text-[12px] text-[#5b4ce6]"
-                onClick={() => {
-                  const name = "New capability";
-                  const caps = [...domain.capabilities, { name, id: null, activities: [] }];
-                  onChange(updateDomain(domains, di, { capabilities: caps }));
-                }}
-              >
-                + Capability
-              </button>
-              <button
-                type="button"
-                className="text-[12px] text-[#8b90a0] hover:text-[#b42318]"
-                aria-label={`Remove ${domain.name}`}
-                onClick={() => onChange(domains.filter((_, i) => i !== di))}
-              >
-                ×
-              </button>
-            </header>
-            <div className="px-3 py-2 pl-6">
-              {domain.capabilities.map((cap, ci) => (
-                <div key={cap.id ?? `c${di}-${ci}`} className="mb-1">
-                  <div className="flex items-center gap-2 py-1">
-                    <input
-                      aria-label="Capability name"
-                      value={cap.name}
-                      onChange={(e) => {
-                        const capabilities = domain.capabilities.map((c, i) => (i === ci ? { ...c, name: e.target.value } : c));
-                        onChange(updateDomain(domains, di, { capabilities }));
-                      }}
-                      className="min-w-[120px] border-0 bg-transparent text-[13px] font-semibold outline-none"
-                    />
-                    <span className="flex-1" />
-                    <button
-                      type="button"
-                      className="text-[12px] text-[#8b90a0] hover:text-[#b42318]"
-                      aria-label={`Remove ${cap.name}`}
-                      onClick={() => {
-                        const capabilities = domain.capabilities.filter((_, i) => i !== ci);
-                        onChange(updateDomain(domains, di, { capabilities }));
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div className="mb-2 flex flex-wrap gap-1.5 pl-4">
-                    {cap.activities.map((act, ai) => (
-                      <span key={`${act}-${ai}`} className="inline-flex items-center gap-1 rounded-md border border-[#eef0f4] px-2 py-0.5">
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2" data-testid="capability-preview-grid">
+        {domains.map((domain, di) => {
+          const acts = domain.capabilities.reduce((n, c) => n + c.activities.length, 0);
+          return (
+            <article key={domain.id ?? `d${di}`} className="rounded-xl border border-[#e6e8ee] bg-white px-3.5 py-3">
+              <h3 className="text-[13.5px] font-semibold text-[#1c2230]">{domain.name}</h3>
+              <p className="mb-2 text-[11.5px] text-[#8b90a0]">
+                {domain.capabilities.length} capabilit{domain.capabilities.length === 1 ? "y" : "ies"}, {acts} activit{acts === 1 ? "y" : "ies"}
+              </p>
+              <div className="space-y-2">
+                {domain.capabilities.map((cap, ci) => (
+                  <div key={cap.id ?? `c${di}-${ci}`} className="group/cap" data-testid="preview-capability">
+                    <div className="flex items-center gap-1">
+                      <div className="text-[13px] font-medium text-[#1c2230]">{cap.name}</div>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${cap.name}`}
+                        className="text-[13px] leading-none text-[#8b90a0] opacity-0 hover:text-[#b42318] group-hover/cap:opacity-100"
+                        onClick={() => onChange(updateDomain(domains, di, { capabilities: domain.capabilities.filter((_, i) => i !== ci) }))}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 pl-0">
+                      {cap.activities.map((act, ai) => (
+                        <span key={`${act}-${ai}`} className="group/act inline-flex items-center text-[12.5px] text-[#4b5163]">
+                          {act}
+                          <button
+                            type="button"
+                            aria-label={`Remove ${act}`}
+                            className="ml-0.5 text-[12px] leading-none text-[#8b90a0] opacity-0 hover:text-[#b42318] group-hover/act:opacity-100"
+                            onClick={() =>
+                              onChange(
+                                updateDomain(domains, di, {
+                                  capabilities: updateCap(domain, ci, { activities: cap.activities.filter((_, i) => i !== ai) }),
+                                }),
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      {adding?.domain === di && adding.cap === ci ? (
                         <input
-                          aria-label="Activity name"
-                          value={act}
-                          onChange={(e) => {
-                            const activities = cap.activities.map((a, i) => (i === ai ? e.target.value : a));
-                            const capabilities = domain.capabilities.map((c, i) => (i === ci ? { ...c, activities } : c));
-                            onChange(updateDomain(domains, di, { capabilities }));
+                          data-testid="preview-add-activity"
+                          aria-label="New activity name"
+                          autoFocus
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              saveAdd(di, ci);
+                            }
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              closeAdd();
+                            }
                           }}
-                          className="w-[9rem] border-0 bg-transparent text-[12.5px] outline-none"
+                          onBlur={() => (draft.trim() ? saveAdd(di, ci) : closeAdd())}
+                          className="w-[9.5rem] border-0 border-b border-[#5b4ce6] bg-transparent py-0 text-[12.5px] text-[#1c2230] outline-none"
                         />
+                      ) : (
                         <button
                           type="button"
-                          aria-label={`Remove ${act}`}
-                          className="text-[#8b90a0] hover:text-[#b42318]"
+                          data-testid="preview-add-activity-btn"
+                          aria-label={`Add an activity under ${cap.name}`}
+                          className="text-[15px] leading-none text-[#5b4ce6]"
                           onClick={() => {
-                            const activities = cap.activities.filter((_, i) => i !== ai);
-                            const capabilities = domain.capabilities.map((c, i) => (i === ci ? { ...c, activities } : c));
-                            onChange(updateDomain(domains, di, { capabilities }));
+                            setAdding({ domain: di, cap: ci });
+                            setDraft("");
                           }}
                         >
-                          ×
+                          +
                         </button>
-                      </span>
-                    ))}
-                    <button
-                      type="button"
-                      className="rounded-md border border-dashed border-[#d6d3f0] px-2 py-0.5 text-[12.5px] text-[#5b4ce6]"
-                      onClick={() => {
-                        const capabilities = domain.capabilities.map((c, i) => (i === ci ? { ...c, activities: [...c.activities, "New activity"] } : c));
-                        onChange(updateDomain(domains, di, { capabilities }));
-                      }}
-                    >
-                      + Activity
-                    </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-              <button
-                type="button"
-                className="mt-1 rounded-md border border-dashed border-[#d6d3f0] px-2 py-0.5 text-[12.5px] text-[#5b4ce6]"
-                onClick={() => onChange(updateDomain(domains, di, { capabilities: [...domain.capabilities, { name: "New capability", id: null, activities: [] }] }))}
-              >
-                + Capability
-              </button>
-            </div>
-          </article>
-        ))}
-        <button
-          type="button"
-          className="rounded-md border border-dashed border-[#d6d3f0] px-3 py-1.5 text-[12.5px] text-[#5b4ce6]"
-          onClick={() => onChange([...domains, { name: "New domain", id: null, capabilities: [] }])}
-        >
-          + Domain
-        </button>
+                ))}
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );

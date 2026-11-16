@@ -105,5 +105,16 @@ test("empty state offers an AI interview and add-one-yourself; nothing saves bef
   assert.match(src, /capabilityMapApi.accept/);
   assert.doesNotMatch(src, /Start from a template/);
   assert.doesNotMatch(src, /adoptTemplate/);
-  assert.match(interview, /Nothing is saved until you accept/);
+  assert.match(interview, /Nothing is saved until you use the suggestion/);
+  assert.match(interview, /What does the company do/);
+  assert.doesNotMatch(interview, /Industry/);
+  const review = readFileSync(new URL("../components/capability-map/CapabilityReview.tsx", import.meta.url), "utf8");
+  assert.match(review, /Use this map/);
+  assert.match(review, /Try again/);
+  assert.doesNotMatch(review, /Accept all/);
+  assert.doesNotMatch(review, /Start over/);
+  assert.match(review, /group-hover\/cap:opacity-100/);
+  assert.match(review, /group-hover\/act:opacity-100/);
+  assert.match(review, /e.key === "Enter"/);
+  assert.match(review, /e.key === "Escape"/);
 });

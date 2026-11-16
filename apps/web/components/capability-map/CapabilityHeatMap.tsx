@@ -123,7 +123,7 @@ export function CapabilityHeatMap({
         ))}
       </div>
       <p className="mt-4 text-[12px] text-[#8b90a0]">
-        Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times.
+        Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, add, or move anything later with Edit structure.
       </p>
     </div>
   );

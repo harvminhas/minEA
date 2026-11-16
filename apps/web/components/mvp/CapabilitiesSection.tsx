@@ -90,9 +90,6 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
         workspaceSlug,
         {
           about: values.about,
-          industry: values.industry || null,
-          size: values.size || null,
-          services: values.services || null,
           website: values.website || null,
         },
         await token(),
