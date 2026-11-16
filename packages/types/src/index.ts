@@ -1684,6 +1684,9 @@ export interface SuggestedCapability {
 export interface SuggestedDomain {
   name: string;
   id?: string | null;
+  description?: string | null;
+  icon?: string | null;
+  color?: string | null;
   capabilities: SuggestedCapability[];
 }
 
@@ -1719,6 +1722,7 @@ export interface CapabilityMapDomain {
   id: string;
   name: string;
   icon?: string | null;
+  color?: string | null;
   order_index?: number | null;
   source_template_id?: string | null;
   capabilities: CapabilityMapCapability[];

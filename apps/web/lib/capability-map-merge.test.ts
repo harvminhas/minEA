@@ -30,7 +30,10 @@ test("Map is the default view, List the secondary one", () => {
   const review = src("components/capability-map/CapabilityReview.tsx");
   assert.match(review, /Use this map/);
   assert.match(review, /Try again/);
+  assert.match(review, /Your domains/);
+  assert.match(review, /preview-add-domain/);
   assert.match(review, /preview-add-activity-btn/);
+  assert.match(review, /preview-add-capability/);
   assert.doesNotMatch(review, /Accept all/);
   assert.doesNotMatch(section, /Start from a template/);
 });

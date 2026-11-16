@@ -113,12 +113,21 @@ test("empty state offers an AI interview and add-one-yourself; nothing saves bef
   assert.match(src, /error && !interviewVisible && mode !== "review"/);
   assert.match(src, /result.warning \|\| "No suggestion came back/);
   const review = readFileSync(new URL("../components/capability-map/CapabilityReview.tsx", import.meta.url), "utf8");
-  assert.match(review, /Use this map/);
+  assert.match(review, /Your domains/);
+  assert.match(review, /Capabilities and activities/);
+  assert.match(review, /1 of 2|\{step\} of 2/);
+  assert.match(review, /preview-step-next/);
   assert.match(review, /Try again/);
+  assert.match(review, /Use this map/);
+  assert.match(review, /preview-add-domain/);
+  assert.match(review, /preview-add-capability/);
   assert.doesNotMatch(review, /Accept all/);
   assert.doesNotMatch(review, /Start over/);
   assert.match(review, /group-hover\/cap:opacity-100/);
   assert.match(review, /group-hover\/act:opacity-100/);
+  assert.match(review, /group-hover\/tile:opacity-100/);
   assert.match(review, /e.key === "Enter"/);
   assert.match(review, /e.key === "Escape"/);
+  // Use this map accepts kept suggestions even if a domain was never opened.
+  assert.match(review, /onAccept/);
 });

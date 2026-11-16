@@ -32,6 +32,7 @@ class CapabilityMapDomain(BaseModel):
     id: str
     name: str
     icon: str | None = None
+    color: str | None = None
     order_index: int | None = None
     source_template_id: str | None = None
     capabilities: list["CapabilityMapCapability"] = Field(default_factory=list)
@@ -204,6 +205,9 @@ class SuggestedCapability(BaseModel):
 class SuggestedDomain(BaseModel):
     name: str
     id: str | None = None
+    description: str | None = None
+    icon: str | None = None
+    color: str | None = None
     capabilities: list[SuggestedCapability] = Field(default_factory=list)
 
 

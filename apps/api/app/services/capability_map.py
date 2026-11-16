@@ -656,6 +656,7 @@ async def load_domain_detail(
         "id": str(domain.id),
         "name": domain.name,
         "icon": props.get("icon"),
+        "color": props.get("color"),
         "owner": domain.owner,
         "description": domain.description,
         "source_template_id": props.get("source_template_id"),

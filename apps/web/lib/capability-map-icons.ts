@@ -4,12 +4,18 @@ import {
   BarChart3,
   Briefcase,
   Calculator,
+  CircleDollarSign,
   Cloud,
   Code,
+  Compass,
   CreditCard,
+  HardHat,
+  HeartHandshake,
   HeartPulse,
+  LandPlot,
   Landmark,
   Layers,
+  LayoutGrid,
   Megaphone,
   Scale,
   Server,
@@ -26,6 +32,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { DOMAIN_THEMES, domainTheme } from "./domain-theme";
+
 export const TEMPLATE_ICONS: Record<string, LucideIcon> = {
   cloud: Cloud,
   store: Store,
@@ -38,6 +46,13 @@ export const TEMPLATE_ICONS: Record<string, LucideIcon> = {
 export const DOMAIN_ICONS: Record<string, LucideIcon> = {
   users: Users,
   box: Layers,
+  layers: Layers,
+  compass: Compass,
+  "land-plot": LandPlot,
+  "hard-hat": HardHat,
+  "heart-handshake": HeartHandshake,
+  "circle-dollar-sign": CircleDollarSign,
+  "layout-grid": LayoutGrid,
   "credit-card": CreditCard,
   code: Code,
   "trending-up": TrendingUp,
@@ -83,7 +98,11 @@ const DOMAIN_ICON_PALETTE = [
   { bg: "bg-indigo-100", text: "text-indigo-600" },
 ] as const;
 
-export function domainIconStyle(domainId: string): { bg: string; text: string } {
+export function domainIconStyle(domainId: string, color?: string | null): { bg: string; text: string; accent?: string; tint?: string; ink?: string } {
+  if (color && color in DOMAIN_THEMES) {
+    const theme = domainTheme(color);
+    return { bg: "", text: "", accent: theme.accent, tint: theme.tint, ink: theme.ink };
+  }
   const index =
     domainId.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) %
     DOMAIN_ICON_PALETTE.length;

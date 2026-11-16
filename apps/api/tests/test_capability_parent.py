@@ -12,6 +12,7 @@ import pytest
 from app.ai.json_parse import parse_json_object, parse_partial_json_object
 from app.services.capability_map import is_l3
 from app.services.capability_suggest import _as_tree, _merge_activities, existing_tree
+from app.services.domain_theme import pick_domain_theme
 from app.services.safe_fetch import public_hostname
 
 API = Path(__file__).resolve().parents[1]
@@ -84,6 +85,36 @@ def test_as_tree_accepts_wrapped_payloads_and_skips_empty_domains():
     tree = _as_tree(wrapped)
     assert [d["name"] for d in tree] == ["Finance"]
     assert tree[0]["capabilities"][0]["activities"] == ["Invoice capture"]
+
+
+def test_as_tree_keeps_description_and_assigns_a_theme():
+    tree = _as_tree({"domains": [{"name": "Finance", "description": "Planning, accounting, and project funding", "capabilities": [{"name": "AP", "activities": ["Invoice capture"]}]}]})
+    assert tree[0]["description"] == "Planning, accounting, and project funding"
+    assert tree[0]["color"] == "finance" and tree[0]["icon"] == "circle-dollar-sign"
+
+
+def test_as_tree_tolerates_a_missing_description():
+    tree = _as_tree({"domains": [{"name": "Mystery Division", "capabilities": [{"name": "X", "activities": ["Y"]}]}]})
+    assert tree[0].get("description") is None
+    assert tree[0]["color"] == "generic" and tree[0]["icon"] == "layout-grid"
+
+
+def test_pick_domain_theme_matches_homebuilder_and_common_names():
+    assert pick_domain_theme("Strategic Planning & Governance") == ("strategy", "compass")
+    assert pick_domain_theme("Land Acquisition & Development") == ("land", "land-plot")
+    assert pick_domain_theme("Home Design & Construction") == ("construction", "hard-hat")
+    assert pick_domain_theme("Sales & Marketing") == ("sales", "megaphone")
+    assert pick_domain_theme("Customer Experience & Warranty") == ("customer", "heart-handshake")
+    assert pick_domain_theme("Finance") == ("finance", "circle-dollar-sign")
+    assert pick_domain_theme("People & Workforce") == ("people", "users")
+    assert pick_domain_theme("Technology & Platforms") == ("technology", "layers")
+    assert pick_domain_theme("Financial Management") == ("finance", "circle-dollar-sign")
+    assert pick_domain_theme("Information Technology") == ("technology", "layers")
+    assert pick_domain_theme("Quality & Compliance") == ("strategy", "compass")
+    assert pick_domain_theme("Mystery Division") == ("generic", "layout-grid")
+    assert pick_domain_theme("") == ("generic", "layout-grid")
+    assert pick_domain_theme("Technology & Platforms", "Systems for building, sales, finance, and IT") == ("technology", "layers")
+    assert pick_domain_theme("Mystery Division", "Finding and entitling land") == ("land", "land-plot")
 
 
 def test_parse_json_object_does_not_return_an_inner_object_from_truncated_tree():
@@ -363,7 +394,9 @@ def test_l3_parent_uniqueness_roll_up_accept_and_delete():
                     assert accepted.status_code == 200, accepted.text
                     assert accepted.json()["activity_count"] >= 1
                     saved = (await c.get(f"{base}/capability-map")).json()
-                    ap_saved = next(c for c in next(d for d in saved["domains"] if d["name"] == "Financial Management")["capabilities"] if c["name"] == "Accounts Payable")
+                    fm_saved = next(d for d in saved["domains"] if d["name"] == "Financial Management")
+                    assert fm_saved.get("color") == "finance" and fm_saved.get("icon") == "circle-dollar-sign"
+                    ap_saved = next(c for c in fm_saved["capabilities"] if c["name"] == "Accounts Payable")
                     assert "Vendor payments" in [ch["name"] for ch in ap_saved["children"]]
 
                     # Deleting L2 also deletes its L3 children.

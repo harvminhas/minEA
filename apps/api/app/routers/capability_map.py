@@ -110,6 +110,7 @@ def _map_to_read(
                 id=str(domain.id),
                 name=domain.name,
                 icon=props.get("icon"),
+                color=props.get("color"),
                 order_index=props.get("order_index"),
                 source_template_id=props.get("source_template_id"),
                 capabilities=sorted(
@@ -125,6 +126,7 @@ def _map_to_read(
                 id=NO_DOMAIN_ID,
                 name=NO_DOMAIN_NAME,
                 icon=None,
+                color=None,
                 order_index=None,
                 source_template_id=None,
                 capabilities=sorted(caps_by_domain[NO_DOMAIN_ID], key=lambda c: c.name),

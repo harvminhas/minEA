@@ -17,6 +17,7 @@ from app.ai.json_parse import parse_json_object, parse_partial_json_object
 from app.models.objects import ChangeLog, MinEAObject
 from app.models.relationships import Relationship
 from app.services.capability_map import is_l3, load_capability_map
+from app.services.domain_theme import decorate_domain, pick_domain_theme
 from app.services.safe_fetch import fetch_public_page
 from app.services.snapshot_hooks import notify_workspace_data_changed
 
@@ -24,11 +25,12 @@ log = logging.getLogger(__name__)
 
 FULL_SYSTEM = """You suggest a 3-level business capability map for a company.
 Return JSON only, no markdown or commentary:
-{"domains":[{"name":"...","capabilities":[{"name":"...","activities":["..."]}]}]}
+{"domains":[{"name":"...","description":"one-line description","capabilities":[{"name":"...","activities":["..."]}]}]}
 Rules:
 - Level 1 is a business domain (e.g. Financial Management).
 - Level 2 is a capability (e.g. Accounts Payable).
 - Level 3 is an activity (e.g. Invoice capture).
+- Each domain has a one-line description (about 6-12 words) of what that area of the business does.
 - Aim for about 8 domains, 20-25 capabilities, and about 50 activities in total.
 - Use clear, commonly used business names. Do not invent software product names as capabilities.
 - Every capability has at least one activity. Keep names short (2-5 words).
@@ -120,7 +122,17 @@ def _as_tree(raw: object) -> list[dict]:
                         acts.append(aname)
             caps.append({"name": cname, "id": cap.get("id"), "activities": acts})
         if caps:
-            out.append({"name": name, "id": domain.get("id"), "capabilities": caps})
+            desc = domain.get("description") or domain.get("summary") or domain.get("desc")
+            description = str(desc).strip() if isinstance(desc, str) and desc.strip() else None
+            if description and len(description) > 160:
+                trimmed = description[:157].rsplit(" ", 1)[0]
+                description = (trimmed or description[:157]) + "…"
+            out.append(decorate_domain({
+                "name": name,
+                "id": domain.get("id"),
+                "description": description,
+                "capabilities": caps,
+            }))
     return out
 
 
@@ -209,17 +221,26 @@ def existing_tree(domains: list[MinEAObject], capabilities: list[MinEAObject]) -
                 "id": str(cap.id),
                 "activities": [a.name for a in l3.get(str(cap.id), [])],
             })
-        tree.append({"name": domain.name, "id": str(domain.id), "capabilities": caps})
+        props = domain.properties or {}
+        tree.append(decorate_domain({
+            "name": domain.name,
+            "id": str(domain.id),
+            "description": (domain.description or "").strip() or None,
+            "icon": props.get("icon"),
+            "color": props.get("color"),
+            "capabilities": caps,
+        }))
     orphans = l2.get("", [])
     if orphans:
-        tree.append({
+        tree.append(decorate_domain({
             "name": "No domain",
             "id": None,
+            "description": None,
             "capabilities": [
                 {"name": c.name, "id": str(c.id), "activities": [a.name for a in l3.get(str(c.id), [])]}
                 for c in orphans
             ],
-        })
+        }))
     return tree
 
 
@@ -340,13 +361,18 @@ async def accept_map(
         if not dname:
             continue
         domain = domain_by_name.get(_norm(dname))
+        desc = str(raw.get("description") or "").strip() or None
+        theme, icon = pick_domain_theme(dname, desc)
+        icon = str(raw.get("icon") or "").strip() or icon
+        color = str(raw.get("color") or "").strip() or theme
         if not domain:
             domain = MinEAObject(
                 workspace_id=workspace_id,
                 org_id=org_id,
                 type="business_domain",
                 name=dname,
-                properties={"order_index": d_index},
+                description=desc,
+                properties={"order_index": d_index, "icon": icon, "color": color},
                 source="user",
                 created_by=user_id,
             )
@@ -354,6 +380,20 @@ async def accept_map(
             await db.flush()
             domain_by_name[_norm(dname)] = domain
             created_domains += 1
+        else:
+            # Fill missing presentation fields only; never overwrite a template icon/colour.
+            props = dict(domain.properties or {})
+            changed = False
+            if not props.get("icon") and icon:
+                props["icon"] = icon
+                changed = True
+            if not props.get("color") and color:
+                props["color"] = color
+                changed = True
+            if changed:
+                domain.properties = props
+            if desc and not (domain.description or "").strip():
+                domain.description = desc
         did = str(domain.id)
 
         for c_index, craw in enumerate(raw.get("capabilities") or []):

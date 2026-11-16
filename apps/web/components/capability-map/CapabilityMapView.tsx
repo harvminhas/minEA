@@ -543,7 +543,7 @@ function DomainCard({
 }) {
   const { orgSlug, workspaceSlug } = useTenancy();
   const Icon = domainIcon(domain.icon);
-  const iconStyle = domainIconStyle(domain.id);
+  const iconStyle = domainIconStyle(domain.id, domain.color);
   const detailPath = domainDetailPath(orgSlug, workspaceSlug, domain.id);
   const coverageCounts = useMemo(
     () => domainCardCoverageCounts(domain.capabilities),
@@ -564,9 +564,10 @@ function DomainCard({
           <div
             className={cn(
               "h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors",
-              iconStyle.bg,
-              iconStyle.text
+              !iconStyle.tint && iconStyle.bg,
+              !iconStyle.ink && iconStyle.text
             )}
+            style={iconStyle.tint && iconStyle.ink ? { background: iconStyle.tint, color: iconStyle.ink } : undefined}
           >
             <Icon size={18} />
           </div>
@@ -644,7 +645,7 @@ function EmptyDomainCard({
 }) {
   const { orgSlug, workspaceSlug } = useTenancy();
   const Icon = domainIcon(domain.icon);
-  const iconStyle = domainIconStyle(domain.id);
+  const iconStyle = domainIconStyle(domain.id, domain.color);
   const detailPath = domainDetailPath(orgSlug, workspaceSlug, domain.id);
 
   return (
@@ -654,9 +655,10 @@ function EmptyDomainCard({
           <div
             className={cn(
               "h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0",
-              iconStyle.bg,
-              iconStyle.text
+              !iconStyle.tint && iconStyle.bg,
+              !iconStyle.ink && iconStyle.text
             )}
+            style={iconStyle.tint && iconStyle.ink ? { background: iconStyle.tint, color: iconStyle.ink } : undefined}
           >
             <Icon size={18} />
           </div>
