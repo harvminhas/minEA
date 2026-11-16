@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
@@ -22,9 +22,11 @@ import {
   type RelLike,
 } from "@/lib/capability-detail";
 import { CapabilityDetailView } from "@/components/capability-map/CapabilityDetailView";
+import { themeForDomain } from "@/lib/domain-theme";
 import { AddRelationshipDialog } from "@/components/capability-map/AddRelationshipDialog";
 
 export function CapabilityDetailPage({ capabilityId }: { capabilityId: string }) {
+  const router = useRouter();
   const params = useSearchParams();
   const highlightId = params.get("activity");
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
@@ -38,11 +40,13 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
 
   const tree = useMemo(() => buildCapabilityTree(objects, edges, rows), [objects, edges, rows]);
   const node = useMemo(() => findCapabilityNode(tree, capabilityId), [tree, capabilityId]);
-  const domainName = useMemo(() => {
+  const domain = useMemo(() => {
     const domainId = node?.domainId;
-    if (!domainId) return "";
-    return objects.find((item) => item.id === domainId)?.name ?? "";
+    if (!domainId) return undefined;
+    return objects.find((item) => item.id === domainId);
   }, [node?.domainId, objects]);
+  const domainName = domain?.name ?? "";
+  const theme = useMemo(() => themeForDomain(domain), [domain]);
 
   const apps = useMemo(() => {
     const list: AppRef[] = [];
@@ -234,12 +238,13 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
     <CapabilityDetailView
       node={node}
       domainName={domainName}
+      theme={theme}
       backHref={capabilityMapPath(basePath)}
       detailsHref={capabilityDetailPath(basePath, node.id, { activity: highlightId, tab: "details" })}
-      activityHref={(activityId) => capabilityDetailPath(basePath, node.id, { activity: activityId })}
       activityDetailsHref={(activityId) =>
         capabilityDetailPath(basePath, node.id, { activity: activityId, tab: "details", details: activityId })
       }
+      onOpenDetails={(href) => router.push(href)}
       highlightId={highlightId}
       linksByTarget={linksByTarget}
       canEdit={canEdit}

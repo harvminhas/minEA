@@ -126,6 +126,16 @@ test("capability detail view and app form picker stay in source", () => {
   assert.match(view, /data-testid="capability-detail"/);
   assert.match(view, /Back to map/);
   assert.match(view, /Add relationship/);
+  assert.doesNotMatch(view, /\+ Link app/);
+  assert.match(view, /role="button"/);
+  assert.match(view, /cursor-pointer/);
+  assert.match(view, /isCardChromeTarget/);
+  assert.match(view, /event.key === "Enter" \|\| event.key === " "/);
+  assert.match(view, /data-no-card-nav/);
+  assert.match(view, /borderLeftColor/);
+  assert.match(view, /domain-theme-icon/);
+  assert.match(view, /themeForDomain/);
+  assert.match(dialog, /Activity/);
   assert.match(dialog, /data-testid="add-relationship-dialog"/);
   assert.match(dialog, /Create a new app/);
   assert.match(picker, /data-testid="map-target-picker"/);

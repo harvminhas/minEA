@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decorateDomain, pickDomainTheme } from "./domain-theme.ts";
+import { DOMAIN_THEMES, decorateDomain, pickDomainTheme, themeForDomain } from "./domain-theme.ts";
 
 test("pickDomainTheme maps homebuilder and common names, with a generic fallback", () => {
   const cases: [string, string, string][] = [
@@ -40,4 +40,23 @@ test("pickDomainTheme prefers the name over a conflicting description", () => {
     pickDomainTheme("Mystery Division", "Finding and entitling land"),
     { color: "land", icon: "land-plot" },
   );
+});
+
+test("themeForDomain uses stored properties colour, else the name theme", () => {
+  const fromName = themeForDomain({ name: "Finance" });
+  assert.equal(fromName.color, "finance");
+  assert.equal(fromName.accent, DOMAIN_THEMES.finance.accent);
+  assert.equal(fromName.icon, "circle-dollar-sign");
+
+  const stored = themeForDomain({
+    name: "Finance",
+    properties: { color: "technology", icon: "layers" },
+  });
+  assert.equal(stored.color, "technology");
+  assert.equal(stored.icon, "layers");
+  assert.equal(stored.accent, DOMAIN_THEMES.technology.accent);
+
+  const missing = themeForDomain(undefined);
+  assert.equal(missing.color, "generic");
+  assert.equal(missing.accent, DOMAIN_THEMES.generic.accent);
 });

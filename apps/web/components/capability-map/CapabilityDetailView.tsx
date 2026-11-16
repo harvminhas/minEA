@@ -10,14 +10,25 @@ import {
   type AppLink,
   type MoveTarget,
 } from "@/lib/capability-detail";
+import { themeForDomain } from "@/lib/domain-theme";
+import { domainIcon } from "@/lib/capability-map-icons";
+
+/** Clicks/keys on app chips, Move, remove, rename, and other controls stay on those controls. */
+export function isCardChromeTarget(target: EventTarget | null, currentTarget: EventTarget | null): boolean {
+  if (!(target instanceof Element) || !(currentTarget instanceof Element)) return true;
+  if (target === currentTarget) return false;
+  const blocking = target.closest("a, button, input, textarea, select, [data-no-card-nav], [role='menuitem']");
+  return Boolean(blocking && currentTarget.contains(blocking));
+}
 
 export type CapabilityDetailViewProps = {
   node: TreeNode;
   domainName: string;
+  theme?: { accent: string; tint: string; ink: string; icon: string };
   backHref: string;
   detailsHref: string;
-  activityHref: (activityId: string) => string;
   activityDetailsHref: (activityId: string) => string;
+  onOpenDetails: (href: string) => void;
   highlightId?: string | null;
   linksByTarget: Map<string, AppLink[]>;
   canEdit?: boolean;
@@ -34,10 +45,11 @@ export type CapabilityDetailViewProps = {
 export function CapabilityDetailView({
   node,
   domainName,
+  theme = themeForDomain({ name: domainName }),
   backHref,
   detailsHref,
-  activityHref,
   activityDetailsHref,
+  onOpenDetails,
   highlightId,
   linksByTarget,
   canEdit = false,
@@ -52,6 +64,7 @@ export function CapabilityDetailView({
 }: CapabilityDetailViewProps) {
   const coverage = coverageSummary(node);
   const [addingActivity, setAddingActivity] = useState(false);
+  const DomainIcon = domainIcon(theme.icon);
 
   useEffect(() => {
     if (!highlightId) return;
@@ -76,7 +89,21 @@ export function CapabilityDetailView({
 
       <div className="max-w-[880px]">
         <div className="mb-3.5 flex items-center gap-2 text-[13px] text-[#6b7289]">
-          <span>{domainName || "No domain"}</span>
+          {domainName ? (
+            <>
+              <span
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md"
+                style={{ background: theme.tint, color: theme.ink }}
+                aria-hidden
+                data-testid="domain-theme-icon"
+              >
+                <DomainIcon size={12} strokeWidth={2.2} />
+              </span>
+              <span>{domainName}</span>
+            </>
+          ) : (
+            <span>No domain</span>
+          )}
           <span className="text-[#c0c3cc]">/</span>
           <strong className="font-semibold text-[#1c2230]">{node.name}</strong>
         </div>
@@ -131,10 +158,11 @@ export function CapabilityDetailView({
           moveTargets={moveTargetsFor(node, node.id)}
           canEdit={canEdit}
           detailsHref={detailsHref}
-          onAdd={onAdd}
+          onOpenDetails={onOpenDetails}
           onRemove={onRemove}
           onMove={onMove}
           onRename={onRename}
+          theme={theme}
         />
 
         {node.children.map((activity) => (
@@ -146,12 +174,12 @@ export function CapabilityDetailView({
             links={linksByTarget.get(activity.id) ?? []}
             moveTargets={moveTargetsFor(node, activity.id)}
             canEdit={canEdit}
-            href={activityHref(activity.id)}
             detailsHref={activityDetailsHref(activity.id)}
-            onAdd={onAdd}
+            onOpenDetails={onOpenDetails}
             onRemove={onRemove}
             onMove={onMove}
             onRename={onRename}
+            theme={theme}
           />
         ))}
 
@@ -200,12 +228,12 @@ function TargetBlock({
   links,
   moveTargets,
   canEdit,
-  href,
   detailsHref,
-  onAdd,
+  onOpenDetails,
   onRemove,
   onMove,
   onRename,
+  theme,
 }: {
   node: TreeNode;
   kind: "capability" | "activity";
@@ -213,22 +241,46 @@ function TargetBlock({
   links: AppLink[];
   moveTargets: MoveTarget[];
   canEdit: boolean;
-  href?: string;
   detailsHref: string;
-  onAdd: (targetId: string) => void;
+  onOpenDetails: (href: string) => void;
   onRemove: (link: AppLink) => void;
   onMove: (link: AppLink, targetId: string) => void;
   onRename?: (id: string, name: string) => void | Promise<void>;
+  theme: { accent: string; tint: string; ink: string; icon: string };
 }) {
+  const openDetails = () => onOpenDetails(detailsHref);
+  const label = kind === "capability" ? `${node.name} details` : `${node.name} activity details`;
+  const leftBorder = kind === "capability" ? theme.accent : `color-mix(in srgb, ${theme.accent} 58%, white)`;
+  const fill = highlight
+    ? undefined
+    : kind === "capability"
+      ? theme.tint
+      : `color-mix(in srgb, ${theme.tint} 55%, white)`;
   return (
     <section
       id={kind === "activity" ? `activity-${node.id}` : `capability-${node.id}`}
       data-testid={kind === "activity" ? `activity-block-${node.id}` : "capability-block"}
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      onClick={(event) => {
+        if (isCardChromeTarget(event.target, event.currentTarget)) return;
+        openDetails();
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openDetails();
+        }
+      }}
+      style={{ borderLeftWidth: kind === "capability" ? 4 : 3, borderLeftColor: leftBorder, background: fill }}
       className={cn(
-        "mb-2.5 rounded-xl border p-3.5 px-4",
-        kind === "capability" && !highlight && "border-[#e6e8ee] bg-[#fafafb]",
-        kind === "activity" && !highlight && "border-[#e6e8ee] bg-white",
-        highlight && "border-[#c4b5fd] bg-[#f6f5ff] shadow-[0_0_0_3px_rgba(91,76,230,0.14)]"
+        "mb-2.5 rounded-xl border p-3.5 px-4 cursor-pointer",
+        "focus-visible:outline-none focus-visible:border-[#c4b5fd] focus-visible:shadow-[0_0_0_3px_rgba(91,76,230,0.14)]",
+        kind === "capability" && !highlight && "border-[#e6e8ee] hover:border-[#c4b5fd]",
+        kind === "activity" && !highlight && "border-[#e6e8ee] hover:border-[#c4b5fd]",
+        highlight && "border-[#c4b5fd] bg-[#f6f5ff] shadow-[0_0_0_3px_rgba(91,76,230,0.14)] hover:border-[#a78bfa]"
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -237,26 +289,10 @@ function TargetBlock({
             value={node.name}
             canEdit={canEdit && Boolean(onRename)}
             onSave={(name) => onRename?.(node.id, name)}
-            href={href}
           />
           <span className="mt-px block text-[11px] text-[#8b90a0]">
             {kind === "capability" ? "Capability — apps linked here apply to the whole capability" : "Activity"}
           </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href={detailsHref} className="bg-transparent text-[12.5px] font-medium text-[#6b7289] hover:text-[#5b4ce6]">
-            Details
-          </Link>
-          {canEdit && (
-            <button
-              type="button"
-              data-testid={`link-app-${node.id}`}
-              onClick={() => onAdd(node.id)}
-              className="bg-transparent text-[12.5px] font-medium text-[#5b4ce6]"
-            >
-              + Link app
-            </button>
-          )}
         </div>
       </div>
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
@@ -312,8 +348,10 @@ function AppChip({
   return (
     <span
       ref={root}
+      data-no-card-nav
+      onClick={(event) => event.stopPropagation()}
       className={cn(
-        "relative inline-flex items-center gap-1.5 rounded-full py-[3px] pl-2.5 pr-2 text-[12.5px] text-[#1c2230]",
+        "relative inline-flex items-center gap-1.5 rounded-full py-[3px] pl-2.5 pr-2 text-[12.5px] text-[#1c2230] cursor-default",
         highlight ? "bg-[#ece9ff]" : "bg-[#f3f4f8]"
       )}
     >
@@ -368,13 +406,11 @@ function EditableTitle({
   canEdit,
   onSave,
   heading,
-  href,
 }: {
   value: string;
   canEdit: boolean;
   onSave?: (name: string) => void | Promise<void>;
   heading?: boolean;
-  href?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -419,21 +455,16 @@ function EditableTitle({
     ? "m-0 text-[22px] font-semibold tracking-[-0.02em] text-[#1c2230]"
     : "m-0 text-[14.5px] font-semibold text-[#1c2230]";
 
-  if (href && !canEdit) {
-    return (
-      <Link href={href} className={className}>
-        {value}
-      </Link>
-    );
+  if (!canEdit) {
+    const Tag = heading ? "h2" : "h3";
+    return <Tag className={className}>{value}</Tag>;
   }
 
   return (
     <button
       type="button"
-      className={cn(className, "bg-transparent text-left", canEdit && "cursor-text rounded hover:ring-1 hover:ring-[#e6e8ee]")}
-      onClick={() => {
-        if (canEdit) setEditing(true);
-      }}
+      className={cn(className, "cursor-text rounded bg-transparent text-left hover:ring-1 hover:ring-[#e6e8ee]")}
+      onClick={() => setEditing(true)}
     >
       {value}
     </button>

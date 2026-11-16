@@ -55,3 +55,29 @@ export function decorateDomain<T extends { name: string; description?: string | 
     color: domain.color || picked.color,
   };
 }
+
+export type DomainLike = {
+  name?: string | null;
+  description?: string | null;
+  color?: string | null;
+  icon?: string | null;
+  properties?: Record<string, unknown> | null;
+};
+
+function textProp(properties: Record<string, unknown> | null | undefined, key: string): string | null {
+  const value = properties?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+/** Stored business_domain.properties colour/icon, else the deterministic name theme. */
+export function themeForDomain(domain?: DomainLike | null): Omit<DomainTheme, "icon"> & { color: DomainThemeId; icon: string } {
+  const decorated = decorateDomain({
+    name: domain?.name ?? "",
+    description: domain?.description ?? textProp(domain?.properties, "description"),
+    color: domain?.color ?? textProp(domain?.properties, "color"),
+    icon: domain?.icon ?? textProp(domain?.properties, "icon"),
+  });
+  const color = (decorated.color && decorated.color in DOMAIN_THEMES ? decorated.color : "generic") as DomainThemeId;
+  const theme = domainTheme(color);
+  return { ...theme, color, icon: decorated.icon || theme.icon };
+}
