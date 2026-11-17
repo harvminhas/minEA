@@ -14,6 +14,7 @@ from typing import Callable
 
 from app.ai.ask.ai_landscape import JOB_LABELS, ai_landscape as build_landscape, data_access
 from app.ai.ask.capability_tree import build_capability_tree, walk
+from app.ai.ask.capability_assessment import assess_object, dispositions_for, retire_savings
 from app.ai.ask.cio_views import idle_licences as build_idle, overlaps as build_overlaps
 from app.ai.ask.graph import Rec, WorkspaceGraph, fold
 from app.ai.ask.impact import ImpactEdge, impact_of as traverse_impact
@@ -519,7 +520,8 @@ WEAKEST_CRITERIA = (
 QUALITATIVE_CRITERIA = (
     "Words like core, critical, strategic, most important, or weakest are not a stored field and not a name. "
     "Judge from these signals: highest criticality of the supporting apps, unique app count, annual cost, "
-    "how many other items depend on those apps (supporting_app_dependents), coverage and fitness. "
+    "how many other items depend on those apps (supporting_app_dependents), coverage and fitness, "
+    "plus investment_posture, business_criticality, technology_fit and dispositions when they are set. "
     "Say which criteria you used, e.g. 'Core here means capabilities backed by Critical or High apps or carrying the most spend.' "
     "Do not name-search the adjective unless the user clearly means a name (for example a capability called Core Banking)."
 )
@@ -585,9 +587,22 @@ def _app_names(bag: ToolBag, ids: list[str]) -> list[str]:
     return names
 
 
-def _health_row(bag: ToolBag, node: dict) -> dict:
+def _node_ids(node: dict) -> set[str]:
+    ids = {node["id"]}
+    for child in node.get("children") or []:
+        ids |= _node_ids(child)
+    return ids
+
+
+def _health_row(bag: ToolBag, node: dict, edges: list[dict], costs: dict[str, float]) -> dict:
     names = _app_names(bag, node["uniqueAppIds"])
     path = node.get("path") or []
+    objects = bag.graph.objects
+    obj = next((item for item in objects if item.get("id") == node["id"]), None)
+    ids = _node_ids(node)
+    assessment = assess_object(obj, objects, edges, ids)
+    dispositions = dispositions_for(ids, objects, edges)
+    savings = retire_savings(objects, edges, costs, ids)
     row = {
         "id": node["id"],
         "name": node["name"],
@@ -612,6 +627,15 @@ def _health_row(bag: ToolBag, node: dict) -> dict:
         "annual_cost": node["cost"],
         "highest_app_criticality": _highest_app_criticality(bag, node["uniqueAppIds"]),
         "supporting_app_dependents": 0,
+        "investment_posture": assessment["investment_posture"],
+        "business_criticality": assessment["business_criticality"],
+        "technology_fit": assessment["technology_fit"],
+        "technology_fit_source": assessment["technology_fit_source"],
+        "assessed": assessment["assessed"],
+        "exposed": assessment["exposed"],
+        "dispositions": dispositions,
+        "retire_savings": savings["amount"],
+        "retire_app_ids": savings["app_ids"],
     }
     return row
 
@@ -686,7 +710,9 @@ def _supporting_dependents(bag: ToolBag, app_ids: list[str]) -> int:
 
 def capability_health(bag: ToolBag, args: dict) -> dict:
     """The heat-map roll-up for every domain, capability and activity: coverage, fitness, redundancy, unique apps, cost."""
-    tree = build_capability_tree(bag.graph.objects, _tree_edges(bag), _tree_costs(bag))
+    costs = _tree_costs(bag)
+    edges = _tree_edges(bag)
+    tree = build_capability_tree(bag.graph.objects, edges, costs)
     walked = walk(tree)
     level_raw = str(args.get("level") or "").strip().lower()
     level = LEVEL_ALIAS.get(level_raw)
@@ -697,7 +723,7 @@ def capability_health(bag: ToolBag, args: dict) -> dict:
             continue
         if level and node["level"] != level:
             continue
-        row = _health_row(bag, node)
+        row = _health_row(bag, node, edges, costs)
         row["supporting_app_dependents"] = _supporting_dependents(bag, node["uniqueAppIds"])
         if domain_raw and not _matches_domain(row, domain_raw, walked):
             continue
@@ -781,6 +807,14 @@ def capability_health(bag: ToolBag, args: dict) -> dict:
             "annual_cost": row["annual_cost"],
             "highest_app_criticality": row["highest_app_criticality"],
             "supporting_app_dependents": row["supporting_app_dependents"],
+            "investment_posture": row["investment_posture"],
+            "business_criticality": row["business_criticality"],
+            "technology_fit": row["technology_fit"],
+            "technology_fit_source": row["technology_fit_source"],
+            "assessed": row["assessed"],
+            "exposed": row["exposed"],
+            "dispositions": row["dispositions"],
+            "retire_savings": row["retire_savings"],
         }
 
     return {
@@ -795,6 +829,9 @@ def capability_health(bag: ToolBag, args: dict) -> dict:
             "overlaps": len(originating),
             "unique_apps": len(unique_ids),
             "annual_cost": annual,
+            "assessed_capabilities": sum(1 for row in capabilities if row["assessed"]),
+            "exposed_capabilities": sum(1 for row in capabilities if row["exposed"]),
+            "retire_savings": retire_savings(bag.graph.objects, edges, costs)["amount"],
         },
         "best_shape": [slim(row) for row in best],
         "weakest_domains": [slim(row) for row in weakest],
@@ -1194,14 +1231,22 @@ TOOLS: list[AskTool] = [
             "explicit 'none' is unscored; gaps are not weak fitness), redundancy (an activity, or a capability with no "
             "activities, with two or more unique direct apps; parents inherit; the same app at two levels counts once), "
             "unique app count rolled up once, annual cost, highest_app_criticality (max criticality of the supporting apps), "
-            "and supporting_app_dependents (how many other items depend on those apps). "
+            "supporting_app_dependents (how many other items depend on those apps), "
+            "investment_posture (invest, tolerate, migrate, eliminate, or unset), "
+            "business_criticality on the capability (low, medium, high, critical, or unset), "
+            "technology_fit (1-5; if unset, defaulted from the weakest explicitly scored link: strong 4, adequate 3, weak 2), "
+            "dispositions on each supporting app (keep, consolidate, retire, replace), and retire_savings "
+            "(annual cost of apps marked Retire, each app counted once). "
+            "A capability is assessed when owner, business_criticality, technology_fit and investment_posture are set. "
+            "exposed is a High or Critical capability with technology_fit of 2 or less. "
             "Each row has id and path so you can cite it. totals, level_counts and no_app_counts are the numbers to write. "
             "no_apps is every row with unique_app_count 0. Say which level you are listing. "
             "best_shape ranks capabilities by full coverage first, then best fitness, then no redundancy. "
             "weakest_domains uses the inverse. gaps are coverage gap or partial (partial still has apps). "
             "redundant is where overlap starts. "
             "For qualitative words (core, critical, strategic, most important, weakest), do not name-search: judge from "
-            "highest_app_criticality, unique app count, annual cost, supporting_app_dependents, coverage and fitness, "
+            "highest_app_criticality, unique app count, annual cost, supporting_app_dependents, coverage, fitness, "
+            "investment_posture, business_criticality, technology_fit and dispositions, "
             "and say which criteria you used. Use the numbers as given. Do not do arithmetic."
         ),
         parameters={

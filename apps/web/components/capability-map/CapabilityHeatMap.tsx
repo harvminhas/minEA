@@ -10,17 +10,11 @@ import {
   heatMeta,
   moneyLabel,
   tilesInDomain,
-  type HeatDepth,
   type HeatMetric,
   type TreeNode,
 } from "@/lib/capability-tree";
 import { cn } from "@/lib/utils";
 
-const DEPTHS: { id: HeatDepth; label: string }[] = [
-  { id: "l1", label: "Domains" },
-  { id: "l2", label: "Capabilities" },
-  { id: "l3", label: "Activities" },
-];
 const METRICS: { id: HeatMetric; label: string }[] = [
   { id: "coverage", label: "Coverage" },
   { id: "apps", label: "Apps" },
@@ -105,27 +99,27 @@ export function CapabilityHeatMap({
   edges,
   rows,
   onOpen,
+  onOpenDomain,
   focusDomainId,
-  initialDepth = "l2",
   initialMetric = "coverage",
 }: {
   objects: readonly MinEAObject[];
   edges: readonly Relationship[];
   rows: readonly CatalogRow[];
   onOpen?: (id: string) => void;
+  onOpenDomain?: (id: string) => void;
   focusDomainId?: string | null;
-  initialDepth?: HeatDepth;
   initialMetric?: HeatMetric;
 }) {
-  const [depth, setDepth] = useState<HeatDepth>(initialDepth);
   const [metric, setMetric] = useState<HeatMetric>(initialMetric);
   const tree = useMemo(
     () => buildCapabilityTree(objects, edges, rows),
     [objects, edges, rows],
   );
-  const allTiles = flatten(tree, depth);
-  const focusedTiles = focusDomainId ? tilesInDomain(allTiles, focusDomainId) : allTiles;
-  const tiles = focusedTiles.length ? focusedTiles : allTiles;
+  const domains = focusDomainId ? tree.filter((node) => node.id === focusDomainId) : tree;
+  const sections = (domains.length ? domains : tree).filter((node) => node.children.length > 0 || node.id !== "no-domain");
+  const allTiles = flatten(tree, "l2");
+  const tiles = focusDomainId ? tilesInDomain(allTiles, focusDomainId) : allTiles;
   const appIds = new Set(objects.filter((o) => o.type === "application" || o.type === "cloud_service").map((o) => o.id));
   const linked = new Set(
     edges.filter((e) => e.type === "supported_by" && appIds.has(e.to_object_id)).map((e) => e.to_object_id),
@@ -139,7 +133,7 @@ export function CapabilityHeatMap({
     if (!focusDomainId || tiles.length === 0) return;
     const targetId = tiles.some((node) => node.id === focusDomainId) ? focusDomainId : tiles[0]!.id;
     document.getElementById(`heat-node-${targetId}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [focusDomainId, depth, tileKey, tiles]);
+  }, [focusDomainId, tileKey, tiles]);
 
   return (
     <div data-testid="capability-heat-map">
@@ -150,7 +144,6 @@ export function CapabilityHeatMap({
         <Kpi value={String(gaps)} label="Activities with no app" />
       </div>
       <div className="mb-3 flex flex-wrap items-center gap-4">
-        <Tabs label="Show" value={depth} options={DEPTHS} onChange={setDepth} testIdPrefix="heat-depth" />
         <Tabs label="Colour by" value={metric} options={METRICS} onChange={setMetric} testIdPrefix="heat-metric" />
         <div className="ml-auto flex items-center gap-2 text-[11.5px] text-[#6b7289]">
           {LEGEND[metric].map(([color, label], i) => (
@@ -168,9 +161,28 @@ export function CapabilityHeatMap({
           ))}
         </div>
       </div>
-      <div className={cn("grid gap-2.5", depth === "l1" ? "grid-cols-2 xl:grid-cols-4" : depth === "l3" ? "grid-cols-2 md:grid-cols-3 xl:grid-cols-4" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3")}>
-        {tiles.map((node) => (
-          <Tile key={node.id} node={node} metric={metric} depth={depth} onOpen={onOpen} focused={Boolean(focusDomainId) && (node.id === focusDomainId || node.domainId === focusDomainId)} />
+      <div className="flex flex-col gap-6">
+        {sections.map((domain) => (
+          <section key={domain.id} data-testid={`heat-domain-${domain.id}`}>
+            <div className="mb-2 flex items-baseline justify-between gap-3 border-b border-[#e6e8ee] pb-1.5">
+              <button
+                type="button"
+                className="text-left text-[13.5px] font-semibold text-[#1c2230] disabled:cursor-default"
+                disabled={domain.id === "no-domain"}
+                onClick={() => domain.id !== "no-domain" && onOpenDomain?.(domain.id)}
+              >
+                {domain.name}
+              </button>
+              <span className="text-[11.5px] text-[#8b90a0]">
+                {domain.children.length} {domain.children.length === 1 ? "capability" : "capabilities"}
+              </span>
+            </div>
+            <div className={cn("grid gap-2.5", focusDomainId ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3")}>
+              {domain.children.map((node) => (
+                <Tile key={node.id} node={node} metric={metric} onOpen={onOpen} focused={Boolean(focusDomainId) && node.domainId === focusDomainId} />
+              ))}
+            </div>
+          </section>
         ))}
       </div>
       <p className="mt-4 max-w-[820px] text-[12px] text-[#8b90a0]">{FOOTNOTE[metric]}</p>
@@ -208,28 +220,16 @@ function Tabs<T extends string>({ label, value, options, onChange, testIdPrefix 
   );
 }
 
-function Tile({ node, metric, depth, onOpen, focused }: { node: TreeNode; metric: HeatMetric; depth: HeatDepth; onOpen?: (id: string) => void; focused?: boolean }) {
+function Tile({ node, metric, onOpen, focused }: { node: TreeNode; metric: HeatMetric; onOpen?: (id: string) => void; focused?: boolean }) {
   return (
     <button
       type="button"
       id={`heat-node-${node.id}`}
-      onClick={() => node.id !== "no-domain" && onOpen?.(node.id)}
+      onClick={() => onOpen?.(node.id)}
       className={cn("flex min-h-[88px] flex-col rounded-xl border p-3 text-left", TILE[heatClass(node, metric)], focused && "ring-2 ring-[#5b4ce6] ring-offset-2")}
     >
       <div className="text-[13.5px] font-semibold">{node.name}</div>
-      {node.level > 1 && node.domainId && depth !== "l1" && (
-        <div className="text-[11px] opacity-70">{node.level === 3 ? "Activity" : "Capability"}</div>
-      )}
       <div className="mt-0.5 text-[11.5px]">{heatMeta(node, metric)}</div>
-      {depth !== "l3" && node.children.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {node.children.slice(0, 6).map((child) => (
-            <span key={child.id} className="rounded bg-white/55 px-1.5 py-0.5 text-[11px] ring-1 ring-black/5">
-              {child.name}
-            </span>
-          ))}
-        </div>
-      )}
     </button>
   );
 }

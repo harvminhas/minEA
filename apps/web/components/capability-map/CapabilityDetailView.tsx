@@ -16,6 +16,15 @@ import {
 } from "@/lib/capability-detail";
 import { themeForDomain } from "@/lib/domain-theme";
 import { domainIcon } from "@/lib/capability-map-icons";
+import { CapabilityAssessmentFields, type AssessmentPatch } from "@/components/capability-map/CapabilityAssessmentFields";
+import {
+  DISPOSITIONS,
+  dispositionLabel,
+  parseDisposition,
+  type CapabilityAssessment,
+  type Disposition,
+  type SuggestedPosture,
+} from "@/lib/capability-assessment";
 
 /** Clicks/keys on app chips, Move, remove, rename, and other controls stay on those controls. */
 export function isCardChromeTarget(target: EventTarget | null, currentTarget: EventTarget | null): boolean {
@@ -30,6 +39,7 @@ export type CapabilityDetailViewProps = {
   domainName: string;
   theme?: { accent: string; tint: string; ink: string; icon: string };
   backHref: string;
+  allDomainsHref?: string;
   detailsHref: string;
   activityDetailsHref: (activityId: string) => string;
   onOpenDetails: (href: string) => void;
@@ -44,7 +54,11 @@ export type CapabilityDetailViewProps = {
   onRename?: (id: string, name: string) => void | Promise<void>;
   onAddActivity?: (name: string) => void | Promise<void>;
   onSetFitness?: (link: AppLink, fitness: Exclude<FitnessKind, "none">) => void;
+  onSetDisposition?: (link: AppLink, disposition: Disposition) => void;
   fitnessOpenRelId?: string | null;
+  assessment?: CapabilityAssessment;
+  suggestedPosture?: SuggestedPosture | null;
+  onSetAssessment?: (patch: AssessmentPatch) => void;
   addDialog?: ReactNode;
 };
 
@@ -53,6 +67,7 @@ export function CapabilityDetailView({
   domainName,
   theme = themeForDomain({ name: domainName }),
   backHref,
+  allDomainsHref,
   detailsHref,
   activityDetailsHref,
   onOpenDetails,
@@ -67,7 +82,11 @@ export function CapabilityDetailView({
   onRename,
   onAddActivity,
   onSetFitness,
+  onSetDisposition,
   fitnessOpenRelId = null,
+  assessment,
+  suggestedPosture = null,
+  onSetAssessment,
   addDialog,
 }: CapabilityDetailViewProps) {
   const coverage = coverageSummary(node);
@@ -98,7 +117,15 @@ export function CapabilityDetailView({
       </div>
 
       <div className="max-w-[880px]">
-        <div className="mb-3.5 flex items-center gap-2 text-[13px] text-[#6b7289]">
+        <div className="mb-3.5 flex items-center gap-2 text-[13px] text-[#6b7289]" data-testid="capability-detail-breadcrumb">
+          {allDomainsHref ? (
+            <>
+              <Link href={allDomainsHref} className="font-medium text-[#4a43c9]">
+                All domains
+              </Link>
+              <span className="text-[#c0c3cc]">/</span>
+            </>
+          ) : null}
           {domainName ? (
             <>
               <span
@@ -109,7 +136,13 @@ export function CapabilityDetailView({
               >
                 <DomainIcon size={12} strokeWidth={2.2} />
               </span>
-              <span>{domainName}</span>
+              {allDomainsHref ? (
+                <Link href={backHref} className="font-medium text-[#4a43c9]">
+                  {domainName}
+                </Link>
+              ) : (
+                <span>{domainName}</span>
+              )}
             </>
           ) : (
             <span>No domain</span>
@@ -167,6 +200,15 @@ export function CapabilityDetailView({
           <AssessItem label="Redundancy" item={redundancy} />
         </div>
 
+        {assessment && onSetAssessment ? (
+          <CapabilityAssessmentFields
+            assessment={assessment}
+            suggested={suggestedPosture}
+            canEdit={canEdit}
+            onChange={onSetAssessment}
+          />
+        ) : null}
+
         {error ? <p className="mb-3 text-[13px] text-red-600">{error}</p> : null}
 
         <TargetBlock
@@ -182,6 +224,7 @@ export function CapabilityDetailView({
           onMove={onMove}
           onRename={onRename}
           onSetFitness={onSetFitness}
+          onSetDisposition={onSetDisposition}
           fitnessOpenRelId={fitnessOpenRelId}
           theme={theme}
         />
@@ -201,6 +244,7 @@ export function CapabilityDetailView({
             onMove={onMove}
             onRename={onRename}
             onSetFitness={onSetFitness}
+            onSetDisposition={onSetDisposition}
             fitnessOpenRelId={fitnessOpenRelId}
             theme={theme}
           />
@@ -275,6 +319,7 @@ function TargetBlock({
   onMove,
   onRename,
   onSetFitness,
+  onSetDisposition,
   fitnessOpenRelId,
   theme,
 }: {
@@ -290,6 +335,7 @@ function TargetBlock({
   onMove: (link: AppLink, targetId: string) => void;
   onRename?: (id: string, name: string) => void | Promise<void>;
   onSetFitness?: (link: AppLink, fitness: Exclude<FitnessKind, "none">) => void;
+  onSetDisposition?: (link: AppLink, disposition: Disposition) => void;
   fitnessOpenRelId?: string | null;
   theme: { accent: string; tint: string; ink: string; icon: string };
 }) {
@@ -365,6 +411,7 @@ function TargetBlock({
               onRemove={onRemove}
               onMove={onMove}
               onSetFitness={onSetFitness}
+              onSetDisposition={onSetDisposition}
               fitnessOpen={fitnessOpenRelId === link.relId}
             />
           ))
@@ -403,6 +450,7 @@ function AppChip({
   onRemove,
   onMove,
   onSetFitness,
+  onSetDisposition,
   fitnessOpen: fitnessOpenProp = false,
 }: {
   link: AppLink;
@@ -413,29 +461,34 @@ function AppChip({
   onRemove: (link: AppLink) => void;
   onMove: (link: AppLink, targetId: string) => void;
   onSetFitness?: (link: AppLink, fitness: Exclude<FitnessKind, "none">) => void;
+  onSetDisposition?: (link: AppLink, disposition: Disposition) => void;
   fitnessOpen?: boolean;
 }) {
   const [moveOpen, setMoveOpen] = useState(false);
   const [fitnessOpen, setFitnessOpen] = useState(fitnessOpenProp);
+  const [dispositionOpen, setDispositionOpen] = useState(false);
   const root = useRef<HTMLSpanElement>(null);
   const fitness = linkFitnessOf(link);
+  const disposition = parseDisposition(link.attributes?.disposition);
   const canSet = Boolean(canEdit && onSetFitness);
+  const canSetDisposition = Boolean(canEdit && onSetDisposition);
 
   useEffect(() => {
     setFitnessOpen(fitnessOpenProp);
   }, [fitnessOpenProp]);
 
   useEffect(() => {
-    if (!moveOpen && !fitnessOpen) return;
+    if (!moveOpen && !fitnessOpen && !dispositionOpen) return;
     const close = (event: MouseEvent) => {
       if (!root.current?.contains(event.target as Node)) {
         setMoveOpen(false);
         setFitnessOpen(false);
+        setDispositionOpen(false);
       }
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
-  }, [moveOpen, fitnessOpen]);
+  }, [moveOpen, fitnessOpen, dispositionOpen]);
 
   return (
     <span
@@ -456,6 +509,7 @@ function AppChip({
         onClick={() => {
           if (!canSet) return;
           setMoveOpen(false);
+          setDispositionOpen(false);
           setFitnessOpen((value) => !value);
         }}
         className={cn(
@@ -467,6 +521,23 @@ function AppChip({
         {link.appName} · {levelLabel}
         <span className="text-[11px] font-medium text-[#6b7289]">{FITNESS_CHOICES.find((choice) => choice.id === fitness)?.label}</span>
       </button>
+      {canSetDisposition ? (
+        <button
+          type="button"
+          data-testid={`disposition-chip-${link.relId}`}
+          aria-label={`Set disposition for ${link.appName}`}
+          onClick={() => {
+            setFitnessOpen(false);
+            setMoveOpen(false);
+            setDispositionOpen((value) => !value);
+          }}
+          className="bg-transparent text-[11px] font-medium text-[#8b90a0] hover:text-[#5b4ce6]"
+        >
+          {dispositionLabel(disposition)}
+        </button>
+      ) : disposition ? (
+        <span className="text-[11px] font-medium text-[#8b90a0]">{dispositionLabel(disposition)}</span>
+      ) : null}
       {canEdit && (
         <>
           <button
@@ -474,6 +545,7 @@ function AppChip({
             className="bg-transparent text-[11px] font-medium text-[#8b90a0] hover:text-[#5b4ce6]"
             onClick={() => {
               setFitnessOpen(false);
+              setDispositionOpen(false);
               setMoveOpen((value) => !value);
             }}
           >
@@ -533,6 +605,31 @@ function AppChip({
             >
               <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", choice.dot)} aria-hidden />
               {choice.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {dispositionOpen && canSetDisposition && (
+        <div
+          className="absolute left-0 top-[calc(100%+6px)] z-30 min-w-[148px] rounded-[10px] border border-[#e6e8ee] bg-white p-1.5 shadow-[0_10px_28px_rgba(28,34,48,0.14)]"
+          data-testid="disposition-setter"
+        >
+          <p className="mx-2 mb-1.5 mt-1 text-[10px] font-semibold tracking-[0.08em] text-[#8b90a0]">DISPOSITION</p>
+          {DISPOSITIONS.map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              data-testid={`disposition-choice-${choice}`}
+              className={cn(
+                "flex w-full items-center rounded-[7px] bg-transparent px-2 py-1.5 text-left text-[12.5px] text-[#1c2230]",
+                choice === disposition && "bg-[#f6f5ff] font-semibold"
+              )}
+              onClick={() => {
+                setDispositionOpen(false);
+                onSetDisposition?.(link, choice);
+              }}
+            >
+              {dispositionLabel(choice)}
             </button>
           ))}
         </div>

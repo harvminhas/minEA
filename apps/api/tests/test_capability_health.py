@@ -451,3 +451,88 @@ def test_list_all_core_capabilities_uses_health_signals_not_a_name_search(monkey
     assert "Core here means" in result["answer_text"]
     assert models.configs[0].tools and not models.configs[0].response_mime_type
     # A name-search answer that listed only "Core Billing" would be the anti-pattern; health is required to ground 200000.
+
+
+def test_health_includes_posture_criticality_fit_and_retire_savings():
+    objects = [
+        {"id": "fin", "type": "business_domain", "name": "Finance", "properties": {}},
+        {
+            "id": "ap",
+            "type": "capability",
+            "name": "Accounting",
+            "owner": "CFO",
+            "properties": {
+                "domain_id": "fin",
+                "investment_posture": "migrate",
+                "business_criticality": "critical",
+            },
+        },
+        {"id": "gl", "type": "capability", "name": "Manage general ledger", "properties": {"domain_id": "fin", "parent_id": "ap"}},
+        {"id": "erp", "type": "application", "name": "Legacy GL", "properties": {"annual_cost": 200000, "criticality": "high"}},
+        {"id": "new", "type": "application", "name": "New GL", "properties": {"annual_cost": 80000}},
+    ]
+    edges = [
+        {"type": "supported_by", "from_object_id": "gl", "to_object_id": "erp", "attributes": {"fitness": "weak", "disposition": "retire"}},
+        {"type": "supported_by", "from_object_id": "ap", "to_object_id": "new", "attributes": {"fitness": "strong", "disposition": "keep"}},
+    ]
+    from app.ai.ask.tools import ToolBag, run_tool
+
+    bag = ToolBag(graph=_graph(objects, edges), seen_ids=set(), numbers=set())
+    result = run_tool(bag, "capability_health", {})
+    rows = _by_id(result["records"])
+    ap = rows["ap"]
+    assert ap["investment_posture"] == "migrate"
+    assert ap["business_criticality"] == "critical"
+    assert ap["technology_fit"] == 2  # defaulted from weakest scored link (weak → 2)
+    assert ap["technology_fit_source"] == "default"
+    assert ap["assessed"] is True
+    assert ap["exposed"] is True
+    assert ap["retire_savings"] == 200000
+    dispositions = {item["app_id"]: item["disposition"] for item in ap["dispositions"]}
+    assert dispositions["erp"] == "retire"
+    assert dispositions["new"] == "keep"
+    assert result["totals"]["retire_savings"] == 200000
+    assert result["totals"]["exposed_capabilities"] == 1
+    slim = next(item for item in result["best_shape"] if item["id"] == "ap")
+    assert slim["investment_posture"] == "migrate"
+    assert slim["technology_fit"] == 2
+
+
+def test_retire_savings_counts_each_app_once_across_capabilities():
+    objects = [
+        {"id": "fin", "type": "business_domain", "name": "Finance", "properties": {}},
+        {"id": "ap", "type": "capability", "name": "Accounting", "properties": {"domain_id": "fin"}},
+        {"id": "cm", "type": "capability", "name": "Construction", "properties": {"domain_id": "fin"}},
+        {"id": "sch", "type": "application", "name": "Scheduler", "properties": {"annual_cost": 180000}},
+    ]
+    edges = [
+        {"type": "supported_by", "from_object_id": "ap", "to_object_id": "sch", "attributes": {"disposition": "retire"}},
+        {"type": "supported_by", "from_object_id": "cm", "to_object_id": "sch", "attributes": {"disposition": "retire"}},
+    ]
+    from app.ai.ask.tools import ToolBag, run_tool
+
+    bag = ToolBag(graph=_graph(objects, edges), seen_ids=set(), numbers=set())
+    result = run_tool(bag, "capability_health", {})
+    assert result["totals"]["retire_savings"] == 180000
+
+
+def test_stored_technology_fit_wins_over_the_link_default():
+    objects = [
+        {"id": "fin", "type": "business_domain", "name": "Finance", "properties": {}},
+        {
+            "id": "ap",
+            "type": "capability",
+            "name": "Accounting",
+            "owner": "CFO",
+            "properties": {"domain_id": "fin", "investment_posture": "tolerate", "business_criticality": "medium", "technology_fit": 5},
+        },
+        {"id": "erp", "type": "application", "name": "ERP", "properties": {"annual_cost": 10}},
+    ]
+    edges = [{"type": "supported_by", "from_object_id": "ap", "to_object_id": "erp", "attributes": {"fitness": "weak"}}]
+    from app.ai.ask.tools import ToolBag, run_tool
+
+    bag = ToolBag(graph=_graph(objects, edges), seen_ids=set(), numbers=set())
+    ap = _by_id(run_tool(bag, "capability_health", {})["records"])["ap"]
+    assert ap["technology_fit"] == 5
+    assert ap["technology_fit_source"] == "stored"
+    assert ap["exposed"] is False

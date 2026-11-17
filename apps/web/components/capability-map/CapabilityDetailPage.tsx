@@ -11,7 +11,7 @@ import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { buildCapabilityTree } from "@/lib/capability-tree";
 import {
   capabilityDetailPath,
-  capabilityMapPath,
+  capabilityMapHref,
   findCapabilityNode,
   asLinkableType,
   isLinkableApp,
@@ -21,6 +21,14 @@ import {
   type AppRef,
   type RelLike,
 } from "@/lib/capability-detail";
+import {
+  assessCapability,
+  parseDisposition,
+  suggestInvestmentPosture,
+  type CapabilityRecord,
+  type Disposition,
+} from "@/lib/capability-assessment";
+import type { AssessmentPatch } from "@/components/capability-map/CapabilityAssessmentFields";
 import { CapabilityDetailView } from "@/components/capability-map/CapabilityDetailView";
 import { themeForDomain } from "@/lib/domain-theme";
 import { AddRelationshipDialog } from "@/components/capability-map/AddRelationshipDialog";
@@ -205,6 +213,30 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
       applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: updated });
     });
 
+  const onSetDisposition = (link: AppLink, disposition: Disposition) =>
+    run(async (token) => {
+      const updated = await relationshipsApi.updateAttributes(
+        orgSlug,
+        workspaceSlug,
+        link.relId,
+        { ...link.attributes, disposition },
+        token
+      );
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: updated });
+    });
+
+  const onSetAssessment = (patch: AssessmentPatch) =>
+    run(async (token) => {
+      const updated = await objectsApi.update(
+        orgSlug,
+        workspaceSlug,
+        capabilityId,
+        { properties: patch as Record<string, unknown> },
+        token
+      );
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: updated });
+    });
+
   const onAddActivity = (name: string) =>
     run(async (token) => {
       const created = await objectsApi.create(
@@ -246,12 +278,21 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
     ...node.children.map((child) => ({ id: child.id, name: child.name, level: "activity" as const })),
   ];
 
+  const capRecord = objects.find((item) => item.id === capabilityId) as CapabilityRecord | undefined;
+  const assessment = assessCapability(capRecord, objects as CapabilityRecord[], edges);
+  const dispositions = [...linksByTarget.values()]
+    .flat()
+    .map((link) => parseDisposition(link.attributes?.disposition))
+    .filter((item): item is Disposition => Boolean(item));
+  const suggestedPosture = suggestInvestmentPosture(assessment, node, dispositions);
+
   return (
     <CapabilityDetailView
       node={node}
       domainName={domainName}
       theme={theme}
-      backHref={capabilityMapPath(basePath)}
+      backHref={capabilityMapHref(basePath, { domain: node.domainId })}
+      allDomainsHref={capabilityMapHref(basePath)}
       detailsHref={capabilityDetailPath(basePath, node.id, { activity: highlightId, tab: "details" })}
       activityDetailsHref={(activityId) =>
         capabilityDetailPath(basePath, node.id, { activity: activityId, tab: "details", details: activityId })
@@ -267,6 +308,10 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
       onMove={(link, targetId) => void onMove(link, targetId)}
       onRename={(id, name) => onRename(id, name)}
       onSetFitness={(link, fitness) => void onSetFitness(link, fitness)}
+      onSetDisposition={(link, disposition) => void onSetDisposition(link, disposition)}
+      assessment={assessment}
+      suggestedPosture={suggestedPosture}
+      onSetAssessment={(patch) => void onSetAssessment(patch)}
       onAddActivity={(name) => onAddActivity(name)}
       addDialog={
         addFor ? (

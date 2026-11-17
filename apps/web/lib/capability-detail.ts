@@ -33,10 +33,46 @@ export function capabilityMapPath(basePath: string): string {
   return modelPath(basePath, "capabilities");
 }
 
+export type MapWorkspace = "executive" | "architect";
+
+export type ExecutiveLensName = "posture" | "spend" | "risk" | "coverage";
+
+export type CapabilityMapQuery = {
+  workspace?: MapWorkspace | null;
+  domain?: string | null;
+  cap?: string | null;
+  view?: "map" | "list" | null;
+  lens?: ExecutiveLensName | null;
+};
+
+export function capabilityWorkspaceFrom(search: string): MapWorkspace {
+  return new URLSearchParams(search).get("workspace") === "architect" ? "architect" : "executive";
+}
+
+export function capabilityPanelFrom(search: string): string | null {
+  const id = new URLSearchParams(search).get("cap")?.trim() ?? "";
+  return id || null;
+}
+
+export function capabilityLensFrom(search: string): ExecutiveLensName {
+  const raw = new URLSearchParams(search).get("lens")?.trim().toLowerCase();
+  return raw === "spend" || raw === "risk" || raw === "coverage" ? raw : "posture";
+}
+
+export function capabilityMapHref(basePath: string, query: CapabilityMapQuery = {}): string {
+  const params = new URLSearchParams();
+  if (query.workspace === "architect") params.set("workspace", "architect");
+  if (query.domain && query.domain !== "no-domain") params.set("domain", query.domain);
+  if (query.cap) params.set("cap", query.cap);
+  if (query.view === "list") params.set("view", "list");
+  if (query.workspace !== "architect" && query.lens && query.lens !== "posture") params.set("lens", query.lens);
+  const suffix = params.toString();
+  return suffix ? `${capabilityMapPath(basePath)}?${suffix}` : capabilityMapPath(basePath);
+}
+
 /** Heat map focused on one domain. The synthetic "No domain" group has no id to open. */
-export function capabilityDomainMapPath(basePath: string, domainId: string): string {
-  if (!domainId || domainId === "no-domain") return capabilityMapPath(basePath);
-  return `${capabilityMapPath(basePath)}?domain=${encodeURIComponent(domainId)}`;
+export function capabilityDomainMapPath(basePath: string, domainId: string, workspace?: MapWorkspace | null): string {
+  return capabilityMapHref(basePath, { workspace, domain: domainId });
 }
 
 export function capabilityOpenPath(
@@ -45,6 +81,7 @@ export function capabilityOpenPath(
   objects: Array<{ id: string; type: string; properties?: Record<string, unknown> | null }>
 ): string {
   const object = objects.find((item) => item.id === id);
+  if (object?.type === "business_domain") return capabilityDomainMapPath(basePath, object.id);
   if (object?.type === "capability" && isActivity(object.properties)) {
     const parentId = String(object.properties?.parent_id ?? "");
     if (parentId) return capabilityDetailPath(basePath, parentId, { activity: object.id });

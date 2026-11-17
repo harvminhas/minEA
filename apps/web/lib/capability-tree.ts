@@ -53,6 +53,17 @@ export function isActivity(properties: Record<string, unknown> | null | undefine
   return Boolean(parent) && String(parent) !== String(domain ?? "");
 }
 
+function orderIndex(object: CapObj): number {
+  const n = Number(object.properties?.order_index);
+  return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
+}
+
+/** Domain (and capability) order: properties.order_index when present, then name. */
+export function compareByOrderThenName(a: CapObj, b: CapObj): number {
+  const delta = orderIndex(a) - orderIndex(b);
+  return delta !== 0 ? delta : a.name.localeCompare(b.name);
+}
+
 const norm = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
 
 function money(row: CatalogRow | undefined, object: CapObj): number {
@@ -208,7 +219,7 @@ export function buildCapabilityTree(
     linksByFrom.set(edge.from_object_id, [...(linksByFrom.get(edge.from_object_id) ?? []), entry]);
   }
 
-  const domains = objects.filter((object) => object.type === "business_domain").sort((a, b) => a.name.localeCompare(b.name));
+  const domains = objects.filter((object) => object.type === "business_domain").sort(compareByOrderThenName);
   const caps = objects.filter((object) => object.type === "capability");
   const knownDomains = new Set(domains.map((d) => d.id));
   const l2: CapObj[] = [];
@@ -245,9 +256,9 @@ export function buildCapabilityTree(
         const did = String(cap.properties?.domain_id ?? "");
         return domainId ? did === domainId : !did || !knownDomains.has(did);
       })
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort(compareByOrderThenName)
       .map((cap) => {
-        const kids = (l3ByParent.get(cap.id) ?? []).sort((a, b) => a.name.localeCompare(b.name)).map((act) => make(act, 3, domainId, cap.id, []));
+        const kids = (l3ByParent.get(cap.id) ?? []).sort(compareByOrderThenName).map((act) => make(act, 3, domainId, cap.id, []));
         return make(cap, 2, domainId, domainId, kids);
       });
 

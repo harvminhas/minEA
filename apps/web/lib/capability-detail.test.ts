@@ -5,7 +5,10 @@ import { buildCapabilityTree } from "./capability-tree";
 import {
   capabilityDetailPath,
   capabilityDomainMapPath,
+  capabilityMapHref,
   capabilityOpenPath,
+  capabilityWorkspaceFrom,
+  capabilityPanelFrom,
   coverageSummary,
   fitnessSummary,
   overlapNote,
@@ -46,6 +49,28 @@ test("opening an activity goes to its parent capability with ?activity=", () => 
   ];
   assert.equal(capabilityOpenPath("/ws", "inv", objects), "/ws/model/capabilities/ap?activity=inv");
   assert.equal(capabilityOpenPath("/ws", "ap", objects), "/ws/model/capabilities/ap");
+});
+
+test("opening a business domain focuses the map with ?domain= instead of a detail URL", () => {
+  const objects = [o("fin", "business_domain", "Finance")];
+  assert.equal(capabilityOpenPath("/ws", "fin", objects), "/ws/model/capabilities?domain=fin");
+});
+
+test("map href encodes workspace, domain and the executive panel cap", () => {
+  assert.equal(capabilityMapHref("/ws"), "/ws/model/capabilities");
+  assert.equal(capabilityMapHref("/ws", { workspace: "executive", domain: "fin" }), "/ws/model/capabilities?domain=fin");
+  assert.equal(
+    capabilityMapHref("/ws", { workspace: "architect", domain: "fin" }),
+    "/ws/model/capabilities?workspace=architect&domain=fin"
+  );
+  assert.equal(
+    capabilityMapHref("/ws", { domain: "fin", cap: "ap" }),
+    "/ws/model/capabilities?domain=fin&cap=ap"
+  );
+  assert.equal(capabilityWorkspaceFrom("?workspace=architect&domain=fin"), "architect");
+  assert.equal(capabilityWorkspaceFrom(""), "executive");
+  assert.equal(capabilityPanelFrom("?cap=ap"), "ap");
+  assert.equal(capabilityDomainMapPath("/ws", "fin", "architect"), "/ws/model/capabilities?workspace=architect&domain=fin");
 });
 
 test("moving a link to a sibling keeps attributes and creates before deleting", () => {

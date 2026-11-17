@@ -7,7 +7,15 @@ import type { SuggestedDomain } from "@minea/types";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { useAuth } from "@/lib/auth-context";
-import { capabilityMapPath, capabilityOpenPath } from "@/lib/capability-detail";
+import {
+  capabilityLensFrom,
+  capabilityMapHref,
+  capabilityOpenPath,
+  capabilityPanelFrom,
+  capabilityWorkspaceFrom,
+  type CapabilityMapQuery,
+} from "@/lib/capability-detail";
+import { CapabilityExecutiveView, type ExecutiveLens } from "@/components/capability-map/CapabilityExecutiveView";
 import { capabilityMapApi, objectsApi } from "@/lib/api-client";
 import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
 import { usePermissions } from "@/lib/use-permissions";
@@ -53,13 +61,26 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
   useEffect(() => setView(capabilityViewFrom(window.location.search)), []);
   const focusDomainId = capabilityDomainFrom(searchParams.toString());
   const focusDomainName = focusDomainId ? objects.find((item) => item.id === focusDomainId)?.name ?? null : null;
+  const workspace = capabilityWorkspaceFrom(searchParams.toString());
+  const panelId = capabilityPanelFrom(searchParams.toString());
+  const lens = capabilityLensFrom(searchParams.toString()) as ExecutiveLens;
+  const pushMap = (query: CapabilityMapQuery) => router.push(capabilityMapHref(basePath, query));
+  const mapQuery = (overrides: CapabilityMapQuery = {}): CapabilityMapQuery => ({
+    workspace,
+    domain: focusDomainId,
+    cap: workspace === "executive" ? panelId : null,
+    view: workspace === "architect" && view === "list" ? "list" : undefined,
+    lens: workspace === "executive" ? lens : undefined,
+    ...overrides,
+  });
   const openCapability = (id: string) => router.push(capabilityOpenPath(basePath, id, objects));
-  const clearDomainFocus = () => {
-    const params = new URLSearchParams();
-    if (view === "list") params.set("view", "list");
-    const query = params.toString();
-    router.push(query ? `${capabilityMapPath(basePath)}?${query}` : capabilityMapPath(basePath));
-  };
+  const openDomain = (id: string) => pushMap(mapQuery({ domain: id, cap: null }));
+  const openCapPanel = (id: string, domainId: string | null) =>
+    pushMap(mapQuery({ workspace: "executive", domain: focusDomainId || domainId, cap: id }));
+  const closePanel = () => pushMap(mapQuery({ cap: null }));
+  const clearDomainFocus = () => pushMap(mapQuery({ domain: null, cap: null }));
+  const setWorkspace = (next: "executive" | "architect") =>
+    pushMap(mapQuery({ workspace: next, cap: next === "executive" ? panelId : null, view: next === "architect" && view === "list" ? "list" : undefined, lens: next === "executive" ? lens : undefined }));
   const refreshMap = () => {
     void queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
     void queryClient.invalidateQueries({ queryKey: ["capability-map-status", orgSlug, workspaceSlug] });
@@ -153,22 +174,50 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
           <h1 className="text-[22px] font-semibold text-[#1c2230]">
             Capability map <span className="text-[14px] font-normal text-[#8b90a0]">{rows.length}</span>
           </h1>
+          {workspace === "executive" && !empty && !focused ? (
+            <p className="mt-0.5 text-[13.5px] text-[#6b7289]">How well the estate supports each part of the business</p>
+          ) : null}
         </div>
         {!empty && !focused && (
-          <div className="ml-auto mr-2 flex rounded-lg border border-[#e6e8ee] p-0.5 text-[12px]" role="tablist" aria-label="Capability view">
-            {(["map", "list"] as const).map((item) => (
-              <button
-                key={item}
-                type="button"
-                role="tab"
-                aria-selected={view === item}
-                data-testid={`capability-view-${item}`}
-                onClick={() => setView(item)}
-                className={cn("rounded-md px-2.5 py-1", view === item ? "bg-[#ece9ff] font-semibold text-[#3f35b5]" : "text-[#4b5163]")}
-              >
-                {item === "map" ? "Map" : "List"}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg bg-[#f3f4f8] p-0.5 text-[12.5px]" role="tablist" aria-label="Capability workspace">
+              {([
+                ["executive", "Executive view"],
+                ["architect", "Architect workspace"],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={workspace === id}
+                  data-testid={`capability-workspace-${id}`}
+                  onClick={() => setWorkspace(id)}
+                  className={cn("rounded-md px-2.5 py-1", workspace === id ? "bg-white font-semibold text-[#1c2230] shadow-sm" : "text-[#4b5163]")}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {workspace === "architect" ? (
+              <div className="flex rounded-lg border border-[#e6e8ee] p-0.5 text-[12px]" role="tablist" aria-label="Capability view">
+                {(["map", "list"] as const).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    role="tab"
+                    aria-selected={view === item}
+                    data-testid={`capability-view-${item}`}
+                    onClick={() => {
+                      setView(item);
+                      pushMap(mapQuery({ view: item }));
+                    }}
+                    className={cn("rounded-md px-2.5 py-1", view === item ? "bg-[#ece9ff] font-semibold text-[#3f35b5]" : "text-[#4b5163]")}
+                  >
+                    {item === "map" ? "Map" : "List"}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
         {canCreate && !empty && !focused && (
@@ -250,22 +299,54 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
         <CapabilityStructureEditor objects={objects} onBack={() => setMode("none")} />
       )}
 
-      {focusDomainName && rows.length > 0 && !focused && mode !== "add" && (
-        <p className="mb-3 text-[13px] text-[#6b7289]" data-testid="capability-domain-focus">
-          Showing {focusDomainName}{" "}
-          <button type="button" onClick={clearDomainFocus} className="font-medium text-[#5b4ce6]">
-            Show all
-          </button>
-        </p>
-      )}
-
-      {rows.length > 0 && view === "map" && !focused && mode !== "add" && (
-        <div data-testid="capability-map-view">
-          <CapabilityHeatMap objects={objects} edges={edges} rows={catalogRows} onOpen={openCapability} focusDomainId={focusDomainId} />
+      {rows.length > 0 && !focused && mode !== "add" && (
+        <div className="mb-3 flex items-center gap-2 text-[13px] text-[#6b7289]" data-testid="capability-map-breadcrumb">
+          {focusDomainName ? (
+            <>
+              <button type="button" onClick={clearDomainFocus} className="font-medium text-[#4a43c9]">
+                All domains
+              </button>
+              <span className="text-[#c0c3cc]">/</span>
+              <strong className="font-semibold text-[#1c2230]">{focusDomainName}</strong>
+            </>
+          ) : (
+            <strong className="font-semibold text-[#1c2230]">All domains</strong>
+          )}
         </div>
       )}
 
-      {rows.length > 0 && view === "list" && !focused && mode !== "add" && (
+      {rows.length > 0 && workspace === "executive" && !focused && mode !== "add" && (
+        <div data-testid="capability-map-view">
+          <CapabilityExecutiveView
+            objects={objects}
+            edges={edges}
+            rows={catalogRows}
+            basePath={basePath}
+            focusDomainId={focusDomainId}
+            selectedId={panelId}
+            lens={lens}
+            onLens={(next) => pushMap(mapQuery({ lens: next }))}
+            onOpenCap={openCapPanel}
+            onOpenDomain={openDomain}
+            onClosePanel={closePanel}
+          />
+        </div>
+      )}
+
+      {rows.length > 0 && workspace === "architect" && view === "map" && !focused && mode !== "add" && (
+        <div data-testid="capability-map-view">
+          <CapabilityHeatMap
+            objects={objects}
+            edges={edges}
+            rows={catalogRows}
+            onOpen={openCapability}
+            onOpenDomain={openDomain}
+            focusDomainId={focusDomainId}
+          />
+        </div>
+      )}
+
+      {rows.length > 0 && workspace === "architect" && view === "list" && !focused && mode !== "add" && (
         <>
           <div className="mb-2 flex items-center gap-3 text-[12px]">
             {gaps > 0 ? (

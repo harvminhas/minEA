@@ -21,7 +21,9 @@ test("Map is the default view, List the secondary one", () => {
   assert.equal(capabilityViewFrom("?view=list"), "list");
   const section = src("components/mvp/CapabilitiesSection.tsx");
   assert.match(section, /capability-view-\$\{item\}/);
-  assert.match(section, /<CapabilityHeatMap /);
+  assert.match(section, /<CapabilityHeatMap\b/);
+  assert.match(section, /<CapabilityExecutiveView\b/);
+  assert.match(section, /workspace === "architect" && view === "map"/);
   assert.match(section, /CapabilityInterview/);
   assert.match(section, /onAddYourself/);
   const interview = src("components/capability-map/CapabilityInterview.tsx");
@@ -50,4 +52,16 @@ test("/business/capabilities redirects to the merged page; domain pages still re
   assert.match(src("components/capability-map/CapabilityMapRedirect.tsx"), /router\.replace\(target\)/);
   assert.match(src("components/capability-map/DomainDetailPage.tsx"), /capabilityMapPath\(orgSlug, workspaceSlug\)/);
   assert.match(src("components/capability-map/CapabilityMapView.tsx"), /data-testid="map-capability"/);
+});
+
+test("domain section counts say capability or capabilities, not capacities", () => {
+  for (const path of [
+    "components/capability-map/CapabilityExecutiveView.tsx",
+    "components/capability-map/CapabilityHeatMap.tsx",
+  ]) {
+    const text = src(path);
+    assert.match(text, /1 \? "capability" : "capabilities"/);
+    assert.doesNotMatch(text, /capacit\{/);
+    assert.doesNotMatch(text, /capacities/);
+  }
 });
