@@ -118,6 +118,8 @@ def idle_licences(objects: list[dict]) -> dict:
 
 
 def overlaps(objects: list[dict], relationships: list[dict]) -> dict:
+    """Overlap is 2+ unique direct tools on an activity or capability (or domain). Parents are not flagged just because children have different apps.
+    """
     by_id = {obj["id"]: obj for obj in objects}
     linked: set[str] = set()
     targets: dict[str, list[str]] = {}
@@ -126,7 +128,7 @@ def overlaps(objects: list[dict], relationships: list[dict]) -> dict:
             continue
         src = by_id.get(edge.get("from_object_id"))
         dst = by_id.get(edge.get("to_object_id"))
-        if not src or not dst or src.get("type") != "capability" or dst.get("type") not in TOOL_TYPES:
+        if not src or not dst or src.get("type") not in {"capability", "business_domain"} or dst.get("type") not in TOOL_TYPES:
             continue
         linked.add(dst["id"])
         if not _active(src) or not _active(dst):

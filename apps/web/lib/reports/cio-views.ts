@@ -132,7 +132,7 @@ export function overlaps(objects: readonly LandscapeObject[], relationships: rea
     if (edge.type !== "supported_by") continue;
     const from = byId.get(edge.from_object_id);
     const to = byId.get(edge.to_object_id);
-    if (!from || !to || from.type !== "capability" || !tools.has(to.type)) continue;
+    if (!from || !to || (from.type !== "capability" && from.type !== "business_domain") || !tools.has(to.type)) continue;
     linked.add(to.id);
     if (!active(from) || !active(to)) continue;
     const list = targetsOf.get(from.id) ?? [];

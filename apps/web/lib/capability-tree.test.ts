@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { buildCapabilityTree, flatten, heatClass, heatMeta, isActivity } from "./capability-tree";
 import type { CatalogRow } from "./model-catalog";
@@ -237,4 +238,14 @@ test("a childless capability with three direct apps is flagged as many", () => {
   assert.equal(heatClass(node, "redundancy"), "c-gap");
   assert.equal(heatMeta(node, "redundancy"), "3 apps on Treasury");
   assert.equal(tree[0]!.redundancy, "many");
+});
+
+const fixture = JSON.parse(
+  readFileSync(new URL("../../../packages/types/src/fixtures/capability-tree.fixture.json", import.meta.url), "utf8")
+) as { cases: { id: string; objects: Parameters<typeof buildCapabilityTree>[0]; edges: Parameters<typeof buildCapabilityTree>[1]; expected: ReturnType<typeof buildCapabilityTree> }[] };
+
+test("the shared fixture matches buildCapabilityTree (Python parity)", () => {
+  for (const item of fixture.cases) {
+    assert.deepEqual(buildCapabilityTree(item.objects, item.edges), item.expected, item.id);
+  }
 });

@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from typing import Callable
 
 from app.ai.ask.ai_landscape import JOB_LABELS, ai_landscape as build_landscape, data_access
+from app.ai.ask.capability_tree import build_capability_tree, walk
 from app.ai.ask.cio_views import idle_licences as build_idle, overlaps as build_overlaps
 from app.ai.ask.graph import Rec, WorkspaceGraph, fold
 from app.ai.ask.impact import ImpactEdge, impact_of as traverse_impact
@@ -492,9 +493,217 @@ def idle_licences(bag: ToolBag, args: dict) -> dict:
     return {"totals": totals, "apps": rows, "no_in_use_count": missing}
 
 
+LEVEL_NAME = {1: "domain", 2: "capability", 3: "activity"}
+LEVEL_ALIAS = {
+    "domain": 1,
+    "l1": 1,
+    "1": 1,
+    "business_domain": 1,
+    "capability": 2,
+    "l2": 2,
+    "2": 2,
+    "activity": 3,
+    "l3": 3,
+    "3": 3,
+}
+COVERAGE_RANK = {"covered": 3, "mostly": 2, "partial": 1, "gap": 0}
+FITNESS_BEST = {"strong": 3, "adequate": 2, "weak": 1, "none": 0}
+REDUNDANCY_BEST = {"none": 3, "two": 1, "many": 0, "gap": 0}
+BEST_SHAPE_CRITERIA = (
+    "Full coverage first, then best fitness (strong, then adequate, then weak), then no redundancy. "
+    "Activities with no app are coverage gaps, not weak fitness. "
+    "The same app linked at two levels counts once and is not overlap."
+)
+WEAKEST_CRITERIA = (
+    "Lowest coverage first, then weakest fitness, then most redundancy (many, then two). "
+    "Activities with no app are coverage gaps, not weak fitness."
+)
+
+
+def _tree_costs(bag: ToolBag) -> dict[str, float]:
+    costs: dict[str, float] = {}
+    for rec in bag.graph.records.values():
+        if rec.annual is not None:
+            costs[rec.id] = rec.annual
+    return costs
+
+
+def _tree_edges(bag: ToolBag) -> list[dict]:
+    return [
+        {
+            "type": edge.relation,
+            "from_object_id": edge.from_id,
+            "to_object_id": edge.to_id,
+            "attributes": dict(edge.attributes or {}),
+        }
+        for edge in bag.graph.edges
+    ]
+
+
+def _app_names(bag: ToolBag, ids: list[str]) -> list[str]:
+    names = []
+    for app_id in ids:
+        rec = bag.graph.get(app_id)
+        names.append(rec.name if rec else app_id)
+    return names
+
+
+def _health_row(bag: ToolBag, node: dict) -> dict:
+    names = _app_names(bag, node["uniqueAppIds"])
+    path = node.get("path") or []
+    row = {
+        "id": node["id"],
+        "name": node["name"],
+        "level": LEVEL_NAME[node["level"]],
+        "path": path,
+        "path_label": " / ".join([*path, node["name"]]),
+        "domain_id": node["domainId"],
+        "parent_id": node["parentId"],
+        "coverage": node["coverage"],
+        "covered_activities": node["coveredLeaves"],
+        "total_activities": node["leafCount"],
+        "fitness": node["fitness"],
+        "fitness_hint": node["fitnessHint"],
+        "redundancy": node["redundancy"],
+        "redundancy_hint": node["redundancyHint"],
+        "redundancy_place": node["redundancyPlace"],
+        "redundancy_apps": node["redundancyApps"],
+        "unique_app_count": len(node["uniqueAppIds"]),
+        "unique_app_ids": node["uniqueAppIds"],
+        "unique_app_names": names,
+        "annual_cost": node["cost"],
+    }
+    return row
+
+
+def _shape_key(row: dict, *, weakest: bool = False) -> tuple:
+    cov = COVERAGE_RANK[row["coverage"]]
+    fit = FITNESS_BEST[row["fitness"]]
+    red = REDUNDANCY_BEST[row["redundancy"]]
+    key = (cov, fit, red, row["name"])
+    return key if weakest else (-cov, -fit, -red, row["name"])
+
+
+def _matches_domain(row: dict, needle: str, nodes: list[dict]) -> bool:
+    text = needle.strip().lower()
+    if not text:
+        return True
+    if str(row.get("domain_id") or "").lower() == text or str(row["id"]).lower() == text:
+        return True
+    if row["name"].lower() == text:
+        return True
+    domain = next((node for node in nodes if node["id"] == row.get("domain_id") or (node["level"] == 1 and node["id"] == row["id"])), None)
+    return bool(domain and domain["name"].lower() == text)
+
+
+def capability_health(bag: ToolBag, args: dict) -> dict:
+    """The heat-map roll-up for every domain, capability and activity: coverage, fitness, redundancy, unique apps, cost."""
+    tree = build_capability_tree(bag.graph.objects, _tree_edges(bag), _tree_costs(bag))
+    walked = walk(tree)
+    level_raw = str(args.get("level") or "").strip().lower()
+    level = LEVEL_ALIAS.get(level_raw)
+    domain_raw = str(args.get("domain") or "").strip()
+    rows = []
+    for node in walked:
+        if node["id"] == "no-domain":
+            continue
+        if level and node["level"] != level:
+            continue
+        row = _health_row(bag, node)
+        if domain_raw and not _matches_domain(row, domain_raw, walked):
+            continue
+        if node["id"] in bag.graph.records:
+            _cite(bag, node["id"])
+        for app_id in node["uniqueAppIds"]:
+            _cite(bag, app_id)
+        _note_numbers(
+            bag,
+            row["covered_activities"],
+            row["total_activities"],
+            row["unique_app_count"],
+            row["annual_cost"],
+        )
+        rows.append(row)
+
+    capabilities = [row for row in rows if row["level"] == "capability"]
+    domains = [row for row in rows if row["level"] == "domain"]
+    activities = [row for row in rows if row["level"] == "activity"]
+    originating = [row for row in rows if row["redundancy"] in {"two", "many"} and row["redundancy_place"] == row["name"]]
+    inherited = [row for row in rows if row["redundancy"] in {"two", "many"} and row["redundancy_place"] and row["redundancy_place"] != row["name"]]
+    gaps = [row for row in rows if row["coverage"] in {"gap", "partial"}]
+    best = sorted(capabilities or rows, key=_shape_key)
+    weakest = sorted(domains or rows, key=lambda row: _shape_key(row, weakest=True))
+
+    estate_apps: list[str] = []
+    seen: set[str] = set()
+    estate_cost = 0.0
+    for node in tree:
+        for app_id in node["uniqueAppIds"]:
+            if app_id not in seen:
+                seen.add(app_id)
+                estate_apps.append(app_id)
+        estate_cost += node["cost"]
+    _note_numbers(bag, len(rows), len(domains), len(capabilities), len(activities), len(gaps), len(originating), len(estate_apps), estate_cost)
+
+    tops = domains or capabilities or activities or rows
+    unique_ids: list[str] = []
+    seen_apps: set[str] = set()
+    for row in tops:
+        for app_id in row["unique_app_ids"]:
+            if app_id not in seen_apps:
+                seen_apps.add(app_id)
+                unique_ids.append(app_id)
+    app_cost = _tree_costs(bag)
+    # Fall back to the tree's rolled-up cost when every top node is a domain (no shared apps across domains).
+    annual = sum(app_cost.get(app_id, 0) or 0 for app_id in unique_ids)
+    if not annual and tops:
+        annual = sum(row["annual_cost"] for row in tops)
+
+    def slim(row: dict) -> dict:
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "level": row["level"],
+            "path_label": row["path_label"],
+            "coverage": row["coverage"],
+            "covered_activities": row["covered_activities"],
+            "total_activities": row["total_activities"],
+            "fitness": row["fitness"],
+            "fitness_hint": row["fitness_hint"],
+            "redundancy": row["redundancy"],
+            "redundancy_hint": row["redundancy_hint"],
+            "redundancy_place": row["redundancy_place"],
+            "redundancy_apps": row["redundancy_apps"],
+            "unique_app_count": row["unique_app_count"],
+            "annual_cost": row["annual_cost"],
+        }
+
+    return {
+        "criteria": {"best_shape": BEST_SHAPE_CRITERIA, "weakest": WEAKEST_CRITERIA},
+        "totals": {
+            "domains": len(domains),
+            "capabilities": len(capabilities),
+            "activities": len(activities),
+            "records": len(rows),
+            "coverage_gaps": len(gaps),
+            "overlaps": len(originating),
+            "unique_apps": len(unique_ids),
+            "annual_cost": annual,
+        },
+        "best_shape": [slim(row) for row in best],
+        "weakest_domains": [slim(row) for row in weakest],
+        "gaps": [slim(row) for row in gaps],
+        "redundant": [slim(row) for row in originating],
+        "redundant_inherited": [slim(row) for row in inherited],
+        "records": rows,
+    }
+
+
 def overlapping_tools(bag: ToolBag, args: dict) -> dict:
-    """The Overlapping tools view as data: capabilities with 2+ active tools, and the "up to" savings."""
+    """The Overlapping tools view as data: activity-level direct apps (parents inherit), and the "up to" savings."""
     result = build_overlaps(bag.graph.objects, [{"type": e.relation, "from_object_id": e.from_id, "to_object_id": e.to_id} for e in bag.graph.edges])
+    tree = build_capability_tree(bag.graph.objects, _tree_edges(bag), _tree_costs(bag))
+    by_id = {node["id"]: node for node in walk(tree)}
     groups = []
     for group in result["groups"]:
         _cite(bag, group["id"])
@@ -514,11 +723,34 @@ def overlapping_tools(bag: ToolBag, args: dict) -> dict:
             tools.append(item)
         saving = _dollars(group["savingsCents"])
         _note_numbers(bag, saving, len(tools))
-        groups.append({"capability_id": group["id"], "capability": group["name"], "tools": tools, "up_to_savings_per_year": saving})
+        node = by_id.get(group["id"])
+        inherited_by = []
+        if node:
+            place = node["name"]
+            for ancestor in walk(tree):
+                if ancestor["id"] == node["id"]:
+                    continue
+                if ancestor["redundancy"] in {"two", "many"} and ancestor.get("redundancyPlace") == place:
+                    inherited_by.append({"id": ancestor["id"], "name": ancestor["name"], "level": LEVEL_NAME[ancestor["level"]]})
+                    if ancestor["id"] in bag.graph.records:
+                        _cite(bag, ancestor["id"])
+        groups.append(
+            {
+                "capability_id": group["id"],
+                "capability": group["name"],
+                "level": LEVEL_NAME[node["level"]] if node else "capability",
+                "path": (node.get("path") or []) if node else [],
+                "path_label": " / ".join([*(node.get("path") or []), group["name"]]) if node else group["name"],
+                "inherited_by": inherited_by,
+                "tools": tools,
+                "up_to_savings_per_year": saving,
+            }
+        )
     hints = [{"category": h["category"], "apps": [t["name"] for t in h["tools"]]} for h in result["categoryHints"]]
     total = _dollars(result["savingsCents"])
     _note_numbers(bag, total, len(groups))
     return {"overlap_count": len(groups), "up_to_savings_per_year": total, "overlaps": groups, "same_category_no_capability": hints}
+
 
 
 def ai_landscape(bag: ToolBag, args: dict) -> dict:
@@ -841,11 +1073,36 @@ TOOLS: list[AskTool] = [
         run=idle_licences,
     ),
     AskTool(
+        name="capability_health",
+        description=(
+            "Capability map health: coverage (activities with an app / total), fitness (weakest scored supported_by link; "
+            "missing counts as adequate, explicit 'none' is unscored; gaps are not weak fitness), redundancy (an activity, "
+            "or a capability with no activities, with two or more unique direct apps; parents inherit; the same app at two "
+            "levels counts once), unique app count rolled up once, and annual cost, for every domain, capability and activity. "
+            "Each row has id and path so you can cite it. Optional filters: level (domain, capability, activity) and domain "
+            "(id or name). best_shape ranks capabilities by full coverage first, then best fitness, then no redundancy. "
+            "weakest_domains uses the inverse. gaps are coverage gap or partial. redundant is where overlap starts. "
+            "Say which of those criteria you used. Use the numbers as given. Do not do arithmetic."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "level": {"type": "string", "enum": ["domain", "capability", "activity"]},
+                "domain": {"type": "string"},
+            },
+        },
+        run=capability_health,
+    ),
+    AskTool(
         name="overlapping_tools",
         description=(
-            "Overlapping or duplicate tools: capabilities provided by two or more active apps or platforms, each tool with "
-            "annual cost, owner, users and renewal, the most-used tool, and the 'up to' savings per year if only the most-used "
-            "tool were kept. same_category_no_capability is only a hint (same category, no capability linked), not an overlap. "
+            "Overlapping or duplicate tools in the 3-level capability map: an activity (or a capability with no activities) "
+            "with two or more unique direct apps or platforms, and parents inherit that overlap (listed on inherited_by). "
+            "The same app linked at two levels counts once and is not overlap. Two activities under one capability, each "
+            "with a different single app, are not overlap. Each overlap has path, tools (annual cost, owner, users, renewal), "
+            "the most-used tool, and the 'up to' savings per year if only the most-used tool were kept. "
+            "up_to_savings_per_year already counts each dropped tool once; do not add inherited parents again. "
+            "same_category_no_capability is only a hint (same category, no capability linked), not an overlap. "
             "Use the numbers as given."
         ),
         parameters={"type": "object", "properties": {}},

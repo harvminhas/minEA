@@ -239,6 +239,23 @@ def _overlaps(args: dict, result: dict) -> tuple[str, dict]:
     return label, {"overlaps": n}
 
 
+def _health(args: dict, result: dict) -> tuple[str, dict]:
+    t = result.get("totals") or {}
+    records = int(t.get("records") or 0)
+    if not records:
+        return "No capabilities in the map yet", {"records": 0}
+    gaps = int(t.get("coverage_gaps") or 0)
+    overlaps = int(t.get("overlaps") or 0)
+    parts = [count_label(records, "item") + " scored"]
+    if gaps:
+        parts.append(count_label(gaps, "coverage gap"))
+    if overlaps:
+        parts.append(count_label(overlaps, "overlap"))
+    if t.get("annual_cost"):
+        parts.append(f"{money(t.get('annual_cost'))} a year")
+    return "; ".join(parts), {"records": records, "gaps": gaps, "overlaps": overlaps}
+
+
 _BUILDERS = {
     "search_records": _search,
     "impact_of": _impact,
@@ -248,6 +265,7 @@ _BUILDERS = {
     "ai_landscape": _ai,
     "idle_licences": _idle,
     "overlapping_tools": _overlaps,
+    "capability_health": _health,
 }
 
 

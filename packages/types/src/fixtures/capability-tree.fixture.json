@@ -1,0 +1,1503 @@
+{
+  "cases": [
+    {
+      "id": "finance",
+      "objects": [
+        {
+          "id": "fin",
+          "type": "business_domain",
+          "name": "Finance"
+        },
+        {
+          "id": "ap",
+          "type": "capability",
+          "name": "Accounts Payable",
+          "properties": {
+            "domain_id": "fin"
+          }
+        },
+        {
+          "id": "inv",
+          "type": "capability",
+          "name": "Invoice capture",
+          "properties": {
+            "domain_id": "fin",
+            "parent_id": "ap"
+          }
+        },
+        {
+          "id": "pay",
+          "type": "capability",
+          "name": "Vendor payments",
+          "properties": {
+            "domain_id": "fin",
+            "parent_id": "ap"
+          }
+        },
+        {
+          "id": "plan",
+          "type": "capability",
+          "name": "Financial Planning",
+          "properties": {
+            "domain_id": "fin"
+          }
+        },
+        {
+          "id": "bud",
+          "type": "capability",
+          "name": "Budgets",
+          "properties": {
+            "domain_id": "fin",
+            "parent_id": "plan"
+          }
+        },
+        {
+          "id": "fc",
+          "type": "capability",
+          "name": "Forecasts",
+          "properties": {
+            "domain_id": "fin",
+            "parent_id": "plan"
+          }
+        },
+        {
+          "id": "tre",
+          "type": "capability",
+          "name": "Treasury",
+          "properties": {
+            "domain_id": "fin"
+          }
+        },
+        {
+          "id": "sage",
+          "type": "application",
+          "name": "Sage",
+          "properties": {
+            "annual_cost": 18000
+          }
+        },
+        {
+          "id": "qb",
+          "type": "application",
+          "name": "QuickBooks",
+          "properties": {
+            "annual_cost": 42000
+          }
+        },
+        {
+          "id": "epic",
+          "type": "application",
+          "name": "Epic",
+          "properties": {
+            "annual_cost": 200000
+          }
+        },
+        {
+          "id": "hyp",
+          "type": "application",
+          "name": "Hyperion",
+          "properties": {
+            "annual_cost": 80000
+          }
+        },
+        {
+          "id": "bank",
+          "type": "application",
+          "name": "Bank Portal",
+          "properties": {
+            "annual_cost": 22000
+          }
+        }
+      ],
+      "edges": [
+        {
+          "type": "supported_by",
+          "from_object_id": "ap",
+          "to_object_id": "sage",
+          "attributes": {
+            "fitness": "strong"
+          }
+        },
+        {
+          "type": "supported_by",
+          "from_object_id": "inv",
+          "to_object_id": "qb",
+          "attributes": {
+            "fitness": "adequate"
+          }
+        },
+        {
+          "type": "supported_by",
+          "from_object_id": "inv",
+          "to_object_id": "epic",
+          "attributes": {
+            "fitness": "weak"
+          }
+        },
+        {
+          "type": "supported_by",
+          "from_object_id": "pay",
+          "to_object_id": "qb",
+          "attributes": {
+            "fitness": "strong"
+          }
+        },
+        {
+          "type": "supported_by",
+          "from_object_id": "plan",
+          "to_object_id": "hyp",
+          "attributes": {
+            "fitness": "strong"
+          }
+        },
+        {
+          "type": "supported_by",
+          "from_object_id": "bud",
+          "to_object_id": "hyp",
+          "attributes": {
+            "fitness": "strong"
+          }
+        },
+        {
+          "type": "supported_by",
+          "from_object_id": "tre",
+          "to_object_id": "bank",
+          "attributes": {
+            "fitness": "adequate"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "id": "fin",
+          "name": "Finance",
+          "level": 1,
+          "domainId": "fin",
+          "parentId": null,
+          "appIds": [],
+          "uniqueAppIds": [
+            "sage",
+            "qb",
+            "epic",
+            "hyp",
+            "bank"
+          ],
+          "cost": 362000,
+          "risk": "low",
+          "coverage": "mostly",
+          "leafCount": 5,
+          "coveredLeaves": 4,
+          "fitness": "weak",
+          "fitnessHint": "Epic on Invoice capture",
+          "redundancy": "two",
+          "redundancyHint": "2 apps on Invoice capture",
+          "redundancyPlace": "Invoice capture",
+          "redundancyApps": [
+            "QuickBooks",
+            "Epic"
+          ],
+          "children": [
+            {
+              "id": "ap",
+              "name": "Accounts Payable",
+              "level": 2,
+              "domainId": "fin",
+              "parentId": "fin",
+              "appIds": [
+                "sage"
+              ],
+              "uniqueAppIds": [
+                "sage",
+                "qb",
+                "epic"
+              ],
+              "cost": 260000,
+              "risk": "low",
+              "coverage": "covered",
+              "leafCount": 2,
+              "coveredLeaves": 2,
+              "fitness": "weak",
+              "fitnessHint": "Epic on Invoice capture",
+              "redundancy": "two",
+              "redundancyHint": "2 apps on Invoice capture",
+              "redundancyPlace": "Invoice capture",
+              "redundancyApps": [
+                "QuickBooks",
+                "Epic"
+              ],
+              "children": [
+                {
+                  "id": "inv",
+                  "name": "Invoice capture",
+                  "level": 3,
+                  "domainId": "fin",
+                  "parentId": "ap",
+                  "appIds": [
+                    "qb",
+                    "epic"
+                  ],
+                  "uniqueAppIds": [
+                    "qb",
+                    "epic"
+                  ],
+                  "cost": 242000,
+                  "risk": "low",
+                  "coverage": "covered",
+                  "leafCount": 1,
+                  "coveredLeaves": 1,
+                  "fitness": "weak",
+                  "fitnessHint": "Epic on Invoice capture",
+                  "redundancy": "two",
+                  "redundancyHint": "2 apps on Invoice capture",
+                  "redundancyPlace": "Invoice capture",
+                  "redundancyApps": [
+                    "QuickBooks",
+                    "Epic"
+                  ],
+                  "children": []
+                },
+                {
+                  "id": "pay",
+                  "name": "Vendor payments",
+                  "level": 3,
+                  "domainId": "fin",
+                  "parentId": "ap",
+                  "appIds": [
+                    "qb"
+                  ],
+                  "uniqueAppIds": [
+                    "qb"
+                  ],
+                  "cost": 42000,
+                  "risk": "low",
+                  "coverage": "covered",
+                  "leafCount": 1,
+                  "coveredLeaves": 1,
+                  "fitness": "strong",
+                  "fitnessHint": "QuickBooks on Vendor payments",
+                  "redundancy": "none",
+                  "redundancyHint": null,
+                  "redundancyPlace": null,
+                  "redundancyApps": [],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "plan",
+              "name": "Financial Planning",
+              "level": 2,
+              "domainId": "fin",
+              "parentId": "fin",
+              "appIds": [
+                "hyp"
+              ],
+              "uniqueAppIds": [
+                "hyp"
+              ],
+              "cost": 80000,
+              "risk": "low",
+              "coverage": "partial",
+              "leafCount": 2,
+              "coveredLeaves": 1,
+              "fitness": "strong",
+              "fitnessHint": "Hyperion on Financial Planning",
+              "redundancy": "none",
+              "redundancyHint": null,
+              "redundancyPlace": null,
+              "redundancyApps": [],
+              "children": [
+                {
+                  "id": "bud",
+                  "name": "Budgets",
+                  "level": 3,
+                  "domainId": "fin",
+                  "parentId": "plan",
+                  "appIds": [
+                    "hyp"
+                  ],
+                  "uniqueAppIds": [
+                    "hyp"
+                  ],
+                  "cost": 80000,
+                  "risk": "low",
+                  "coverage": "covered",
+                  "leafCount": 1,
+                  "coveredLeaves": 1,
+                  "fitness": "strong",
+                  "fitnessHint": "Hyperion on Budgets",
+                  "redundancy": "none",
+                  "redundancyHint": null,
+                  "redundancyPlace": null,
+                  "redundancyApps": [],
+                  "children": []
+                },
+                {
+                  "id": "fc",
+                  "name": "Forecasts",
+                  "level": 3,
+                  "domainId": "fin",
+                  "parentId": "plan",
+                  "appIds": [],
+                  "uniqueAppIds": [],
+                  "cost": 0,
+                  "risk": "none",
+                  "coverage": "gap",
+                  "leafCount": 1,
+                  "coveredLeaves": 0,
+                  "fitness": "none",
+                  "fitnessHint": null,
+                  "redundancy": "gap",
+                  "redundancyHint": null,
+                  "redundancyPlace": null,
+                  "redundancyApps": [],
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "tre",
+              "name": "Treasury",
+              "level": 2,
+              "domainId": "fin",
+              "parentId": "fin",
+              "appIds": [
+                "bank"
+              ],
+              "uniqueAppIds": [
+                "bank"
+              ],
+              "cost": 22000,
+              "risk": "low",
+              "coverage": "covered",
+              "leafCount": 1,
+              "coveredLeaves": 1,
+              "fitness": "adequate",
+              "fitnessHint": "Bank Portal on Treasury",
+              "redundancy": "none",
+              "redundancyHint": null,
+              "redundancyPlace": null,
+              "redundancyApps": [],
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "count-once",
+      "objects": [
+        {
+          "id": "d",
+          "type": "business_domain",
+          "name": "Financial Management"
+        },
+        {
+          "id": "ap",
+          "type": "capability",
+          "name": "Accounts Payable",
+          "properties": {
+            "domain_id": "d"
+          }
+        },
+        {
+          "id": "inv",
+          "type": "capability",
+          "name": "Invoice capture",
+          "properties": {
+            "domain_id": "d",
+            "parent_id": "ap"
+          }
+        },
+        {
+          "id": "pay",
+          "type": "capability",
+          "name": "Vendor payments",
+          "properties": {
+            "domain_id": "d",
+            "parent_id": "ap"
+          }
+        },
+        {
+          "id": "qb",
+          "type": "application",
+          "name": "QuickBooks",
+          "properties": {
+            "annual_cost": 42000
+          }
+        },
+        {
+          "id": "epic",
+          "type": "application",
+          "name": "Epic",
+          "properties": {
+            "annual_cost": 200000,
+            "criticality": "critical"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "type": "supported_by",
+          "from_object_id": "inv",
+          "to_object_id": "qb"
+        },
+        {
+          "type": "supported_by",
+          "from_object_id": "pay",
+          "to_object_id": "qb"
+        },
+        {
+          "type": "supported_by",
+          "from_object_id": "inv",
+          "to_object_id": "epic"
+        }
+      ],
+      "expected": [
+        {
+          "id": "d",
+          "name": "Financial Management",
+          "level": 1,
+          "domainId": "d",
+          "parentId": null,
+          "appIds": [],
+          "uniqueAppIds": [
+            "qb",
+            "epic"
+          ],
+          "cost": 242000,
+          "risk": "high",
+          "coverage": "covered",
+          "leafCount": 2,
+          "coveredLeaves": 2,
+          "fitness": "adequate",
+          "fitnessHint": "QuickBooks on Invoice capture",
+          "redundancy": "two",
+          "redundancyHint": "2 apps on Invoice capture",
+          "redundancyPlace": "Invoice capture",
+          "redundancyApps": [
+            "QuickBooks",
+            "Epic"
+          ],
+          "children": [
+            {
+              "id": "ap",
+              "name": "Accounts Payable",
+              "level": 2,
+              "domainId": "d",
+              "parentId": "d",
+              "appIds": [],
+              "uniqueAppIds": [
+                "qb",
+                "epic"
+              ],
+              "cost": 242000,
+              "risk": "high",
+              "coverage": "covered",
+              "leafCount": 2,
+              "coveredLeaves": 2,
+              "fitness": "adequate",
+              "fitnessHint": "QuickBooks on Invoice capture",
+              "redundancy": "two",
+              "redundancyHint": "2 apps on Invoice capture",
+              "redundancyPlace": "Invoice capture",
+              "redundancyApps": [
+                "QuickBooks",
+                "Epic"
+              ],
+              "children": [
+                {
+                  "id": "inv",
+                  "name": "Invoice capture",
+                  "level": 3,
+                  "domainId": "d",
+                  "parentId": "ap",
+                  "appIds": [
+                    "qb",
+                    "epic"
+                  ],
+                  "uniqueAppIds": [
+                    "qb",
+                    "epic"
+                  ],
+                  "cost": 242000,
+                  "risk": "high",
+                  "coverage": "covered",
+                  "leafCount": 1,
+                  "coveredLeaves": 1,
+                  "fitness": "adequate",
+                  "fitnessHint": "QuickBooks on Invoice capture",
+                  "redundancy": "two",
+                  "redundancyHint": "2 apps on Invoice capture",
+                  "redundancyPlace": "Invoice capture",
+                  "redundancyApps": [
+                    "QuickBooks",
+                    "Epic"
+                  ],
+                  "children": []
+                },
+                {
+                  "id": "pay",
+                  "name": "Vendor payments",
+                  "level": 3,
+                  "domainId": "d",
+                  "parentId": "ap",
+                  "appIds": [
+                    "qb"
+                  ],
+                  "uniqueAppIds": [
+                    "qb"
+                  ],
+                  "cost": 42000,
+                  "risk": "low",
+                  "coverage": "covered",
+                  "leafCount": 1,
+                  "coveredLeaves": 1,
+                  "fitness": "adequate",
+                  "fitnessHint": "QuickBooks on Vendor payments",
+                  "redundancy": "none",
+                  "redundancyHint": null,
+                  "redundancyPlace": null,
+                  "redundancyApps": [],
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mixed-coverage",
+      "objects": [
+        {
+          "id": "d",
+          "type": "business_domain",
+          "name": "Finance"
+        },
+        {
+          "id": "ap",
+          "type": "capability",
+          "name": "AP",
+          "properties": {
+            "domain_id": "d"
+          }
+        },
+        {
+          "id": "inv",
+          "type": "capability",
+          "name": "Invoice capture",
+          "properties": {
+            "domain_id": "d",
+            "parent_id": "ap"
+          }
+        },
+        {
+          "id": "pay",
+          "type": "capability",
+          "name": "Vendor payments",
+          "properties": {
+            "domain_id": "d",
+            "parent_id": "ap"
+          }
+        },
+        {
+          "id": "qb",
+          "type": "application",
+          "name": "QuickBooks"
+        }
+      ],
+      "edges": [
+        {
+          "type": "supported_by",
+          "from_object_id": "pay",
+          "to_object_id": "qb"
+        }
+      ],
+      "expected": [
+        {
+          "id": "d",
+          "name": "Finance",
+          "level": 1,
+          "domainId": "d",
+          "parentId": null,
+          "appIds": [],
+          "uniqueAppIds": [
+            "qb"
+          ],
+          "cost": 0,
+          "risk": "low",
+          "coverage": "partial",
+          "leafCount": 2,
+          "coveredLeaves": 1,
+          "fitness": "adequate",
+          "fitnessHint": "QuickBooks on Vendor payments",
+          "redundancy": "none",
+          "redundancyHint": null,
+          "redundancyPlace": null,
+          "redundancyApps": [],
+          "children": [
+            {
+              "id": "ap",
+              "name": "AP",
+              "level": 2,
+              "domainId": "d",
+              "parentId": "d",
+              "appIds": [],
+              "uniqueAppIds": [
+                "qb"
+              ],
+              "cost": 0,
+              "risk": "low",
+              "coverage": "partial",
+              "leafCount": 2,
+              "coveredLeaves": 1,
+              "fitness": "adequate",
+              "fitnessHint": "QuickBooks on Vendor payments",
+              "redundancy": "none",
+              "redundancyHint": null,
+              "redundancyPlace": null,
+              "redundancyApps": [],
+              "children": [
+                {
+                  "id": "inv",
+                  "name": "Invoice capture",
+                  "level": 3,
+                  "domainId": "d",
+                  "parentId": "ap",
+                  "appIds": [],
+                  "uniqueAppIds": [],
+                  "cost": 0,
+                  "risk": "none",
+                  "coverage": "gap",
+                  "leafCount": 1,
+                  "coveredLeaves": 0,
+                  "fitness": "none",
+                  "fitnessHint": null,
+                  "redundancy": "gap",
+                  "redundancyHint": null,
+                  "redundancyPlace": null,
+                  "redundancyApps": [],
+                  "children": []
+                },
+                {
+                  "id": "pay",
+                  "name": "Vendor payments",
+                  "level": 3,
+                  "domainId": "d",
+                  "parentId": "ap",
+                  "appIds": [
+                    "qb"
+                  ],
+                  "uniqueAppIds": [
+                    "qb"
+                  ],
+                  "cost": 0,
+                  "risk": "low",
+                  "coverage": "covered",
+                  "leafCount": 1,
+                  "coveredLeaves": 1,
+                  "fitness": "adequate",
+                  "fitnessHint": "QuickBooks on Vendor payments",
+                  "redundancy": "none",
+                  "redundancyHint": null,
+                  "redundancyPlace": null,
+                  "redundancyApps": [],
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "parent-app-uncovered-children",
+      "objects": [
+        {
+          "id": "d",
+          "type": "business_domain",
+          "name": "Finance"
+        },
+        {
+          "id": "ap",
+          "type": "capability",
+          "name": "AP",
+          "properties": {
+            "domain_id": "d"
+          }
+        },
+        {
+          "id": "inv",
+          "type": "capability",
+          "name": "Invoice capture",
+          "properties": {
+            "domain_id": "d",
+            "parent_id": "ap"
+          }
+        },
+        {
+          "id": "pay",
+          "type": "capability",
+          "name": "Vendor payments",
+          "properties": {
+            "domain_id": "d",
+            "parent_id": "ap"
+          }
+        },
+        {
+          "id": "sage",
+          "type": "application",
+          "name": "Sage"
+        }
+      ],
+      "edges": [
+        {
+          "type": "supported_by",
+          "from_object_id": "ap",
+          "to_object_id": "sage"
+        }
+      ],
+      "expected": [
+        {
+          "id": "d",
+          "name": "Finance",
+          "level": 1,
+          "domainId": "d",
+          "parentId": null,
+          "appIds": [],
+          "uniqueAppIds": [
+            "sage"
+          ],
+          "cost": 0,
+          "risk": "low",
+          "coverage": "partial",
+          "leafCount": 2,
+          "coveredLeaves": 0,
+          "fitness": "adequate",
+          "fitnessHint": "Sage on AP",
+          "redundancy": "none",
+          "redundancyHint": null,
+          "redundancyPlace": null,
+          "redundancyApps": [],
+          "children": [
+            {
+              "id": "ap",
+              "name": "AP",
+              "level": 2,
+              "domainId": "d",
+              "parentId": "d",
+              "appIds": [
+                "sage"
+              ],
+              "uniqueAppIds": [
+                "sage"
+              ],
+              "cost": 0,
+              "risk": "low",
+              "coverage": "partial",
+              "leafCount": 2,
+              "coveredLeaves": 0,
+              "fitness": "adequate",
+              "fitnessHint": "Sage on AP",
+              "redundancy": "none",
+              "redundancyHint": null,
+              "redundancyPlace": null,
+              "redundancyApps": [],
+              "children": [
+                {
+                  "id": "inv",
+                  "name": "Invoice capture",
+                  "level": 3,
+                  "domainId": "d",
+                  "parentId": "ap",
+                  "appIds": [],
+                  "uniqueAppIds": [],
+                  "cost": 0,
+                  "risk": "none",
+                  "coverage": "gap",
+                  "leafCount": 1,
+                  "coveredLeaves": 0,
+                  "fitness": "none",
+                  "fitnessHint": null,
+                  "redundancy": "gap",
+                  "redundancyHint": null,
+                  "redundancyPlace": null,
+                  "redundancyApps": [],
+                  "children": []
+                },
+                {
+                  "id": "pay",
+                  "name": "Vendor payments",
+                  "level": 3,
+                  "domainId": "d",
+                  "parentId": "ap",
+                  "appIds": [],
+                  "uniqueAppIds": [],
+                  "cost": 0,
+                  "risk": "none",
+                  "coverage": "gap",
+                  "leafCount": 1,
+                  "coveredLeaves": 0,
+                  "fitness": "none",
+                  "fitnessHint": null,
+                  "redundancy": "gap",
+                  "redundancyHint": null,
+                  "redundancyPlace": null,
+                  "redundancyApps": [],
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "missing-fitness-adequate",
+      "objects": [
+        {
+          "id": "d",
+          "type": "business_domain",
+          "name": "Finance"
+        },
+        {
+          "id": "cap",
+          "type": "capability",
+          "name": "Treasury",
+          "properties": {
+            "domain_id": "d"
+          }
+        },
+        {
+          "id": "a",
+          "type": "application",
+          "name": "Bank Portal"
+        }
+      ],
+      "edges": [
+        {
+          "type": "supported_by",
+          "from_object_id": "cap",
+          "to_object_id": "a"
+        }
+      ],
+      "expected": [
+        {
+          "id": "d",
+          "name": "Finance",
+          "level": 1,
+          "domainId": "d",
+          "parentId": null,
+          "appIds": [],
+          "uniqueAppIds": [
+            "a"
+          ],
+          "cost": 0,
+          "risk": "low",
+          "coverage": "covered",
+          "leafCount": 1,
+          "coveredLeaves": 1,
+          "fitness": "adequate",
+          "fitnessHint": "Bank Portal on Treasury",
+          "redundancy": "none",
+          "redundancyHint": null,
+          "redundancyPlace": null,
+          "redundancyApps": [],
+          "children": [
+            {
+              "id": "cap",
+              "name": "Treasury",
+              "level": 2,
+              "domainId": "d",
+              "parentId": "d",
+              "appIds": [
+                "a"
+              ],
+              "uniqueAppIds": [
+                "a"
+              ],
+              "cost": 0,
+              "risk": "low",
+              "coverage": "covered",
+              "leafCount": 1,
+              "coveredLeaves": 1,
+              "fitness": "adequate",
+              "fitnessHint": "Bank Portal on Treasury",
+              "redundancy": "none",
+              "redundancyHint": null,
+              "redundancyPlace": null,
+              "redundancyApps": [],
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "explicit-none-unscored",
+      "objects": [
+        {
+          "id": "d",
+          "type": "business_domain",
+          "name": "Finance"
+        },
+        {
+          "id": "cap",
+          "type": "capability",
+          "name": "Treasury",
+          "properties": {
+            "domain_id": "d"
+          }
+        },
+        {
+          "id": "a",
+          "type": "application",
+          "name": "Bank Portal"
+        }
+      ],
+      "edges": [
+        {
+          "type": "supported_by",
+          "from_object_id": "cap",
+          "to_object_id": "a",
+          "attributes": {
+            "fitness": "none"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "id": "d",
+          "name": "Finance",
+          "level": 1,
+          "domainId": "d",
+          "parentId": null,
+          "appIds": [],
+          "uniqueAppIds": [
+            "a"
+          ],
+          "cost": 0,
+          "risk": "low",
+          "coverage": "covered",
+          "leafCount": 1,
+          "coveredLeaves": 1,
+          "fitness": "none",
+          "fitnessHint": null,
+          "redundancy": "none",
+          "redundancyHint": null,
+          "redundancyPlace": null,
+          "redundancyApps": [],
+          "children": [
+            {
+              "id": "cap",
+              "name": "Treasury",
+              "level": 2,
+              "domainId": "d",
+              "parentId": "d",
+              "appIds": [
+                "a"
+              ],
+              "uniqueAppIds": [
+                "a"
+              ],
+              "cost": 0,
+              "risk": "low",
+              "coverage": "covered",
+              "leafCount": 1,
+              "coveredLeaves": 1,
+              "fitness": "none",
+              "fitnessHint": null,
+              "redundancy": "none",
+              "redundancyHint": null,
+              "redundancyPlace": null,
+              "redundancyApps": [],
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mixed-none-and-strong",
+      "objects": [
+        {
+          "id": "d",
+          "type": "business_domain",
+          "name": "Finance"
+        },
+        {
+          "id": "cap",
+          "type": "capability",
+          "name": "Treasury",
+          "properties": {
+            "domain_id": "d"
+          }
+        },
+        {
+          "id": "a",
+          "type": "application",
+          "name": "Bank Portal"
+        },
+        {
+          "id": "b",
+          "type": "application",
+          "name": "Excel"
+        }
+      ],
+      "edges": [
+        {
+          "type": "supported_by",
+          "from_object_id": "cap",
+          "to_object_id": "a",
+          "attributes": {
+            "fitness": "none"
+          }
+        },
+        {
+          "type": "supported_by",
+          "from_object_id": "cap",
+          "to_object_id": "b",
+          "attributes": {
+            "fitness": "strong"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "id": "d",
+          "name": "Finance",
+          "level": 1,
+          "domainId": "d",
+          "parentId": null,
+          "appIds": [],
+          "uniqueAppIds": [
+            "a",
+            "b"
+          ],
+          "cost": 0,
+          "risk": "low",
+          "coverage": "covered",
+          "leafCount": 1,
+          "coveredLeaves": 1,
+          "fitness": "strong",
+          "fitnessHint": "Excel on Treasury",
+          "redundancy": "two",
+          "redundancyHint": "2 apps on Treasury",
+          "redundancyPlace": "Treasury",
+          "redundancyApps": [
+            "Bank Portal",
+            "Excel"
+          ],
+          "children": [
+            {
+              "id": "cap",
+              "name": "Treasury",
+              "level": 2,
+              "domainId": "d",
+              "parentId": "d",
+              "appIds": [
+                "a",
+                "b"
+              ],
+              "uniqueAppIds": [
+                "a",
+                "b"
+              ],
+              "cost": 0,
+              "risk": "low",
+              "coverage": "covered",
+              "leafCount": 1,
+              "coveredLeaves": 1,
+              "fitness": "strong",
+              "fitnessHint": "Excel on Treasury",
+              "redundancy": "two",
+              "redundancyHint": "2 apps on Treasury",
+              "redundancyPlace": "Treasury",
+              "redundancyApps": [
+                "Bank Portal",
+                "Excel"
+              ],
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "two-single-app-activities-not-overlap",
+      "objects": [
+        {
+          "id": "d",
+          "type": "business_domain",
+          "name": "Finance"
+        },
+        {
+          "id": "ap",
+          "type": "capability",
+          "name": "AP",
+          "properties": {
+            "domain_id": "d"
+          }
+        },
+        {
+          "id": "inv",
+          "type": "capability",
+          "name": "Invoice capture",
+          "properties": {
+            "domain_id": "d",
+            "parent_id": "ap"
+          }
+        },
+        {
+          "id": "pay",
+          "type": "capability",
+          "name": "Vendor payments",
+          "properties": {
+            "domain_id": "d",
+            "parent_id": "ap"
+          }
+        },
+        {
+          "id": "qb",
+          "type": "application",
+          "name": "QuickBooks"
+        },
+        {
+          "id": "sage",
+          "type": "application",
+          "name": "Sage"
+        }
+      ],
+      "edges": [
+        {
+          "type": "supported_by",
+          "from_object_id": "inv",
+          "to_object_id": "qb",
+          "attributes": {
+            "fitness": "strong"
+          }
+        },
+        {
+          "type": "supported_by",
+          "from_object_id": "pay",
+          "to_object_id": "sage",
+          "attributes": {
+            "fitness": "strong"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "id": "d",
+          "name": "Finance",
+          "level": 1,
+          "domainId": "d",
+          "parentId": null,
+          "appIds": [],
+          "uniqueAppIds": [
+            "qb",
+            "sage"
+          ],
+          "cost": 0,
+          "risk": "low",
+          "coverage": "covered",
+          "leafCount": 2,
+          "coveredLeaves": 2,
+          "fitness": "strong",
+          "fitnessHint": "QuickBooks on Invoice capture",
+          "redundancy": "none",
+          "redundancyHint": null,
+          "redundancyPlace": null,
+          "redundancyApps": [],
+          "children": [
+            {
+              "id": "ap",
+              "name": "AP",
+              "level": 2,
+              "domainId": "d",
+              "parentId": "d",
+              "appIds": [],
+              "uniqueAppIds": [
+                "qb",
+                "sage"
+              ],
+              "cost": 0,
+              "risk": "low",
+              "coverage": "covered",
+              "leafCount": 2,
+              "coveredLeaves": 2,
+              "fitness": "strong",
+              "fitnessHint": "QuickBooks on Invoice capture",
+              "redundancy": "none",
+              "redundancyHint": null,
+              "redundancyPlace": null,
+              "redundancyApps": [],
+              "children": [
+                {
+                  "id": "inv",
+                  "name": "Invoice capture",
+                  "level": 3,
+                  "domainId": "d",
+                  "parentId": "ap",
+                  "appIds": [
+                    "qb"
+                  ],
+                  "uniqueAppIds": [
+                    "qb"
+                  ],
+                  "cost": 0,
+                  "risk": "low",
+                  "coverage": "covered",
+                  "leafCount": 1,
+                  "coveredLeaves": 1,
+                  "fitness": "strong",
+                  "fitnessHint": "QuickBooks on Invoice capture",
+                  "redundancy": "none",
+                  "redundancyHint": null,
+                  "redundancyPlace": null,
+                  "redundancyApps": [],
+                  "children": []
+                },
+                {
+                  "id": "pay",
+                  "name": "Vendor payments",
+                  "level": 3,
+                  "domainId": "d",
+                  "parentId": "ap",
+                  "appIds": [
+                    "sage"
+                  ],
+                  "uniqueAppIds": [
+                    "sage"
+                  ],
+                  "cost": 0,
+                  "risk": "low",
+                  "coverage": "covered",
+                  "leafCount": 1,
+                  "coveredLeaves": 1,
+                  "fitness": "strong",
+                  "fitnessHint": "Sage on Vendor payments",
+                  "redundancy": "none",
+                  "redundancyHint": null,
+                  "redundancyPlace": null,
+                  "redundancyApps": [],
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "childless-three-apps-many",
+      "objects": [
+        {
+          "id": "d",
+          "type": "business_domain",
+          "name": "Finance"
+        },
+        {
+          "id": "tre",
+          "type": "capability",
+          "name": "Treasury",
+          "properties": {
+            "domain_id": "d"
+          }
+        },
+        {
+          "id": "a",
+          "type": "application",
+          "name": "Bank Portal"
+        },
+        {
+          "id": "b",
+          "type": "application",
+          "name": "Kyriba"
+        },
+        {
+          "id": "c",
+          "type": "application",
+          "name": "Excel"
+        }
+      ],
+      "edges": [
+        {
+          "type": "supported_by",
+          "from_object_id": "tre",
+          "to_object_id": "a",
+          "attributes": {
+            "fitness": "adequate"
+          }
+        },
+        {
+          "type": "supported_by",
+          "from_object_id": "tre",
+          "to_object_id": "b",
+          "attributes": {
+            "fitness": "strong"
+          }
+        },
+        {
+          "type": "supported_by",
+          "from_object_id": "tre",
+          "to_object_id": "c",
+          "attributes": {
+            "fitness": "adequate"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "id": "d",
+          "name": "Finance",
+          "level": 1,
+          "domainId": "d",
+          "parentId": null,
+          "appIds": [],
+          "uniqueAppIds": [
+            "a",
+            "b",
+            "c"
+          ],
+          "cost": 0,
+          "risk": "low",
+          "coverage": "covered",
+          "leafCount": 1,
+          "coveredLeaves": 1,
+          "fitness": "adequate",
+          "fitnessHint": "Bank Portal on Treasury",
+          "redundancy": "many",
+          "redundancyHint": "3 apps on Treasury",
+          "redundancyPlace": "Treasury",
+          "redundancyApps": [
+            "Bank Portal",
+            "Kyriba",
+            "Excel"
+          ],
+          "children": [
+            {
+              "id": "tre",
+              "name": "Treasury",
+              "level": 2,
+              "domainId": "d",
+              "parentId": "d",
+              "appIds": [
+                "a",
+                "b",
+                "c"
+              ],
+              "uniqueAppIds": [
+                "a",
+                "b",
+                "c"
+              ],
+              "cost": 0,
+              "risk": "low",
+              "coverage": "covered",
+              "leafCount": 1,
+              "coveredLeaves": 1,
+              "fitness": "adequate",
+              "fitnessHint": "Bank Portal on Treasury",
+              "redundancy": "many",
+              "redundancyHint": "3 apps on Treasury",
+              "redundancyPlace": "Treasury",
+              "redundancyApps": [
+                "Bank Portal",
+                "Kyriba",
+                "Excel"
+              ],
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "parent-id-equals-domain-still-l2",
+      "objects": [
+        {
+          "id": "d",
+          "type": "business_domain",
+          "name": "Finance"
+        },
+        {
+          "id": "cap",
+          "type": "capability",
+          "name": "Treasury",
+          "properties": {
+            "domain_id": "d",
+            "parent_id": "d"
+          }
+        },
+        {
+          "id": "a",
+          "type": "application",
+          "name": "Bank Portal"
+        }
+      ],
+      "edges": [
+        {
+          "type": "supported_by",
+          "from_object_id": "cap",
+          "to_object_id": "a",
+          "attributes": {
+            "fitness": "adequate"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "id": "d",
+          "name": "Finance",
+          "level": 1,
+          "domainId": "d",
+          "parentId": null,
+          "appIds": [],
+          "uniqueAppIds": [
+            "a"
+          ],
+          "cost": 0,
+          "risk": "low",
+          "coverage": "covered",
+          "leafCount": 1,
+          "coveredLeaves": 1,
+          "fitness": "adequate",
+          "fitnessHint": "Bank Portal on Treasury",
+          "redundancy": "none",
+          "redundancyHint": null,
+          "redundancyPlace": null,
+          "redundancyApps": [],
+          "children": [
+            {
+              "id": "cap",
+              "name": "Treasury",
+              "level": 2,
+              "domainId": "d",
+              "parentId": "d",
+              "appIds": [
+                "a"
+              ],
+              "uniqueAppIds": [
+                "a"
+              ],
+              "cost": 0,
+              "risk": "low",
+              "coverage": "covered",
+              "leafCount": 1,
+              "coveredLeaves": 1,
+              "fitness": "adequate",
+              "fitnessHint": "Bank Portal on Treasury",
+              "redundancy": "none",
+              "redundancyHint": null,
+              "redundancyPlace": null,
+              "redundancyApps": [],
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

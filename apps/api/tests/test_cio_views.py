@@ -63,7 +63,7 @@ def test_ask_lookups_return_the_same_numbers_as_the_web():
 
 def test_lookups_are_in_the_ai_first_tool_set():
     names = [t["name"] for t in tool_specs(include_ai=False)]
-    assert "idle_licences" in names and "overlapping_tools" in names
+    assert "idle_licences" in names and "overlapping_tools" in names and "capability_health" in names
     assert build_gemini_tools(tool_specs())
-    assert "idle_licences" in SYSTEM and "overlapping_tools" in SYSTEM
+    assert "idle_licences" in SYSTEM and "overlapping_tools" in SYSTEM and "capability_health" in SYSTEM
     assert len({t.name for t in TOOLS}) == len(TOOLS)
