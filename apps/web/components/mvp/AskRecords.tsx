@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, ChevronRight, X } from "lucide-react";
 import type { AskAnswer } from "@/lib/ask/deterministic";
 import { chipOptions, chipValue, factsForIds, FILTER_KEYS, FILTER_LABEL, filterFacts, filterLine, OP_KEYS, OP_LABEL, OPS, opOf, regionName, HOSTING, withFilter, type FilterKey, type FilterOp, type RecordFacts, type RecordFilters } from "@/lib/ask/record-filter";
@@ -90,7 +91,7 @@ export function MetaChip({ text, testId }: { text: string; testId?: string }) {
 /** Footer follow-up pill (max two per answer). */
 export function FollowPill({ label, onClick, href }: { label: string; onClick?: () => void; href?: string }) {
   const cls = "rounded-full border border-[#e6e8ee] bg-white px-2.5 py-0.5 text-[12px] text-[#3c4254] hover:border-[#c9c6f5]";
-  return href ? <a href={href} className={cls}>{label}</a> : <button type="button" onClick={onClick} className={cls}>{label}</button>;
+  return href ? <Link href={href} className={cls}>{label}</Link> : <button type="button" onClick={onClick} className={cls}>{label}</button>;
 }
 
 export function AskRecordsBlock({
@@ -167,7 +168,7 @@ export function AskRecordsBlock({
             {lean.names.map((row, index) => (
               <span key={row.id}>
                 {index > 0 && ", "}
-                <a href={rowHref(row)} className="text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-[3px] hover:decoration-[#4c3fd1]">{row.name}</a>
+                <Link href={rowHref(row)} className="text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-[3px] hover:decoration-[#4c3fd1]">{row.name}</Link>
               </span>
             ))}
           </>
@@ -295,7 +296,7 @@ export function AskRecordsBlock({
               return (
                 <tr key={row.id} className={`cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb] ${animate ? "ask-row-in" : ""}`} style={animate ? { animationDelay: `${300 + index * 80}ms` } : undefined} onClick={() => onOpen(row)}>
                   <td className="px-2 py-2.5 font-medium">
-                    <a href={rowHref(row)} onClick={(event) => event.stopPropagation()} className="text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-2 hover:decoration-[#4c3fd1]">{row.name}</a>
+                    <Link href={rowHref(row)} onClick={(event) => event.stopPropagation()} className="text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-2 hover:decoration-[#4c3fd1]">{row.name}</Link>
                   </td>
                   <td className="px-2 py-2.5">{row.typeLabel}</td>
                   <td className="px-2 py-2.5">{owner || <span className="rounded bg-[#fff7ed] px-1.5 py-0.5 text-[11px] text-[#9a3412]">No owner</span>}</td>

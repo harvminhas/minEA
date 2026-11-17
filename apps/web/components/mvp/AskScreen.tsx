@@ -1134,7 +1134,7 @@ export function LeanAnswer({ lean, basePath, footerExtra, onAdd, onPick, items =
           <tbody>
             {items.slice(0, 5).map((row) => (
               <tr key={row.id} className="border-b border-[#f3f4f8]">
-                <td className="px-2 py-2"><a href={rowHref(row)} className="font-medium text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-2">{row.name}</a></td>
+                <td className="px-2 py-2"><Link href={rowHref(row)} className="font-medium text-[#4c3fd1] underline decoration-[#c9c6f5] underline-offset-2">{row.name}</Link></td>
                 <td className="px-2 py-2">{row.typeLabel}</td>
                 <td className="px-2 py-2">{[row.ownerTeam, row.ownerPerson].filter(Boolean).join(" · ") || <span className="rounded bg-[#fff7ed] px-1.5 py-0.5 text-[11px] text-[#9a3412]">No owner</span>}</td>
               </tr>
