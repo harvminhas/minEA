@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { MinEAObject, Relationship } from "@minea/types";
 import type { CatalogRow } from "@/lib/model-catalog";
 import {
@@ -9,6 +9,7 @@ import {
   heatClass,
   heatMeta,
   moneyLabel,
+  tilesInDomain,
   type HeatDepth,
   type HeatMetric,
   type TreeNode,
@@ -104,6 +105,7 @@ export function CapabilityHeatMap({
   edges,
   rows,
   onOpen,
+  focusDomainId,
   initialDepth = "l2",
   initialMetric = "coverage",
 }: {
@@ -111,6 +113,7 @@ export function CapabilityHeatMap({
   edges: readonly Relationship[];
   rows: readonly CatalogRow[];
   onOpen?: (id: string) => void;
+  focusDomainId?: string | null;
   initialDepth?: HeatDepth;
   initialMetric?: HeatMetric;
 }) {
@@ -120,7 +123,9 @@ export function CapabilityHeatMap({
     () => buildCapabilityTree(objects, edges, rows),
     [objects, edges, rows],
   );
-  const tiles = flatten(tree, depth);
+  const allTiles = flatten(tree, depth);
+  const focusedTiles = focusDomainId ? tilesInDomain(allTiles, focusDomainId) : allTiles;
+  const tiles = focusedTiles.length ? focusedTiles : allTiles;
   const appIds = new Set(objects.filter((o) => o.type === "application" || o.type === "cloud_service").map((o) => o.id));
   const linked = new Set(
     edges.filter((e) => e.type === "supported_by" && appIds.has(e.to_object_id)).map((e) => e.to_object_id),
@@ -128,6 +133,13 @@ export function CapabilityHeatMap({
   const leaves = flatten(tree, "l3");
   const gaps = leaves.filter((n) => n.uniqueAppIds.length === 0).length;
   const spend = rows.filter((row) => linked.has(row.id)).reduce((sum, row) => sum + (row.annualCostNumber ?? 0), 0);
+
+  const tileKey = tiles.map((node) => node.id).join("|");
+  useEffect(() => {
+    if (!focusDomainId || tiles.length === 0) return;
+    const targetId = tiles.some((node) => node.id === focusDomainId) ? focusDomainId : tiles[0]!.id;
+    document.getElementById(`heat-node-${targetId}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [focusDomainId, depth, tileKey, tiles]);
 
   return (
     <div data-testid="capability-heat-map">
@@ -158,7 +170,7 @@ export function CapabilityHeatMap({
       </div>
       <div className={cn("grid gap-2.5", depth === "l1" ? "grid-cols-2 xl:grid-cols-4" : depth === "l3" ? "grid-cols-2 md:grid-cols-3 xl:grid-cols-4" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3")}>
         {tiles.map((node) => (
-          <Tile key={node.id} node={node} metric={metric} depth={depth} onOpen={onOpen} />
+          <Tile key={node.id} node={node} metric={metric} depth={depth} onOpen={onOpen} focused={Boolean(focusDomainId) && (node.id === focusDomainId || node.domainId === focusDomainId)} />
         ))}
       </div>
       <p className="mt-4 max-w-[820px] text-[12px] text-[#8b90a0]">{FOOTNOTE[metric]}</p>
@@ -196,12 +208,13 @@ function Tabs<T extends string>({ label, value, options, onChange, testIdPrefix 
   );
 }
 
-function Tile({ node, metric, depth, onOpen }: { node: TreeNode; metric: HeatMetric; depth: HeatDepth; onOpen?: (id: string) => void }) {
+function Tile({ node, metric, depth, onOpen, focused }: { node: TreeNode; metric: HeatMetric; depth: HeatDepth; onOpen?: (id: string) => void; focused?: boolean }) {
   return (
     <button
       type="button"
+      id={`heat-node-${node.id}`}
       onClick={() => node.id !== "no-domain" && onOpen?.(node.id)}
-      className={cn("flex min-h-[88px] flex-col rounded-xl border p-3 text-left", TILE[heatClass(node, metric)])}
+      className={cn("flex min-h-[88px] flex-col rounded-xl border p-3 text-left", TILE[heatClass(node, metric)], focused && "ring-2 ring-[#5b4ce6] ring-offset-2")}
     >
       <div className="text-[13.5px] font-semibold">{node.name}</div>
       {node.level > 1 && node.domainId && depth !== "l1" && (

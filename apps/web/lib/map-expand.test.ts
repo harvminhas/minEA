@@ -4,8 +4,8 @@ import type { MinEAObject, Relationship } from "@minea/types";
 import type { Edge, Node } from "reactflow";
 import { expandSystemGraph, expansionFitKey, mapNeighbors, nodeObjectId, objectOpenHref, PER_NODE_CAP, initialExpanded, savableLayout, savedExpanded, savedPositions, TOTAL_CAP } from "./map-expand.ts";
 
-const obj = (id: string, type: string, name: string) =>
-  ({ id, type, name, properties: {}, workspace_id: "w", org_id: "o", updated_at: "2026-10-21T00:00:00Z" }) as unknown as MinEAObject;
+const obj = (id: string, type: string, name: string, properties: Record<string, unknown> = {}) =>
+  ({ id, type, name, properties, workspace_id: "w", org_id: "o", updated_at: "2026-10-21T00:00:00Z" }) as unknown as MinEAObject;
 let n = 0;
 const rel = (type: string, from: MinEAObject, to: MinEAObject) =>
   ({ id: `r${++n}`, type, from_object_id: from.id, from_type: from.type, to_object_id: to.id, to_type: to.type, attributes: {} }) as unknown as Relationship;
@@ -134,6 +134,11 @@ describe("map expand", () => {
     assert.equal(objectOpenHref("/b", crm), "/b/model/applications/C");
     assert.equal(objectOpenHref("/b", api), "/b/integration/apis?open=X");
     assert.equal(objectOpenHref("/b", obj("V", "external_party", "Acme")), "/b/model/vendors/V");
+    assert.equal(objectOpenHref("/b", obj("L", "location", "HQ")), "/b/model/locations/L");
+    assert.equal(objectOpenHref("/b", obj("AP", "capability", "Accounts Payable", { domain_id: "F" })), "/b/model/capabilities/AP");
+    const activity = obj("INV", "capability", "Invoice capture", { domain_id: "F", parent_id: "AP" });
+    assert.equal(objectOpenHref("/b", activity, [obj("AP", "capability", "Accounts Payable", { domain_id: "F" }), activity]), "/b/model/capabilities/AP?activity=INV");
+    assert.equal(objectOpenHref("/b", obj("F", "business_domain", "Finance")), "/b/model/capabilities?domain=F");
     assert.equal(objectOpenHref("/b", debt), null);
   });
 });

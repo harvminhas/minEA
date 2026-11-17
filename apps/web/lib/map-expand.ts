@@ -2,9 +2,7 @@ import { MarkerType, type Edge, type Node } from "reactflow";
 import type { MinEAObject, Relationship } from "@minea/types";
 import { relationshipPhrase } from "@/lib/relationship-display";
 import { isTechDebtRelationship } from "@/lib/relationship-display";
-import { connectorHref } from "@/lib/connected-via";
-import { rowFromObject } from "@/lib/model-catalog";
-import { modelItemPath, sectionForKind } from "@/lib/mvp-paths";
+import { recordOpenPath } from "@/lib/record-href";
 
 /** Revealed per expanded node before "+N more", and across the whole map. */
 export const PER_NODE_CAP = 5;
@@ -256,15 +254,8 @@ export function savableLayout(layout: Record<string, unknown>, expanded: readonl
 }
 
 /** Where "Open" goes for a record on the map, or null when it has no page of its own. */
-export function objectOpenHref(basePath: string, object: MinEAObject): string | null {
-  const row = rowFromObject(object);
-  if (row) return modelItemPath(basePath, sectionForKind(row.kind), object.id);
-  const section = ({ agent: "agents", ai_model: "ai-models", location: "locations", external_party: "vendors", capability: "capabilities" } as const)[object.type as string];
-  if (section) return modelItemPath(basePath, section, object.id);
-  if (["api", "event", "integration_flow", "tool", "data_store", "data_object"].includes(object.type)) {
-    return connectorHref(basePath, object.type, object.id);
-  }
-  return null;
+export function objectOpenHref(basePath: string, object: MinEAObject, objects: readonly MinEAObject[] = []): string | null {
+  return recordOpenPath(basePath, { id: object.id, object }, objects.length ? objects : [object]);
 }
 
 /** Changes only when the expanded set changes (not on drags or order), so the full map re-fits then. */

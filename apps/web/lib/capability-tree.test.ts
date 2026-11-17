@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { buildCapabilityTree, flatten, heatClass, heatMeta, isActivity } from "./capability-tree";
+import { buildCapabilityTree, flatten, heatClass, heatMeta, isActivity, tilesInDomain } from "./capability-tree";
 import type { CatalogRow } from "./model-catalog";
 
 const o = (id: string, type: string, name: string, properties: Record<string, unknown> = {}) => ({ id, type, name, properties });
@@ -248,4 +248,19 @@ test("the shared fixture matches buildCapabilityTree (Python parity)", () => {
   for (const item of fixture.cases) {
     assert.deepEqual(buildCapabilityTree(item.objects, item.edges), item.expected, item.id);
   }
+});
+
+test("tilesInDomain keeps a domain and the capabilities or activities under it", () => {
+  const finance = o("fin", "business_domain", "Finance");
+  const people = o("peo", "business_domain", "People");
+  const ap = o("ap", "capability", "Accounts Payable", { domain_id: "fin" });
+  const inv = o("inv", "capability", "Invoice capture", { domain_id: "fin", parent_id: "ap" });
+  const hr = o("hr", "capability", "HR", { domain_id: "peo" });
+  const tree = buildCapabilityTree([finance, people, ap, inv, hr], [], []);
+  const l1 = tilesInDomain(flatten(tree, "l1"), "fin");
+  assert.deepEqual(l1.map((n) => n.id), ["fin"]);
+  const l2 = tilesInDomain(flatten(tree, "l2"), "fin");
+  assert.deepEqual(l2.map((n) => n.id), ["ap"]);
+  const l3 = tilesInDomain(flatten(tree, "l3"), "fin");
+  assert.deepEqual(l3.map((n) => n.id), ["inv"]);
 });

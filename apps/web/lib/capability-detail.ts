@@ -33,6 +33,12 @@ export function capabilityMapPath(basePath: string): string {
   return modelPath(basePath, "capabilities");
 }
 
+/** Heat map focused on one domain. The synthetic "No domain" group has no id to open. */
+export function capabilityDomainMapPath(basePath: string, domainId: string): string {
+  if (!domainId || domainId === "no-domain") return capabilityMapPath(basePath);
+  return `${capabilityMapPath(basePath)}?domain=${encodeURIComponent(domainId)}`;
+}
+
 export function capabilityOpenPath(
   basePath: string,
   id: string,

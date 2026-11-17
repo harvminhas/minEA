@@ -15,6 +15,7 @@ import { impactOf, type ImpactEdge, type ImpactHit, type ImpactNode } from "@/li
 import { OWN_LOGIN_LABEL, SIGN_IN_EDGE, isOwnLogin, isSignInCandidate } from "@/lib/sign-in";
 import { moneyLabel, vendorRollup, type CatalogMissing, type CatalogRow } from "@/lib/model-catalog";
 import { modelItemPath, modelPath, reportPath, sectionForKind } from "@/lib/mvp-paths";
+import { recordOpenPath } from "@/lib/record-href";
 import { aiLandscape, dataAccess, type AiLandscape, type LandscapeEdge, type LandscapeFlag, type LandscapeObject } from "@/lib/ai/landscape";
 import { readRuntimeInfra } from "@/lib/infra/read";
 import { agingSummary } from "@/lib/infra/status";
@@ -1379,7 +1380,7 @@ function joinNames(names: string[]): string {
 }
 
 function itemHref(basePath: string, row: CatalogRow): string {
-  return modelItemPath(basePath, sectionForKind(row.kind), row.id);
+  return recordOpenPath(basePath, row) ?? modelItemPath(basePath, sectionForKind(row.kind), row.id);
 }
 
 function empty(handler: AskAnswer["handler"], answerText: string, today: string): AskAnswer {

@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { buildCapabilityTree } from "./capability-tree";
 import {
   capabilityDetailPath,
+  capabilityDomainMapPath,
   capabilityOpenPath,
   coverageSummary,
   fitnessSummary,
@@ -31,6 +32,11 @@ test("capability detail path includes an activity query when highlighting an act
     capabilityDetailPath("/ws", "ap", { tab: "details", details: "inv", activity: "inv" }),
     "/ws/model/capabilities/ap?activity=inv&tab=details&details=inv"
   );
+});
+
+test("a domain opens the capability map focused on that domain", () => {
+  assert.equal(capabilityDomainMapPath("/ws", "fin"), "/ws/model/capabilities?domain=fin");
+  assert.equal(capabilityDomainMapPath("/ws", "no-domain"), "/ws/model/capabilities");
 });
 
 test("opening an activity goes to its parent capability with ?activity=", () => {

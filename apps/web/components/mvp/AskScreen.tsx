@@ -9,6 +9,7 @@ import { addApi, aiApi, billingApi, objectsApi, peopleDirectoryApi } from "@/lib
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import { askPath, modelItemPath, modelPath, reportPath } from "@/lib/mvp-paths";
+import { recordOpenPath } from "@/lib/record-href";
 import { ASK_BAR_ID } from "@/components/nav/ask-shortcut";
 import { catalogStats, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
@@ -58,6 +59,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const { getToken } = useAuth();
   const catalog = useModelCatalog();
   const rows = catalog.data?.rows ?? [];
+  const objects = catalog.data?.objects ?? [];
   const stats = catalogStats(rows);
   // The question on screen is owned here, not read live from the URL. A new question sets it at once
   // and the URL follows (history.pushState, no server round trip). A URL that still reports the
@@ -522,7 +524,8 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
       {earlier.length > 0 && (
         <ConversationThread turns={earlier} hrefFor={(id) => {
           const row = rows.find((item) => item.id === id);
-          return row ? recordHref(basePath, row) : null;
+          const object = objects.find((item) => item.id === id);
+          return recordHref(basePath, row ?? { id, object }, objects);
         }} onAsk={submit} onNew={newConversation} />
       )}
       {visibleReceipt ? (
@@ -568,7 +571,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
               </div>
             )}
             {shownLean && !answer.records && (
-              <LeanAnswer lean={shownLean} basePath={basePath} footerExtra={smallActions} onAdd={(name) => submit(prefixAdd(name))} onPick={(filters) => setEdited({ question, filters })} items={fallbackItems} rowHref={(row) => recordHref(basePath, row)} steps={answer.steps} timing={answer.timingLine} timingDetails={answer.timingDetails} />
+              <LeanAnswer lean={shownLean} basePath={basePath} footerExtra={smallActions} onAdd={(name) => submit(prefixAdd(name))} onPick={(filters) => setEdited({ question, filters })} items={fallbackItems} rowHref={(row) => recordHref(basePath, row, objects) ?? "#"} steps={answer.steps} timing={answer.timingLine} timingDetails={answer.timingDetails} />
             )}
             {!leanCard && <p className="text-[17px] leading-7 text-[#1c2230]">
               {answer.handler === "clarify" ? (
@@ -611,11 +614,12 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             {!revealing && answer.table && !answer.records && (
               <AskRichTable
                 table={answer.table}
-                hrefFor={(target) => richRowHref(basePath, answer.table!.kind, target, rows)}
+                hrefFor={(target) => richRowHref(basePath, answer.table!.kind, target, rows, objects)}
                 onOpen={(href) => router.push(href)}
                 itemHref={(id) => {
                   const row = rows.find((item) => item.id === id);
-                  return row ? recordHref(basePath, row) : null;
+                  const object = objects.find((item) => item.id === id);
+                  return recordHref(basePath, row ?? { id, object }, objects);
                 }}
               />
             )}
@@ -629,8 +633,8 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                 footerExtra={smallActions}
                 facts={facts}
                 onFilters={(filters) => setEdited({ question, filters })}
-                onOpen={(row) => router.push(recordHref(basePath, row))}
-                rowHref={(row) => recordHref(basePath, row)}
+                onOpen={(row) => { const href = recordHref(basePath, row, objects); if (href) router.push(href); }}
+                rowHref={(row) => recordHref(basePath, row, objects) ?? "#"}
               />
             )}
             {!revealing && !leanCard && !answer.table && !answer.records && tableCitations(answer).length > 0 && (
@@ -661,7 +665,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
                           )}
                           <tr
                             className="cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]"
-                            onClick={() => router.push(recordHref(basePath, item.row))}
+                            onClick={() => { const href = recordHref(basePath, item.row, objects); if (href) router.push(href); }}
                           >
                             <td className="px-2 py-2.5 font-medium">
                               <button
@@ -721,6 +725,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
           nodes={impact.nodes}
           edges={impact.edges}
           rows={rows}
+          objects={objects}
           basePath={basePath}
           onOpen={setPreviewId}
           onClose={() => setPreviewId(null)}
@@ -818,6 +823,7 @@ function RecordPreview({
   nodes,
   edges,
   rows,
+  objects = [],
   basePath,
   onOpen,
   onClose,
@@ -826,6 +832,7 @@ function RecordPreview({
   nodes: ImpactNode[];
   edges: ImpactEdge[];
   rows: CatalogRow[];
+  objects?: { id: string; type: string; properties?: Record<string, unknown> | null }[];
   basePath: string;
   onOpen: (id: string) => void;
   onClose: () => void;
@@ -906,8 +913,8 @@ function RecordPreview({
             ))}
           </ul>
         )}
-        {row && (
-          <Link href={recordHref(basePath, row)} className="mt-5 inline-block text-[13px] font-medium text-[#5b4ce6]">
+        {row && recordHref(basePath, row, objects) && (
+          <Link href={recordHref(basePath, row, objects)!} className="mt-5 inline-block text-[13px] font-medium text-[#5b4ce6]">
             Open full page
           </Link>
         )}
@@ -1183,17 +1190,14 @@ function criticalityCell(item: AskCitation, focus: AskAnswer["focusBlank"]) {
 }
 
 /** Rich table rows: a vendor opens its vendor record; anything else opens the item's record. */
-function richRowHref(basePath: string, kind: string, target: { recordId: string | null; label: string }, rows: CatalogRow[]): string | null {
+function richRowHref(basePath: string, kind: string, target: { recordId: string | null; label: string }, rows: CatalogRow[], objects: Parameters<typeof recordHref>[2] = []): string | null {
   if (kind === "vendors") return modelItemPath(basePath, "vendors", target.label);
   const row = target.recordId ? rows.find((item) => item.id === target.recordId) : undefined;
-  return row ? recordHref(basePath, row) : null;
+  return row ? recordHref(basePath, row, objects) : null;
 }
 
-function recordHref(basePath: string, row: { id: string; kind: string; object?: { type?: string } }): string {
-  if (row.object?.type === "agent") return modelItemPath(basePath, "agents", row.id);
-  if (row.object?.type === "ai_model") return modelItemPath(basePath, "ai-models", row.id);
-  if (row.object?.type === "tool") return modelItemPath(basePath, "infrastructure", row.id);
-  return modelItemPath(basePath, row.kind === "application" ? "applications" : row.kind === "platform" ? "platforms" : "servers", row.id);
+function recordHref(basePath: string, row: { id: string; kind?: string; object?: { type?: string; properties?: Record<string, unknown> | null } }, objects: { id: string; type: string; properties?: Record<string, unknown> | null }[] = []): string | null {
+  return recordOpenPath(basePath, row, objects);
 }
 
 function AnswerText({ text, nodes, onOpen }: { text: string; nodes: ImpactNode[]; onOpen: (id: string) => void }) {

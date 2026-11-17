@@ -5,6 +5,7 @@ import rules from "../../../packages/types/src/relationship-rules.json";
 import { REGISTRY } from "./fields/registry.ts";
 import {
   NO_CAPABILITY,
+  capabilityDomainFrom,
   appCapabilityIndex,
   capabilityFilterOptions,
   capabilityRows,
@@ -130,4 +131,11 @@ test("empty state offers an AI interview and add-one-yourself; nothing saves bef
   assert.match(review, /e.key === "Escape"/);
   // Use this map accepts kept suggestions even if a domain was never opened.
   assert.match(review, /onAccept/);
+});
+
+test("capabilityDomainFrom reads ?domain= and ignores the empty No domain id", () => {
+  assert.equal(capabilityDomainFrom("?domain=fin"), "fin");
+  assert.equal(capabilityDomainFrom("?view=list&domain=fin"), "fin");
+  assert.equal(capabilityDomainFrom("?domain=no-domain"), null);
+  assert.equal(capabilityDomainFrom(""), null);
 });

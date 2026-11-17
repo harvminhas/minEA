@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import type { SuggestedDomain } from "@minea/types";
 import { cn } from "@/lib/utils";
 import { useTenancy } from "@/lib/tenancy";
 import { useAuth } from "@/lib/auth-context";
-import { capabilityOpenPath } from "@/lib/capability-detail";
+import { capabilityMapPath, capabilityOpenPath } from "@/lib/capability-detail";
 import { capabilityMapApi, objectsApi } from "@/lib/api-client";
 import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
 import { usePermissions } from "@/lib/use-permissions";
-import { capabilityViewFrom, type CapabilityView } from "@/lib/capabilities";
+import { capabilityDomainFrom, capabilityViewFrom, type CapabilityView } from "@/lib/capabilities";
 import {
   NO_DOMAIN,
   capabilityRows,
@@ -30,6 +30,7 @@ type Mode = "none" | "add" | "interview" | "review" | "mapping" | "edit";
 
 export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
   const { canCreate } = usePermissions();
@@ -50,7 +51,15 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => setView(capabilityViewFrom(window.location.search)), []);
+  const focusDomainId = capabilityDomainFrom(searchParams.toString());
+  const focusDomainName = focusDomainId ? objects.find((item) => item.id === focusDomainId)?.name ?? null : null;
   const openCapability = (id: string) => router.push(capabilityOpenPath(basePath, id, objects));
+  const clearDomainFocus = () => {
+    const params = new URLSearchParams();
+    if (view === "list") params.set("view", "list");
+    const query = params.toString();
+    router.push(query ? `${capabilityMapPath(basePath)}?${query}` : capabilityMapPath(basePath));
+  };
   const refreshMap = () => {
     void queryClient.invalidateQueries({ queryKey: ["capability-map", orgSlug, workspaceSlug] });
     void queryClient.invalidateQueries({ queryKey: ["capability-map-status", orgSlug, workspaceSlug] });
@@ -125,7 +134,12 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
   };
 
   const empty = !catalog.isLoading && rows.length === 0;
-  const shownGroups = gapsOnly ? groups.map((group) => ({ ...group, rows: group.rows.filter((row) => row.gap) })).filter((group) => group.rows.length) : groups;
+  const domainGroups = focusDomainName ? groups.filter((group) => group.domain === focusDomainName) : groups;
+  const shownGroups = gapsOnly ? domainGroups.map((group) => ({ ...group, rows: group.rows.filter((row) => row.gap) })).filter((group) => group.rows.length) : domainGroups;
+  useEffect(() => {
+    if (!focusDomainName || view !== "list") return;
+    document.getElementById("capability-domain-focus-group")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [focusDomainName, view]);
   const flat = groups.length === 1 && groups[0]!.domain === NO_DOMAIN;
   const focused = mode === "review" || mode === "mapping" || mode === "edit" || mode === "interview";
   // Empty-map interview lives in mode "none"; hide the page-top error so it only appears under the form.
@@ -236,9 +250,18 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
         <CapabilityStructureEditor objects={objects} onBack={() => setMode("none")} />
       )}
 
+      {focusDomainName && rows.length > 0 && !focused && mode !== "add" && (
+        <p className="mb-3 text-[13px] text-[#6b7289]" data-testid="capability-domain-focus">
+          Showing {focusDomainName}{" "}
+          <button type="button" onClick={clearDomainFocus} className="font-medium text-[#5b4ce6]">
+            Show all
+          </button>
+        </p>
+      )}
+
       {rows.length > 0 && view === "map" && !focused && mode !== "add" && (
         <div data-testid="capability-map-view">
-          <CapabilityHeatMap objects={objects} edges={edges} rows={catalogRows} onOpen={openCapability} />
+          <CapabilityHeatMap objects={objects} edges={edges} rows={catalogRows} onOpen={openCapability} focusDomainId={focusDomainId} />
         </div>
       )}
 
@@ -279,7 +302,7 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
                 }
               }
               return (
-                <tbody key={group.domain} data-testid="capability-group">
+                <tbody key={group.domain} id={focusDomainName === group.domain ? "capability-domain-focus-group" : undefined} data-testid="capability-group">
                   {!flat && (
                     <tr>
                       <td colSpan={3} className="px-2 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8b90a0]">

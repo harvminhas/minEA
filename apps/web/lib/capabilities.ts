@@ -215,3 +215,9 @@ export type CapabilityView = "map" | "list";
 export function capabilityViewFrom(search: string): CapabilityView {
   return new URLSearchParams(search).get("view") === "list" ? "list" : "map";
 }
+
+/** Domain id from ?domain= on the capability map. */
+export function capabilityDomainFrom(search: string): string | null {
+  const id = new URLSearchParams(search).get("domain")?.trim() ?? "";
+  return !id || id === "no-domain" ? null : id;
+}

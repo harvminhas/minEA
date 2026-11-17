@@ -274,6 +274,11 @@ export function buildCapabilityTree(
   return trees.map((node) => finish(node, appById, linksByFrom));
 }
 
+/** Tiles that belong to a domain: the domain itself, or a capability/activity under it. */
+export function tilesInDomain(tiles: readonly TreeNode[], domainId: string): TreeNode[] {
+  return tiles.filter((node) => node.id === domainId || node.domainId === domainId);
+}
+
 export function flatten(nodes: readonly TreeNode[], depth: HeatDepth): TreeNode[] {
   if (depth === "l1") return [...nodes];
   if (depth === "l2") return nodes.flatMap((d) => d.children);
