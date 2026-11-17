@@ -420,8 +420,10 @@ def test_empty_reply_retry_turns_lookups_off(engine):
     assert models.configs[-1].response_mime_type == "application/json" and not models.configs[-1].tools
 
 
-def test_prompt_asks_for_one_direct_reply_and_headline_first():
-    assert "Answer in ONE reply, straight from the workspace" in loop.SYSTEM
+def test_prompt_asks_for_tools_on_lists_and_headline_first():
+    assert "You can call lookups on the first turn" in loop.SYSTEM
+    assert "For a full list or a count of any kind" in loop.SYSTEM
+    assert "Do not call a lookup to re-read what the workspace shows" not in loop.SYSTEM
     assert 'Write "headline" as the FIRST key' in loop.SYSTEM
     assert "Use aggregate for any count" not in loop.SYSTEM
 
@@ -618,16 +620,14 @@ def test_not_json_after_repair_falls_back_without_a_reask_and_keeps_a_redacted_s
     assert len(sample) <= 300 and "<email>" in sample and "<n>" in sample and "ops@acme.com" not in sample and "5,000" not in sample
 
 
-def test_first_call_is_json_mode_without_tools_and_lookups_only_on_need_lookup(engine):
-    ask = {"headline": "x", "answer_markdown": "x", "need_lookup": True, "lookup_reason": "impact chain"}
-    models = engine([_text_response(ask), _call_response("aggregate", {"filters": {"renewal_within_days": 90}}), _text_response(GOOD)])
+def test_first_call_offers_tools_and_the_answer_after_lookups_is_json(engine):
+    models = engine([_call_response("aggregate", {"filters": {"renewal_within_days": 90}}), _text_response(GOOD)])
     result = asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
     assert result["source"] == "llm"
-    first, second, third = models.configs
-    assert first.response_mime_type == "application/json" and first.response_schema is not None and not first.tools
-    assert second.tools and not second.response_mime_type
-    assert third.response_mime_type == "application/json" and not third.tools
-    assert [c["why"] for c in result["timing"]["calls"]] == ["first", "need_lookup: impact chain", "tool follow-up: aggregate"]
+    first, second = models.configs
+    assert first.tools and not first.response_mime_type
+    assert second.response_mime_type == "application/json" and second.response_schema is not None and not second.tools
+    assert [c["why"] for c in result["timing"]["calls"]] == ["first", "tool follow-up: aggregate"]
 
 
 def test_schema_puts_headline_first():
@@ -641,10 +641,11 @@ def test_thinking_is_off_for_every_flash_name(name, budget):
 
 
 def test_json_call_has_thinking_off_and_a_tight_cap(engine):
-    models = engine([_text_response(GOOD)])
+    models = engine([_call_response("aggregate", {"filters": {"renewal_within_days": 90}}), _text_response(GOOD)])
     asyncio.run(loop.answer_with_model(None, CTX, "What renews in the next 90 days?"))
-    cfg = models.configs[0]
-    assert cfg.thinking_config.thinking_budget == 0 and cfg.max_output_tokens == 1024 and cfg.response_mime_type == "application/json"
+    first, answer = models.configs
+    assert first.thinking_config.thinking_budget == 0 and first.max_output_tokens == 1024 and first.tools
+    assert answer.thinking_config.thinking_budget == 0 and answer.max_output_tokens == 1024 and answer.response_mime_type == "application/json"
 
 
 def test_schema_is_slim_and_prompt_has_no_long_json_example():

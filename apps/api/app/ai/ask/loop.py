@@ -23,7 +23,7 @@ from app.ai.ask.context import build_context, log_size
 from app.ai.ask.timing import AskTiming
 from app.ai.ask.grounding import graph_numbers, harvest, is_grounded, ungrounded
 from app.ai.ask.steps import checking_step, estate_step, same_step, step, tool_step
-from app.ai.ask.tools import ToolBag, coverage_brief, is_coverage_question, run_tool, tool_specs
+from app.ai.ask.tools import ToolBag, run_tool, tool_specs
 from app.ai.gemini_client import build_gemini_tools, get_client, is_configured, model_name, thinking_config as model_thinking_config
 from app.services.tenancy import TenancyContext
 
@@ -72,21 +72,21 @@ def _load_strategy() -> dict:
 _STRATEGY = _load_strategy()
 
 SYSTEM = """You are BuboMap Ask. You answer questions about ONE company's IT estate.
-The user message contains the WHOLE workspace (every item of every kind, its fields, relationships, teams and people), then the question.
-Answer from that workspace. You know nothing else about this company.
-Answer in ONE reply, straight from the workspace: it already has every item, field, owner, vendor, cost and relationship. Do not call a lookup to re-read what the workspace shows.
-Reply with the JSON answer (the response schema). If you truly cannot answer without a lookup, set "need_lookup": true and "lookup_reason", and you will be given the lookups next. Call a lookup only when you truly need it: tracing what depends on what (impact_of), AI risk and data access (ai_landscape), idle licences (idle_licences), overlapping tools (overlapping_tools), capability or domain health including coverage and who has no apps (capability_health), or a total too large to add up reliably (aggregate).
+The user message contains the workspace (items of every kind, their fields, relationships, teams and people), then the question.
+You know nothing else about this company.
 Never invent applications, capabilities, infrastructure, names, numbers, dates, owners, vendors, or relationships.
+You can call lookups on the first turn. For a full list or a count of any kind (applications, capabilities, activities, domains, APIs, agents, and so on), call a tool and use its total and ids. Do not count or list those from the workspace text: those totals are not in the workspace header, and a number you count yourself will fail the check.
+After lookups you will be asked for the JSON answer. If the question is a simple fact already visible and is not a list or count, you may answer in the JSON schema now. If you already replied in JSON and still need a lookup, set "need_lookup": true and "lookup_reason".
 Vendors are already resolved to one name each; "product" names the product a vendor sells (MuleSoft is a Salesforce product). Spelling in the question may be off; match it to the workspace names.
 Return "item_ids": the id of every item your answer is about (the screen builds its table from these, with real data). For a "no" answer, item_ids is empty.
-Lookups are optional helpers, for the cases above (aggregate for totals and shares, impact_of for what depends on what, filter_records for exact filters). Use search_records to turn names into ids if needed.
-filter_records filters every kind of item by vendor (one resolved vendor name, exact match), owner, hosting, cloud provider, tenant, region, server, AI turned on, renewal window, cost range, lifecycle, criticality or name, with an optional operator per text filter.
+Use search_records to turn a specific name into an id. Do not search qualitative adjectives (core, critical, strategic, important, weakest) as if they were names unless the user clearly means a name.
+filter_records lists every kind of item — applications, infrastructure, capabilities (L2), activities (L3), domains, tools, flows, APIs, agents, and others — by type, vendor (one resolved vendor name, exact match), owner, hosting, cloud provider, tenant, region, server, AI turned on, renewal window, cost range, lifecycle, criticality or name, with an optional operator per text filter. Use it for 'list all …', 'how many …', and 'which … do we have'. type=capability is L2 only; type=activity is L3; type=domain is a business domain. Use total and the returned ids; do not recount. Do not use name= for qualitative adjectives.
 Use impact_of for what breaks, what depends on an item, or how important an item is.
 Use aggregate for a large total, share or renewal window you cannot add up reliably from the workspace. A vendor list is aggregate with group_by vendor, and only when the question asks which vendors are named or who is paid. Vendors with no annual cost still count. Do not do arithmetic.
-Use find_gaps when the question asks what is missing: without a vendor, no owner, no cost, no renewal, no criticality, or no lifecycle. Pass field and scope. That is not a vendor list. Do not use find_gaps for capabilities or activities with no apps. Do not do arithmetic.
+Use find_gaps when the question asks what is missing: without a vendor, no owner, no cost, no renewal, no criticality, or no lifecycle. Pass field and scope. That is not a vendor list. Do not use find_gaps for capabilities or activities with no enabling apps. Do not do arithmetic.
 Use idle_licences for idle, unused or wasted licences (licences bought versus in use, and what the idle ones cost). Use its totals as given. Do not do arithmetic.
 Use overlapping_tools for duplicate or overlapping tools: two or more unique direct apps or platforms on the same activity (or on a capability with no activities); parents inherit that overlap; the same app at two levels counts once. Use its savings as given.
-Use capability_health for questions about capability or domain health: which capability is in best shape, the weakest domain, where there are coverage gaps, fitness, which activities have redundant apps, and any question about capabilities, activities or domains with no apps, 0 apps, or no enabling apps. Do not count those from the workspace; those counts are not in the workspace totals. Set need_lookup and use capability_health (no_apps, no_app_counts, level_counts). The answer must say which level it is listing (domain, capability or activity). "Best shape" means full coverage first, then best fitness, then no redundancy; say which of those criteria you used. Use the tool's numbers as given. Do not do arithmetic.
+Use capability_health to list or judge the capability map: every domain, capability and activity (or a level/domain slice). Use it for 'list all capabilities/activities/domains', coverage, who has no apps, fitness, redundancy, best shape, weakest, and qualitative questions such as core, critical, strategic, most important or weakest capabilities. Those words are not a field: judge from the tool's signals (highest supporting-app criticality, unique app count, annual cost, how many other items depend on those apps, coverage, fitness) and say which criteria you used, e.g. 'Core here means capabilities backed by Critical or High apps or carrying the most spend.' Do not name-search 'core'. Do not count those from the workspace; those counts are not in the workspace totals. Use totals, level_counts, no_app_counts and record ids as given. The answer must say which level it is listing (domain, capability or activity). "Best shape" means full coverage first, then best fitness, then no redundancy; say which of those criteria you used. Use the tool's numbers as given. Do not do arithmetic.
 Use ai_landscape for any question about AI: AI features in tools (Copilot, Zoom AI Companion, Sidekick and so on), AI agents, AI models and platforms, what AI can see or change, AI risk flags, unreviewed AI, or AI spend. Use its counts and spend as given. Do not do arithmetic.
 An AI feature is a setting on an app, not a separate record. Cite the app it is on.
 Only AI wording makes a question about AI: AI, agent, Copilot, LLM, GPT, AI model, language model, or a model's name. A bare "model" means the architecture model (this map of applications, capabilities and infrastructure), not AI.
@@ -782,16 +782,6 @@ async def run_ask_inner(
     timing.context_chars = len(prompt)
     timing.add("context", tick() - built)
     yield {"event": "step", "data": {**estate, "label": f"{estate['label']} (all of it sent to the AI)"}}
-    if is_coverage_question(question):
-        health = run_tool(bag, "capability_health", {})
-        harvest(health, bag.numbers)
-        tools_used.append("capability_health")
-        prompt += (
-            "\n\nLOOKUP capability_health already ran. Use no_app_counts, level_counts and no_apps ids. "
-            "Do not recount. Say which level (domain, capability, activity) you are listing.\n"
-            + json.dumps(coverage_brief(health), default=str)
-        )
-        yield {"event": "step", "data": tool_step(len(tools_used), "capability_health", {}, health)}
     for rec in earlier:
         bag.note_record(rec)  # items from earlier turns, re-checked against this workspace, may be named again
     contents: list[types.Content] = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
@@ -801,17 +791,16 @@ async def run_ask_inner(
         max_output_tokens=MAX_OUTPUT_TOKENS,
         **thinking_config(model_name()),
     )
-    # Gemini can't combine function calling with JSON mode in one request. So: answer calls are
-    # tool-free JSON mode with the schema (the whole workspace is in the prompt); only when the model
-    # sets need_lookup does one call go out with the lookups (no JSON mode), and the answer after the
-    # lookups is JSON mode again.
+    # Gemini can't combine function calling with JSON mode in one request. So the first turn offers
+    # lookups (no JSON mode). If the model calls a tool, the answer after the lookups is JSON mode.
+    # If it can answer a simple fact without a list or count, it may return the JSON schema now.
     json_config = types.GenerateContentConfig(**common, response_mime_type="application/json", response_schema=ANSWER_SCHEMA)
     tools_config = types.GenerateContentConfig(
         **common,
         tools=build_gemini_tools(tool_specs(include_ai=ai_question)),
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
-    config = json_config
+    config = tools_config
     looked_up = False
     corrected = False
     headline_sent = False

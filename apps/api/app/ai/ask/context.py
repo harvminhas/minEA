@@ -52,6 +52,7 @@ def build_context(graph: WorkspaceGraph) -> str:
     raw = {str(obj.get("id")): obj for obj in graph.objects}
     facts = {f.rec.id: f for f in build_facts(graph)}
     recs = sorted(graph.records.values(), key=lambda r: (ORDER.get(r.type, 2), r.type_label(), r.name.lower()))
+    recs_by_id = {r.id: r for r in recs}
     lines = [
         f"WORKSPACE: {len(recs)} items. One line per item: id | name | kind | then only the fields that are recorded.",
     ]
@@ -59,6 +60,12 @@ def build_context(graph: WorkspaceGraph) -> str:
         f = facts.get(rec.id)
         props = (raw.get(rec.id) or {}).get("properties") or {}
         parts = [rec.id, rec.name, rec.type_label()]
+        parent = recs_by_id.get(rec.parent_id).name if rec.parent_id and recs_by_id.get(rec.parent_id) else ""
+        domain = recs_by_id.get(rec.domain_id).name if rec.domain_id and recs_by_id.get(rec.domain_id) else ""
+        if rec.is_activity and parent:
+            parts.append(f"in {parent}" + (f" · {domain}" if domain and domain != parent else ""))
+        elif domain and rec.raw_type == "capability":
+            parts.append(f"in {domain}")
         if rec.vendor_names:
             parts.append("vendor " + ", ".join(rec.vendor_names))
         elif rec.catalog_vendor:

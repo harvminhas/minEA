@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.objects import MinEAObject
 from app.models.people import Team
 from app.models.relationships import Relationship
+from app.ai.ask.capability_tree import is_activity
 from app.services.cost_lines import object_annual_dollars
 
 APP_TYPES = {"application", "solution", "technical_capability"}
@@ -87,8 +88,13 @@ class Rec:
     catalog_vendor: str | None = None
     # A product named by a vendor code ("salesforce_mulesoft" -> MuleSoft), kept apart from the vendor.
     product: str | None = None
+    is_activity: bool = False
+    domain_id: str | None = None
+    parent_id: str | None = None
 
     def type_label(self) -> str:
+        if self.raw_type == "capability" and self.is_activity:
+            return "Activity"
         if self.raw_type == "technical_capability":
             return "Capability"
         if self.raw_type == "solution":
@@ -152,6 +158,10 @@ def _kind(obj: MinEAObject, props: dict) -> str:
     runtime = str(props.get("compute_runtime_kind") or "")
     if obj.type in {"agent", "ai_model"}:
         return TYPE_LABELS[obj.type]
+    if obj.type == "business_domain":
+        return "Domain"
+    if obj.type == "capability":
+        return "Activity" if is_activity(props) else "Capability"
     if obj.type in APP_TYPES:
         if props.get("is_custom_built"):
             return "Built in-house"
@@ -213,7 +223,7 @@ def _record(obj: MinEAObject, team_names: dict[str, str]) -> Rec | None:
         record_type = "flow"
     elif obj.type == "component":
         record_type = "component"
-    elif obj.type in {"api", "event", "capability", "data_object", "data_store", "data_domain", "roadmap_item", "tech_debt", "agent", "ai_model"}:
+    elif obj.type in {"api", "event", "capability", "business_domain", "data_object", "data_store", "data_domain", "roadmap_item", "tech_debt", "agent", "ai_model"}:
         record_type = obj.type
     else:
         record_type = "other"
@@ -272,6 +282,9 @@ def _record(obj: MinEAObject, team_names: dict[str, str]) -> Rec | None:
         blank=blank,
         description=description,
         product=product,
+        is_activity=is_activity(props) if obj.type == "capability" else False,
+        domain_id=str(props.get("domain_id") or "") or None,
+        parent_id=str(props.get("parent_id") or "") or None,
     )
 
 

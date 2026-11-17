@@ -229,6 +229,16 @@ def matches(f: Facts, filters: dict, today: date | None = None) -> bool:
         elif t in {"infrastructure", "platform", "platforms", "server", "servers"}:
             if rec.type != "infrastructure":
                 return False
+        elif t in {"activity", "activities"}:
+            if rec.raw_type != "capability" or not rec.is_activity:
+                return False
+        elif t in {"capability", "capabilities"}:
+            # L2 only; activities are type=activity, technical capabilities are applications.
+            if rec.raw_type != "capability" or rec.is_activity:
+                return False
+        elif t in {"domain", "domains", "business_domain", "business_domains"}:
+            if rec.raw_type != "business_domain":
+                return False
         elif fold(t).rstrip("s") not in {fold(rec.raw_type).rstrip("s"), fold(rec.type).rstrip("s"), fold(rec.type_label()).rstrip("s"), fold(rec.kind or "").rstrip("s")}:
             return False
     if "owner" in filters and filters["owner"].lower() in {"none", "no", "missing"} and (rec.owner_team or rec.owner_person):

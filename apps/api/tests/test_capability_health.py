@@ -194,7 +194,7 @@ def test_health_step_and_tool_are_wired():
     assert "no redundancy" in SYSTEM
     assert "Say which of those criteria" in SYSTEM or "must say which of those criteria" in SYSTEM or "say which of those criteria" in SYSTEM
     assert "no enabling apps" in SYSTEM and "Do not count those from the workspace" in SYSTEM
-    assert "Do not use find_gaps for capabilities or activities with no apps" in SYSTEM
+    assert "Do not use find_gaps for capabilities or activities with no enabling apps" in SYSTEM
     assert len({item.name for item in TOOLS}) == len(TOOLS)
     spec = next(item for item in tool_specs() if item["name"] == "capability_health")
     assert "level" in spec["input_schema"]["properties"]
@@ -290,11 +290,22 @@ def test_listing_zero_apps_is_grounded_from_capability_health():
     assert "capability_health" in find_gaps["description"]
 
 
-def test_coverage_question_auto_runs_capability_health(monkeypatch):
+def _run_loop(monkeypatch, graph, question, script):
     import asyncio
     from types import SimpleNamespace
-    from tests.test_ask_engine import CTX, FakeModels, _text_response
+    from tests.test_ask_engine import CTX, FakeModels
     from app.ai.ask import loop
+
+    models = FakeModels(script)
+    monkeypatch.setattr(loop, "is_configured", lambda: True)
+    monkeypatch.setattr(loop, "model_name", lambda: "gemini-2.5-flash")
+    monkeypatch.setattr(loop, "get_client", lambda: SimpleNamespace(aio=SimpleNamespace(models=models)))
+    result = asyncio.run(loop.answer_with_model(None, CTX, question, graph=graph))
+    return result, models
+
+
+def test_coverage_question_does_not_pre_run_capability_health(monkeypatch):
+    from tests.test_ask_engine import _text_response
 
     graph, empty_ids, _ = _gap_map(12, 15)
     question = "list capabilities that have 0 enabling apps"
@@ -304,15 +315,139 @@ def test_coverage_question_auto_runs_capability_health(monkeypatch):
         "item_ids": empty_ids,
         "citations": [],
     }
-    models = FakeModels([_text_response(answer)])
-    monkeypatch.setattr(loop, "is_configured", lambda: True)
-    monkeypatch.setattr(loop, "model_name", lambda: "gemini-2.5-flash")
-    monkeypatch.setattr(loop, "get_client", lambda: SimpleNamespace(aio=SimpleNamespace(models=models)))
-    result = asyncio.run(loop.answer_with_model(None, CTX, question, graph=graph))
-    assert result["source"] == "llm", result.get("fallback_reason")
-    assert "capability_health" in result["tools_used"]
-    assert result["headline"] == "12 of 27 capabilities have 0 enabling apps"
-    # The first model call stays JSON-mode without tools; the lookup was run by the server.
-    assert models.configs[0].response_mime_type == "application/json" and not models.configs[0].tools
-    prompt = models.calls  # generate_content stores configs, not prompt; check tools_used is enough
+    result, models = _run_loop(monkeypatch, graph, question, [_text_response(answer)])
+    assert not result.get("tools_used")
+    assert models.configs[0].tools and not models.configs[0].response_mime_type
     assert len(models.configs) == 1
+    # Without a pre-run or a model-chosen lookup, 27 is ungrounded and is dropped.
+    body = (result.get("headline") or "") + (result.get("answer_text") or "")
+    assert "27" not in body
+
+
+def test_list_all_capabilities_passes_via_the_tool(monkeypatch):
+    from tests.test_ask_engine import _call_response, _text_response
+
+    graph, empty_ids, covered_ids = _gap_map(12, 15)
+    all_ids = empty_ids + covered_ids
+    question = "list all capabilities"
+    answer = {
+        "headline": "27 capabilities",
+        "answer_markdown": "There are 27 capabilities on the map. These are capabilities, not activities.",
+        "item_ids": all_ids,
+        "citations": [],
+    }
+    result, models = _run_loop(
+        monkeypatch,
+        graph,
+        question,
+        [_call_response("filter_records", {"type": "capability"}), _text_response(answer)],
+    )
+    assert result["source"] == "llm", result.get("fallback_reason")
+    assert "filter_records" in result["tools_used"]
+    assert result["headline"] == "27 capabilities"
+    assert "27" in (result.get("answer_text") or "")
+    assert models.configs[0].tools and not models.configs[0].response_mime_type
+    assert models.configs[1].response_mime_type == "application/json" and not models.configs[1].tools
+    # A workspace-only count (no lookup, no complete item_ids) is still ungrounded.
+    bag, _ = _prepare(graph, question, use_health=False)
+    assert _validate({**answer, "item_ids": []}, bag, question) == "ungrounded_number"
+
+
+def test_filter_and_search_cover_domains_capabilities_and_activities():
+    from app.ai.ask.context import build_context
+    from app.ai.ask.tools import ToolBag, search_records
+
+    bag, _ = _bag("finance")
+    caps = run_tool(bag, "filter_records", {"type": "capability"})
+    acts = run_tool(bag, "filter_records", {"type": "activity"})
+    domains = run_tool(bag, "filter_records", {"type": "domain"})
+    assert caps["total"] == 3 and sorted(item["name"] for item in caps["items"]) == [
+        "Accounts Payable",
+        "Financial Planning",
+        "Treasury",
+    ]
+    assert all(item["type_label"] == "Capability" and item["raw_type"] == "capability" for item in caps["items"])
+    assert acts["total"] == 4 and "Invoice capture" in [item["name"] for item in acts["items"]]
+    assert all(item["type_label"] == "Activity" for item in acts["items"])
+    assert domains["total"] == 1 and domains["items"][0]["name"] == "Finance"
+    found = search_records(ToolBag(graph=bag.graph, seen_ids=set(), numbers=set()), {"text": "finance"})
+    assert found["matches"][0]["name"] == "Finance" and found["matches"][0]["type_label"] == "Domain"
+    text = build_context(bag.graph)
+    assert "Invoice capture | Activity | in Accounts Payable · Finance" in text
+    assert "Accounts Payable | Capability | in Finance" in text
+    assert "Finance | Domain |" in text
+
+
+def _core_map():
+    objects = [
+        {"id": "d", "type": "business_domain", "name": "Finance"},
+        {"id": "ap", "type": "capability", "name": "Accounts Payable", "properties": {"domain_id": "d"}},
+        {"id": "named", "type": "capability", "name": "Core Billing", "properties": {"domain_id": "d"}},
+        {"id": "sf", "type": "application", "name": "Salesforce", "properties": {"criticality": "critical", "annual_cost": 200000}},
+        {"id": "tiny", "type": "application", "name": "Tiny App", "properties": {"criticality": "low", "annual_cost": 500}},
+        {"id": "portal", "type": "application", "name": "Supplier Portal", "properties": {}},
+        {"id": "crm", "type": "application", "name": "CRM", "properties": {}},
+    ]
+    edges = [
+        {"type": "supported_by", "from_object_id": "ap", "to_object_id": "sf"},
+        {"type": "supported_by", "from_object_id": "named", "to_object_id": "tiny"},
+        {"type": "depends_on", "from_object_id": "portal", "to_object_id": "sf"},
+        {"type": "depends_on", "from_object_id": "crm", "to_object_id": "sf"},
+    ]
+    for i in range(11):
+        cid = f"side{i}"
+        objects.append({"id": cid, "type": "capability", "name": f"Side {i}", "properties": {"domain_id": "d"}})
+        app = f"app-{cid}"
+        objects.append({"id": app, "type": "application", "name": f"App {i}", "properties": {"criticality": "low", "annual_cost": 1000}})
+        edges.append({"type": "supported_by", "from_object_id": cid, "to_object_id": app})
+    return _graph(objects, edges)
+
+
+def test_capability_health_exposes_criticality_cost_and_dependents():
+    bag = __import__("app.ai.ask.tools", fromlist=["ToolBag"]).ToolBag(graph=_core_map(), seen_ids=set(), numbers=set())
+    result = run_tool(bag, "capability_health", {"level": "capability"})
+    rows = _by_id(result["records"])
+    ap, named = rows["ap"], rows["named"]
+    assert ap["highest_app_criticality"] == "Critical"
+    assert ap["annual_cost"] == 200000
+    assert ap["unique_app_count"] == 1
+    assert ap["supporting_app_dependents"] >= 2
+    assert named["highest_app_criticality"] == "Low"
+    assert named["annual_cost"] == 500
+    assert named["supporting_app_dependents"] < ap["supporting_app_dependents"]
+    assert "qualitative" in result["criteria"]
+    assert "not a stored field" in result["criteria"]["qualitative"]
+    # Name search would wrongly pick the capability called Core Billing.
+    from app.ai.ask.tools import ToolBag, search_records
+    found = search_records(ToolBag(graph=bag.graph, seen_ids=set(), numbers=set()), {"text": "core"})
+    assert [row["name"] for row in found["matches"]] == ["Core Billing"]
+
+
+def test_list_all_core_capabilities_uses_health_signals_not_a_name_search(monkeypatch):
+    from tests.test_ask_engine import _call_response, _text_response
+
+    graph = _core_map()
+    question = "list all core capabilities"
+    answer = {
+        "headline": "Accounts Payable is the core capability",
+        "answer_markdown": (
+            "Core here means capabilities backed by Critical or High apps or carrying the most spend. "
+            "Accounts Payable is backed by Salesforce (Critical) at $200,000 a year."
+        ),
+        "item_ids": ["ap"],
+        "citations": [],
+    }
+    result, models = _run_loop(
+        monkeypatch,
+        graph,
+        question,
+        [_call_response("capability_health", {"level": "capability"}), _text_response(answer)],
+    )
+    assert result["source"] == "llm", result.get("fallback_reason")
+    assert result["tools_used"] == ["capability_health"]
+    assert "search_records" not in result["tools_used"]
+    assert "Core Billing" not in (result.get("answer_text") or "")
+    assert "Accounts Payable" in result["answer_text"]
+    assert "Core here means" in result["answer_text"]
+    assert models.configs[0].tools and not models.configs[0].response_mime_type
+    # A name-search answer that listed only "Core Billing" would be the anti-pattern; health is required to ground 200000.

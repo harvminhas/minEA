@@ -74,8 +74,6 @@ def search_records(bag: ToolBag, args: dict) -> dict:
     limit = min(int(args.get("limit") or 8), 20)
     matches: list[dict] = []
     for rec in bag.graph.records.values():
-        if rec.type == "other":
-            continue
         hay = fold(rec.name)
         if text and text in hay:
             bag.note_record(rec)
@@ -518,6 +516,13 @@ WEAKEST_CRITERIA = (
     "Lowest coverage first, then weakest fitness, then most redundancy (many, then two). "
     "Activities with no app are coverage gaps, not weak fitness."
 )
+QUALITATIVE_CRITERIA = (
+    "Words like core, critical, strategic, most important, or weakest are not a stored field and not a name. "
+    "Judge from these signals: highest criticality of the supporting apps, unique app count, annual cost, "
+    "how many other items depend on those apps (supporting_app_dependents), coverage and fitness. "
+    "Say which criteria you used, e.g. 'Core here means capabilities backed by Critical or High apps or carrying the most spend.' "
+    "Do not name-search the adjective unless the user clearly means a name (for example a capability called Core Banking)."
+)
 
 # "0 apps" / "no enabling apps" / coverage gaps on the capability map — not "apps with 0 licences".
 _COVERAGE_QUESTION = re.compile(
@@ -601,9 +606,12 @@ def _health_row(bag: ToolBag, node: dict) -> dict:
         "redundancy_place": node["redundancyPlace"],
         "redundancy_apps": node["redundancyApps"],
         "unique_app_count": len(node["uniqueAppIds"]),
+        "app_count": len(node["uniqueAppIds"]),
         "unique_app_ids": node["uniqueAppIds"],
         "unique_app_names": names,
         "annual_cost": node["cost"],
+        "highest_app_criticality": _highest_app_criticality(bag, node["uniqueAppIds"]),
+        "supporting_app_dependents": 0,
     }
     return row
 
@@ -628,6 +636,54 @@ def _matches_domain(row: dict, needle: str, nodes: list[dict]) -> bool:
     return bool(domain and domain["name"].lower() == text)
 
 
+
+CRIT_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
+
+
+def _highest_app_criticality(bag: ToolBag, app_ids: list[str]) -> str | None:
+    best = 0
+    label = None
+    for app_id in app_ids:
+        rec = bag.graph.get(app_id)
+        crit = rec.criticality if rec else None
+        rank = CRIT_RANK.get(crit or "", 0)
+        if rank > best:
+            best = rank
+            label = crit
+    return label
+
+
+def _dependents_by_app(bag: ToolBag) -> dict[str, set[str]]:
+    """Other items that depend on each app (impact), cached on the bag for one lookup."""
+    cached = getattr(bag, "_app_dependents", None)
+    if cached is not None:
+        return cached
+    names = {rec.id: rec.name for rec in bag.graph.records.values()}
+    edges = [ImpactEdge(edge.relation, edge.from_id, edge.to_id) for edge in bag.graph.edges]
+    found: dict[str, set[str]] = {}
+    for rec in bag.graph.records.values():
+        if rec.type not in {"application", "infrastructure"} and rec.raw_type not in {"application", "solution", "cloud_service", "model"}:
+            continue
+        hits = set()
+        for hit in traverse_impact(names, edges, rec.id):
+            if hit.get("id") and hit["id"] != rec.id:
+                hits.add(hit["id"])
+        found[rec.id] = hits
+    bag._app_dependents = found
+    return found
+
+
+def _supporting_dependents(bag: ToolBag, app_ids: list[str]) -> int:
+    by_app = _dependents_by_app(bag)
+    found: set[str] = set()
+    apps = set(app_ids)
+    for app_id in app_ids:
+        for item_id in by_app.get(app_id, ()):
+            if item_id not in apps:
+                found.add(item_id)
+    return len(found)
+
+
 def capability_health(bag: ToolBag, args: dict) -> dict:
     """The heat-map roll-up for every domain, capability and activity: coverage, fitness, redundancy, unique apps, cost."""
     tree = build_capability_tree(bag.graph.objects, _tree_edges(bag), _tree_costs(bag))
@@ -642,6 +698,7 @@ def capability_health(bag: ToolBag, args: dict) -> dict:
         if level and node["level"] != level:
             continue
         row = _health_row(bag, node)
+        row["supporting_app_dependents"] = _supporting_dependents(bag, node["uniqueAppIds"])
         if domain_raw and not _matches_domain(row, domain_raw, walked):
             continue
         if node["id"] in bag.graph.records:
@@ -654,6 +711,7 @@ def capability_health(bag: ToolBag, args: dict) -> dict:
             row["total_activities"],
             row["unique_app_count"],
             row["annual_cost"],
+            row["supporting_app_dependents"],
         )
         rows.append(row)
 
@@ -719,11 +777,14 @@ def capability_health(bag: ToolBag, args: dict) -> dict:
             "redundancy_place": row["redundancy_place"],
             "redundancy_apps": row["redundancy_apps"],
             "unique_app_count": row["unique_app_count"],
+            "app_count": row["unique_app_count"],
             "annual_cost": row["annual_cost"],
+            "highest_app_criticality": row["highest_app_criticality"],
+            "supporting_app_dependents": row["supporting_app_dependents"],
         }
 
     return {
-        "criteria": {"best_shape": BEST_SHAPE_CRITERIA, "weakest": WEAKEST_CRITERIA},
+        "criteria": {"best_shape": BEST_SHAPE_CRITERIA, "weakest": WEAKEST_CRITERIA, "qualitative": QUALITATIVE_CRITERIA},
         "totals": {
             "domains": len(domains),
             "capabilities": len(capabilities),
@@ -985,7 +1046,7 @@ def ai_landscape(bag: ToolBag, args: dict) -> dict:
 TOOLS: list[AskTool] = [
     AskTool(
         name="search_records",
-        description="Find an application, capability, infrastructure item, or other item by name. Each match includes type_label. Use this first to turn a name in the question into an id.",
+        description="Find an application, capability, activity, domain, infrastructure item, or other item by name (including domains). Each match includes type_label. Use this to turn a specific name in the question into an id. Do not search qualitative adjectives (core, critical, strategic, important, weakest) as if they were names unless the user clearly means a name.",
         parameters={
             "type": "object",
             "properties": {
@@ -999,19 +1060,22 @@ TOOLS: list[AskTool] = [
     AskTool(
         name="filter_records",
         description=(
-            "List items of every kind (applications, infrastructure, tools, flows, APIs, agents, ...) matching filters (all optional, combined with AND). type narrows to one kind. Use it for any "
-            "'which/what … do we have' question naming a vendor, owner, hosting, cloud provider, tenant, region, server, "
-            "AI, renewal window, cost range, lifecycle or criticality, and for compound questions. "
+            "List items of every kind — applications, infrastructure, capabilities (L2), activities (L3), domains, "
+            "tools, flows, APIs, agents, and others — matching filters (all optional, combined with AND). "
+            "type narrows to one kind: application, infrastructure, capability (L2 only, not activities), activity, "
+            "domain, tool, flow, api, agent, and so on. Use this for 'list all …', 'how many …', and "
+            "'which/what … do we have' questions, including listing capabilities, activities or domains. "
             "vendor is one resolved vendor name, matched exactly (aliases and stored codes resolve to it); it covers the vendor field, the catalogue vendor, cost-line vendors and a tenant's provider (Azure tenant -> Microsoft). "
             "hosting is saas, own_cloud (our cloud), on_premise (our server) or desktop. owner 'none' = no owner. "
             "ai_on true = an AI feature is turned on. Matching is loose (case, spaces). "
             "ops sets an operator per text filter (is, is_not, is_empty, is_not_empty, contains, any_of). "
-            "total, annual_cost_total and with_owner are the numbers to write; name only the items returned."
+            "Do not use name= to match qualitative words (core, critical, strategic, important, weakest); those are not a name — use capability_health and judge from its signals. "
+            "total, annual_cost_total and with_owner are the numbers to write; name only the items returned. Use total and the returned ids; do not recount."
         ),
         parameters={
             "type": "object",
             "properties": {
-                "type": {"type": "string", "description": "application or infrastructure"},
+                "type": {"type": "string", "description": "application, infrastructure, capability (L2), activity (L3), domain, tool, api, agent, …"},
                 "vendor": {"type": "string"},
                 "owner_team": {"type": "string"},
                 "owner_person": {"type": "string"},
@@ -1123,18 +1187,22 @@ TOOLS: list[AskTool] = [
     AskTool(
         name="capability_health",
         description=(
-            "Capability map health: coverage (activities with an app / total), fitness (weakest scored supported_by link; "
-            "missing counts as adequate, explicit 'none' is unscored; gaps are not weak fitness), redundancy (an activity, "
-            "or a capability with no activities, with two or more unique direct apps; parents inherit; the same app at two "
-            "levels counts once), unique app count rolled up once, and annual cost, for every domain, capability and activity. "
-            "Each row has id and path so you can cite it. Optional filters: level (domain, capability, activity) and domain "
-            "(id or name). Use this for which capability is in best shape, the weakest domain, coverage gaps, and any "
-            "question about capabilities, activities or domains with no apps, 0 apps, or no enabling apps. "
-            "no_apps is every row with unique_app_count 0 (no enabling apps, rolled up once); no_app_counts and level_counts "
-            "are the numbers to write, split by level (domain, capability, activity). Say which level you are listing. "
+            "The capability map: every domain, capability (L2) and activity (L3), or a slice via optional filters "
+            "level (domain, capability, activity) and domain (id or name). Use this to list the whole map or one level "
+            "('list all capabilities', 'list all activities', 'list all domains'), and for health questions: coverage "
+            "(activities with an app / total), fitness (weakest scored supported_by link; missing counts as adequate, "
+            "explicit 'none' is unscored; gaps are not weak fitness), redundancy (an activity, or a capability with no "
+            "activities, with two or more unique direct apps; parents inherit; the same app at two levels counts once), "
+            "unique app count rolled up once, annual cost, highest_app_criticality (max criticality of the supporting apps), "
+            "and supporting_app_dependents (how many other items depend on those apps). "
+            "Each row has id and path so you can cite it. totals, level_counts and no_app_counts are the numbers to write. "
+            "no_apps is every row with unique_app_count 0. Say which level you are listing. "
             "best_shape ranks capabilities by full coverage first, then best fitness, then no redundancy. "
             "weakest_domains uses the inverse. gaps are coverage gap or partial (partial still has apps). "
-            "redundant is where overlap starts. Use the numbers as given. Do not do arithmetic."
+            "redundant is where overlap starts. "
+            "For qualitative words (core, critical, strategic, most important, weakest), do not name-search: judge from "
+            "highest_app_criticality, unique app count, annual cost, supporting_app_dependents, coverage and fitness, "
+            "and say which criteria you used. Use the numbers as given. Do not do arithmetic."
         ),
         parameters={
             "type": "object",
