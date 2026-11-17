@@ -55,13 +55,25 @@ test("/business/capabilities redirects to the merged page; domain pages still re
 });
 
 test("domain section counts say capability or capabilities, not capacities", () => {
-  for (const path of [
-    "components/capability-map/CapabilityExecutiveView.tsx",
-    "components/capability-map/CapabilityHeatMap.tsx",
-  ]) {
-    const text = src(path);
-    assert.match(text, /1 \? "capability" : "capabilities"/);
-    assert.doesNotMatch(text, /capacit\{/);
-    assert.doesNotMatch(text, /capacities/);
-  }
+  const heat = src("components/capability-map/CapabilityHeatMap.tsx");
+  assert.match(heat, /1 \? "capability" : "capabilities"/);
+  assert.doesNotMatch(heat, /capacit\{/);
+  assert.doesNotMatch(heat, /capacities/);
+  const exec = src("components/capability-map/CapabilityExecutiveView.tsx");
+  assert.doesNotMatch(exec, /capacit\{/);
+  assert.doesNotMatch(exec, /capacities/);
+  assert.match(exec, /of \{rollup\.total\} assessed/);
+});
+
+test("Capability map header counts L2 capabilities, not activities", () => {
+  const section = src("components/mvp/CapabilitiesSection.tsx");
+  assert.match(section, /l2Capabilities\(/);
+  assert.match(section, /data-testid="capability-map-count"/);
+  assert.doesNotMatch(section, /Capability map[\s\S]{0,120}\{rows\.length\}/);
+  const heat = src("components/capability-map/CapabilityHeatMap.tsx");
+  assert.match(heat, /flatten\(tree, "l2"\)\.length/);
+  assert.doesNotMatch(heat, /rows\.length/);
+  const sidebar = src("components/mvp/ModelSidebar.tsx");
+  assert.match(sidebar, /l2Capabilities\(/);
+  assert.doesNotMatch(sidebar, /capabilities: countTypes\(\["capability"\]\)/);
 });

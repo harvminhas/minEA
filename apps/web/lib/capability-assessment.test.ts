@@ -12,6 +12,12 @@ import {
   scoredLinkFitness,
   suggestInvestmentPosture,
   weakerScoredFitness,
+  domainIdentityColor,
+  DOMAIN_IDENTITY_PALETTE,
+  domainLensRollup,
+  isExecutiveTileMuted,
+  l2Capabilities,
+  orderedDomainIdsFromTree,
   type CapabilityRecord,
 } from "./capability-assessment";
 import { buildCapabilityTree, type CapEdge, type CapObj } from "./capability-tree";
@@ -221,3 +227,99 @@ test("domain-scoped KPIs use that domain only; All domains stays estate-wide", (
   assert.equal(salesKpi.completeness.assessed, 1);
   assert.equal(salesKpi.completeness.total, 1);
 });
+
+test("l2Capabilities excludes activities, so the map header can count 16 not 16+activities", () => {
+  const objects = [
+    obj("fin", "business_domain", "Finance"),
+    obj("ap", "capability", "Accounting", { properties: { domain_id: "fin" } }),
+    obj("pay", "capability", "Payroll", { properties: { domain_id: "fin" } }),
+    obj("gl", "capability", "Manage general ledger", { properties: { domain_id: "fin", parent_id: "ap" } }),
+    obj("tx", "capability", "Post transactions", { properties: { domain_id: "fin", parent_id: "ap" } }),
+  ];
+  assert.deepEqual(l2Capabilities(objects).map((item) => item.id), ["ap", "pay"]);
+});
+
+test("domain identity colour is stable by estate order, wraps the palette, and survives a drilled-in list of one", () => {
+  const ids = Array.from({ length: DOMAIN_IDENTITY_PALETTE.length + 3 }, (_, i) => `d${i}`);
+  assert.equal(domainIdentityColor("d0", ids), DOMAIN_IDENTITY_PALETTE[0]);
+  assert.equal(domainIdentityColor("d1", ids), DOMAIN_IDENTITY_PALETTE[1]);
+  assert.equal(domainIdentityColor(`d${DOMAIN_IDENTITY_PALETTE.length}`, ids), DOMAIN_IDENTITY_PALETTE[0]);
+  // Colour is the estate-wide index, so a drilled-in view must pass the full id list (not [thisDomain]).
+  assert.equal(domainIdentityColor("d3", ids), DOMAIN_IDENTITY_PALETTE[3]);
+  assert.notEqual(domainIdentityColor("d3", ids), domainIdentityColor("d3", ["d3"]));
+  const treeIds = orderedDomainIdsFromTree([
+    { id: "no-domain", name: "No domain" } as never,
+    { id: "fin", name: "Finance" } as never,
+    { id: "sales", name: "Sales" } as never,
+  ]);
+  assert.deepEqual(treeIds, ["fin", "sales"]);
+});
+
+test("domain lens roll-up reports posture mix, spend share, risk mix, coverage %, assessed x/y, and — spend", () => {
+  const finance = obj("fin", "business_domain", "Finance", { properties: { order_index: 1 } });
+  const sales = obj("sales", "business_domain", "Sales", { properties: { order_index: 2 } });
+  const ap = obj("ap", "capability", "Accounting", {
+    owner: "CFO",
+    properties: { domain_id: "fin", business_criticality: "critical", investment_posture: "migrate", technology_fit: 2 },
+  });
+  const pay = obj("pay", "capability", "Payroll", { properties: { domain_id: "fin" } });
+  const lead = obj("lead", "capability", "Lead capture", {
+    owner: "CSO",
+    properties: { domain_id: "sales", business_criticality: "high", investment_posture: "invest", technology_fit: 4 },
+  });
+  const ledger = obj("ledger", "application", "Legacy GL", { properties: { annual_cost: 90_000 } });
+  const crm = obj("crm", "application", "CRM", { properties: { annual_cost: 40_000 } });
+  const objects = [finance, sales, ap, pay, lead, ledger, crm];
+  const edges: CapEdge[] = [
+    edge("ap", "ledger"),
+    edge("lead", "crm"),
+  ];
+  const rows = [row("ledger", 90_000), row("crm", 40_000)];
+  const tree = buildCapabilityTree(objects, edges, rows);
+  const fin = tree.find((node) => node.id === "fin")!;
+  const salesNode = tree.find((node) => node.id === "sales")!;
+  const estateSpend = tree.reduce((sum, node) => sum + node.cost, 0);
+
+  const posture = domainLensRollup(fin, objects, edges, "posture", estateSpend);
+  assert.equal(posture.assessed, 1);
+  assert.equal(posture.total, 2);
+  assert.equal(posture.spend, 90_000);
+  assert.equal(posture.spendLabel, "$90k");
+  assert.ok(posture.segments.some((segment) => segment.key === "migrate" && Math.abs(segment.fraction - 0.5) < 1e-9));
+  assert.ok(posture.segments.some((segment) => segment.key === "none" && Math.abs(segment.fraction - 0.5) < 1e-9));
+
+  const spend = domainLensRollup(fin, objects, edges, "spend", estateSpend);
+  assert.equal(spend.segments.length, 1);
+  assert.equal(spend.segments[0]!.key, "spend");
+  assert.ok(Math.abs(spend.segments[0]!.fraction - 90_000 / estateSpend) < 1e-9);
+
+  const risk = domainLensRollup(fin, objects, edges, "risk", estateSpend);
+  assert.ok(risk.segments.some((segment) => segment.key === "critical"));
+  assert.ok(risk.segments.some((segment) => segment.key === "none"));
+
+  const coverage = domainLensRollup(salesNode, objects, edges, "coverage", estateSpend);
+  assert.equal(coverage.coveragePercent, 100);
+  assert.ok(coverage.segments.some((segment) => segment.key === "covered" && segment.fraction === 1));
+
+  const emptyPayDomain = domainLensRollup(
+    { ...fin, cost: 0, children: fin.children.filter((child) => child.id === "pay") },
+    objects,
+    edges,
+    "spend",
+    estateSpend,
+  );
+  assert.equal(emptyPayDomain.spendLabel, "—");
+  assert.deepEqual(emptyPayDomain.segments, []);
+  assert.equal(emptyPayDomain.assessed, 0);
+  assert.equal(emptyPayDomain.total, 1);
+});
+
+test("unassessed tiles are muted for posture, spend, and risk lenses, not coverage", () => {
+  assert.equal(isExecutiveTileMuted("posture", 0, null, null), true);
+  assert.equal(isExecutiveTileMuted("posture", 10, "invest", "high"), false);
+  assert.equal(isExecutiveTileMuted("spend", 0, "invest", "high"), true);
+  assert.equal(isExecutiveTileMuted("spend", 10, null, null), false);
+  assert.equal(isExecutiveTileMuted("risk", 10, "invest", null), true);
+  assert.equal(isExecutiveTileMuted("coverage", 0, null, null), false);
+});
+

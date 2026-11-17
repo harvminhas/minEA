@@ -28,6 +28,7 @@ import {
   resolveDomain,
 } from "@/lib/capabilities";
 import { isActivity } from "@/lib/capability-tree";
+import { l2Capabilities } from "@/lib/capability-assessment";
 import { CapabilityInterview, type InterviewValues } from "@/components/capability-map/CapabilityInterview";
 import { CapabilityReview } from "@/components/capability-map/CapabilityReview";
 import { CapabilityHeatMap } from "@/components/capability-map/CapabilityHeatMap";
@@ -48,6 +49,7 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
   const edges = useMemo(() => catalog.data?.relationships ?? [], [catalog.data]);
   const catalogRows = useMemo(() => catalog.data?.rows ?? [], [catalog.data]);
   const rows = useMemo(() => capabilityRows(objects, edges), [objects, edges]);
+  const l2Count = useMemo(() => l2Capabilities(objects).length, [objects]);
   const groups = useMemo(() => groupByDomain(rows), [rows]);
   const gaps = rows.filter((row) => row.gap).length;
   const [mode, setMode] = useState<Mode>("none");
@@ -172,7 +174,7 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
         <div>
           <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">WHAT THE BUSINESS DOES</p>
           <h1 className="text-[22px] font-semibold text-[#1c2230]">
-            Capability map <span className="text-[14px] font-normal text-[#8b90a0]">{rows.length}</span>
+            Capability map <span className="text-[14px] font-normal text-[#8b90a0]" data-testid="capability-map-count">{l2Count}</span>
           </h1>
           {workspace === "executive" && !empty && !focused ? (
             <p className="mt-0.5 text-[13.5px] text-[#6b7289]">How well the estate supports each part of the business</p>

@@ -365,3 +365,154 @@ export function compareDomainOrder(a: CapObj, b: CapObj): number {
   const delta = domainOrder(a) - domainOrder(b);
   return delta !== 0 ? delta : a.name.localeCompare(b.name);
 }
+
+export type DomainIdentityColor = { rgb: string; ink: string };
+
+/** Readable, distinct identity colours. Index wraps so any number of domains is covered. */
+export const DOMAIN_IDENTITY_PALETTE: readonly DomainIdentityColor[] = [
+  { rgb: "79, 70, 229", ink: "67, 56, 202" },     // indigo
+  { rgb: "13, 148, 136", ink: "15, 118, 110" },   // teal
+  { rgb: "2, 132, 199", ink: "3, 105, 161" },     // sky
+  { rgb: "180, 83, 9", ink: "146, 64, 14" },      // amber
+  { rgb: "71, 85, 105", ink: "51, 65, 85" },      // slate
+  { rgb: "124, 58, 237", ink: "91, 33, 182" },    // violet
+  { rgb: "190, 24, 93", ink: "157, 23, 77" },     // rose
+  { rgb: "22, 163, 74", ink: "21, 128, 61" },     // green
+  { rgb: "8, 145, 178", ink: "14, 116, 144" },    // cyan
+  { rgb: "154, 52, 18", ink: "120, 53, 15" },     // rust
+  { rgb: "192, 38, 211", ink: "162, 28, 175" },   // fuchsia
+  { rgb: "101, 163, 13", ink: "77, 124, 15" },    // olive
+];
+
+function fnvIndex(id: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < id.length; i += 1) {
+    hash ^= id.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * Stable identity colour for a domain. Uses the domain's position in the
+ * estate-wide ordered id list (so a drilled-in view keeps the same colour),
+ * wrapping the palette; unknown ids fall back to a hash of the id.
+ */
+export function domainIdentityColor(
+  domainId: string,
+  orderedDomainIds: readonly string[],
+): DomainIdentityColor {
+  const index = orderedDomainIds.indexOf(domainId);
+  const slot = index >= 0 ? index : fnvIndex(domainId);
+  return DOMAIN_IDENTITY_PALETTE[slot % DOMAIN_IDENTITY_PALETTE.length]!;
+}
+
+export function orderedDomainIdsFromTree(tree: readonly TreeNode[]): string[] {
+  return tree.filter((node) => node.id !== "no-domain").map((node) => node.id);
+}
+
+export type DomainRollupSegment = { key: string; color: string; fraction: number };
+
+export type DomainLensRollup = {
+  assessed: number;
+  total: number;
+  spend: number;
+  spendLabel: string;
+  segments: DomainRollupSegment[];
+  coveragePercent: number | null;
+};
+
+const POSTURE_BAR: Record<InvestmentPosture | "none", string> = {
+  invest: "#2563eb",
+  tolerate: "#64748b",
+  migrate: "#f97316",
+  eliminate: "#e11d48",
+  none: "#e5e7eb",
+};
+
+const RISK_BAR: Record<BusinessCriticality | "none", string> = {
+  low: "#10b981",
+  medium: "#f97316",
+  high: "#e11d48",
+  critical: "#be123c",
+  none: "#e5e7eb",
+};
+
+const COVERAGE_BAR: Record<string, string> = {
+  covered: "#059669",
+  mostly: "#84cc16",
+  partial: "#f97316",
+  gap: "#e11d48",
+};
+
+const POSTURE_ORDER: (InvestmentPosture | "none")[] = ["invest", "tolerate", "migrate", "eliminate", "none"];
+const RISK_ORDER: (BusinessCriticality | "none")[] = ["low", "medium", "high", "critical", "none"];
+const COVERAGE_ORDER = ["covered", "mostly", "partial", "gap"];
+
+function segmentsFromCounts(counts: Record<string, number>, colors: Record<string, string>, order: string[], total: number): DomainRollupSegment[] {
+  if (total <= 0) return [];
+  return order
+    .map((key) => ({ key, color: colors[key] ?? "#e5e7eb", fraction: (counts[key] ?? 0) / total }))
+    .filter((segment) => segment.fraction > 0);
+}
+
+export type ExecutiveLensKind = "posture" | "spend" | "risk" | "coverage";
+
+export function domainLensRollup(
+  domain: TreeNode,
+  objects: readonly CapabilityRecord[],
+  edges: readonly CapEdge[],
+  lens: ExecutiveLensKind,
+  estateSpend: number,
+): DomainLensRollup {
+  const caps = domain.children;
+  const total = caps.length;
+  let assessed = 0;
+  const postureCounts: Record<string, number> = {};
+  const riskCounts: Record<string, number> = {};
+  const coverageCounts: Record<string, number> = {};
+  let covered = 0;
+  for (const child of caps) {
+    const assessment = assessCapability(
+      objects.find((item) => item.id === child.id),
+      objects,
+      edges,
+    );
+    if (assessment.assessed) assessed += 1;
+    const posture = assessment.posture ?? "none";
+    postureCounts[posture] = (postureCounts[posture] ?? 0) + 1;
+    const risk = assessment.businessCriticality ?? "none";
+    riskCounts[risk] = (riskCounts[risk] ?? 0) + 1;
+    const coverage = child.coverage || "gap";
+    coverageCounts[coverage] = (coverageCounts[coverage] ?? 0) + 1;
+    if (coverage === "covered") covered += 1;
+  }
+  const spend = domain.cost;
+  let segments: DomainRollupSegment[] = [];
+  if (lens === "posture") segments = segmentsFromCounts(postureCounts, POSTURE_BAR, POSTURE_ORDER, total);
+  else if (lens === "risk") segments = segmentsFromCounts(riskCounts, RISK_BAR, RISK_ORDER, total);
+  else if (lens === "coverage") segments = segmentsFromCounts(coverageCounts, COVERAGE_BAR, COVERAGE_ORDER, total);
+  else if (estateSpend > 0 && spend > 0) {
+    segments = [{ key: "spend", color: "#059669", fraction: Math.min(1, spend / estateSpend) }];
+  }
+  return {
+    assessed,
+    total,
+    spend,
+    spendLabel: spend > 0 ? moneyLabel(spend) : "—",
+    segments,
+    coveragePercent: total ? Math.round((100 * covered) / total) : null,
+  };
+}
+
+export function isExecutiveTileMuted(
+  lens: ExecutiveLensKind,
+  cost: number,
+  posture: InvestmentPosture | null,
+  criticality: BusinessCriticality | null,
+): boolean {
+  if (lens === "posture") return !posture;
+  if (lens === "spend") return !cost;
+  if (lens === "risk") return !criticality;
+  return false;
+}

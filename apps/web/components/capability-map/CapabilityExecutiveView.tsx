@@ -10,7 +10,11 @@ import {
   assessCapability,
   criticalityLabel,
   dispositionLabel,
+  domainIdentityColor,
+  domainLensRollup,
   executiveKpis,
+  isExecutiveTileMuted,
+  orderedDomainIdsFromTree,
   parseDisposition,
   postureLabel,
   retireSavings,
@@ -140,6 +144,8 @@ export function CapabilityExecutiveView({
   const domains = focusDomainId ? tree.filter((node) => node.id === focusDomainId) : tree;
   const sections = (domains.length ? domains : tree).filter((node) => node.children.length > 0 || node.id !== "no-domain");
   const maxSpend = Math.max(0, ...tree.flatMap((domain) => domain.children.map((child) => child.cost)));
+  const estateSpend = tree.reduce((sum, domain) => sum + domain.cost, 0);
+  const estateDomainIds = useMemo(() => orderedDomainIdsFromTree(tree), [tree]);
   const byId = useMemo(() => new Map(objects.map((object) => [object.id, object])), [objects]);
   const selected = selectedId
     ? sections.flatMap((domain) => domain.children).find((node) => node.id === selectedId) ??
@@ -221,44 +227,66 @@ export function CapabilityExecutiveView({
 
       <div className={cn("grid items-start gap-4", selected ? "lg:grid-cols-[minmax(0,1fr)_320px]" : "")}>
         <div className="flex min-w-0 flex-col gap-6">
-          {sections.map((domain) => (
-            <section key={domain.id} data-testid={`exec-domain-${domain.id}`}>
-              <div className="mb-2.5 flex items-baseline justify-between gap-3 border-b border-[#e6e8ee] pb-1.5">
+          {sections.map((domain) => {
+            const identity = domainIdentityColor(domain.id, estateDomainIds);
+            const rollup = domainLensRollup(domain, records, edges, lens, estateSpend);
+            return (
+            <section
+              key={domain.id}
+              data-testid={`exec-domain-${domain.id}`}
+              className="rounded-xl py-3 pr-3.5 pl-4"
+              style={{
+                background: `rgba(${identity.rgb}, 0.045)`,
+                boxShadow: `inset 3px 0 0 rgb(${identity.rgb})`,
+              }}
+            >
+              <div className="mb-2.5 flex items-center justify-between gap-3">
                 <button
                   type="button"
-                  className="text-left text-[13.5px] font-semibold text-[#1c2230] disabled:cursor-default"
+                  data-testid={`exec-domain-pill-${domain.id}`}
+                  className="inline-flex max-w-full shrink-0 rounded-full px-2.5 py-[3px] text-left text-[13px] font-semibold tracking-[-0.01em] disabled:cursor-default"
+                  style={{ background: `rgba(${identity.rgb}, 0.14)`, color: `rgb(${identity.ink})` }}
                   disabled={domain.id === "no-domain"}
                   onClick={() => domain.id !== "no-domain" && onOpenDomain(domain.id)}
                 >
                   {domain.name}
                 </button>
-                <span className="text-[11.5px] text-[#8b90a0]">
-                  {domain.children.length} {domain.children.length === 1 ? "capability" : "capabilities"}
-                </span>
+                <DomainRollupBar rollup={rollup} />
               </div>
               <div className={cn("grid gap-2.5", selected || focusDomainId ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3" : "grid-cols-2 md:grid-cols-3 xl:grid-cols-4")}>
                 {domain.children.map((node) => {
                   const cap = byId.get(node.id) as CapabilityRecord | undefined;
                   const assessment = assessCapability(cap, records, edges);
+                  const muted = isExecutiveTileMuted(lens, node.cost, assessment.posture, assessment.businessCriticality);
                   return (
                     <button
                       key={node.id}
                       type="button"
                       id={`exec-cap-${node.id}`}
                       data-testid={`exec-tile-${node.id}`}
+                      data-muted={muted ? "true" : "false"}
                       aria-pressed={selectedId === node.id}
                       onClick={() => onOpenCap(node.id, node.domainId)}
                       className={cn(
                         "flex min-h-[92px] flex-col rounded-[10px] border p-3 text-left",
-                        tileClass(lens, node, assessment.posture, assessment.businessCriticality, maxSpend),
+                        muted
+                          ? "border-dashed border-[#eceef3] bg-[#fcfcfd] text-[#8b90a0]"
+                          : tileClass(lens, node, assessment.posture, assessment.businessCriticality, maxSpend),
                         selectedId === node.id && "ring-2 ring-[#5b4ce6] ring-offset-2",
                       )}
                     >
-                      <div className="text-[13px] font-semibold leading-snug tracking-[-0.01em]">{node.name}</div>
-                      <span className={cn("mt-2 inline-flex w-fit rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold", POSTURE_PILL[assessment.posture ?? "none"])}>
+                      <div className={cn("text-[13px] leading-snug tracking-[-0.01em]", muted ? "font-medium text-[#6b7289]" : "font-semibold")}>{node.name}</div>
+                      <span
+                        className={cn(
+                          "mt-2 inline-flex w-fit rounded-full px-1.5 py-0.5 text-[10.5px]",
+                          assessment.posture
+                            ? cn("font-semibold", POSTURE_PILL[assessment.posture])
+                            : "bg-transparent font-medium text-[#9aa0ae] ring-1 ring-inset ring-[#e6e8ee]",
+                        )}
+                      >
                         {postureLabel(assessment.posture)}
                       </span>
-                      <div className="mt-auto pt-2 text-[11.5px] opacity-80">
+                      <div className={cn("mt-auto pt-2 text-[11.5px]", muted ? "text-[#9aa0ae] opacity-70" : "opacity-80")}>
                         {moneyLabel(node.cost)} · {node.uniqueAppIds.length} app{node.uniqueAppIds.length === 1 ? "" : "s"}
                       </div>
                     </button>
@@ -266,7 +294,8 @@ export function CapabilityExecutiveView({
                 })}
               </div>
             </section>
-          ))}
+            );
+          })}
         </div>
 
         {selected ? (
@@ -427,6 +456,26 @@ function ExecutivePanel({
         Open in Architect workspace
       </Link>
     </aside>
+  );
+}
+
+function DomainRollupBar({ rollup }: { rollup: ReturnType<typeof domainLensRollup> }) {
+  return (
+    <div className="flex min-w-0 flex-1 items-center justify-end gap-3" data-testid="exec-domain-rollup">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex h-2 w-[148px] shrink-0 overflow-hidden rounded-full bg-[#eef0f4]" aria-hidden="true">
+          {rollup.segments.map((segment) => (
+            <span key={segment.key} className="block h-full" style={{ width: `${segment.fraction * 100}%`, background: segment.color }} />
+          ))}
+        </div>
+        <span className="whitespace-nowrap text-[12px] text-[#5b6170]">
+          <strong className="font-semibold text-[#1c2230]">
+            {rollup.assessed} of {rollup.total} assessed
+          </strong>
+        </span>
+      </div>
+      <span className="whitespace-nowrap text-[12.5px] font-semibold text-[#1c2230]">{rollup.spendLabel}</span>
+    </div>
   );
 }
 

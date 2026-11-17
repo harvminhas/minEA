@@ -30,6 +30,7 @@ import { useTenancy } from "@/lib/tenancy";
 import { modelPath, type ModelSection } from "@/lib/mvp-paths";
 import { useModelNavExtras } from "@/lib/use-repository-nav-counts";
 import { catalogStats } from "@/lib/model-catalog";
+import { l2Capabilities } from "@/lib/capability-assessment";
 import { AI_GROUP_LABEL, UI_TYPE_LABEL } from "@/lib/relationship-targets";
 import { useModelCatalog } from "@/lib/use-model-catalog";
 import { architectureItems, visibleArchitectureItems, type HiddenCounts } from "@/lib/architecture-nav";
@@ -256,7 +257,7 @@ export function ModelSidebar({
   };
   const arch = useArchitectureAdvanced(orgSlug ?? "", workspaceSlug ?? "", hidden);
   const archCount: Record<string, number | undefined> = {
-    capabilities: countTypes(["capability"]),
+    capabilities: catalog.data ? l2Capabilities(catalog.data.objects).length : undefined,
     roadmap: countTypes(["roadmap_item"]),
     "sensitive-data": countTypes(["data_object"]),
     processes: hidden.processes,
