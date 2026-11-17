@@ -519,6 +519,38 @@ WEAKEST_CRITERIA = (
     "Activities with no app are coverage gaps, not weak fitness."
 )
 
+# "0 apps" / "no enabling apps" / coverage gaps on the capability map — not "apps with 0 licences".
+_COVERAGE_QUESTION = re.compile(
+    r"\b("
+    r"(?:no|zero|0)\s+(?:enabling\s+)?apps?"
+    r"|without\s+an?\s+apps?"
+    r"|have\s+no\s+app"
+    r"|uncovered"
+    r"|coverage\s+gaps?"
+    r"|not\s+covered"
+    r")\b",
+    re.I,
+)
+
+
+def is_coverage_question(question: str) -> bool:
+    """True for 'capabilities with no apps', 'what has 0 apps', coverage-gap questions."""
+    return bool(_COVERAGE_QUESTION.search(question or ""))
+
+
+def coverage_brief(result: dict) -> dict:
+    """Compact capability_health slice for a coverage question: counts and no-app rows only."""
+    return {
+        "use": (
+            "no_apps are the domains, capabilities and activities with 0 enabling apps "
+            "(unique_app_count 0, rolled up once). no_app_counts and level_counts are the numbers to write. "
+            "Say which level you are listing. Do not recount."
+        ),
+        "no_app_counts": result.get("no_app_counts") or {},
+        "level_counts": result.get("level_counts") or {},
+        "no_apps": result.get("no_apps") or [],
+    }
+
 
 def _tree_costs(bag: ToolBag) -> dict[str, float]:
     costs: dict[str, float] = {}
@@ -631,6 +663,18 @@ def capability_health(bag: ToolBag, args: dict) -> dict:
     originating = [row for row in rows if row["redundancy"] in {"two", "many"} and row["redundancy_place"] == row["name"]]
     inherited = [row for row in rows if row["redundancy"] in {"two", "many"} and row["redundancy_place"] and row["redundancy_place"] != row["name"]]
     gaps = [row for row in rows if row["coverage"] in {"gap", "partial"}]
+    no_apps = [row for row in rows if row["unique_app_count"] == 0]
+    level_counts = {
+        "domain": len(domains),
+        "capability": len(capabilities),
+        "activity": len(activities),
+    }
+    no_app_counts = {
+        "domain": sum(1 for row in no_apps if row["level"] == "domain"),
+        "capability": sum(1 for row in no_apps if row["level"] == "capability"),
+        "activity": sum(1 for row in no_apps if row["level"] == "activity"),
+    }
+    _note_numbers(bag, *level_counts.values(), *no_app_counts.values(), len(no_apps))
     best = sorted(capabilities or rows, key=_shape_key)
     weakest = sorted(domains or rows, key=lambda row: _shape_key(row, weakest=True))
 
@@ -686,6 +730,7 @@ def capability_health(bag: ToolBag, args: dict) -> dict:
             "activities": len(activities),
             "records": len(rows),
             "coverage_gaps": len(gaps),
+            "no_apps": len(no_apps),
             "overlaps": len(originating),
             "unique_apps": len(unique_ids),
             "annual_cost": annual,
@@ -693,6 +738,9 @@ def capability_health(bag: ToolBag, args: dict) -> dict:
         "best_shape": [slim(row) for row in best],
         "weakest_domains": [slim(row) for row in weakest],
         "gaps": [slim(row) for row in gaps],
+        "no_apps": [slim(row) for row in no_apps],
+        "no_app_counts": no_app_counts,
+        "level_counts": level_counts,
         "redundant": [slim(row) for row in originating],
         "redundant_inherited": [slim(row) for row in inherited],
         "records": rows,
@@ -1037,7 +1085,7 @@ TOOLS: list[AskTool] = [
     ),
     AskTool(
         name="find_gaps",
-        description="List applications or infrastructure missing a field. field is owner, vendor, annual_cost, renewal_date, lifecycle, or criticality. scope is applications, infrastructure, or estate. Use this for without, missing, or no vendor/owner/cost. count and by_type are the numbers to write. This is not a list of vendors.",
+        description="List applications or infrastructure missing a field. field is owner, vendor, annual_cost, renewal_date, lifecycle, or criticality. scope is applications, infrastructure, or estate. Use this for without, missing, or no vendor/owner/cost. count and by_type are the numbers to write. This is not a list of vendors. Do not use this for capabilities or activities with no apps — that is capability_health (no_apps).",
         parameters={
             "type": "object",
             "properties": {
@@ -1080,9 +1128,13 @@ TOOLS: list[AskTool] = [
             "or a capability with no activities, with two or more unique direct apps; parents inherit; the same app at two "
             "levels counts once), unique app count rolled up once, and annual cost, for every domain, capability and activity. "
             "Each row has id and path so you can cite it. Optional filters: level (domain, capability, activity) and domain "
-            "(id or name). best_shape ranks capabilities by full coverage first, then best fitness, then no redundancy. "
-            "weakest_domains uses the inverse. gaps are coverage gap or partial. redundant is where overlap starts. "
-            "Say which of those criteria you used. Use the numbers as given. Do not do arithmetic."
+            "(id or name). Use this for which capability is in best shape, the weakest domain, coverage gaps, and any "
+            "question about capabilities, activities or domains with no apps, 0 apps, or no enabling apps. "
+            "no_apps is every row with unique_app_count 0 (no enabling apps, rolled up once); no_app_counts and level_counts "
+            "are the numbers to write, split by level (domain, capability, activity). Say which level you are listing. "
+            "best_shape ranks capabilities by full coverage first, then best fitness, then no redundancy. "
+            "weakest_domains uses the inverse. gaps are coverage gap or partial (partial still has apps). "
+            "redundant is where overlap starts. Use the numbers as given. Do not do arithmetic."
         ),
         parameters={
             "type": "object",

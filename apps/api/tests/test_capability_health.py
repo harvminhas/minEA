@@ -10,8 +10,9 @@ from app.ai.ask import steps
 from app.ai.ask.capability_tree import build_capability_tree, is_activity, parse_link_fitness
 from app.ai.ask.cio_views import overlaps
 from app.ai.ask.graph import Edge, WorkspaceGraph, _record
-from app.ai.ask.loop import SYSTEM
-from app.ai.ask.tools import TOOLS, run_tool, tool_specs
+from app.ai.ask.grounding import graph_numbers, harvest
+from app.ai.ask.loop import SYSTEM, _validate
+from app.ai.ask.tools import TOOLS, coverage_brief, is_coverage_question, run_tool, tool_specs
 from app.ai.gemini_client import build_gemini_tools
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -183,7 +184,7 @@ def test_health_step_and_tool_are_wired():
     bag, _ = _bag("finance")
     result = run_tool(bag, "capability_health", {})
     label = steps.tool_step(1, "capability_health", {}, result)["label"]
-    assert "scored" in label and "coverage gap" in label and "overlap" in label
+    assert "activity with no apps" in label
     names = [item["name"] for item in tool_specs(include_ai=False)]
     assert "capability_health" in names and "overlapping_tools" in names
     assert build_gemini_tools(tool_specs())
@@ -191,8 +192,127 @@ def test_health_step_and_tool_are_wired():
     assert "Full coverage first" in SYSTEM or "full coverage first" in SYSTEM
     assert "best fitness" in SYSTEM
     assert "no redundancy" in SYSTEM
-    assert "Say which of those criteria" in SYSTEM or "must say which of those criteria" in SYSTEM
+    assert "Say which of those criteria" in SYSTEM or "must say which of those criteria" in SYSTEM or "say which of those criteria" in SYSTEM
+    assert "no enabling apps" in SYSTEM and "Do not count those from the workspace" in SYSTEM
+    assert "Do not use find_gaps for capabilities or activities with no apps" in SYSTEM
     assert len({item.name for item in TOOLS}) == len(TOOLS)
     spec = next(item for item in tool_specs() if item["name"] == "capability_health")
     assert "level" in spec["input_schema"]["properties"]
     assert "domain" in spec["input_schema"]["properties"]
+
+
+
+def test_coverage_questions_are_detected():
+    for question in (
+        "list capabilities that have 0 enabling apps",
+        "capabilities with no apps",
+        "activities with no apps",
+        "what has 0 apps",
+        "which activities have no enabling apps",
+        "where do we have coverage gaps",
+    ):
+        assert is_coverage_question(question), question
+    for question in ("apps with 0 licences", "what renews in the next 90 days", "what has no owner"):
+        assert not is_coverage_question(question), question
+
+
+def test_finance_no_apps_lists_forecasts_only_and_notes_zero():
+    bag, _ = _bag("finance")
+    result = run_tool(bag, "capability_health", {})
+    assert result["no_app_counts"] == {"domain": 0, "capability": 0, "activity": 1}
+    assert result["level_counts"]["capability"] == 3
+    assert [row["id"] for row in result["no_apps"]] == ["fc"]
+    assert result["no_apps"][0]["level"] == "activity"
+    assert "0" in bag.numbers  # "0 capabilities have no apps" must be allowed
+    assert "1" in bag.numbers and "3" in bag.numbers and "4" in bag.numbers
+
+
+def _gap_map(empty=12, covered=15):
+    """A map with many empty L2 capabilities, so the gap count is outside the free 0-10 band."""
+    objects = [{"id": "d", "type": "business_domain", "name": "Operations"}]
+    edges = []
+    empty_ids = [f"empty{i}" for i in range(empty)]
+    covered_ids = [f"capped{i}" for i in range(covered)]
+    for cid in empty_ids:
+        objects.append({"id": cid, "type": "capability", "name": f"Empty {cid}", "properties": {"domain_id": "d"}})
+    for cid in covered_ids:
+        app = f"app-{cid}"
+        objects.append({"id": cid, "type": "capability", "name": f"Covered {cid}", "properties": {"domain_id": "d"}})
+        objects.append({"id": app, "type": "application", "name": f"App {cid}", "properties": {}})
+        edges.append({"type": "supported_by", "from_object_id": cid, "to_object_id": app})
+    return _graph(objects, edges), empty_ids, covered_ids
+
+
+def _prepare(graph, question, *, use_health=False):
+    from app.ai.ask.tools import ToolBag
+
+    bag = ToolBag(graph=graph, seen_ids=set(graph.records), numbers=set())
+    graph_numbers(graph, bag.numbers)
+    harvest(question, bag.numbers)
+    result = None
+    if use_health:
+        result = run_tool(bag, "capability_health", {})
+        harvest(result, bag.numbers)
+    return bag, result
+
+
+def test_listing_zero_apps_fails_the_check_without_capability_health():
+    """The workspace does not include capability totals, so '12 of 27' is ungrounded without the lookup."""
+    graph, empty_ids, covered_ids = _gap_map(12, 15)
+    question = "list capabilities that have 0 enabling apps"
+    bag, _ = _prepare(graph, question, use_health=False)
+    answer = {
+        "headline": "12 of 27 capabilities have 0 enabling apps",
+        "answer_markdown": "12 of 27 capabilities have 0 enabling apps. These are capabilities, not activities.",
+        "item_ids": empty_ids,
+        "citations": [],
+    }
+    assert _validate(answer, bag, question) == "ungrounded_number"
+
+
+def test_listing_zero_apps_is_grounded_from_capability_health():
+    graph, empty_ids, covered_ids = _gap_map(12, 15)
+    question = "list capabilities that have 0 enabling apps"
+    bag, result = _prepare(graph, question, use_health=True)
+    assert result["no_app_counts"]["capability"] == 12
+    assert result["level_counts"]["capability"] == 27
+    assert result["no_app_counts"]["activity"] == 0
+    assert {row["id"] for row in result["no_apps"]} == set(empty_ids)
+    assert coverage_brief(result)["no_app_counts"]["capability"] == 12
+    answer = {
+        "headline": "12 of 27 capabilities have 0 enabling apps",
+        "answer_markdown": "12 of 27 capabilities have 0 enabling apps. These are capabilities (L2), not activities.",
+        "item_ids": empty_ids,
+        "citations": [],
+    }
+    assert _validate(answer, bag, question) is None
+    find_gaps = next(item for item in tool_specs() if item["name"] == "find_gaps")
+    assert "capability_health" in find_gaps["description"]
+
+
+def test_coverage_question_auto_runs_capability_health(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from tests.test_ask_engine import CTX, FakeModels, _text_response
+    from app.ai.ask import loop
+
+    graph, empty_ids, _ = _gap_map(12, 15)
+    question = "list capabilities that have 0 enabling apps"
+    answer = {
+        "headline": "12 of 27 capabilities have 0 enabling apps",
+        "answer_markdown": "12 of 27 capabilities have 0 enabling apps. These are capabilities, not activities.",
+        "item_ids": empty_ids,
+        "citations": [],
+    }
+    models = FakeModels([_text_response(answer)])
+    monkeypatch.setattr(loop, "is_configured", lambda: True)
+    monkeypatch.setattr(loop, "model_name", lambda: "gemini-2.5-flash")
+    monkeypatch.setattr(loop, "get_client", lambda: SimpleNamespace(aio=SimpleNamespace(models=models)))
+    result = asyncio.run(loop.answer_with_model(None, CTX, question, graph=graph))
+    assert result["source"] == "llm", result.get("fallback_reason")
+    assert "capability_health" in result["tools_used"]
+    assert result["headline"] == "12 of 27 capabilities have 0 enabling apps"
+    # The first model call stays JSON-mode without tools; the lookup was run by the server.
+    assert models.configs[0].response_mime_type == "application/json" and not models.configs[0].tools
+    prompt = models.calls  # generate_content stores configs, not prompt; check tools_used is enough
+    assert len(models.configs) == 1

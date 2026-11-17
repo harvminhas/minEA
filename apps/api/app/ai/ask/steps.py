@@ -241,9 +241,22 @@ def _overlaps(args: dict, result: dict) -> tuple[str, dict]:
 
 def _health(args: dict, result: dict) -> tuple[str, dict]:
     t = result.get("totals") or {}
+    none = result.get("no_app_counts") or {}
+    caps = int(none.get("capability") or 0)
+    acts = int(none.get("activity") or 0)
+    domains = int(none.get("domain") or 0)
     records = int(t.get("records") or 0)
     if not records:
         return "No capabilities in the map yet", {"records": 0}
+    empty = []
+    if caps:
+        empty.append(count_label(caps, "capability") + " with no apps")
+    if acts:
+        empty.append(count_label(acts, "activity") + " with no apps")
+    if domains:
+        empty.append(count_label(domains, "domain") + " with no apps")
+    if empty:
+        return "; ".join(empty), {"records": records, "no_apps": int(t.get("no_apps") or 0), "capabilities": caps, "activities": acts}
     gaps = int(t.get("coverage_gaps") or 0)
     overlaps = int(t.get("overlaps") or 0)
     parts = [count_label(records, "item") + " scored"]

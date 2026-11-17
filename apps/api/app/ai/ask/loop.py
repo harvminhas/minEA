@@ -23,7 +23,7 @@ from app.ai.ask.context import build_context, log_size
 from app.ai.ask.timing import AskTiming
 from app.ai.ask.grounding import graph_numbers, harvest, is_grounded, ungrounded
 from app.ai.ask.steps import checking_step, estate_step, same_step, step, tool_step
-from app.ai.ask.tools import ToolBag, run_tool, tool_specs
+from app.ai.ask.tools import ToolBag, coverage_brief, is_coverage_question, run_tool, tool_specs
 from app.ai.gemini_client import build_gemini_tools, get_client, is_configured, model_name, thinking_config as model_thinking_config
 from app.services.tenancy import TenancyContext
 
@@ -75,7 +75,7 @@ SYSTEM = """You are BuboMap Ask. You answer questions about ONE company's IT est
 The user message contains the WHOLE workspace (every item of every kind, its fields, relationships, teams and people), then the question.
 Answer from that workspace. You know nothing else about this company.
 Answer in ONE reply, straight from the workspace: it already has every item, field, owner, vendor, cost and relationship. Do not call a lookup to re-read what the workspace shows.
-Reply with the JSON answer (the response schema). If you truly cannot answer without a lookup, set "need_lookup": true and "lookup_reason", and you will be given the lookups next. Call a lookup only when you truly need it: tracing what depends on what (impact_of), AI risk and data access (ai_landscape), idle licences (idle_licences), overlapping tools (overlapping_tools), capability or domain health (capability_health), or a total too large to add up reliably (aggregate).
+Reply with the JSON answer (the response schema). If you truly cannot answer without a lookup, set "need_lookup": true and "lookup_reason", and you will be given the lookups next. Call a lookup only when you truly need it: tracing what depends on what (impact_of), AI risk and data access (ai_landscape), idle licences (idle_licences), overlapping tools (overlapping_tools), capability or domain health including coverage and who has no apps (capability_health), or a total too large to add up reliably (aggregate).
 Never invent applications, capabilities, infrastructure, names, numbers, dates, owners, vendors, or relationships.
 Vendors are already resolved to one name each; "product" names the product a vendor sells (MuleSoft is a Salesforce product). Spelling in the question may be off; match it to the workspace names.
 Return "item_ids": the id of every item your answer is about (the screen builds its table from these, with real data). For a "no" answer, item_ids is empty.
@@ -83,10 +83,10 @@ Lookups are optional helpers, for the cases above (aggregate for totals and shar
 filter_records filters every kind of item by vendor (one resolved vendor name, exact match), owner, hosting, cloud provider, tenant, region, server, AI turned on, renewal window, cost range, lifecycle, criticality or name, with an optional operator per text filter.
 Use impact_of for what breaks, what depends on an item, or how important an item is.
 Use aggregate for a large total, share or renewal window you cannot add up reliably from the workspace. A vendor list is aggregate with group_by vendor, and only when the question asks which vendors are named or who is paid. Vendors with no annual cost still count. Do not do arithmetic.
-Use find_gaps when the question asks what is missing: without a vendor, no owner, no cost, no renewal, no criticality, or no lifecycle. Pass field and scope. That is not a vendor list. Do not do arithmetic.
+Use find_gaps when the question asks what is missing: without a vendor, no owner, no cost, no renewal, no criticality, or no lifecycle. Pass field and scope. That is not a vendor list. Do not use find_gaps for capabilities or activities with no apps. Do not do arithmetic.
 Use idle_licences for idle, unused or wasted licences (licences bought versus in use, and what the idle ones cost). Use its totals as given. Do not do arithmetic.
 Use overlapping_tools for duplicate or overlapping tools: two or more unique direct apps or platforms on the same activity (or on a capability with no activities); parents inherit that overlap; the same app at two levels counts once. Use its savings as given.
-Use capability_health for questions about capability or domain health: which capability is in best shape, the weakest domain, where there are coverage gaps, fitness, or which activities have redundant apps. "Best shape" means full coverage first, then best fitness, then no redundancy. The answer must say which of those criteria it used. Use the tool's numbers as given. Do not do arithmetic.
+Use capability_health for questions about capability or domain health: which capability is in best shape, the weakest domain, where there are coverage gaps, fitness, which activities have redundant apps, and any question about capabilities, activities or domains with no apps, 0 apps, or no enabling apps. Do not count those from the workspace; those counts are not in the workspace totals. Set need_lookup and use capability_health (no_apps, no_app_counts, level_counts). The answer must say which level it is listing (domain, capability or activity). "Best shape" means full coverage first, then best fitness, then no redundancy; say which of those criteria you used. Use the tool's numbers as given. Do not do arithmetic.
 Use ai_landscape for any question about AI: AI features in tools (Copilot, Zoom AI Companion, Sidekick and so on), AI agents, AI models and platforms, what AI can see or change, AI risk flags, unreviewed AI, or AI spend. Use its counts and spend as given. Do not do arithmetic.
 An AI feature is a setting on an app, not a separate record. Cite the app it is on.
 Only AI wording makes a question about AI: AI, agent, Copilot, LLM, GPT, AI model, language model, or a model's name. A bare "model" means the architecture model (this map of applications, capabilities and infrastructure), not AI.
@@ -782,6 +782,16 @@ async def run_ask_inner(
     timing.context_chars = len(prompt)
     timing.add("context", tick() - built)
     yield {"event": "step", "data": {**estate, "label": f"{estate['label']} (all of it sent to the AI)"}}
+    if is_coverage_question(question):
+        health = run_tool(bag, "capability_health", {})
+        harvest(health, bag.numbers)
+        tools_used.append("capability_health")
+        prompt += (
+            "\n\nLOOKUP capability_health already ran. Use no_app_counts, level_counts and no_apps ids. "
+            "Do not recount. Say which level (domain, capability, activity) you are listing.\n"
+            + json.dumps(coverage_brief(health), default=str)
+        )
+        yield {"event": "step", "data": tool_step(len(tools_used), "capability_health", {}, health)}
     for rec in earlier:
         bag.note_record(rec)  # items from earlier turns, re-checked against this workspace, may be named again
     contents: list[types.Content] = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
