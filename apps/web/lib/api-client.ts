@@ -67,6 +67,9 @@ import type {
   DomainProductsResponse,
   DomainHistoryResponse,
   UpsertDomainMappingRequest,
+  StructureDeleteImpact,
+  StructureMoveRequest,
+  StructureMoveResponse,
   PeopleRole,
   PeopleRoleCreate,
   PeopleRoleUpdate,
@@ -1009,6 +1012,24 @@ export const capabilityMapApi = {
       body: JSON.stringify(body),
       token,
     }),
+
+  deleteImpact: (orgSlug: string, workspaceSlug: string, objectId: string, token: string) =>
+    apiFetch<StructureDeleteImpact>(
+      `${wsBase(orgSlug, workspaceSlug)}/capability-map/nodes/${objectId}/delete-impact`,
+      { token }
+    ),
+
+  moveNode: (
+    orgSlug: string,
+    workspaceSlug: string,
+    objectId: string,
+    body: StructureMoveRequest,
+    token: string
+  ) =>
+    apiFetch<StructureMoveResponse>(
+      `${wsBase(orgSlug, workspaceSlug)}/capability-map/nodes/${objectId}/move`,
+      { method: "POST", body: JSON.stringify(body), token }
+    ),
 };
 
 // ─── People (Roles & Teams) ──────────────────────────────────────────────────

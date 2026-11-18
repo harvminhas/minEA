@@ -15,6 +15,8 @@ import {
   type MoveTarget,
 } from "@/lib/capability-detail";
 import { themeForDomain } from "@/lib/domain-theme";
+import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { StructureKebab, type StructureActions } from "@/components/capability-map/StructureActions";
 import { domainIcon } from "@/lib/capability-map-icons";
 import { CapabilityAssessmentFields, type AssessmentPatch } from "@/components/capability-map/CapabilityAssessmentFields";
 import {
@@ -60,6 +62,7 @@ export type CapabilityDetailViewProps = {
   suggestedPosture?: SuggestedPosture | null;
   onSetAssessment?: (patch: AssessmentPatch) => void;
   addDialog?: ReactNode;
+  structure?: StructureActions;
 };
 
 export function CapabilityDetailView({
@@ -88,6 +91,7 @@ export function CapabilityDetailView({
   suggestedPosture = null,
   onSetAssessment,
   addDialog,
+  structure,
 }: CapabilityDetailViewProps) {
   const coverage = coverageSummary(node);
   const fitness = fitnessSummary(node);
@@ -158,6 +162,8 @@ export function CapabilityDetailView({
               canEdit={canEdit && Boolean(onRename)}
               onSave={(name) => onRename?.(node.id, name)}
               heading
+              editing={structure?.renamingId === node.id}
+              onEditingChange={(editing) => structure?.setRenamingId(editing ? node.id : null)}
             />
             <p className="mt-0.5 text-[13px] text-[#6b7289]">Capability in {domainName || "this map"}</p>
           </div>
@@ -178,6 +184,19 @@ export function CapabilityDetailView({
                 Add relationship
               </button>
             )}
+            {structure ? (
+              <StructureKebab
+                testId={`structure-menu-capability-${node.id}`}
+                ariaLabel={`Actions for ${node.name}`}
+                buttonClassName="opacity-100"
+                items={[
+                  { label: "Rename", icon: <Pencil size={14} />, hidden: !structure.canEdit, onClick: () => structure.setRenamingId(node.id) },
+                  { label: "Move to another domain…", icon: <ArrowRight size={14} />, hidden: !structure.canEdit, onClick: () => structure.openMove({ id: node.id, kind: "capability", name: node.name, domainId: node.domainId }) },
+                  { label: "Add activity", icon: <Plus size={14} />, hidden: !structure.canCreate, onClick: () => structure.addActivity(node.id, node.domainId) },
+                  { label: "Delete capability…", icon: <Trash2 size={14} />, variant: "danger", hidden: !structure.canDelete, onClick: () => structure.openDelete({ id: node.id, kind: "capability", name: node.name, domainId: node.domainId }) },
+                ]}
+              />
+            ) : null}
           </div>
         </div>
 
@@ -227,6 +246,7 @@ export function CapabilityDetailView({
           onSetDisposition={onSetDisposition}
           fitnessOpenRelId={fitnessOpenRelId}
           theme={theme}
+          structure={structure}
         />
 
         {node.children.map((activity) => (
@@ -247,6 +267,7 @@ export function CapabilityDetailView({
             onSetDisposition={onSetDisposition}
             fitnessOpenRelId={fitnessOpenRelId}
             theme={theme}
+            structure={structure}
           />
         ))}
 
@@ -322,6 +343,7 @@ function TargetBlock({
   onSetDisposition,
   fitnessOpenRelId,
   theme,
+  structure,
 }: {
   node: TreeNode;
   kind: "capability" | "activity";
@@ -338,6 +360,7 @@ function TargetBlock({
   onSetDisposition?: (link: AppLink, disposition: Disposition) => void;
   fitnessOpenRelId?: string | null;
   theme: { accent: string; tint: string; ink: string; icon: string };
+  structure?: StructureActions;
 }) {
   const openDetails = () => onOpenDetails(detailsHref);
   const uniqueApps = [...new Set(links.map((link) => link.appId))];
@@ -382,11 +405,14 @@ function TargetBlock({
             value={node.name}
             canEdit={canEdit && Boolean(onRename)}
             onSave={(name) => onRename?.(node.id, name)}
+            editing={structure?.renamingId === node.id}
+            onEditingChange={(editing) => structure?.setRenamingId(editing ? node.id : null)}
           />
           <span className="mt-px block text-[11px] text-[#8b90a0]">
             {kind === "capability" ? "Capability — apps linked here apply to the whole capability" : "Activity"}
           </span>
         </div>
+        <span className="flex shrink-0 items-center gap-1">
         {uniqueApps.length >= 2 ? (
           <span
             className="inline-flex h-5 shrink-0 items-center rounded-full bg-[#fff7ed] px-2 text-[11px] font-semibold text-[#9a3412]"
@@ -395,6 +421,27 @@ function TargetBlock({
             {uniqueApps.length} apps
           </span>
         ) : null}
+        {structure ? (
+          <StructureKebab
+            testId={kind === "activity" ? `structure-menu-activity-${node.id}` : `structure-menu-capability-block-${node.id}`}
+            ariaLabel={`Actions for ${node.name}`}
+            items={
+              kind === "activity"
+                ? [
+                    { label: "Rename", icon: <Pencil size={14} />, hidden: !structure.canEdit, onClick: () => structure.setRenamingId(node.id) },
+                    { label: "Move to another capability…", icon: <ArrowRight size={14} />, hidden: !structure.canEdit, onClick: () => structure.openMove({ id: node.id, kind: "activity", name: node.name, domainId: node.domainId, parentId: node.parentId }) },
+                    { label: "Delete activity…", icon: <Trash2 size={14} />, variant: "danger", hidden: !structure.canDelete, onClick: () => structure.openDelete({ id: node.id, kind: "activity", name: node.name, domainId: node.domainId, parentId: node.parentId }) },
+                  ]
+                : [
+                    { label: "Rename", icon: <Pencil size={14} />, hidden: !structure.canEdit, onClick: () => structure.setRenamingId(node.id) },
+                    { label: "Move to another domain…", icon: <ArrowRight size={14} />, hidden: !structure.canEdit, onClick: () => structure.openMove({ id: node.id, kind: "capability", name: node.name, domainId: node.domainId }) },
+                    { label: "Add activity", icon: <Plus size={14} />, hidden: !structure.canCreate, onClick: () => structure.addActivity(node.id, node.domainId) },
+                    { label: "Delete capability…", icon: <Trash2 size={14} />, variant: "danger", hidden: !structure.canDelete, onClick: () => structure.openDelete({ id: node.id, kind: "capability", name: node.name, domainId: node.domainId }) },
+                  ]
+            }
+          />
+        ) : null}
+        </span>
       </div>
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         {links.length === 0 ? (
@@ -643,13 +690,22 @@ function EditableTitle({
   canEdit,
   onSave,
   heading,
+  editing: editingProp,
+  onEditingChange,
 }: {
   value: string;
   canEdit: boolean;
   onSave?: (name: string) => void | Promise<void>;
   heading?: boolean;
+  editing?: boolean;
+  onEditingChange?: (editing: boolean) => void;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [internalEditing, setInternalEditing] = useState(false);
+  const editing = editingProp ?? internalEditing;
+  const setEditing = (next: boolean) => {
+    setInternalEditing(next);
+    onEditingChange?.(next);
+  };
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
 

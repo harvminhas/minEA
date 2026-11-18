@@ -14,6 +14,8 @@ import {
   type TreeNode,
 } from "@/lib/capability-tree";
 import { cn } from "@/lib/utils";
+import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { InlineRename, StructureKebab, type StructureTarget } from "@/components/capability-map/StructureActions";
 
 const METRICS: { id: HeatMetric; label: string }[] = [
   { id: "coverage", label: "Coverage" },
@@ -63,13 +65,13 @@ const LEGEND: Record<HeatMetric, [string, string][]> = {
 
 const FOOTNOTE: Record<HeatMetric, string> = {
   coverage:
-    "Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, add, or move anything later with Edit structure.",
+    "Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, move, or delete from the menu on a domain or tile.",
   apps:
-    "Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, add, or move anything later with Edit structure.",
+    "Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, move, or delete from the menu on a domain or tile.",
   cost:
-    "Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, add, or move anything later with Edit structure.",
+    "Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, move, or delete from the menu on a domain or tile.",
   risk:
-    "Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, add, or move anything later with Edit structure.",
+    "Each tile is rolled up from the activities under it. An app linked to a lower level also counts in its parents — once, not three times. Rename, move, or delete from the menu on a domain or tile.",
   fitness:
     "Fitness is the weakest app link under the tile. Activities with no app stay a coverage gap — they are not scored as weak fitness.",
   redundancy:
@@ -94,6 +96,19 @@ const TILE: Record<string, string> = {
   "r-high": "bg-red-50 border-red-200 text-red-800",
 };
 
+export type HeatStructureActions = {
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  renamingId: string | null;
+  setRenamingId: (id: string | null) => void;
+  rename: (id: string, name: string) => void | Promise<void>;
+  addCapability: (domainId: string) => void;
+  addActivity: (parentId: string, domainId?: string | null) => void;
+  openDelete: (target: StructureTarget) => void;
+  openMove: (target: StructureTarget) => void;
+};
+
 export function CapabilityHeatMap({
   objects,
   edges,
@@ -102,6 +117,7 @@ export function CapabilityHeatMap({
   onOpenDomain,
   focusDomainId,
   initialMetric = "coverage",
+  structure,
 }: {
   objects: readonly MinEAObject[];
   edges: readonly Relationship[];
@@ -110,6 +126,7 @@ export function CapabilityHeatMap({
   onOpenDomain?: (id: string) => void;
   focusDomainId?: string | null;
   initialMetric?: HeatMetric;
+  structure?: HeatStructureActions;
 }) {
   const [metric, setMetric] = useState<HeatMetric>(initialMetric);
   const tree = useMemo(
@@ -163,23 +180,45 @@ export function CapabilityHeatMap({
       </div>
       <div className="flex flex-col gap-6">
         {sections.map((domain) => (
-          <section key={domain.id} data-testid={`heat-domain-${domain.id}`}>
-            <div className="mb-2 flex items-baseline justify-between gap-3 border-b border-[#e6e8ee] pb-1.5">
-              <button
-                type="button"
-                className="text-left text-[13.5px] font-semibold text-[#1c2230] disabled:cursor-default"
-                disabled={domain.id === "no-domain"}
-                onClick={() => domain.id !== "no-domain" && onOpenDomain?.(domain.id)}
-              >
-                {domain.name}
-              </button>
-              <span className="text-[11.5px] text-[#8b90a0]">
+          <section key={domain.id} data-testid={`heat-domain-${domain.id}`} className="group/domain">
+            <div className="group mb-2 flex items-center justify-between gap-3 border-b border-[#e6e8ee] pb-1.5">
+              {structure && structure.renamingId === domain.id ? (
+                <InlineRename
+                  value={domain.name}
+                  editing
+                  ariaLabel="Domain name"
+                  className="text-[13.5px]"
+                  onClose={() => structure.setRenamingId(null)}
+                  onSave={(name) => structure.rename(domain.id, name)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="text-left text-[13.5px] font-semibold text-[#1c2230] disabled:cursor-default"
+                  disabled={domain.id === "no-domain"}
+                  onClick={() => domain.id !== "no-domain" && onOpenDomain?.(domain.id)}
+                >
+                  {domain.name}
+                </button>
+              )}
+              <span className="flex items-center gap-2 text-[11.5px] text-[#8b90a0]">
                 {domain.children.length} {domain.children.length === 1 ? "capability" : "capabilities"}
+                {structure && domain.id !== "no-domain" ? (
+                  <StructureKebab
+                    testId={`structure-menu-domain-${domain.id}`}
+                    ariaLabel={`Actions for ${domain.name}`}
+                    items={[
+                      { label: "Rename", icon: <Pencil size={14} />, hidden: !structure.canEdit, onClick: () => structure.setRenamingId(domain.id) },
+                      { label: "Add capability", icon: <Plus size={14} />, hidden: !structure.canCreate, onClick: () => structure.addCapability(domain.id) },
+                      { label: "Delete domain…", icon: <Trash2 size={14} />, variant: "danger", hidden: !structure.canDelete, onClick: () => structure.openDelete({ id: domain.id, kind: "domain", name: domain.name }) },
+                    ]}
+                  />
+                ) : null}
               </span>
             </div>
             <div className={cn("grid gap-2.5", focusDomainId ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3")}>
               {domain.children.map((node) => (
-                <Tile key={node.id} node={node} metric={metric} onOpen={onOpen} focused={Boolean(focusDomainId) && node.domainId === focusDomainId} />
+                <Tile key={node.id} node={node} metric={metric} onOpen={onOpen} focused={Boolean(focusDomainId) && node.domainId === focusDomainId} structure={structure} />
               ))}
             </div>
           </section>
@@ -220,16 +259,41 @@ function Tabs<T extends string>({ label, value, options, onChange, testIdPrefix 
   );
 }
 
-function Tile({ node, metric, onOpen, focused }: { node: TreeNode; metric: HeatMetric; onOpen?: (id: string) => void; focused?: boolean }) {
+function Tile({ node, metric, onOpen, focused, structure }: { node: TreeNode; metric: HeatMetric; onOpen?: (id: string) => void; focused?: boolean; structure?: HeatStructureActions }) {
   return (
-    <button
-      type="button"
+    <div
       id={`heat-node-${node.id}`}
-      onClick={() => onOpen?.(node.id)}
-      className={cn("flex min-h-[88px] flex-col rounded-xl border p-3 text-left", TILE[heatClass(node, metric)], focused && "ring-2 ring-[#5b4ce6] ring-offset-2")}
+      className={cn("group relative flex min-h-[88px] flex-col rounded-xl border p-3 text-left", TILE[heatClass(node, metric)], focused && "ring-2 ring-[#5b4ce6] ring-offset-2")}
     >
-      <div className="text-[13.5px] font-semibold">{node.name}</div>
+      {structure && structure.renamingId === node.id ? (
+        <InlineRename
+          value={node.name}
+          editing
+          ariaLabel="Capability name"
+          className="text-[13.5px]"
+          onClose={() => structure.setRenamingId(null)}
+          onSave={(name) => structure.rename(node.id, name)}
+        />
+      ) : (
+        <button type="button" className="text-left text-[13.5px] font-semibold" onClick={() => onOpen?.(node.id)}>
+          {node.name}
+        </button>
+      )}
       <div className="mt-0.5 text-[11.5px]">{heatMeta(node, metric)}</div>
-    </button>
+      {structure ? (
+        <div className="absolute right-1.5 top-1.5">
+          <StructureKebab
+            testId={`structure-menu-capability-${node.id}`}
+            ariaLabel={`Actions for ${node.name}`}
+            items={[
+              { label: "Rename", icon: <Pencil size={14} />, hidden: !structure.canEdit, onClick: () => structure.setRenamingId(node.id) },
+              { label: "Move to another domain…", icon: <ArrowRight size={14} />, hidden: !structure.canEdit, onClick: () => structure.openMove({ id: node.id, kind: "capability", name: node.name, domainId: node.domainId }) },
+              { label: "Add activity", icon: <Plus size={14} />, hidden: !structure.canCreate, onClick: () => structure.addActivity(node.id, node.domainId) },
+              { label: "Delete capability…", icon: <Trash2 size={14} />, variant: "danger", hidden: !structure.canDelete, onClick: () => structure.openDelete({ id: node.id, kind: "capability", name: node.name, domainId: node.domainId }) },
+            ]}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }

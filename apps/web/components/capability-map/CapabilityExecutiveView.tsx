@@ -24,7 +24,8 @@ import {
   type Disposition,
   type InvestmentPosture,
 } from "@/lib/capability-assessment";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 
 export type ExecutiveLens = "posture" | "spend" | "risk" | "coverage";
 
@@ -160,7 +161,7 @@ export function CapabilityExecutiveView({
             {kpis.scopeLabel}
           </div>
         ) : null}
-      <div className="grid grid-cols-4 items-stretch gap-5">
+      <div className="grid grid-cols-4 items-start gap-5">
         <Kpi
           testId="exec-kpi-cost"
           value={kpis.runCost.empty ? "—" : kpis.runCost.label}
@@ -331,25 +332,47 @@ function Kpi({
   emphasize?: boolean;
   testId?: string;
 }) {
+  const [open, setOpen] = useState(false);
   return (
     <div
       className={cn(
-        "rounded-2xl bg-white p-7",
+        "rounded-2xl bg-white px-[22px] pb-4 pt-[18px]",
         emphasize ? "border-2 border-[#4f46e5]" : "border border-[#e2e8f0]",
       )}
       data-testid={testId}
     >
-      <div className="text-[16px] font-semibold leading-5 text-[#475569]">{label}</div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={testId ? `${testId}-hint` : undefined}
+        data-testid={testId ? `${testId}-hint-toggle` : undefined}
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <span className="text-[16px] font-semibold leading-5 text-[#475569]">{label}</span>
+        <span
+          className={cn(
+            "inline-flex h-[22px] w-[22px] flex-shrink-0 items-center justify-center rounded-md text-[#64748b]",
+            open && "bg-[#eef2ff] text-[#4f46e5]",
+          )}
+        >
+          <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+        </span>
+      </button>
       <div
         className={cn(
-          "mt-3 text-[36px] font-bold leading-none tracking-[-0.02em] text-[#0f172a]",
+          "mt-2.5 text-[36px] font-bold leading-none tracking-[-0.02em] text-[#0f172a]",
           tone === "red" && "text-[#b91c1c]",
           tone === "blue" && "text-[#1d4ed8]",
         )}
       >
         {value}
       </div>
-      <div className="mt-5 text-[15px] font-normal leading-6 text-[#334155]">{hint}</div>
+      {open ? (
+        <div id={testId ? `${testId}-hint` : undefined} className="mt-3.5 text-[15px] font-normal leading-6 text-[#334155]">
+          {hint}
+        </div>
+      ) : null}
     </div>
   );
 }

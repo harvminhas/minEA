@@ -249,3 +249,30 @@ class SuggestLinksResponse(BaseModel):
     suggestions: list[SuggestedLink] = Field(default_factory=list)
     unmapped: list[dict] = Field(default_factory=list)
     warning: str | None = None
+
+
+class StructureDeleteImpact(BaseModel):
+    id: str
+    kind: str  # domain | capability | activity
+    name: str
+    capabilities: int = 0
+    activities: int = 0
+    application_links: int = 0
+
+
+class StructureMoveRequest(BaseModel):
+    domain_id: str | None = None
+    parent_id: str | None = None
+    new_domain_name: str | None = None
+    new_capability_name: str | None = None
+
+
+class StructureMoveResponse(BaseModel):
+    id: str
+    kind: str
+    name: str
+    domain_id: str | None = None
+    parent_id: str | None = None
+    created_domain_id: str | None = None
+    created_capability_id: str | None = None
+

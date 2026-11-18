@@ -1733,6 +1733,35 @@ export interface CapabilityMap {
   domains: CapabilityMapDomain[];
 }
 
+export type StructureNodeKind = "domain" | "capability" | "activity";
+
+export interface StructureDeleteImpact {
+  id: string;
+  kind: StructureNodeKind;
+  name: string;
+  capabilities: number;
+  activities: number;
+  application_links: number;
+}
+
+export interface StructureMoveRequest {
+  domain_id?: string | null;
+  parent_id?: string | null;
+  new_domain_name?: string | null;
+  new_capability_name?: string | null;
+}
+
+export interface StructureMoveResponse {
+  id: string;
+  kind: StructureNodeKind;
+  name: string;
+  domain_id?: string | null;
+  parent_id?: string | null;
+  created_domain_id?: string | null;
+  created_capability_id?: string | null;
+}
+
+
 export type MappingFitness = "none" | "weak" | "adequate" | "strong";
 
 export interface DomainMappingSystem {

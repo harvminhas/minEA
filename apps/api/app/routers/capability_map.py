@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -27,13 +28,18 @@ from app.schemas.capability_map import (
     SuggestMapRequest,
     SuggestMapResponse,
     UpsertDomainMappingRequest,
+    StructureMoveResponse,
+    StructureMoveRequest,
+    StructureDeleteImpact,
 )
 from app.services.authorization import require_object_room
+from app.models.objects import ChangeLog, MinEAObject
 from app.services.capability_map import (
     add_domain_mapping_system,
     NO_DOMAIN_ID,
     NO_DOMAIN_NAME,
     adopt_template,
+    capability_name_exists_in_domain,
     capability_picker_suggestions,
     create_domain_mapping_system,
     get_domain,
@@ -43,9 +49,14 @@ from app.services.capability_map import (
     load_domain_detail,
     load_domain_products,
     map_is_initialized,
+    move_activity_to_capability,
+    move_capability_to_domain,
+    structure_delete_impact,
+    structure_kind,
     template_detail_for_api,
     templates_for_api,
     upsert_domain_mapping,
+    _parse_uuid,
 )
 from app.services.domain_history import domain_history_entries_for_api
 from app.services.snapshot_hooks import notify_workspace_data_changed
@@ -462,3 +473,157 @@ async def suggest_capability_links(
 
     result = await suggest_links(db, ctx.workspace.id, ctx.org_id)
     return SuggestLinksResponse(**result)
+
+
+async def _structure_object(db: AsyncSession, ctx: TenancyContext, object_id: UUID) -> MinEAObject:
+    assert ctx.workspace
+    result = await db.execute(
+        select(MinEAObject).where(
+            MinEAObject.id == object_id,
+            MinEAObject.workspace_id == ctx.workspace.id,
+            MinEAObject.org_id == ctx.org_id,
+        )
+    )
+    obj = result.scalar_one_or_none()
+    if not obj or structure_kind(obj) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
+    return obj
+
+
+@router.get("/nodes/{object_id}/delete-impact", response_model=StructureDeleteImpact)
+async def get_structure_delete_impact(
+    object_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> StructureDeleteImpact:
+    await ctx.require_permission(db, "object.delete")
+    assert ctx.workspace
+    obj = await _structure_object(db, ctx, object_id)
+    try:
+        payload = await structure_delete_impact(db, ctx.workspace.id, ctx.org_id, obj)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return StructureDeleteImpact(**payload)
+
+
+def _move_response(obj: MinEAObject, created_domain_id=None, created_capability_id=None) -> StructureMoveResponse:
+    kind = structure_kind(obj) or "capability"
+    props = obj.properties or {}
+    domain = props.get("domain_id")
+    parent = props.get("parent_id")
+    return StructureMoveResponse(
+        id=str(obj.id),
+        kind=kind,
+        name=obj.name,
+        domain_id=str(domain) if domain else None,
+        parent_id=str(parent) if parent and str(parent) != str(domain or "") else None,
+        created_domain_id=str(created_domain_id) if created_domain_id else None,
+        created_capability_id=str(created_capability_id) if created_capability_id else None,
+    )
+
+
+@router.post("/nodes/{object_id}/move", response_model=StructureMoveResponse)
+async def move_structure_node(
+    object_id: UUID,
+    body: StructureMoveRequest,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> StructureMoveResponse:
+    await ctx.require_permission(db, "object.edit")
+    assert ctx.workspace
+    obj = await _structure_object(db, ctx, object_id)
+    kind = structure_kind(obj)
+    created_domain_id = None
+    created_capability_id = None
+
+    try:
+        if kind == "domain":
+            raise ValueError("A domain cannot be moved under another domain")
+
+        if kind == "capability":
+            domain_id = _parse_uuid(body.domain_id)
+            new_name = (body.new_domain_name or "").strip()
+            if new_name:
+                await ctx.require_permission(db, "object.create")
+                domain = MinEAObject(
+                    workspace_id=ctx.workspace.id,
+                    org_id=ctx.org_id,
+                    type="business_domain",
+                    name=new_name,
+                    status="active",
+                    properties={},
+                    created_by=ctx.user_id,
+                    updated_by=ctx.user_id,
+                )
+                db.add(domain)
+                await db.flush()
+                db.add(ChangeLog(
+                    workspace_id=ctx.workspace.id,
+                    org_id=ctx.org_id,
+                    object_id=domain.id,
+                    object_type=domain.type,
+                    action="created",
+                    diff={"action_type": "created_object", "name": domain.name, "type": domain.type},
+                    performed_by=ctx.user_id,
+                ))
+                created_domain_id = domain.id
+                domain_id = domain.id
+            if not domain_id:
+                raise ValueError("Choose a domain, or create a new one")
+            await move_capability_to_domain(db, ctx.workspace.id, ctx.org_id, obj, domain_id)
+
+        elif kind == "activity":
+            parent_id = _parse_uuid(body.parent_id)
+            new_name = (body.new_capability_name or "").strip()
+            if new_name:
+                await ctx.require_permission(db, "object.create")
+                domain_id = _parse_uuid(body.domain_id) or _parse_uuid((obj.properties or {}).get("domain_id"))
+                if domain_id and await capability_name_exists_in_domain(
+                    db, ctx.workspace.id, ctx.org_id, domain_id, new_name
+                ):
+                    raise ValueError(f"A capability named {new_name!r} already exists in that domain")
+                props: dict = {}
+                if domain_id:
+                    props["domain_id"] = str(domain_id)
+                parent = MinEAObject(
+                    workspace_id=ctx.workspace.id,
+                    org_id=ctx.org_id,
+                    type="capability",
+                    name=new_name,
+                    status="active",
+                    properties=props,
+                    created_by=ctx.user_id,
+                    updated_by=ctx.user_id,
+                )
+                db.add(parent)
+                await db.flush()
+                db.add(ChangeLog(
+                    workspace_id=ctx.workspace.id,
+                    org_id=ctx.org_id,
+                    object_id=parent.id,
+                    object_type=parent.type,
+                    action="created",
+                    diff={"action_type": "created_object", "name": parent.name, "type": parent.type},
+                    performed_by=ctx.user_id,
+                ))
+                created_capability_id = parent.id
+                parent_id = parent.id
+            if not parent_id:
+                raise ValueError("Choose a capability, or create a new one")
+            await move_activity_to_capability(db, ctx.workspace.id, ctx.org_id, obj, parent_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    db.add(ChangeLog(
+        workspace_id=ctx.workspace.id,
+        org_id=ctx.org_id,
+        object_id=obj.id,
+        object_type=obj.type,
+        action="updated",
+        diff={"action_type": "moved_structure_node", "name": obj.name, "kind": kind},
+        performed_by=ctx.user_id,
+    ))
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
+    await db.commit()
+    await db.refresh(obj)
+    return _move_response(obj, created_domain_id, created_capability_id)

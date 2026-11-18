@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.data.capability_templates import get_template, list_templates
 from app.models.objects import MinEAObject
@@ -486,17 +487,212 @@ async def load_domain_capabilities(
     return list(result.scalars().all())
 
 
+async def l3_children_of(
+    db: AsyncSession,
+    workspace_id: UUID,
+    org_id: UUID,
+    parent_id: UUID,
+) -> list[MinEAObject]:
+    """L3 activities whose parent_id points at this L2, regardless of domain_id."""
+    result = await db.execute(
+        select(MinEAObject).where(
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.org_id == org_id,
+            MinEAObject.type == "capability",
+            MinEAObject.properties["parent_id"].astext == str(parent_id),
+        )
+    )
+    return [row for row in result.scalars().all() if is_l3(row.properties)]
+
+
+async def domain_capability_closure(
+    db: AsyncSession,
+    workspace_id: UUID,
+    org_id: UUID,
+    domain_id: UUID,
+) -> list[MinEAObject]:
+    """Capabilities removed when a domain is deleted.
+
+    Includes every capability scoped to the domain, plus L3 activities whose
+    parent L2 is in the domain even if the activity itself has no domain_id.
+    """
+    scoped = await load_domain_capabilities(db, workspace_id, org_id, domain_id)
+    by_id = {row.id: row for row in scoped}
+    l2_ids = [row.id for row in scoped if not is_l3(row.properties)]
+    if l2_ids:
+        result = await db.execute(
+            select(MinEAObject).where(
+                MinEAObject.workspace_id == workspace_id,
+                MinEAObject.org_id == org_id,
+                MinEAObject.type == "capability",
+                MinEAObject.properties["parent_id"].astext.in_([str(i) for i in l2_ids]),
+            )
+        )
+        for row in result.scalars().all():
+            if is_l3(row.properties) and row.id not in by_id:
+                by_id[row.id] = row
+    return list(by_id.values())
+
+
 async def delete_capabilities_for_domain(
     db: AsyncSession,
     workspace_id: UUID,
     org_id: UUID,
     domain_id: UUID,
 ) -> int:
-    """Delete all L2 capabilities scoped to a domain. Returns count deleted."""
-    capabilities = await load_domain_capabilities(db, workspace_id, org_id, domain_id)
+    """Delete all capabilities that belong to a domain. Returns count deleted."""
+    capabilities = await domain_capability_closure(db, workspace_id, org_id, domain_id)
     for cap in capabilities:
         await db.delete(cap)
     return len(capabilities)
+
+
+def structure_kind(obj: MinEAObject) -> str | None:
+    if obj.type == "business_domain":
+        return "domain"
+    if obj.type == "capability":
+        return "activity" if is_l3(obj.properties) else "capability"
+    return None
+
+
+async def count_application_links(
+    db: AsyncSession,
+    workspace_id: UUID,
+    org_id: UUID,
+    object_ids: list[UUID],
+) -> int:
+    if not object_ids:
+        return 0
+    result = await db.execute(
+        select(func.count())
+        .select_from(Relationship)
+        .where(
+            Relationship.workspace_id == workspace_id,
+            Relationship.org_id == org_id,
+            Relationship.type == "supported_by",
+            Relationship.from_object_id.in_(object_ids),
+        )
+    )
+    return int(result.scalar_one() or 0)
+
+
+async def structure_delete_impact(
+    db: AsyncSession,
+    workspace_id: UUID,
+    org_id: UUID,
+    obj: MinEAObject,
+) -> dict:
+    """Impact counts for a domain, L2 capability, or L3 activity delete."""
+    kind = structure_kind(obj)
+    if kind is None:
+        raise ValueError("Only a domain, capability, or activity can be deleted from the map")
+
+    if kind == "domain":
+        members = await domain_capability_closure(db, workspace_id, org_id, obj.id)
+        l2 = [row for row in members if not is_l3(row.properties)]
+        l3 = [row for row in members if is_l3(row.properties)]
+        link_ids = [row.id for row in members]
+        return {
+            "id": str(obj.id),
+            "kind": kind,
+            "name": obj.name,
+            "capabilities": len(l2),
+            "activities": len(l3),
+            "application_links": await count_application_links(db, workspace_id, org_id, link_ids),
+        }
+
+    if kind == "capability":
+        children = await l3_children_of(db, workspace_id, org_id, obj.id)
+        link_ids = [obj.id, *[row.id for row in children]]
+        return {
+            "id": str(obj.id),
+            "kind": kind,
+            "name": obj.name,
+            "capabilities": 0,
+            "activities": len(children),
+            "application_links": await count_application_links(db, workspace_id, org_id, link_ids),
+        }
+
+    return {
+        "id": str(obj.id),
+        "kind": kind,
+        "name": obj.name,
+        "capabilities": 0,
+        "activities": 0,
+        "application_links": await count_application_links(db, workspace_id, org_id, [obj.id]),
+    }
+
+
+def _set_props(obj: MinEAObject, patch: dict) -> None:
+    props = dict(obj.properties or {})
+    props.update(patch)
+    for key, value in list(patch.items()):
+        if value is None:
+            props.pop(key, None)
+    obj.properties = props
+    flag_modified(obj, "properties")
+
+
+async def _get_capability(
+    db: AsyncSession, workspace_id: UUID, org_id: UUID, object_id: UUID
+) -> MinEAObject | None:
+    result = await db.execute(
+        select(MinEAObject).where(
+            MinEAObject.id == object_id,
+            MinEAObject.workspace_id == workspace_id,
+            MinEAObject.org_id == org_id,
+            MinEAObject.type == "capability",
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def move_capability_to_domain(
+    db: AsyncSession,
+    workspace_id: UUID,
+    org_id: UUID,
+    cap: MinEAObject,
+    domain_id: UUID,
+) -> list[MinEAObject]:
+    """Move an L2 and keep its activities' domain_id in sync. Returns touched rows."""
+    if is_l3(cap.properties):
+        raise ValueError("Move an activity to another capability, not to a domain")
+    domain = await get_domain(db, workspace_id, org_id, domain_id)
+    if not domain:
+        raise ValueError("Domain not found")
+    if await capability_name_exists_in_domain(
+        db, workspace_id, org_id, domain_id, cap.name, exclude_id=cap.id
+    ):
+        raise ValueError(f"A capability named {cap.name!r} already exists in {domain.name}")
+    _set_props(cap, {"domain_id": str(domain_id)})
+    touched = [cap]
+    for child in await l3_children_of(db, workspace_id, org_id, cap.id):
+        _set_props(child, {"domain_id": str(domain_id)})
+        touched.append(child)
+    return touched
+
+
+async def move_activity_to_capability(
+    db: AsyncSession,
+    workspace_id: UUID,
+    org_id: UUID,
+    activity: MinEAObject,
+    parent_id: UUID,
+) -> MinEAObject:
+    if not is_l3(activity.properties):
+        raise ValueError("Move a capability to another domain, not under a capability")
+    if parent_id == activity.id:
+        raise ValueError("An activity cannot be its own parent")
+    parent = await _get_capability(db, workspace_id, org_id, parent_id)
+    if not parent:
+        raise ValueError("Capability not found")
+    if is_l3(parent.properties):
+        raise ValueError("An activity cannot sit under another activity")
+    parent_domain = (parent.properties or {}).get("domain_id")
+    patch: dict = {"parent_id": str(parent.id)}
+    patch["domain_id"] = str(parent_domain) if parent_domain else None
+    _set_props(activity, patch)
+    return activity
 
 
 def _normalize_fitness(value: object | None) -> str:

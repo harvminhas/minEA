@@ -34,6 +34,8 @@ import { CapabilityReview } from "@/components/capability-map/CapabilityReview";
 import { CapabilityHeatMap } from "@/components/capability-map/CapabilityHeatMap";
 import { CapabilityAppMapping } from "@/components/capability-map/CapabilityAppMapping";
 import { CapabilityStructureEditor } from "@/components/capability-map/CapabilityStructureEditor";
+import { InlineRename, StructureKebab, useStructureActions } from "@/components/capability-map/StructureActions";
+import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 
 type Mode = "none" | "add" | "interview" | "review" | "mapping" | "edit";
 
@@ -50,6 +52,7 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
   const catalogRows = useMemo(() => catalog.data?.rows ?? [], [catalog.data]);
   const rows = useMemo(() => capabilityRows(objects, edges), [objects, edges]);
   const l2Count = useMemo(() => l2Capabilities(objects).length, [objects]);
+  const structure = useStructureActions(objects);
   const groups = useMemo(() => groupByDomain(rows), [rows]);
   const gaps = rows.filter((row) => row.gap).length;
   const [mode, setMode] = useState<Mode>("none");
@@ -170,6 +173,7 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
 
   return (
     <div className="px-6 py-5" data-testid="capabilities-section">
+      {structure.dialogs}
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">WHAT THE BUSINESS DOES</p>
@@ -298,7 +302,7 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
       )}
 
       {mode === "edit" && (
-        <CapabilityStructureEditor objects={objects} onBack={() => setMode("none")} />
+        <CapabilityStructureEditor objects={objects} onBack={() => setMode("none")} structure={structure} />
       )}
 
       {rows.length > 0 && !focused && mode !== "add" && (
@@ -344,6 +348,7 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
             onOpen={openCapability}
             onOpenDomain={openDomain}
             focusDomainId={focusDomainId}
+            structure={structure}
           />
         </div>
       )}
@@ -387,14 +392,44 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
               return (
                 <tbody key={group.domain} id={focusDomainName === group.domain ? "capability-domain-focus-group" : undefined} data-testid="capability-group">
                   {!flat && (
-                    <tr>
+                    <tr className="group">
                       <td colSpan={3} className="px-2 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8b90a0]">
-                        {group.domain} <span className="font-normal">{group.rows.length}</span>
+                        <span className="inline-flex items-center gap-2">
+                          {group.domain} <span className="font-normal">{group.rows.length}</span>
+                          {(() => {
+                            const domainObj = objects.find((item) => item.type === "business_domain" && item.name === group.domain);
+                            if (!domainObj) return null;
+                            if (structure.renamingId === domainObj.id) {
+                              return (
+                                <InlineRename
+                                  value={domainObj.name}
+                                  editing
+                                  ariaLabel="Domain name"
+                                  className="text-[12px] normal-case tracking-normal"
+                                  onClose={() => structure.setRenamingId(null)}
+                                  onSave={(name) => structure.rename(domainObj.id, name)}
+                                />
+                              );
+                            }
+                            return (
+                              <StructureKebab
+                                align="start"
+                                testId={`structure-menu-domain-${domainObj.id}`}
+                                ariaLabel={`Actions for ${domainObj.name}`}
+                                items={[
+                                  { label: "Rename", icon: <Pencil size={14} />, hidden: !structure.canEdit, onClick: () => structure.setRenamingId(domainObj.id) },
+                                  { label: "Add capability", icon: <Plus size={14} />, hidden: !structure.canCreate, onClick: () => structure.addCapability(domainObj.id) },
+                                  { label: "Delete domain…", icon: <Trash2 size={14} />, variant: "danger", hidden: !structure.canDelete, onClick: () => structure.openDelete({ id: domainObj.id, kind: "domain", name: domainObj.name }) },
+                                ]}
+                              />
+                            );
+                          })()}
+                        </span>
                       </td>
                     </tr>
                   )}
                   {top.map((row) => (
-                    <ListRows key={row.id} row={row} childrenRows={children.get(row.id) ?? []} selectedId={selectedId} onOpen={openCapability} />
+                    <ListRows key={row.id} row={row} childrenRows={children.get(row.id) ?? []} selectedId={selectedId} onOpen={openCapability} objects={objects} structure={structure} />
                   ))}
                 </tbody>
               );
@@ -411,17 +446,21 @@ function ListRows({
   childrenRows,
   selectedId,
   onOpen,
+  objects,
+  structure,
 }: {
   row: { id: string; name: string; owner: string; supportedBy: { id: string; name: string }[]; gap: boolean };
   childrenRows: { id: string; name: string; owner: string; supportedBy: { id: string; name: string }[]; gap: boolean }[];
   selectedId?: string;
   onOpen: (id: string) => void;
+  objects: readonly { id: string; type: string; name: string; properties?: Record<string, unknown> | null }[];
+  structure: ReturnType<typeof useStructureActions>;
 }) {
   return (
     <>
-      <ListRow row={row} indent={false} selectedId={selectedId} onOpen={onOpen} />
+      <ListRow row={row} indent={false} selectedId={selectedId} onOpen={onOpen} objects={objects} structure={structure} />
       {childrenRows.map((child) => (
-        <ListRow key={child.id} row={child} indent selectedId={selectedId} onOpen={onOpen} />
+        <ListRow key={child.id} row={child} indent selectedId={selectedId} onOpen={onOpen} objects={objects} structure={structure} />
       ))}
     </>
   );
@@ -432,18 +471,61 @@ function ListRow({
   indent,
   selectedId,
   onOpen,
+  objects,
+  structure,
 }: {
   row: { id: string; name: string; owner: string; supportedBy: { id: string; name: string }[]; gap: boolean };
   indent: boolean;
   selectedId?: string;
   onOpen: (id: string) => void;
+  objects: readonly { id: string; type: string; name: string; properties?: Record<string, unknown> | null }[];
+  structure: ReturnType<typeof useStructureActions>;
 }) {
+  const object = objects.find((item) => item.id === row.id);
+  const activity = isActivity(object?.properties);
+  const domainId = typeof object?.properties?.domain_id === "string" ? object.properties.domain_id : null;
+  const parentId = typeof object?.properties?.parent_id === "string" ? object.properties.parent_id : null;
+  const renaming = structure.renamingId === row.id;
   return (
     <tr
       onClick={() => onOpen(row.id)}
-      className={cn("cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]", selectedId === row.id && "bg-[#f6f5ff]")}
+      className={cn("group cursor-pointer border-b border-[#f3f4f8] hover:bg-[#fafafb]", selectedId === row.id && "bg-[#f6f5ff]")}
     >
-      <td className={cn("px-2 py-3 font-medium text-[#1c2230]", indent && "pl-8 font-normal")}>{row.name}</td>
+      <td className={cn("px-2 py-3 font-medium text-[#1c2230]", indent && "pl-8 font-normal")}>
+        <span className="inline-flex items-center gap-2">
+          {renaming ? (
+            <InlineRename
+              value={row.name}
+              editing
+              ariaLabel={activity ? "Activity name" : "Capability name"}
+              className="text-[13px]"
+              onClose={() => structure.setRenamingId(null)}
+              onSave={(name) => structure.rename(row.id, name)}
+            />
+          ) : (
+            <span>{row.name}</span>
+          )}
+          <StructureKebab
+            align="start"
+            testId={activity ? `structure-menu-activity-${row.id}` : `structure-menu-capability-${row.id}`}
+            ariaLabel={`Actions for ${row.name}`}
+            items={
+              activity
+                ? [
+                    { label: "Rename", icon: <Pencil size={14} />, hidden: !structure.canEdit, onClick: () => structure.setRenamingId(row.id) },
+                    { label: "Move to another capability…", icon: <ArrowRight size={14} />, hidden: !structure.canEdit, onClick: () => structure.openMove({ id: row.id, kind: "activity", name: row.name, domainId, parentId }) },
+                    { label: "Delete activity…", icon: <Trash2 size={14} />, variant: "danger", hidden: !structure.canDelete, onClick: () => structure.openDelete({ id: row.id, kind: "activity", name: row.name, domainId, parentId }) },
+                  ]
+                : [
+                    { label: "Rename", icon: <Pencil size={14} />, hidden: !structure.canEdit, onClick: () => structure.setRenamingId(row.id) },
+                    { label: "Move to another domain…", icon: <ArrowRight size={14} />, hidden: !structure.canEdit, onClick: () => structure.openMove({ id: row.id, kind: "capability", name: row.name, domainId }) },
+                    { label: "Add activity", icon: <Plus size={14} />, hidden: !structure.canCreate, onClick: () => structure.addActivity(row.id, domainId) },
+                    { label: "Delete capability…", icon: <Trash2 size={14} />, variant: "danger", hidden: !structure.canDelete, onClick: () => structure.openDelete({ id: row.id, kind: "capability", name: row.name, domainId }) },
+                  ]
+            }
+          />
+        </span>
+      </td>
       <td className="px-2 py-3">
         {row.gap ? (
           <span className="rounded-full bg-[#fff7ed] px-2 py-0.5 text-[11px] font-semibold text-[#c2410c]">No app</span>

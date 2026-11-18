@@ -32,6 +32,7 @@ import type { AssessmentPatch } from "@/components/capability-map/CapabilityAsse
 import { CapabilityDetailView } from "@/components/capability-map/CapabilityDetailView";
 import { themeForDomain } from "@/lib/domain-theme";
 import { AddRelationshipDialog } from "@/components/capability-map/AddRelationshipDialog";
+import { useStructureActions } from "@/components/capability-map/StructureActions";
 
 export function CapabilityDetailPage({ capabilityId }: { capabilityId: string }) {
   const router = useRouter();
@@ -43,6 +44,7 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
   const catalog = useModelCatalog();
   const queryClient = useQueryClient();
   const objects = catalog.data?.objects ?? [];
+  const structure = useStructureActions(objects);
   const edges = (catalog.data?.relationships ?? []) as RelLike[];
   const rows = catalog.data?.rows ?? [];
 
@@ -287,7 +289,9 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
   const suggestedPosture = suggestInvestmentPosture(assessment, node, dispositions);
 
   return (
-    <CapabilityDetailView
+    <>
+      {structure.dialogs}
+      <CapabilityDetailView
       node={node}
       domainName={domainName}
       theme={theme}
@@ -313,6 +317,7 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
       suggestedPosture={suggestedPosture}
       onSetAssessment={(patch) => void onSetAssessment(patch)}
       onAddActivity={(name) => onAddActivity(name)}
+      structure={structure}
       addDialog={
         addFor ? (
           <AddRelationshipDialog
@@ -330,5 +335,6 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
         ) : null
       }
     />
+    </>
   );
 }

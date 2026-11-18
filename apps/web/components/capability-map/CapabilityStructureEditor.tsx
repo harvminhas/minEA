@@ -8,6 +8,7 @@ import { useTenancy } from "@/lib/tenancy";
 import { applyCatalogWrite, catalogQueryKey } from "@/lib/use-model-catalog";
 import { useQueryClient } from "@tanstack/react-query";
 import { isActivity } from "@/lib/capability-tree";
+import { type StructureActions } from "@/components/capability-map/StructureActions";
 
 type DomainNode = { id: string; name: string; caps: CapNode[] };
 type CapNode = { id: string; name: string; domainId: string; activities: ActNode[] };
@@ -64,10 +65,12 @@ function build(objects: readonly MinEAObject[]): DomainNode[] {
 export function CapabilityStructureEditor({
   objects,
   onBack,
+  structure,
 }: {
   objects: readonly MinEAObject[];
   edges?: readonly Relationship[];
   onBack: () => void;
+  structure: StructureActions;
 }) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
@@ -109,13 +112,8 @@ export function CapabilityStructureEditor({
       applyCatalogWrite(queryClient, orgSlug!, workspaceSlug!, { object: updated });
     });
 
-  const remove = (id: string, label: string) => {
-    if (!window.confirm(`Remove ${label}?`)) return;
-    void run(async () => {
-      const t = await token();
-      await objectsApi.delete(orgSlug!, workspaceSlug!, id, t);
-      applyCatalogWrite(queryClient, orgSlug!, workspaceSlug!, { removeId: id });
-    });
+  const remove = (id: string, name: string, kind: "domain" | "capability" | "activity", domainId?: string, parentId?: string) => {
+    structure.openDelete({ id, kind, name, domainId, parentId });
   };
 
   const addDomain = () =>
@@ -205,7 +203,7 @@ export function CapabilityStructureEditor({
                 + Capability
               </button>
               {domain.id && (
-                <button type="button" className="text-[12px] text-[#8b90a0] hover:text-[#b42318]" aria-label={`Remove ${domain.name}`} onClick={() => remove(domain.id, domain.name)}>
+                <button type="button" className="text-[12px] text-[#8b90a0] hover:text-[#b42318]" aria-label={`Remove ${domain.name}`} onClick={() => remove(domain.id, domain.name, "domain")}>
                   ×
                 </button>
               )}
@@ -225,7 +223,7 @@ export function CapabilityStructureEditor({
                       className="min-w-[120px] border-0 bg-transparent text-[13px] font-semibold outline-none"
                     />
                     <span className="flex-1" />
-                    <button type="button" className="text-[12px] text-[#8b90a0] hover:text-[#b42318]" aria-label={`Remove ${cap.name}`} onClick={() => remove(cap.id, cap.name)}>
+                    <button type="button" className="text-[12px] text-[#8b90a0] hover:text-[#b42318]" aria-label={`Remove ${cap.name}`} onClick={() => remove(cap.id, cap.name, "capability", cap.domainId)}>
                       ×
                     </button>
                   </div>
@@ -242,7 +240,7 @@ export function CapabilityStructureEditor({
                           }}
                           className="w-[9rem] border-0 bg-transparent text-[12.5px] outline-none"
                         />
-                        <button type="button" aria-label={`Remove ${act.name}`} className="text-[#8b90a0] hover:text-[#b42318]" onClick={() => remove(act.id, act.name)}>
+                        <button type="button" aria-label={`Remove ${act.name}`} className="text-[#8b90a0] hover:text-[#b42318]" onClick={() => remove(act.id, act.name, "activity", act.domainId, act.parentId)}>
                           ×
                         </button>
                       </span>
