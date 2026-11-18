@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.objects import MinEAObject
-from app.models.people import PeopleAccountability, PeopleRole, Team, TeamRoleAssignment
+from app.models.people import PeopleAccountability, PeopleContact, PeopleRole, Team, TeamRoleAssignment
 from app.models.views_graph import Process, Product
 from app.schemas.people import (
     AccountabilityRead,
@@ -272,12 +272,17 @@ async def load_entity_accountabilities(
     )
     team_ids = [r.subject_id for r in rows if r.subject_type == "team"]
     role_ids = [r.subject_id for r in rows if r.subject_type == "role"]
+    contact_ids = [r.subject_id for r in rows if r.subject_type == "contact"]
     names: dict[UUID, str] = {}
     if team_ids:
         names.update({t.id: t.name for t in (await db.execute(select(Team).where(Team.id.in_(team_ids)))).scalars()})
     if role_ids:
         names.update(
             {r.id: r.name for r in (await db.execute(select(PeopleRole).where(PeopleRole.id.in_(role_ids)))).scalars()}
+        )
+    if contact_ids:
+        names.update(
+            {c.id: c.name for c in (await db.execute(select(PeopleContact).where(PeopleContact.id.in_(contact_ids)))).scalars()}
         )
     return [
         EntityAccountabilityRead(

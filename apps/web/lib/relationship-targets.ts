@@ -26,9 +26,20 @@ export const LINK_SIDEBAR: readonly { label: string; types: readonly string[] }[
   { label: "Vendors & contracts", types: ["external_party"] },
   { label: "Owners & teams", types: ["team", "role", "contact"] },
   { label: "Capabilities", types: ["capability"] },
+  { label: "Processes", types: ["process"] },
+  { label: "Products", types: ["product"] },
   { label: "Roadmaps", types: ["roadmap_item"] },
   { label: "Data", types: ["data_store", "data_object", "data_domain"] },
 ];
+
+/** Link kinds stored on their own APIs (not relationship triples), offered from a source type. */
+export const SIDE_LINK_TARGETS: Record<string, readonly string[]> = {
+  capability: ["process", "product", "contact", "team"],
+};
+
+export function isSideLinkType(type: string): boolean {
+  return type === "process" || type === "product" || type === "contact" || type === "team";
+}
 
 function asApplication(type: string): string {
   if (type === "solution" || type === "technical_capability") return "application";
@@ -76,9 +87,11 @@ export type LinkGroup = {
 
 export function linkGroupsFor(sourceType: string, extraTargets: readonly string[] = []): LinkGroup[] {
   const source = asApplication(sourceType);
+  const side = SIDE_LINK_TARGETS[source] ?? SIDE_LINK_TARGETS[sourceType] ?? [];
   const targets = new Set([
     ...linkTargetsFor(sourceType).map((link) => link.target),
-    ...extraTargets.filter((target) => linksForPair(source, target).length > 0),
+    ...extraTargets.filter((target) => linksForPair(source, target).length > 0 || side.includes(target)),
+    ...side,
   ]);
   const groups: LinkGroup[] = [];
   for (const group of LINK_SIDEBAR) {
@@ -113,6 +126,14 @@ export const NAME_ONLY_LINK_TYPES = new Set([
   "external_party",
   "agent",
   "ai_model",
+  "data_object",
+  "data_store",
+  "data_domain",
+  "roadmap_item",
+  "process",
+  "product",
+  "contact",
+  "team",
 ]);
 
 export function fieldForDialogLink(

@@ -163,6 +163,34 @@ class RelationshipRulesTests(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 _create("sends_data_to", source, "data_store")
 
+
+    def test_capability_can_map_to_estate_and_architecture_types(self):
+        accepted = [
+            ("supported_by", "capability", "application"),
+            ("supported_by", "capability", "solution"),
+            ("supported_by", "capability", "technical_capability"),
+            ("supported_by", "capability", "cloud_service"),
+            ("supported_by", "capability", "model"),
+            ("depends_on", "capability", "capability"),
+            ("supports", "agent", "capability"),
+            ("reads", "capability", "data_object"),
+            ("creates", "capability", "data_object"),
+            ("reads", "capability", "data_store"),
+            ("writes", "capability", "data_store"),
+            ("belongs_to", "capability", "data_domain"),
+            ("supplied_by", "capability", "external_party"),
+            ("located_at", "capability", "location"),
+            ("affects", "roadmap_item", "capability"),
+        ]
+        for rel_type, source, target in accepted:
+            self.assertEqual(_create(rel_type, source, target).type, rel_type)
+        # Domain itself still cannot hold a relationship.
+        with self.assertRaises(ValidationError):
+            _create("supported_by", "business_domain", "application")
+        # Existing app links keep working.
+        self.assertEqual(_create("supported_by", "capability", "application").type, "supported_by")
+        self.assertEqual(_create("supplied_by", "application", "external_party").type, "supplied_by")
+
     def test_workspace_copy_keeps_ai_models(self):
         from app.services.workspace_copy_layers import object_types_for_layers
 

@@ -43,13 +43,29 @@ const EXPECTED: Record<string, string[]> = {
     "Capabilities",
     "Data stores",
   ],
-  model: ["Applications", "Platforms & cloud", "Servers & devices", "Locations", "Vendors & contracts"],
-  location: ["Applications", "Platforms & cloud", "Servers & devices"],
-  capability: ["Applications", "AI agents", "Platforms & cloud", "Capabilities"],
+  model: ["Applications", "Platforms & cloud", "Servers & devices", "Locations", "Vendors & contracts", "Capabilities"],
+  location: ["Applications", "Platforms & cloud", "Servers & devices", "Capabilities"],
+  capability: [
+    "Applications",
+    "AI agents",
+    "Platforms & cloud",
+    "Servers & devices",
+    "Locations",
+    "Vendors & contracts",
+    "Teams",
+    "People",
+    "Capabilities",
+    "Processes",
+    "Products",
+    "Roadmaps",
+    "Data stores",
+    "Data entities",
+    "Data domains",
+  ],
   integration_flow: ["Applications", "APIs", "Events", "Integration infra"],
   api: ["Applications", "Flows", "Integration infra"],
   event: ["Applications", "Flows", "Integration infra", "Data entities"],
-  external_party: ["Applications", "AI models", "Platforms & cloud", "Servers & devices", "Vendors & contracts"],
+  external_party: ["Applications", "AI models", "Platforms & cloud", "Servers & devices", "Vendors & contracts", "Capabilities"],
   agent: ["Applications", "AI agents", "AI models", "Platforms & cloud", "Integration infra", "Capabilities", "Data stores", "Data entities"],
   ai_model: ["Applications", "AI agents", "Platforms & cloud", "Vendors & contracts"],
 };
@@ -66,7 +82,7 @@ test("offered sections follow the sidebar for each source", () => {
     assert.deepEqual(offeredSections(source), expected, source);
     assert.equal(
       linkGroupsFor(source).some((group) => group.label === "Owners & teams"),
-      false,
+      source === "capability",
       source
     );
   }

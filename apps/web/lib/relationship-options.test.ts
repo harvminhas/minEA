@@ -32,3 +32,22 @@ test("a mutual type offers both directions, a symmetric one does not double up",
   const swap = siblingOption(options, dep[0]);
   assert.ok(swap && swap.direction !== dep[0].direction);
 });
+
+test("process and product offer Uses, and people offer Owner or Informed", () => {
+  assert.deepEqual(
+    buildRelationshipOptionsForTarget("capability", "process").map((option) => option.label),
+    ["Uses"]
+  );
+  assert.deepEqual(
+    buildRelationshipOptionsForTarget("capability", "product").map((option) => option.label),
+    ["Uses"]
+  );
+  assert.deepEqual(
+    buildRelationshipOptionsForTarget("capability", "contact").map((option) => option.label),
+    ["Owner", "Informed"]
+  );
+  assert.deepEqual(
+    buildRelationshipOptionsForTarget("application", "team").map((option) => option.label),
+    ["Owner", "Informed"]
+  );
+});

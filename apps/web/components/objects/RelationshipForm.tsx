@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X, Search } from "lucide-react";
 import { type MinEAObject, type ObjectListResponse, type ObjectType, type Relationship, type RelationshipType, ALLOWED_TRIPLES, relationshipLabelFor } from "@minea/types";
-import { objectsApi, relationshipsApi } from "@/lib/api-client";
+import { objectsApi, peopleApi, processesApi, productsApi, relationshipsApi } from "@/lib/api-client";
 import { tripleKey } from "@/lib/allowed-triples";
 import { appendComponentSystemRef } from "@/lib/component-relationship-utils";
 import { applyPatch, type FieldEdge, type FieldRecord } from "@/lib/fields/save";
@@ -14,11 +14,14 @@ import { catalogStats, catalogVendorNames } from "@/lib/model-catalog";
 import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
 import { usePermissions } from "@/lib/use-permissions";
 import { useTenancy } from "@/lib/tenancy";
+import { isActivity } from "@/lib/capability-tree";
+import { accountabilityEntityKindOf } from "@/lib/people-utils";
 import { detailsAlsoSetsHint } from "@/lib/fields/shared-links";
 import { friendlyError } from "@/lib/row-saving";
 import { buildRelationshipOptionsForTarget, siblingOption, type RelDirection } from "@/lib/relationship-options";
 import {
   emptyTypeHint,
+  isSideLinkType,
   linkGroupsFor,
   linksForTarget,
   linkTargetsFor,
@@ -31,9 +34,11 @@ import {
 interface Props {
   fromObject: MinEAObject;
   onClose: () => void;
-  onSuccess: (rel: Relationship) => void;
+  onSuccess: (rel?: Relationship) => void;
   /** Pre-select target object type in the link picker (e.g. data_store). */
   initialTargetType?: string;
+  /** When more than one record is provided, the person picks which one the link is from. */
+  fromRecords?: MinEAObject[];
 }
 
 type PickerChoice = {
@@ -43,6 +48,35 @@ type PickerChoice = {
   object?: MinEAObject;
   createName?: string;
 };
+
+
+function asLinkRecord(item: { id: string; name: string }, type: string): MinEAObject {
+  return {
+    id: item.id,
+    name: item.name,
+    type: type as ObjectType,
+    workspace_id: "",
+    org_id: "",
+    tags: [],
+    properties: {},
+    created_at: "",
+    updated_at: "",
+  };
+}
+
+function capabilityFamily(objects: MinEAObject[], from: MinEAObject): MinEAObject[] {
+  if (from.type !== "capability") return [from];
+  const parentId = isActivity(from.properties) ? String(from.properties?.parent_id ?? "") : from.id;
+  const cap = objects.find((item) => item.id === parentId) ?? from;
+  const activities = objects.filter(
+    (item) => item.type === "capability" && isActivity(item.properties) && String(item.properties?.parent_id ?? "") === cap.id
+  );
+  const list = [cap, ...activities.filter((item) => item.id !== cap.id)];
+  if (!list.some((item) => item.id === from.id)) return [from, ...list];
+  return list;
+}
+
+type FitnessKind = "strong" | "adequate" | "weak";
 
 const ALLOWED_TRIPLE_KEYS = new Set(
   ALLOWED_TRIPLES.map(([type, from, to]) => tripleKey(type, from, to))
@@ -60,12 +94,18 @@ function connectableTargetTypes(fromType: string): string[] {
   return types;
 }
 
-export function RelationshipForm({ fromObject, onClose, onSuccess, initialTargetType }: Props) {
+export function RelationshipForm({ fromObject, onClose, onSuccess, initialTargetType, fromRecords }: Props) {
   const { getToken } = useAuth();
   const { canEdit } = usePermissions();
   const { orgSlug, workspaceSlug } = useTenancy();
   const queryClient = useQueryClient();
   const catalog = useModelCatalog();
+  const family = useMemo(() => {
+    if (fromRecords && fromRecords.length > 0) return fromRecords;
+    return capabilityFamily((catalog.data?.objects ?? []) as MinEAObject[], fromObject);
+  }, [fromRecords, catalog.data?.objects, fromObject]);
+  const [fromId, setFromId] = useState(fromObject.id);
+  const source = family.find((item) => item.id === fromId) ?? fromObject;
   const [targetSearch, setTargetSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState(() =>
     initialTargetType &&
@@ -80,6 +120,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
   const [flowFrequency, setFlowFrequency] = useState("");
   const [createError, setCreateError] = useState("");
   const [creatingComponent, setCreatingComponent] = useState(false);
+  const [fitness, setFitness] = useState<FitnessKind>("adequate");
 
   useEffect(() => {
     if (!canEdit) onClose();
@@ -88,8 +129,8 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
   }, [canEdit]);
 
   const linkGroups = useMemo(
-    () => linkGroupsFor(fromObject.type, initialTargetType === "component" ? ["component"] : []),
-    [fromObject.type, initialTargetType]
+    () => linkGroupsFor(source.type, initialTargetType === "component" ? ["component"] : []),
+    [source.type, initialTargetType]
   );
   const connectableTypes = useMemo(
     () => linkGroups.flatMap((group) => group.options.map((option) => option.type)),
@@ -109,26 +150,45 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
   const searchableTypes = typeFilter ? [typeFilter] : [];
 
   const { data: candidates, isError, isPending, refetch } = useQuery({
-    queryKey: ["objects-candidates", orgSlug, workspaceSlug, fromObject.type, typeFilter, targetSearch],
+    queryKey: ["objects-candidates", orgSlug, workspaceSlug, source.type, source.id, typeFilter, targetSearch],
     enabled: connectableTypes.length > 0 && typeFilter.length > 0,
     queryFn: async () => {
       const token = await getToken();
+      if (!token) return [];
+      const q = targetSearch.trim().toLowerCase();
+      const match = (name: string) => !q || name.toLowerCase().includes(q);
+      if (typeFilter === "process") {
+        const list = await processesApi.list(orgSlug, workspaceSlug, token);
+        return list.items.filter((item) => item.id !== source.id && match(item.name)).map((item) => asLinkRecord(item, "process"));
+      }
+      if (typeFilter === "product") {
+        const list = await productsApi.list(orgSlug, workspaceSlug, token);
+        return list.items.filter((item) => item.id !== source.id && match(item.name)).map((item) => asLinkRecord(item, "product"));
+      }
+      if (typeFilter === "contact") {
+        const list = await peopleApi.listContacts(orgSlug, workspaceSlug, token);
+        return list.items.filter((item) => item.id !== source.id && match(item.name)).map((item) => asLinkRecord(item, "contact"));
+      }
+      if (typeFilter === "team") {
+        const list = await peopleApi.listTeams(orgSlug, workspaceSlug, token);
+        return list.items.filter((item) => item.id !== source.id && match(item.name)).map((item) => asLinkRecord(item, "team"));
+      }
       const results = await Promise.all(
         searchableTypes.map((type) =>
-          objectsApi.list(orgSlug, workspaceSlug, { type, search: targetSearch || undefined }, token!)
+          objectsApi.list(orgSlug, workspaceSlug, { type, search: targetSearch || undefined }, token)
         )
       );
       return results
         .flatMap((r: ObjectListResponse) => r.items)
-        .filter((obj) => obj.id !== fromObject.id)
+        .filter((obj) => obj.id !== source.id)
         .sort((a, b) => a.name.localeCompare(b.name));
     },
   });
 
   const relationshipOptions = useMemo(() => {
     if (!selectedTarget) return [];
-    return buildRelationshipOptionsForTarget(fromObject.type, selectedTarget.type);
-  }, [fromObject.type, selectedTarget]);
+    return buildRelationshipOptionsForTarget(source.type, selectedTarget.type);
+  }, [source.type, selectedTarget]);
 
   const selectedOption = relationshipOptions.find((option) => option.key === selectedOptionKey);
   const swapTo = siblingOption(relationshipOptions, selectedOption);
@@ -139,20 +199,20 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
     if (direction === "outbound") {
       return {
         type: selectedOption.type,
-        fromType: fromObject.type,
+        fromType: source.type,
         toType: selectedTarget.type,
-        fromId: fromObject.id,
+        fromId: source.id,
         toId: selectedTarget.id,
       };
     }
     return {
       type: selectedOption.type,
       fromType: selectedTarget.type,
-      toType: fromObject.type,
+      toType: source.type,
       fromId: selectedTarget.id,
-      toId: fromObject.id,
+      toId: source.id,
     };
-  }, [direction, fromObject, selectedOption, selectedTarget]);
+  }, [direction, source, selectedOption, selectedTarget]);
 
   const detailsHint = resolvedTriple ? detailsAlsoSetsHint(resolvedTriple.type, resolvedTriple.fromType) : null;
   // Always read from the open record: "Azure hosts Salesforce" even though Salesforce → Azure is stored.
@@ -160,12 +220,12 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
     ? (() => {
         const words = relationshipLabelFor(resolvedTriple.type, resolvedTriple.fromType, resolvedTriple.toType);
         return direction === "inverse"
-          ? words.reverseSentence(selectedTarget.name, fromObject.name)
-          : words.sentence(fromObject.name, selectedTarget.name);
+          ? words.reverseSentence(selectedTarget.name, source.name)
+          : words.sentence(source.name, selectedTarget.name);
       })()
     : "";
-  const sentenceSource = direction === "inverse" && selectedTarget ? selectedTarget : fromObject;
-  const linkToRecord = direction === "inverse" && selectedTarget ? fromObject : selectedTarget;
+  const sentenceSource = direction === "inverse" && selectedTarget ? selectedTarget : source;
+  const linkToRecord = direction === "inverse" && selectedTarget ? source : selectedTarget;
 
   const isValidTriple = resolvedTriple
     ? allowedTriple(resolvedTriple.type, resolvedTriple.fromType, resolvedTriple.toType)
@@ -173,27 +233,62 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!resolvedTriple || !isValidTriple || !selectedOption || !selectedTarget) return;
+      if (!selectedOption || !selectedTarget) return;
+      const side = isSideLinkType(selectedTarget.type);
+      if (!side && (!resolvedTriple || !isValidTriple)) return;
       setCreateError("");
       const token = await getToken();
       if (!token) throw new Error("Not authenticated");
 
+      const targetType = String(selectedTarget.type);
+      if (isSideLinkType(targetType)) {
+        if (targetType === "process") {
+          await processesApi.addCapability(orgSlug, workspaceSlug, selectedTarget.id, source.id, token);
+        } else if (targetType === "product") {
+          const product = (await productsApi.list(orgSlug, workspaceSlug, token)).items.find((item) => item.id === selectedTarget.id);
+          const current = product?.capability_ids ?? [];
+          await productsApi.update(
+            orgSlug,
+            workspaceSlug,
+            selectedTarget.id,
+            { capability_ids: [...new Set([...current, source.id])] },
+            token
+          );
+        } else {
+          const entityKind = accountabilityEntityKindOf(source.type);
+          if (!entityKind) throw new Error("This record type cannot have an owner or informed person.");
+          const body = {
+            entity_kind: entityKind,
+            entity_id: source.id,
+            link_kind: (selectedOption.key.endsWith("informed") ? "informed" : "owns") as "owns" | "informed",
+          };
+          if (targetType === "team") {
+            await peopleApi.addTeamAccountability(orgSlug, workspaceSlug, selectedTarget.id, body, token);
+          } else {
+            await peopleApi.addContactAccountability(orgSlug, workspaceSlug, selectedTarget.id, body, token);
+          }
+        }
+        return { relationship: undefined, existed: false };
+      }
+
+      if (!resolvedTriple || !isValidTriple) return;
+
       const record: FieldRecord = {
-        id: fromObject.id,
-        type: fromObject.type,
-        name: fromObject.name,
-        description: fromObject.description,
-        status: fromObject.status,
-        tags: fromObject.tags,
-        owner: fromObject.owner,
-        owner_team_id: fromObject.owner_team_id,
-        owner_team_name: fromObject.owner_team_name,
-        point_of_contact_id: fromObject.point_of_contact_id,
-        point_of_contact_name: fromObject.point_of_contact_name,
-        properties: { ...(fromObject.properties ?? {}) },
+        id: source.id,
+        type: source.type,
+        name: source.name,
+        description: source.description,
+        status: source.status,
+        tags: source.tags,
+        owner: source.owner,
+        owner_team_id: source.owner_team_id,
+        owner_team_name: source.owner_team_name,
+        point_of_contact_id: source.point_of_contact_id,
+        point_of_contact_name: source.point_of_contact_name,
+        properties: { ...(source.properties ?? {}) },
       };
       const edges: FieldEdge[] = (catalog.data?.relationships ?? [])
-        .filter((rel) => rel.from_object_id === fromObject.id || rel.to_object_id === fromObject.id)
+        .filter((rel) => rel.from_object_id === source.id || rel.to_object_id === source.id)
         .map((rel) => ({
           id: rel.id,
           type: rel.type,
@@ -203,19 +298,28 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
           to_type: rel.to_type,
         }));
       const patch = patchForPickedLink(
-        fromObject.type,
+        source.type,
         { type: selectedOption.type, target: selectedTarget.type, direction },
         selectedTarget.id,
         record,
         edges,
         selectedTarget.name
       );
+      if (patch?.addRel && resolvedTriple.type === "supported_by") {
+        patch.addRel = patch.addRel.map((rel) => ({
+          ...rel,
+          attributes: {
+            ...(rel.attributes ?? {}),
+            ...(rel.type === "supported_by" ? { fitness } : {}),
+          },
+        }));
+      }
       if (patch && orgSlug && workspaceSlug) {
         const applied = applyPatch(record, patch, edges);
         const pending = (patch.addRel ?? []).map((rel, index) => ({
           id: `optimistic-${index}-${rel.from_object_id}-${rel.to_object_id}`,
-          workspace_id: fromObject.workspace_id,
-          org_id: fromObject.org_id,
+          workspace_id: source.workspace_id,
+          org_id: source.org_id,
           type: rel.type,
           from_object_id: rel.from_object_id,
           from_type: rel.from_type,
@@ -225,7 +329,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
           created_at: new Date().toISOString(),
         })) satisfies Relationship[];
         applyCatalogWrite(queryClient, orgSlug, workspaceSlug, {
-          object: { ...fromObject, properties: applied.properties, status: (applied.status ?? fromObject.status) as MinEAObject["status"] },
+          object: { ...source, properties: applied.properties, status: (applied.status ?? source.status) as MinEAObject["status"] },
         });
         for (const id of patch.removeRelIds ?? []) {
           applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { removeRelationshipId: id });
@@ -250,7 +354,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
             await relationshipsApi.delete(orgSlug, workspaceSlug, id, token);
           }
           if (patch.object) {
-            const saved = await objectsApi.update(orgSlug, workspaceSlug, fromObject.id, patch.object, token);
+            const saved = await objectsApi.update(orgSlug, workspaceSlug, source.id, patch.object, token);
             applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: saved });
           }
           const relationship =
@@ -273,14 +377,15 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
           from_type: resolvedTriple.fromType,
           to_object_id: resolvedTriple.toId,
           to_type: resolvedTriple.toType,
-          ...(resolvedTriple.type === "sends_data_to"
-            ? {
-                attributes: {
+          attributes: {
+            ...(resolvedTriple.type === "sends_data_to"
+              ? {
                   ...(flowHow ? { how: flowHow } : {}),
                   ...(flowFrequency ? { frequency: flowFrequency } : {}),
-                },
-              }
-            : {}),
+                }
+              : {}),
+            ...(resolvedTriple.type === "supported_by" ? { fitness } : {}),
+          },
         },
         token
       );
@@ -289,9 +394,9 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
         direction === "inverse" &&
         resolvedTriple.type === "part_of" &&
         selectedTarget?.type === "component" &&
-        fromObject.type === "application"
+        source.type === "application"
       ) {
-        await appendComponentSystemRef(orgSlug, workspaceSlug, selectedTarget, fromObject, token);
+        await appendComponentSystemRef(orgSlug, workspaceSlug, selectedTarget, source, token);
       }
 
       return { relationship: created.body, existed: created.status === 200 };
@@ -299,8 +404,13 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
     onSuccess: (result) => {
       if (!result) return;
       if (orgSlug && workspaceSlug) {
-        applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: result.relationship });
+        if (result.relationship) {
+          applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: result.relationship });
+        }
         queryClient.invalidateQueries({ queryKey: ["relationships"] });
+        queryClient.invalidateQueries({ queryKey: ["capability-mapping-lists"] });
+        queryClient.invalidateQueries({ queryKey: ["entity-accountabilities"] });
+        queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
       }
       if (result.existed) {
         setCreateError("That relationship already exists");
@@ -321,6 +431,22 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
       if (!canEdit || !name || !NAME_ONLY_LINK_TYPES.has(type)) return;
       const token = await getToken();
       if (!token) throw new Error("Not authenticated");
+      if (type === "process") {
+        const created = await processesApi.create(orgSlug, workspaceSlug, { name }, token);
+        return asLinkRecord(created, "process");
+      }
+      if (type === "product") {
+        const created = await productsApi.create(orgSlug, workspaceSlug, { name }, token);
+        return asLinkRecord(created, "product");
+      }
+      if (type === "contact") {
+        const created = await peopleApi.createContact(orgSlug, workspaceSlug, { name }, token);
+        return asLinkRecord(created, "contact");
+      }
+      if (type === "team") {
+        const created = await peopleApi.createTeam(orgSlug, workspaceSlug, { name }, token);
+        return asLinkRecord(created, "team");
+      }
       return objectsApi.create(
         orgSlug,
         workspaceSlug,
@@ -349,7 +475,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
 
   function selectTarget(obj: MinEAObject) {
     setSelectedTarget(obj);
-    const options = buildRelationshipOptionsForTarget(fromObject.type, obj.type);
+    const options = buildRelationshipOptionsForTarget(source.type, obj.type);
     if (options.length === 1) chooseType(options[0].key, options);
     else chooseType("");
   }
@@ -363,10 +489,10 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
 
   if (creatingComponent) {
     const preset =
-      fromObject.type === "application" ||
-      fromObject.type === "solution" ||
-      fromObject.type === "technical_capability"
-        ? [{ system_id: fromObject.id, system_name: fromObject.name, system_type: fromObject.type }]
+      source.type === "application" ||
+      source.type === "solution" ||
+      source.type === "technical_capability"
+        ? [{ system_id: source.id, system_name: source.name, system_type: source.type }]
         : [];
     return (
       <CreateComponentPanel
@@ -390,7 +516,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
   const partyItems: PickerChoice[] =
     typeFilter === "external_party"
       ? (catalog.data?.parties ?? [])
-          .filter((item) => item.id !== fromObject.id)
+          .filter((item) => item.id !== source.id)
           .filter((item) => !objectItems.some((listed) => listed.id === item.id))
           .filter((item) => !trimmedSearch || item.name.toLowerCase().includes(trimmedSearch.toLowerCase()))
           .map((item) => ({
@@ -429,7 +555,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-[100]" onClick={onClose} />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] bg-white rounded-xl shadow-2xl z-[110]">
+      <div data-testid="relationship-form" className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] bg-white rounded-xl shadow-2xl z-[110]">
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <h3 className="font-semibold text-gray-900">Add Relationship</h3>
           <button onClick={onClose} className="p-1.5 rounded-md hover:bg-gray-100">
@@ -440,10 +566,28 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
         <div className="p-5 space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
-            <div className="flex items-center gap-2 py-2 px-3 bg-gray-50 rounded-md text-sm text-gray-700">
-              <span className="font-medium">{sentenceSource.name}</span>
-              <span className="text-gray-400">({uiTypeLabel(sentenceSource.type, true)})</span>
-            </div>
+            {family.length > 1 ? (
+              <select
+                data-testid="relationship-from"
+                value={source.id}
+                onChange={(e) => {
+                  setFromId(e.target.value);
+                  clearTarget();
+                }}
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {family.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} ({isActivity(item.properties) ? "Activity" : uiTypeLabel(item.type, true)})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="flex items-center gap-2 py-2 px-3 bg-gray-50 rounded-md text-sm text-gray-700">
+                <span className="font-medium">{sentenceSource.name}</span>
+                <span className="text-gray-400">({uiTypeLabel(sentenceSource.type, true)})</span>
+              </div>
+            )}
           </div>
 
           <div>
@@ -483,11 +627,12 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
                       {group.options.map((option) => {
                         const count = option.type === "external_party" ? vendorCount : typeCounts?.get(option.type);
                         const known = option.type === "external_party" ? catalog.data != null : typeCounts != null;
-                        const empty = known && (count ?? 0) === 0 && option.type !== "component";
+                        const empty = known && (count ?? 0) === 0 && option.type !== "component" && !isSideLinkType(option.type);
                         const name = option.label;
+                        const showCount = known && !isSideLinkType(option.type);
                         return (
                           <option key={option.type} value={option.type} disabled={empty}>
-                            {empty ? `${name} — ${emptyTypeHint(option.type)}` : known ? `${name} (${count ?? 0})` : name}
+                            {empty ? `${name} — ${emptyTypeHint(option.type)}` : showCount ? `${name} (${count ?? 0})` : name}
                           </option>
                         );
                       })}
@@ -650,6 +795,21 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
                   </label>
                 </div>
               )}
+              {selectedOption?.type === "supported_by" && (
+                <label className="mt-3 block text-xs font-medium text-gray-700">
+                  Fitness
+                  <select
+                    data-testid="relationship-fitness"
+                    value={fitness}
+                    onChange={(e) => setFitness(e.target.value as FitnessKind)}
+                    className="mt-1 w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                  >
+                    <option value="adequate">Adequate</option>
+                    <option value="strong">Strong</option>
+                    <option value="weak">Weak</option>
+                  </select>
+                </label>
+              )}
               {sentence && <p className="mt-3 text-sm text-gray-800">{sentence}</p>}
             </div>
           )}
@@ -665,7 +825,7 @@ export function RelationshipForm({ fromObject, onClose, onSuccess, initialTarget
           </button>
           <button
             onClick={() => mutation.mutate()}
-            disabled={!selectedTarget || !selectedOption || !isValidTriple || mutation.isPending}
+            disabled={!selectedTarget || !selectedOption || mutation.isPending || (!isValidTriple && !isSideLinkType(selectedTarget.type))}
             className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-md py-2 text-sm font-medium transition-colors"
           >
             {mutation.isPending ? "Adding..." : "Add relationship"}

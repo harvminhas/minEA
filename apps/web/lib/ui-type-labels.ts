@@ -19,6 +19,9 @@ export const UI_TYPE_LABEL = {
   data_object: "Data entities",
   data_domain: "Data domains",
   process: "Processes",
+  product: "Products",
+  contact: "People",
+  team: "Teams",
   component: "Components",
   tech_debt: "Tech debt",
 } as const;
@@ -43,6 +46,9 @@ const UI_TYPE_SINGULAR: Record<keyof typeof UI_TYPE_LABEL, string> = {
   data_object: "Data entity",
   data_domain: "Data domain",
   process: "Process",
+  product: "Product",
+  contact: "Person",
+  team: "Team",
   component: "Component",
   tech_debt: "Tech debt",
 };

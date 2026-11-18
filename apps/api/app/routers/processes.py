@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.objects import MinEAObject
 from app.models.views_graph import Process, Stage, StageCapability
-from app.schemas.processes import ProcessCreate, ProcessListResponse, ProcessRead, ProcessUpdate, StageRead
+from app.schemas.processes import ProcessCapabilityAdd, ProcessCreate, ProcessListResponse, ProcessRead, ProcessUpdate, StageRead
 from app.services.owner_fields import apply_ownership_write_resolved, ownership_from_body, ownership_read_payload
 from app.services.snapshot_hooks import notify_workspace_data_changed
 from app.services.tenancy import TenancyContext, get_workspace_context
@@ -270,3 +270,67 @@ async def update_process(
     assert refreshed
     await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
     return await _to_read(refreshed)
+
+
+@router.post("/{process_id}/capabilities", status_code=status.HTTP_204_NO_CONTENT)
+async def add_process_capability(
+    process_id: UUID,
+    body: ProcessCapabilityAdd,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Attach a capability or activity to a process without replacing its stages."""
+    await ctx.require_write(db)
+    assert ctx.workspace
+    cap_uuid = body.capability_id
+    try:
+        await _validate_capability_ids(db, ctx.workspace.id, ctx.org_id, [cap_uuid])
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    process = await _load_process(db, process_id, ctx.workspace.id, ctx.org_id)
+    if not process:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Process not found")
+
+    existing = {
+        row.capability_id
+        for stage in process.stages
+        for row in stage.capabilities
+    }
+    if cap_uuid in existing:
+        return
+
+    if not process.stages:
+        stage = Stage(process_id=process.id, name=process.name, position=0)
+        db.add(stage)
+        await db.flush()
+    else:
+        stage = sorted(process.stages, key=lambda item: item.position)[0]
+    db.add(StageCapability(stage_id=stage.id, capability_id=cap_uuid))
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
+
+
+@router.delete("/{process_id}/capabilities/{capability_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_process_capability(
+    process_id: UUID,
+    capability_id: UUID,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Drop a capability from every stage of this process."""
+    await ctx.require_write(db)
+    assert ctx.workspace
+    process = await _load_process(db, process_id, ctx.workspace.id, ctx.org_id)
+    if not process:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Process not found")
+    stage_ids = [stage.id for stage in process.stages]
+    if not stage_ids:
+        return
+    await db.execute(
+        delete(StageCapability).where(
+            StageCapability.stage_id.in_(stage_ids),
+            StageCapability.capability_id == capability_id,
+        )
+    )
+    await notify_workspace_data_changed(db, ctx.workspace.id, ctx.org_id)
+

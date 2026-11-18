@@ -849,6 +849,31 @@ export const processesApi = {
       body: JSON.stringify(body),
       token,
     }),
+
+  addCapability: (
+    orgSlug: string,
+    workspaceSlug: string,
+    processId: string,
+    capabilityId: string,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/processes/${processId}/capabilities`, {
+      method: "POST",
+      body: JSON.stringify({ capability_id: capabilityId }),
+      token,
+    }),
+
+  removeCapability: (
+    orgSlug: string,
+    workspaceSlug: string,
+    processId: string,
+    capabilityId: string,
+    token: string
+  ) =>
+    apiFetch<void>(
+      `${wsBase(orgSlug, workspaceSlug)}/processes/${processId}/capabilities/${capabilityId}`,
+      { method: "DELETE", token }
+    ),
 };
 
 // ─── Journeys ────────────────────────────────────────────────────────────────
@@ -1159,6 +1184,19 @@ export const peopleApi = {
     token: string
   ) =>
     apiFetch<PeopleContact>(`${wsBase(orgSlug, workspaceSlug)}/people/contacts`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      token,
+    }),
+
+  addContactAccountability: (
+    orgSlug: string,
+    workspaceSlug: string,
+    contactId: string,
+    body: AccountabilityCreate,
+    token: string
+  ) =>
+    apiFetch<void>(`${wsBase(orgSlug, workspaceSlug)}/people/contacts/${contactId}/accountabilities`, {
       method: "POST",
       body: JSON.stringify(body),
       token,

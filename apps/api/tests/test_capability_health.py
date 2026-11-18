@@ -536,3 +536,34 @@ def test_stored_technology_fit_wins_over_the_link_default():
     assert ap["technology_fit"] == 5
     assert ap["technology_fit_source"] == "stored"
     assert ap["exposed"] is False
+
+
+def test_capability_health_includes_process_product_and_people_links():
+    objects = [
+        {"id": "fin", "type": "business_domain", "name": "Finance", "properties": {}},
+        {"id": "ap", "type": "capability", "name": "Accounting", "properties": {"domain_id": "fin"}},
+        {"id": "inv", "type": "capability", "name": "Invoice", "properties": {"domain_id": "fin", "parent_id": "ap"}},
+        {"id": "erp", "type": "application", "name": "ERP", "properties": {}},
+    ]
+    edges = [{"type": "supported_by", "from_object_id": "ap", "to_object_id": "erp", "attributes": {"fitness": "strong"}}]
+    graph = _graph(objects, edges)
+    graph.side_links = [
+        {"id": "p1", "name": "Close the books", "type": "process", "relationship": "uses", "on": "ap"},
+        {"id": "pr1", "name": "Ledger", "type": "product", "relationship": "uses", "on": "ap"},
+        {"id": "c1", "name": "Alex Chen", "type": "contact", "relationship": "owns", "on": "inv"},
+        {"id": "c2", "name": "Sam Lee", "type": "contact", "relationship": "informed", "on": "ap"},
+    ]
+    from app.ai.ask.tools import ToolBag, run_tool
+
+    bag = ToolBag(graph=graph, seen_ids=set(), numbers=set())
+    rows = _by_id(run_tool(bag, "capability_health", {})["records"])
+    ap_types = {(item["type"], item["name"], item["relationship"]) for item in rows["ap"]["linked"]}
+    assert ("application", "ERP", "supported_by") in ap_types
+    assert ("process", "Close the books", "uses") in ap_types
+    assert ("product", "Ledger", "uses") in ap_types
+    assert ("contact", "Sam Lee", "informed") in ap_types
+    # Activity people links roll up to the parent capability
+    assert ("contact", "Alex Chen", "owns") in ap_types
+    inv_types = {(item["type"], item["name"], item["relationship"]) for item in rows["inv"]["linked"]}
+    assert ("contact", "Alex Chen", "owns") in inv_types
+    assert ("process", "Close the books", "uses") not in inv_types

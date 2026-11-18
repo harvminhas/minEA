@@ -594,6 +594,63 @@ def _node_ids(node: dict) -> set[str]:
     return ids
 
 
+
+def _linked_records(bag: ToolBag, node: dict, edges: list[dict]) -> list[dict]:
+    """Catalog links on this node or its children, so Ask can name more than apps."""
+    ids = _node_ids(node)
+    by_id = {item.get("id"): item for item in bag.graph.objects}
+    items = []
+    seen: set[tuple[str, str, str]] = set()
+    for edge in edges:
+        rel = str(edge.get("type") or "")
+        source = str(edge.get("from_object_id") or "")
+        target = str(edge.get("to_object_id") or "")
+        if source in ids and target not in ids:
+            other_id, on_id = target, source
+        elif target in ids and source not in ids:
+            other_id, on_id = source, target
+        else:
+            continue
+        key = (rel, other_id, on_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        rec = bag.graph.get(other_id)
+        obj = by_id.get(other_id) or {}
+        name = rec.name if rec else obj.get("name") or other_id
+        raw_type = obj.get("type") or (getattr(rec, "raw_type", None) if rec else None) or "unknown"
+        item = {
+            "id": other_id,
+            "name": name,
+            "type": raw_type,
+            "relationship": rel,
+            "on": on_id,
+        }
+        fitness = (edge.get("attributes") or {}).get("fitness")
+        if fitness:
+            item["fitness"] = fitness
+        items.append(item)
+    for row in getattr(bag.graph, "side_links", None) or []:
+        on_id = str(row.get("on") or "")
+        other_id = str(row.get("id") or "")
+        if on_id not in ids or not other_id:
+            continue
+        rel = str(row.get("relationship") or "")
+        key = (rel, other_id, on_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append({
+            "id": other_id,
+            "name": row.get("name") or other_id,
+            "type": row.get("type") or "unknown",
+            "relationship": rel,
+            "on": on_id,
+        })
+    items.sort(key=lambda row: (str(row["type"]), str(row["name"])))
+    return items
+
+
 def _health_row(bag: ToolBag, node: dict, edges: list[dict], costs: dict[str, float]) -> dict:
     names = _app_names(bag, node["uniqueAppIds"])
     path = node.get("path") or []
@@ -636,7 +693,9 @@ def _health_row(bag: ToolBag, node: dict, edges: list[dict], costs: dict[str, fl
         "dispositions": dispositions,
         "retire_savings": savings["amount"],
         "retire_app_ids": savings["app_ids"],
+        "linked": _linked_records(bag, node, edges),
     }
+    row["linked_count"] = len(row["linked"])
     return row
 
 
@@ -815,6 +874,8 @@ def capability_health(bag: ToolBag, args: dict) -> dict:
             "exposed": row["exposed"],
             "dispositions": row["dispositions"],
             "retire_savings": row["retire_savings"],
+            "linked": row.get("linked") or [],
+            "linked_count": row.get("linked_count") or 0,
         }
 
     return {

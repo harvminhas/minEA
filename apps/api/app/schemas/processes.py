@@ -81,3 +81,7 @@ class ProcessRead(OwnershipFields, BaseModel):
 class ProcessListResponse(BaseModel):
     items: list[ProcessRead]
     total: int
+
+
+class ProcessCapabilityAdd(BaseModel):
+    capability_id: UUID

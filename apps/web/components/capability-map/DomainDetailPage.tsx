@@ -14,6 +14,7 @@ import { DomainProductsTab } from "@/components/capability-map/DomainProductsTab
 import { DomainHistoryTab } from "@/components/capability-map/DomainHistoryTab";
 import { capabilityMapPath } from "@/lib/capability-map-paths";
 import { DomainOverviewTab } from "@/components/capability-map/DomainOverviewTab";
+import { DomainRelationshipsTab } from "@/components/capability-map/DomainRelationshipsTab";
 import { EditCapabilityDialog } from "@/components/capability-map/EditCapabilityDialog";
 import { domainIcon } from "@/lib/capability-map-icons";
 import { objectListPath } from "@/lib/tenancy";
@@ -24,7 +25,7 @@ import { RefreshingOverlay } from "@/components/ui/RefreshingOverlay";
 import { useQueryRefreshing } from "@/lib/use-query-refreshing";
 import { usePermissions } from "@/lib/use-permissions";
 
-type TabId = "overview" | "mapping" | "processes" | "products" | "history";
+type TabId = "overview" | "mapping" | "relationships" | "processes" | "products" | "history";
 
 interface Props {
   domainId: string;
@@ -37,6 +38,7 @@ export function DomainDetailPage({ domainId }: Props) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [editCapability, setEditCapability] = useState<CapabilityMapCapability | null>(null);
+  const [addingRelationship, setAddingRelationship] = useState(false);
   const queryEnabled = useAuthQueryEnabled(orgSlug, workspaceSlug, domainId);
 
   const domainQuery = useQuery({
@@ -163,6 +165,19 @@ export function DomainDetailPage({ domainId }: Props) {
               <Info size={14} />
               Details
             </button>
+            {canEdit ? (
+              <button
+                type="button"
+                data-testid="domain-add-relationship"
+                onClick={() => {
+                  setActiveTab("relationships");
+                  setAddingRelationship(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#5b4ce6] bg-[#5b4ce6] px-3 py-1.5 text-sm font-semibold text-white"
+              >
+                Add relationship
+              </button>
+            ) : null}
             <button
               type="button"
               className="inline-flex items-center gap-1.5 border border-gray-200 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
@@ -179,6 +194,7 @@ export function DomainDetailPage({ domainId }: Props) {
             [
               ["overview", "Overview"],
               ["mapping", "Mapping"],
+              ["relationships", "Relationships"],
               ["processes", "Processes"],
               ["products", "Products"],
               ["history", "History"],
@@ -209,6 +225,10 @@ export function DomainDetailPage({ domainId }: Props) {
             onEditCapability={canEdit ? setEditCapability : undefined}
             onRefresh={refreshDomain}
           />
+        )}
+
+        {activeTab === "relationships" && (
+          <DomainRelationshipsTab domain={domain} adding={addingRelationship} onAddingChange={setAddingRelationship} />
         )}
 
         {activeTab === "mapping" && (

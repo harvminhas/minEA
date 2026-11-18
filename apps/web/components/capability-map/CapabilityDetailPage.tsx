@@ -31,8 +31,11 @@ import {
 import type { AssessmentPatch } from "@/components/capability-map/CapabilityAssessmentFields";
 import { CapabilityDetailView } from "@/components/capability-map/CapabilityDetailView";
 import { themeForDomain } from "@/lib/domain-theme";
-import { AddRelationshipDialog } from "@/components/capability-map/AddRelationshipDialog";
+import { RelationshipForm } from "@/components/objects/RelationshipForm";
+import type { MinEAObject } from "@minea/types";
 import { useStructureActions, type StructureTarget } from "@/components/capability-map/StructureActions";
+import { useCapabilityMappedLinks } from "@/lib/use-capability-mapped-links";
+import type { MappedScope } from "@/lib/capability-mapping";
 
 export function CapabilityDetailPage({ capabilityId }: { capabilityId: string }) {
   const router = useRouter();
@@ -83,25 +86,14 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
     return map;
   }, [targetIds, edges, appMap]);
 
-  const linkedByApp = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const [targetId, links] of linksByTarget) {
-      for (const link of links) {
-        const current = map.get(link.appId) ?? [];
-        current.push(targetId);
-        map.set(link.appId, current);
-      }
-    }
-    return map;
-  }, [linksByTarget]);
-
-  const targetNames = useMemo(() => {
-    const map = new Map<string, string>();
-    if (!node) return map;
-    map.set(node.id, node.name);
-    for (const child of node.children) map.set(child.id, child.name);
-    return map;
+  const scopes = useMemo<MappedScope[]>(() => {
+    if (!node) return [];
+    return [
+      { id: node.id, name: node.name, level: "capability" as const },
+      ...node.children.map((child) => ({ id: child.id, name: child.name, level: "activity" as const })),
+    ];
   }, [node]);
+  const mapped = useCapabilityMappedLinks(scopes, node?.id);
 
   const [addFor, setAddFor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -127,52 +119,6 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
       setBusy(false);
     }
   };
-
-  const onLink = (targetId: string, appId: string) =>
-    run(async (token) => {
-      const app = appMap.get(appId);
-      const rel = await relationshipsApi.create(
-        orgSlug,
-        workspaceSlug,
-        {
-          type: "supported_by",
-          from_object_id: targetId,
-          from_type: "capability",
-          to_object_id: appId,
-          to_type: asLinkableType(app?.type),
-          attributes: { fitness: "strong" },
-        },
-        token
-      );
-      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: rel });
-      setAddFor(null);
-    });
-
-  const onCreate = (targetId: string, name: string) =>
-    run(async (token) => {
-      const app = await objectsApi.create(
-        orgSlug,
-        workspaceSlug,
-        { type: "application", name, status: "active", properties: {} },
-        token
-      );
-      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: app });
-      const rel = await relationshipsApi.create(
-        orgSlug,
-        workspaceSlug,
-        {
-          type: "supported_by",
-          from_object_id: targetId,
-          from_type: "capability",
-          to_object_id: app.id,
-          to_type: app.type,
-          attributes: { fitness: "strong" },
-        },
-        token
-      );
-      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: rel });
-      setAddFor(null);
-    });
 
   const onRemove = (link: AppLink) =>
     run(async (token) => {
@@ -291,10 +237,10 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
     );
   }
 
-  const targets = [
-    { id: node.id, name: node.name, level: "capability" as const },
-    ...node.children.map((child) => ({ id: child.id, name: child.name, level: "activity" as const })),
-  ];
+  const fromRecords = [node.id, ...node.children.map((child) => child.id)]
+    .map((id) => objects.find((item) => item.id === id))
+    .filter((item): item is MinEAObject => Boolean(item));
+  const fromObject = fromRecords.find((item) => item.id === addFor) ?? fromRecords[0];
 
   const capRecord = objects.find((item) => item.id === capabilityId) as CapabilityRecord | undefined;
   const assessment = assessCapability(capRecord, objects as CapabilityRecord[], edges);
@@ -334,19 +280,19 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
       onSetAssessment={(patch) => void onSetAssessment(patch)}
       onAddActivity={(name) => onAddActivity(name)}
       structure={structure}
+      relationshipGroups={mapped.groups}
       addDialog={
-        addFor ? (
-          <AddRelationshipDialog
-            targets={targets}
-            defaultTargetId={addFor}
-            apps={apps}
-            linkedByApp={linkedByApp}
-            targetNames={targetNames}
-            busy={busy}
-            error={error}
+        addFor && fromObject ? (
+          <RelationshipForm
+            fromObject={fromObject}
+            fromRecords={fromRecords}
             onClose={() => setAddFor(null)}
-            onLink={(targetId, appId) => onLink(targetId, appId)}
-            onCreate={(targetId, name) => onCreate(targetId, name)}
+            onSuccess={() => {
+              setAddFor(null);
+              refresh();
+              void queryClient.invalidateQueries({ queryKey: ["capability-mapping-lists"] });
+              void queryClient.invalidateQueries({ queryKey: ["entity-accountabilities"] });
+            }}
           />
         ) : null
       }

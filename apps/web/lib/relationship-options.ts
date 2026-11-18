@@ -6,7 +6,7 @@ export type RelDirection = "outbound" | "inverse";
 
 export type RelOption = {
   key: string;
-  type: RelationshipType;
+  type: RelationshipType | "uses" | "owns" | "informed";
   label: string;
   /** Stored direction this option writes: the open record is the source (outbound) or the target (inverse). */
   direction: RelDirection;
@@ -24,6 +24,15 @@ function allowedTriple(type: string, from: string, to: string): boolean {
  * A symmetric type reads the same both ways, so it gets one option.
  */
 export function buildRelationshipOptionsForTarget(fromType: string, targetType: string): RelOption[] {
+  if (targetType === "process" || targetType === "product") {
+    return [{ key: "side:uses|out", type: "uses", label: "Uses", direction: "outbound" }];
+  }
+  if (targetType === "contact" || targetType === "team") {
+    return [
+      { key: "side:owns", type: "owns", label: "Owner", direction: "outbound" },
+      { key: "side:informed", type: "informed", label: "Informed", direction: "outbound" },
+    ];
+  }
   const options: RelOption[] = [];
   const seen = new Set<string>();
   for (const link of linksForTarget(fromType, targetType)) {

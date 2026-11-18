@@ -12,6 +12,11 @@
   [
     "affects",
     "roadmap_item",
+    "capability"
+  ],
+  [
+    "affects",
+    "roadmap_item",
     "solution"
   ],
   [
@@ -171,6 +176,11 @@
   ],
   [
     "belongs_to",
+    "capability",
+    "data_domain"
+  ],
+  [
+    "belongs_to",
     "data_object",
     "data_domain"
   ],
@@ -286,6 +296,11 @@
   ],
   [
     "creates",
+    "capability",
+    "data_object"
+  ],
+  [
+    "creates",
     "solution",
     "data_object"
   ],
@@ -387,6 +402,11 @@
   [
     "located_at",
     "application",
+    "location"
+  ],
+  [
+    "located_at",
+    "capability",
     "location"
   ],
   [
@@ -562,6 +582,16 @@
   [
     "reads",
     "application",
+    "data_store"
+  ],
+  [
+    "reads",
+    "capability",
+    "data_object"
+  ],
+  [
+    "reads",
+    "capability",
     "data_store"
   ],
   [
@@ -886,6 +916,11 @@
   ],
   [
     "supplied_by",
+    "capability",
+    "external_party"
+  ],
+  [
+    "supplied_by",
     "cloud_service",
     "external_party"
   ],
@@ -913,6 +948,11 @@
     "supported_by",
     "capability",
     "cloud_service"
+  ],
+  [
+    "supported_by",
+    "capability",
+    "model"
   ],
   [
     "supported_by",
@@ -1012,6 +1052,11 @@
   [
     "writes",
     "application",
+    "data_store"
+  ],
+  [
+    "writes",
+    "capability",
     "data_store"
   ],
   [

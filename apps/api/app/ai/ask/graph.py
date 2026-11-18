@@ -10,8 +10,9 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.objects import MinEAObject
-from app.models.people import Team
+from app.models.people import PeopleAccountability, PeopleContact, Team
 from app.models.relationships import Relationship
+from app.models.views_graph import Process, Product, ProductCapability, Stage, StageCapability
 from app.ai.ask.capability_tree import is_activity
 from app.services.cost_lines import object_annual_dollars
 
@@ -143,6 +144,8 @@ class WorkspaceGraph:
     # Raw objects (id, type, name, status, owners, properties) for lookups that need properties,
     # such as ai_landscape. Same shape as the web catalog objects.
     objects: list[dict] = field(default_factory=list)
+    # Process, product, and people links (not catalog edges). Default empty so existing callers stay valid.
+    side_links: list[dict] = field(default_factory=list)
 
     def get(self, record_id: str) -> Rec | None:
         return self.records.get(record_id)
@@ -326,7 +329,79 @@ async def load_graph(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUI
         raw.append(_raw(obj, team_names))
     for rel in relationships:
         edges.append(Edge(str(rel.from_object_id), str(rel.to_object_id), rel.type, "", dict(getattr(rel, "attributes", None) or {})))
-    return WorkspaceGraph(records=records, edges=edges, objects=raw)
+    side_links = await _load_side_links(db, workspace_id, org_id)
+    return WorkspaceGraph(records=records, edges=edges, objects=raw, side_links=side_links)
+
+
+
+async def _load_side_links(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID) -> list[dict]:
+    """Process, product, and people (owner/informed) links on capabilities. Not added to edges."""
+    items: list[dict] = []
+    try:
+        async with db.begin_nested():
+            rows = (
+                await db.execute(
+                    select(Process.id, Process.name, StageCapability.capability_id)
+                    .join(Stage, Stage.process_id == Process.id)
+                    .join(StageCapability, StageCapability.stage_id == Stage.id)
+                    .where(Process.workspace_id == workspace_id, Process.org_id == org_id)
+                )
+            ).all()
+            for process_id, name, cap_id in rows:
+                items.append({"id": str(process_id), "name": name, "type": "process", "relationship": "uses", "on": str(cap_id)})
+    except Exception:
+        pass
+    try:
+        async with db.begin_nested():
+            rows = (
+                await db.execute(
+                    select(Product.id, Product.name, ProductCapability.capability_id)
+                    .join(ProductCapability, ProductCapability.product_id == Product.id)
+                    .where(Product.workspace_id == workspace_id, Product.org_id == org_id)
+                )
+            ).all()
+            for product_id, name, cap_id in rows:
+                items.append({"id": str(product_id), "name": name, "type": "product", "relationship": "uses", "on": str(cap_id)})
+    except Exception:
+        pass
+    try:
+        async with db.begin_nested():
+            contacts = {
+                str(row.id): row.name
+                for row in (
+                    await db.execute(
+                        select(PeopleContact).where(PeopleContact.workspace_id == workspace_id, PeopleContact.org_id == org_id)
+                    )
+                ).scalars()
+            }
+            teams = {
+                str(row.id): row.name
+                for row in (
+                    await db.execute(select(Team).where(Team.workspace_id == workspace_id, Team.org_id == org_id))
+                ).scalars()
+            }
+            rows = (
+                await db.execute(
+                    select(PeopleAccountability).where(
+                        PeopleAccountability.workspace_id == workspace_id,
+                        PeopleAccountability.org_id == org_id,
+                        PeopleAccountability.entity_kind == "capability",
+                    )
+                )
+            ).scalars()
+            for row in rows:
+                subject_type = "contact" if row.subject_type == "contact" else "team" if row.subject_type == "team" else row.subject_type
+                name = contacts.get(str(row.subject_id)) if subject_type == "contact" else teams.get(str(row.subject_id))
+                items.append({
+                    "id": str(row.subject_id),
+                    "name": name or str(row.subject_id),
+                    "type": subject_type,
+                    "relationship": row.link_kind,
+                    "on": str(row.entity_id),
+                })
+    except Exception:
+        pass
+    return items
 
 
 class _Effective:
@@ -430,10 +505,32 @@ async def _contracts_fingerprint(db: AsyncSession, workspace_id: uuid.UUID) -> s
         return "-"
 
 
+
+_SIDE_LINKS_FINGERPRINT_SQL = text(
+    """
+    SELECT
+      (SELECT count(*)::text || '/' || coalesce(max(updated_at)::text, '') FROM processes WHERE workspace_id = :ws AND org_id = :org)
+      || '|' || (SELECT count(*)::text || '/' || coalesce(max(updated_at)::text, '') FROM products WHERE workspace_id = :ws AND org_id = :org)
+      || '|' || (SELECT count(*)::text FROM stage_capabilities sc JOIN stages s ON s.id = sc.stage_id JOIN processes p ON p.id = s.process_id WHERE p.workspace_id = :ws AND p.org_id = :org)
+      || '|' || (SELECT count(*)::text FROM product_capabilities pc JOIN products p ON p.id = pc.product_id WHERE p.workspace_id = :ws AND p.org_id = :org)
+      || '|' || (SELECT count(*)::text || '/' || coalesce(md5(string_agg(id::text || link_kind || entity_id::text || subject_id::text, ',' ORDER BY id)), '')
+                 FROM people_accountabilities WHERE workspace_id = :ws AND org_id = :org)
+    """
+)
+
+
+async def _side_links_fingerprint(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID) -> str:
+    try:
+        async with db.begin_nested():
+            return str((await db.execute(_SIDE_LINKS_FINGERPRINT_SQL, {"ws": workspace_id, "org": org_id})).scalar() or "")
+    except Exception:
+        return "-"
+
+
 async def workspace_fingerprint(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID) -> str | None:
     try:
         base = str((await db.execute(_FINGERPRINT_SQL, {"ws": workspace_id, "org": org_id})).scalar() or "")
-        return base + "|c:" + await _contracts_fingerprint(db, workspace_id)
+        return base + "|c:" + await _contracts_fingerprint(db, workspace_id) + "|s:" + await _side_links_fingerprint(db, workspace_id, org_id)
     except Exception:  # never let the cache break Ask: load normally
         try:
             await db.rollback()

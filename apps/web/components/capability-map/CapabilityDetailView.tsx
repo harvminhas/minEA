@@ -19,6 +19,8 @@ import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { InlineCreate, StructureKebab, type StructureActions } from "@/components/capability-map/StructureActions";
 import { domainIcon } from "@/lib/capability-map-icons";
 import { CapabilityAssessmentFields, type AssessmentPatch } from "@/components/capability-map/CapabilityAssessmentFields";
+import { CapabilityRelationshipsSection } from "@/components/capability-map/CapabilityRelationshipsSection";
+import type { MappedLink } from "@/lib/capability-mapping";
 import {
   DISPOSITIONS,
   dispositionLabel,
@@ -63,6 +65,7 @@ export type CapabilityDetailViewProps = {
   onSetAssessment?: (patch: AssessmentPatch) => void;
   addDialog?: ReactNode;
   structure?: StructureActions;
+  relationshipGroups?: { key: string; label: string; items: MappedLink[] }[];
 };
 
 export function CapabilityDetailView({
@@ -92,6 +95,7 @@ export function CapabilityDetailView({
   onSetAssessment,
   addDialog,
   structure,
+  relationshipGroups = [],
 }: CapabilityDetailViewProps) {
   const coverage = coverageSummary(node);
   const fitness = fitnessSummary(node);
@@ -229,6 +233,11 @@ export function CapabilityDetailView({
         ) : null}
 
         {error ? <p className="mb-3 text-[13px] text-red-600">{error}</p> : null}
+
+        <CapabilityRelationshipsSection
+          groups={relationshipGroups}
+          onAdd={canEdit ? () => onAdd(node.id) : undefined}
+        />
 
         <TargetBlock
           node={node}

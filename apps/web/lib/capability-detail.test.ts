@@ -153,7 +153,7 @@ test("linksOn lists direct apps on a target and ignores other levels", () => {
 test("capability detail view and app form picker stay in source", () => {
   const page = readFileSync(new URL("../components/capability-map/CapabilityDetailPage.tsx", import.meta.url), "utf8");
   const view = readFileSync(new URL("../components/capability-map/CapabilityDetailView.tsx", import.meta.url), "utf8");
-  const dialog = readFileSync(new URL("../components/capability-map/AddRelationshipDialog.tsx", import.meta.url), "utf8");
+  const relForm = readFileSync(new URL("../components/objects/RelationshipForm.tsx", import.meta.url), "utf8");
   const picker = readFileSync(new URL("../components/objects/MapTargetPicker.tsx", import.meta.url), "utf8");
   const form = readFileSync(new URL("../components/objects/ObjectForm.tsx", import.meta.url), "utf8");
   const screen = readFileSync(new URL("../components/mvp/ModelScreen.tsx", import.meta.url), "utf8");
@@ -173,12 +173,14 @@ test("capability detail view and app form picker stay in source", () => {
   assert.match(view, /fitness-setter/);
   assert.match(view, /onSetFitness/);
   assert.match(page, /updateAttributes/);
+  assert.match(page, /RelationshipForm/);
+  assert.doesNotMatch(page, /AddRelationshipDialog/);
   const heat = readFileSync(new URL("../components/capability-map/CapabilityHeatMap.tsx", import.meta.url), "utf8");
   assert.match(heat, /label: "Fitness"/);
   assert.match(heat, /label: "Redundancy"/);
-  assert.match(dialog, /Activity/);
-  assert.match(dialog, /data-testid="add-relationship-dialog"/);
-  assert.match(dialog, /Create a new app/);
+  assert.match(relForm, /data-testid="relationship-form"/);
+  assert.match(relForm, /Activity/);
+  assert.match(relForm, /\+ Create '/);
   assert.match(picker, /data-testid="map-target-picker"/);
   assert.match(picker, /Activity/);
   assert.match(form, /MapTargetPicker/);

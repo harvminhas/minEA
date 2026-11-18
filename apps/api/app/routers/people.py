@@ -444,6 +444,47 @@ async def create_contact(
     return await _contact_read(db, contact)
 
 
+@router.post("/contacts/{contact_id}/accountabilities", status_code=status.HTTP_204_NO_CONTENT)
+async def add_contact_accountability(
+    contact_id: UUID,
+    body: AccountabilityCreate,
+    ctx: TenancyContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Link a person to a capability (or other entity) as owner or informed. No new table."""
+    await ctx.require_write(db)
+    assert ctx.workspace
+
+    result = await db.execute(
+        select(PeopleContact).where(
+            PeopleContact.id == contact_id,
+            PeopleContact.workspace_id == ctx.workspace.id,
+            PeopleContact.org_id == ctx.org_id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+
+    try:
+        await validate_accountability_entity(
+            db, ctx.workspace.id, ctx.org_id, body.entity_kind, body.entity_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    db.add(
+        PeopleAccountability(
+            workspace_id=ctx.workspace.id,
+            org_id=ctx.org_id,
+            subject_type="contact",
+            subject_id=contact_id,
+            entity_kind=body.entity_kind,
+            entity_id=body.entity_id,
+            link_kind=body.link_kind,
+        )
+    )
+
+
 @router.get("/contacts/{contact_id}", response_model=PeopleContactDetail)
 async def get_contact(
     contact_id: UUID,
