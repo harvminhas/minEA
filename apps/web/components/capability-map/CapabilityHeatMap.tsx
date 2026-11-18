@@ -15,7 +15,7 @@ import {
 } from "@/lib/capability-tree";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
-import { InlineRename, StructureKebab, type StructureTarget } from "@/components/capability-map/StructureActions";
+import { InlineCreate, InlineRename, StructureKebab, type StructureDraft, type StructureTarget } from "@/components/capability-map/StructureActions";
 
 const METRICS: { id: HeatMetric; label: string }[] = [
   { id: "coverage", label: "Coverage" },
@@ -100,11 +100,16 @@ export type HeatStructureActions = {
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  pending: boolean;
+  error: string;
   renamingId: string | null;
   setRenamingId: (id: string | null) => void;
   rename: (id: string, name: string) => void | Promise<void>;
+  draft: StructureDraft | null;
   addCapability: (domainId: string) => void;
   addActivity: (parentId: string, domainId?: string | null) => void;
+  cancelDraft: () => void;
+  commitDraft: (name: string) => void | Promise<void>;
   openDelete: (target: StructureTarget) => void;
   openMove: (target: StructureTarget) => void;
 };
@@ -220,6 +225,23 @@ export function CapabilityHeatMap({
               {domain.children.map((node) => (
                 <Tile key={node.id} node={node} metric={metric} onOpen={onOpen} focused={Boolean(focusDomainId) && node.domainId === focusDomainId} structure={structure} />
               ))}
+              {structure?.draft?.kind === "capability" && structure.draft.domainId === domain.id ? (
+                <div
+                  data-testid="structure-create-capability-tile"
+                  className="flex min-h-[88px] flex-col justify-center rounded-xl border border-dashed border-[#c4b5fd] bg-[#fafafe] p-3"
+                >
+                  <InlineCreate
+                    ariaLabel="New capability name"
+                    placeholder="Capability name"
+                    testId="structure-create-capability"
+                    className="text-[13.5px]"
+                    pending={structure.pending}
+                    error={structure.error}
+                    onCancel={structure.cancelDraft}
+                    onSave={(name) => structure.commitDraft(name)}
+                  />
+                </div>
+              ) : null}
             </div>
           </section>
         ))}
@@ -280,6 +302,29 @@ function Tile({ node, metric, onOpen, focused, structure }: { node: TreeNode; me
         </button>
       )}
       <div className="mt-0.5 text-[11.5px]">{heatMeta(node, metric)}</div>
+      {structure && (node.children.length > 0 || (structure.draft?.kind === "activity" && structure.draft.parentId === node.id)) ? (
+        <ul className="mt-2 space-y-0.5" data-testid={`heat-activities-${node.id}`}>
+          {node.children.map((child) => (
+            <li key={child.id} data-testid={`heat-activity-${child.id}`} className="text-[12px] leading-4 text-[#334155]">
+              {child.name}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {structure?.draft?.kind === "activity" && structure.draft.parentId === node.id ? (
+        <div className="mt-2" data-testid="structure-create-activity-slot">
+          <InlineCreate
+            ariaLabel="New activity name"
+            placeholder="Activity name"
+            testId="structure-create-activity"
+            className="w-full text-[13px]"
+            pending={structure.pending}
+            error={structure.error}
+            onCancel={structure.cancelDraft}
+            onSave={(name) => structure.commitDraft(name)}
+          />
+        </div>
+      ) : null}
       {structure ? (
         <div className="absolute right-1.5 top-1.5">
           <StructureKebab

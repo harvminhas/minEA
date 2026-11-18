@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
@@ -32,7 +32,7 @@ import type { AssessmentPatch } from "@/components/capability-map/CapabilityAsse
 import { CapabilityDetailView } from "@/components/capability-map/CapabilityDetailView";
 import { themeForDomain } from "@/lib/domain-theme";
 import { AddRelationshipDialog } from "@/components/capability-map/AddRelationshipDialog";
-import { useStructureActions } from "@/components/capability-map/StructureActions";
+import { useStructureActions, type StructureTarget } from "@/components/capability-map/StructureActions";
 
 export function CapabilityDetailPage({ capabilityId }: { capabilityId: string }) {
   const router = useRouter();
@@ -44,7 +44,16 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
   const catalog = useModelCatalog();
   const queryClient = useQueryClient();
   const objects = catalog.data?.objects ?? [];
-  const structure = useStructureActions(objects);
+  const [leaving, setLeaving] = useState(false);
+  const onDeleted = useCallback(
+    (target: StructureTarget) => {
+      if (target.id !== capabilityId) return;
+      setLeaving(true);
+      router.replace(capabilityMapHref(basePath, { workspace: "architect", domain: target.domainId }));
+    },
+    [basePath, capabilityId, router],
+  );
+  const structure = useStructureActions(objects, { onDeleted });
   const edges = (catalog.data?.relationships ?? []) as RelLike[];
   const rows = catalog.data?.rows ?? [];
 
@@ -268,6 +277,13 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
   }
 
   if (!node) {
+    if (leaving) {
+      return (
+        <div className="px-6 py-5" data-testid="capability-detail-leaving">
+          <p className="text-[13px] text-[#8b90a0]">Returning to the map…</p>
+        </div>
+      );
+    }
     return (
       <div className="px-6 py-5" data-testid="capability-detail">
         <p className="text-[13px] text-[#8b90a0]">This capability is not on the map.</p>

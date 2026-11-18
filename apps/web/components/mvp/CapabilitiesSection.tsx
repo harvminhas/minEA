@@ -34,7 +34,7 @@ import { CapabilityReview } from "@/components/capability-map/CapabilityReview";
 import { CapabilityHeatMap } from "@/components/capability-map/CapabilityHeatMap";
 import { CapabilityAppMapping } from "@/components/capability-map/CapabilityAppMapping";
 import { CapabilityStructureEditor } from "@/components/capability-map/CapabilityStructureEditor";
-import { InlineRename, StructureKebab, useStructureActions } from "@/components/capability-map/StructureActions";
+import { InlineCreate, InlineRename, StructureKebab, useStructureActions } from "@/components/capability-map/StructureActions";
 import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 
 type Mode = "none" | "add" | "interview" | "review" | "mapping" | "edit";
@@ -428,6 +428,22 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
                       </td>
                     </tr>
                   )}
+                  {structure.draft?.kind === "capability" && domainObjId(objects, group.domain) === structure.draft.domainId ? (
+                    <tr data-testid="structure-create-capability-row">
+                      <td colSpan={3} className="px-2 py-2" onClick={(event) => event.stopPropagation()}>
+                        <InlineCreate
+                          ariaLabel="New capability name"
+                          placeholder="Capability name"
+                          testId="structure-create-capability"
+                          className="text-[13px]"
+                          pending={structure.pending}
+                          error={structure.error}
+                          onCancel={structure.cancelDraft}
+                          onSave={(name) => structure.commitDraft(name)}
+                        />
+                      </td>
+                    </tr>
+                  ) : null}
                   {top.map((row) => (
                     <ListRows key={row.id} row={row} childrenRows={children.get(row.id) ?? []} selectedId={selectedId} onOpen={openCapability} objects={objects} structure={structure} />
                   ))}
@@ -439,6 +455,11 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
       )}
     </div>
   );
+}
+
+
+function domainObjId(objects: readonly { id: string; type: string; name: string }[], name: string) {
+  return objects.find((item) => item.type === "business_domain" && item.name === name)?.id ?? null;
 }
 
 function ListRows({
@@ -462,6 +483,22 @@ function ListRows({
       {childrenRows.map((child) => (
         <ListRow key={child.id} row={child} indent selectedId={selectedId} onOpen={onOpen} objects={objects} structure={structure} />
       ))}
+      {structure.draft?.kind === "activity" && structure.draft.parentId === row.id ? (
+        <tr data-testid="structure-create-activity-row" onClick={(event) => event.stopPropagation()}>
+          <td className="px-2 py-2 pl-8" colSpan={3}>
+            <InlineCreate
+              ariaLabel="New activity name"
+              placeholder="Activity name"
+              testId="structure-create-activity"
+              className="text-[13px]"
+              pending={structure.pending}
+              error={structure.error}
+              onCancel={structure.cancelDraft}
+              onSave={(name) => structure.commitDraft(name)}
+            />
+          </td>
+        </tr>
+      ) : null}
     </>
   );
 }

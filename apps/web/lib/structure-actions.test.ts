@@ -77,3 +77,43 @@ test("architect heat map and list expose structure menus; structure editor no lo
   assert.match(detail, /structure-menu-activity-/);
   assert.match(detail, /Move to another capability/);
 });
+
+test("Add activity and Add capability open an inline name field instead of creating immediately", () => {
+  const actions = src("components/capability-map/StructureActions.tsx");
+  const addActivity = actions.slice(actions.indexOf("const addActivity"), actions.indexOf("const cancelDraft"));
+  const addCapability = actions.slice(actions.indexOf("const addCapability"), actions.indexOf("const addActivity"));
+  assert.match(addActivity, /setDraft\(\{ kind: "activity"/);
+  assert.doesNotMatch(addActivity, /objectsApi\.create/);
+  assert.match(addCapability, /setDraft\(\{ kind: "capability"/);
+  assert.doesNotMatch(addCapability, /objectsApi\.create/);
+  assert.match(actions, /const commitDraft/);
+  assert.match(actions, /export function InlineCreate/);
+  assert.match(actions.slice(actions.indexOf("const commitDraft")), /objectsApi\.create/);
+
+  const heat = src("components/capability-map/CapabilityHeatMap.tsx");
+  assert.match(heat, /structure-create-activity/);
+  assert.match(heat, /heat-activity-/);
+  assert.match(heat, /node.children.map/);
+
+  assert.match(heat, /structure-create-capability/);
+  assert.match(heat, /structure\.addActivity\(node\.id, node\.domainId\)/);
+  assert.match(heat, /structure\.addCapability\(domain\.id\)/);
+
+  const section = src("components/mvp/CapabilitiesSection.tsx");
+  assert.match(section, /structure-create-activity/);
+  assert.match(section, /structure-create-capability/);
+  assert.match(section, /structure\.addActivity\(row\.id, domainId\)/);
+
+  const detail = src("components/capability-map/CapabilityDetailView.tsx");
+  assert.match(detail, /structure-create-activity/);
+  assert.match(detail, /structure\.addActivity\(node\.id, node\.domainId\)/);
+});
+
+test("deleting the open capability from its detail page returns to the Architect map", () => {
+  const page = src("components/capability-map/CapabilityDetailPage.tsx");
+  assert.match(page, /onDeleted/);
+  assert.match(page, /workspace: "architect"/);
+  assert.match(page, /router\.replace/);
+  assert.match(page, /capability-detail-leaving/);
+  assert.match(page, /useStructureActions\(objects, \{ onDeleted \}\)/);
+});

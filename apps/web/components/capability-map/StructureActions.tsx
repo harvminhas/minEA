@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreVertical } from "lucide-react";
 import type { MinEAObject, StructureDeleteImpact, StructureMoveRequest } from "@minea/types";
@@ -111,16 +111,23 @@ export function InlineRename({
   className?: string;
 }) {
   const [draft, setDraft] = useState(value);
+  const saving = useRef(false);
   useEffect(() => setDraft(value), [value, editing]);
   if (!editing) return null;
   const commit = async () => {
+    if (saving.current) return;
     const next = draft.trim();
     if (!next || next === value) {
       onClose();
       return;
     }
-    await onSave(next);
-    onClose();
+    saving.current = true;
+    try {
+      await onSave(next);
+      onClose();
+    } catch {
+      saving.current = false;
+    }
   };
   return (
     <input
@@ -146,6 +153,73 @@ export function InlineRename({
         className,
       )}
     />
+  );
+}
+
+export function InlineCreate({
+  ariaLabel,
+  placeholder,
+  testId,
+  className,
+  pending,
+  error,
+  onCancel,
+  onSave,
+}: {
+  ariaLabel: string;
+  placeholder: string;
+  testId: string;
+  className?: string;
+  pending?: boolean;
+  error?: string;
+  onCancel: () => void;
+  onSave: (name: string) => void | Promise<void>;
+}) {
+  const [value, setValue] = useState("");
+  const saving = useRef(false);
+  const commit = async () => {
+    if (saving.current) return;
+    const next = value.trim();
+    if (!next) {
+      onCancel();
+      return;
+    }
+    saving.current = true;
+    try {
+      await onSave(next);
+    } catch {
+      saving.current = false;
+    }
+  };
+  return (
+    <div className="min-w-0">
+    <input
+      autoFocus
+      aria-label={ariaLabel}
+      data-testid={testId}
+      placeholder={placeholder}
+      value={value}
+      disabled={pending}
+      onChange={(event) => setValue(event.target.value)}
+      onClick={(event) => event.stopPropagation()}
+      onBlur={() => void commit()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void commit();
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onCancel();
+        }
+      }}
+      className={cn(
+        "rounded-md border-2 border-[#4f46e5] bg-white px-1.5 py-0.5 font-semibold text-[#1c2230] outline-none shadow-[0_0_0_3px_rgba(79,70,229,0.15)] placeholder:font-normal placeholder:text-[#94a3b8]",
+        className,
+      )}
+    />
+    {error ? <p className="mt-1 text-[12px] text-[#b42318]">{error}</p> : null}
+    </div>
   );
 }
 
@@ -332,12 +406,20 @@ function MoveNodeDialog({
   );
 }
 
-export function useStructureActions(objects: readonly MinEAObject[]) {
+export type StructureDraft =
+  | { kind: "capability"; domainId: string }
+  | { kind: "activity"; parentId: string; domainId?: string | null };
+
+export function useStructureActions(
+  objects: readonly MinEAObject[],
+  options?: { onDeleted?: (target: StructureTarget) => void },
+) {
   const { getToken } = useAuth();
   const { orgSlug, workspaceSlug } = useTenancy();
   const { canCreate, canEdit, canDelete } = usePermissions();
   const queryClient = useQueryClient();
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<StructureDraft | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StructureTarget | null>(null);
   const [impact, setImpact] = useState<StructureDeleteImpact | null>(null);
   const [impactLoading, setImpactLoading] = useState(false);
@@ -381,31 +463,54 @@ export function useStructureActions(objects: readonly MinEAObject[]) {
       applyCatalogWrite(queryClient, orgSlug!, workspaceSlug!, { object: updated });
     });
 
-  const addCapability = (domainId: string) =>
-    run(async () => {
-      const created = await objectsApi.create(
-        orgSlug!,
-        workspaceSlug!,
-        { type: "capability", name: "New capability", status: "active", properties: domainId ? { domain_id: domainId } : {} },
-        await token(),
-      );
-      applyCatalogWrite(queryClient, orgSlug!, workspaceSlug!, { object: created });
-      setRenamingId(created.id);
-    });
+  const addCapability = (domainId: string) => {
+    setRenamingId(null);
+    setError("");
+    setDraft({ kind: "capability", domainId });
+  };
 
-  const addActivity = (parentId: string, domainId?: string | null) =>
-    run(async () => {
-      const properties: Record<string, string> = { parent_id: parentId };
-      if (domainId) properties.domain_id = domainId;
+  const addActivity = (parentId: string, domainId?: string | null) => {
+    setRenamingId(null);
+    setError("");
+    setDraft({ kind: "activity", parentId, domainId });
+  };
+
+  const cancelDraft = () => {
+    setDraft(null);
+    setError("");
+  };
+
+  const commitDraft = (name: string) => {
+    const trimmed = name.trim();
+    const current = draft;
+    if (!current) return Promise.resolve();
+    if (!trimmed) {
+      cancelDraft();
+      return Promise.resolve();
+    }
+    return run(async () => {
+      const properties: Record<string, string> = {};
+      if (current.kind === "capability") {
+        if (current.domainId) properties.domain_id = current.domainId;
+      } else {
+        properties.parent_id = current.parentId;
+        if (current.domainId) properties.domain_id = current.domainId;
+      }
       const created = await objectsApi.create(
         orgSlug!,
         workspaceSlug!,
-        { type: "capability", name: "New activity", status: "active", properties },
+        {
+          type: "capability",
+          name: trimmed,
+          status: "active",
+          properties,
+        },
         await token(),
       );
       applyCatalogWrite(queryClient, orgSlug!, workspaceSlug!, { object: created });
-      setRenamingId(created.id);
+      setDraft(null);
     });
+  };
 
   useEffect(() => {
     if (!deleteTarget) {
@@ -434,10 +539,12 @@ export function useStructureActions(objects: readonly MinEAObject[]) {
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
+    const target = deleteTarget;
     void run(async () => {
-      await objectsApi.delete(orgSlug!, workspaceSlug!, deleteTarget.id, await token());
-      applyCatalogWrite(queryClient, orgSlug!, workspaceSlug!, { removeId: deleteTarget.id });
+      await objectsApi.delete(orgSlug!, workspaceSlug!, target.id, await token());
+      applyCatalogWrite(queryClient, orgSlug!, workspaceSlug!, { removeId: target.id });
       setDeleteTarget(null);
+      options?.onDeleted?.(target);
     }).catch(() => undefined);
   };
 
@@ -512,8 +619,11 @@ export function useStructureActions(objects: readonly MinEAObject[]) {
     renamingId,
     setRenamingId,
     rename,
+    draft,
     addCapability,
     addActivity,
+    cancelDraft,
+    commitDraft,
     openDelete: setDeleteTarget,
     openMove: setMoveTarget,
     dialogs,

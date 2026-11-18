@@ -16,7 +16,7 @@ import {
 } from "@/lib/capability-detail";
 import { themeForDomain } from "@/lib/domain-theme";
 import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
-import { StructureKebab, type StructureActions } from "@/components/capability-map/StructureActions";
+import { InlineCreate, StructureKebab, type StructureActions } from "@/components/capability-map/StructureActions";
 import { domainIcon } from "@/lib/capability-map-icons";
 import { CapabilityAssessmentFields, type AssessmentPatch } from "@/components/capability-map/CapabilityAssessmentFields";
 import {
@@ -271,9 +271,22 @@ export function CapabilityDetailView({
           />
         ))}
 
-        {canCreate && onAddActivity && (
+        {structure?.draft?.kind === "activity" && structure.draft.parentId === node.id ? (
+          <div className="mt-1" data-testid="structure-create-activity-slot">
+            <InlineCreate
+              ariaLabel="New activity name"
+              placeholder="Activity name"
+              testId="structure-create-activity"
+              className="text-[13px]"
+              pending={structure.pending}
+              error={structure.error}
+              onCancel={structure.cancelDraft}
+              onSave={(name) => structure.commitDraft(name)}
+            />
+          </div>
+        ) : canCreate && (structure?.canCreate || onAddActivity) ? (
           <div className="mt-1">
-            {addingActivity ? (
+            {addingActivity && onAddActivity ? (
               <AddActivityForm
                 onCancel={() => setAddingActivity(false)}
                 onSave={async (name) => {
@@ -285,13 +298,16 @@ export function CapabilityDetailView({
               <button
                 type="button"
                 className="bg-transparent text-[12.5px] font-medium text-[#5b4ce6]"
-                onClick={() => setAddingActivity(true)}
+                onClick={() => {
+                  if (structure?.canCreate) structure.addActivity(node.id, node.domainId);
+                  else setAddingActivity(true);
+                }}
               >
                 + Activity
               </button>
             )}
           </div>
-        )}
+        ) : null}
       </div>
       {addDialog}
     </div>
