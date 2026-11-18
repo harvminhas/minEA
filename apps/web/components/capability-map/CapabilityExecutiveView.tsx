@@ -160,7 +160,7 @@ export function CapabilityExecutiveView({
             {kpis.scopeLabel}
           </div>
         ) : null}
-      <div className="grid grid-cols-4 gap-2.5 overflow-hidden rounded-xl border border-[#eef0f4]">
+      <div className="grid grid-cols-4 items-stretch gap-5">
         <Kpi
           testId="exec-kpi-cost"
           value={kpis.runCost.empty ? "—" : kpis.runCost.label}
@@ -172,13 +172,14 @@ export function CapabilityExecutiveView({
           value={kpis.exposure.label}
           label="Exposure"
           hint={kpis.exposure.hint}
-          tone={kpis.exposure.empty ? undefined : kpis.exposure.value > 0 ? "bad" : "ok"}
+          tone={kpis.exposure.empty || kpis.exposure.value === 0 ? undefined : "red"}
         />
         <Kpi
           testId="exec-kpi-savings"
           value={kpis.savings.empty ? "—" : kpis.savings.label}
           label="Rationalisation savings"
           hint={kpis.savings.hint}
+          tone={kpis.savings.empty ? undefined : "blue"}
           emphasize={!kpis.savings.empty}
         />
         <Kpi
@@ -326,23 +327,29 @@ function Kpi({
   value: string;
   label: string;
   hint: string;
-  tone?: "bad" | "ok";
+  tone?: "red" | "blue";
   emphasize?: boolean;
   testId?: string;
 }) {
   return (
-    <div className={cn("px-[18px] py-3.5", emphasize && "bg-[#f5f3ff]")} data-testid={testId}>
-      <div className="text-[11px] font-semibold tracking-[0.04em] text-[#6b7289]">{label}</div>
+    <div
+      className={cn(
+        "rounded-2xl bg-white p-7",
+        emphasize ? "border-2 border-[#4f46e5]" : "border border-[#e2e8f0]",
+      )}
+      data-testid={testId}
+    >
+      <div className="text-[16px] font-semibold leading-5 text-[#475569]">{label}</div>
       <div
         className={cn(
-          "mt-1 text-[22px] font-semibold tracking-[-0.03em] leading-tight text-[#1c2230]",
-          tone === "bad" && "text-[#9f1239]",
-          tone === "ok" && "text-[#166534]",
+          "mt-3 text-[36px] font-bold leading-none tracking-[-0.02em] text-[#0f172a]",
+          tone === "red" && "text-[#b91c1c]",
+          tone === "blue" && "text-[#1d4ed8]",
         )}
       >
         {value}
       </div>
-      <div className="mt-1 text-[12px] text-[#6b7289]">{hint}</div>
+      <div className="mt-5 text-[15px] font-normal leading-6 text-[#334155]">{hint}</div>
     </div>
   );
 }
