@@ -17,9 +17,10 @@ import {
 import { themeForDomain } from "@/lib/domain-theme";
 import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { InlineCreate, StructureKebab, type StructureActions } from "@/components/capability-map/StructureActions";
-import { domainIcon } from "@/lib/capability-map-icons";
 import type { AssessmentPatch } from "@/components/capability-map/CapabilityAssessmentFields";
 import { ActivityAssessmentTab, type ProcessLike } from "@/components/assessment/ActivityAssessmentTab";
+import { ArchitectureBreadcrumb } from "@/components/capability-map/ArchitectureBreadcrumb";
+import { architectureRecordCrumbs } from "@/lib/architecture-breadcrumb";
 import { CapabilityAssessmentTab } from "@/components/assessment/CapabilityAssessmentTab";
 import type { FunctionalAssessment } from "@minea/types";
 import type { CapEdge, CapObj } from "@/lib/capability-tree";
@@ -51,6 +52,7 @@ export type CapabilityDetailViewProps = {
   theme?: { accent: string; tint: string; ink: string; icon: string };
   backHref: string;
   allDomainsHref?: string;
+  domainHref?: string | null;
   parentHref?: string;
   parentName?: string;
   activityPage?: boolean;
@@ -100,6 +102,7 @@ export function CapabilityDetailView({
   theme = themeForDomain({ name: domainName }),
   backHref,
   allDomainsHref,
+  domainHref,
   parentHref,
   parentName,
   activityPage = false,
@@ -145,7 +148,6 @@ export function CapabilityDetailView({
   const fitness = fitnessSummary(node);
   const redundancy = redundancySummary(node);
   const [addingActivity, setAddingActivity] = useState(false);
-  const DomainIcon = domainIcon(theme.icon);
 
   useEffect(() => {
     if (!highlightId) return;
@@ -169,49 +171,19 @@ export function CapabilityDetailView({
       </div>
 
       <div className="max-w-[880px]">
-        <div className="mb-3.5 flex items-center gap-2 text-[13px] text-[#6b7289]" data-testid="capability-detail-breadcrumb">
-          {allDomainsHref ? (
-            <>
-              <Link href={allDomainsHref} className="font-medium text-[#4a43c9]">
-                All domains
-              </Link>
-              <span className="text-[#c0c3cc]">/</span>
-            </>
-          ) : null}
-          {domainName ? (
-            <>
-              <span
-                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md"
-                style={{ background: theme.tint, color: theme.ink }}
-                aria-hidden
-                data-testid="domain-theme-icon"
-              >
-                <DomainIcon size={12} strokeWidth={2.2} />
-              </span>
-              {allDomainsHref ? (
-                <Link href={backHref} className="font-medium text-[#4a43c9]">
-                  {domainName}
-                </Link>
-              ) : (
-                <span>{domainName}</span>
-              )}
-            </>
-          ) : (
-            <span>No domain</span>
-          )}
-          <span className="text-[#c0c3cc]">/</span>
-          {activityPage && parentHref ? (
-            <>
-              <Link href={parentHref} className="font-medium text-[#4a43c9]">
-                {parentName || "Capability"}
-              </Link>
-              <span className="text-[#c0c3cc]">/</span>
-              <strong className="font-semibold text-[#1c2230]">{node.name}</strong>
-            </>
-          ) : (
-            <strong className="font-semibold text-[#1c2230]">{node.name}</strong>
-          )}
-        </div>
+        {allDomainsHref ? (
+          <ArchitectureBreadcrumb
+            testId="capability-detail-breadcrumb"
+            items={architectureRecordCrumbs({
+              capabilitiesHref: allDomainsHref,
+              domain: domainName ? { name: domainName, href: domainHref ?? undefined } : { name: "No domain" },
+              capability: activityPage
+                ? { name: parentName || "Capability", href: parentHref }
+                : { name: node.name },
+              activity: activityPage ? { name: node.name } : null,
+            })}
+          />
+        ) : null}
 
         <div className="mb-1 flex items-start justify-between gap-3">
           <div>

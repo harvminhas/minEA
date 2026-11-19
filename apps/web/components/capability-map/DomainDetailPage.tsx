@@ -15,6 +15,8 @@ import { DomainProcessesTab } from "@/components/capability-map/DomainProcessesT
 import { DomainProductsTab } from "@/components/capability-map/DomainProductsTab";
 import { DomainHistoryTab } from "@/components/capability-map/DomainHistoryTab";
 import { capabilityMapPath } from "@/lib/capability-map-paths";
+import { ArchitectureBreadcrumb } from "@/components/capability-map/ArchitectureBreadcrumb";
+import { architectureRecordCrumbs } from "@/lib/architecture-breadcrumb";
 import { DomainOverviewTab } from "@/components/capability-map/DomainOverviewTab";
 import { DomainRelationshipsTab } from "@/components/capability-map/DomainRelationshipsTab";
 import { EditCapabilityDialog } from "@/components/capability-map/EditCapabilityDialog";
@@ -213,13 +215,13 @@ export function DomainDetailPage({ domainId }: Props) {
       <div className="px-8 pt-5 pb-0 border-b border-gray-200 bg-white">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="min-w-0">
-            <nav className="text-xs text-gray-400 mb-3 flex items-center gap-1">
-              <Link href={capabilitiesPath} className="hover:text-indigo-600 transition-colors">
-                Capabilities
-              </Link>
-              <span>›</span>
-              <span className="text-gray-600">Domain</span>
-            </nav>
+            <ArchitectureBreadcrumb
+              testId="domain-detail-breadcrumb"
+              items={architectureRecordCrumbs({
+                capabilitiesHref: capabilitiesPath,
+                domain: { name: domain.name },
+              })}
+            />
 
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-indigo-50 p-2 text-indigo-600 flex-shrink-0">

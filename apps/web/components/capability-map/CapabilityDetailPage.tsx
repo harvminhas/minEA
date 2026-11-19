@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
+import { domainDetailPath } from "@/lib/capability-map-paths";
 import { usePermissions } from "@/lib/use-permissions";
 import { applyCatalogWrite, catalogQueryKey, useModelCatalog } from "@/lib/use-model-catalog";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
@@ -326,6 +327,7 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
       theme={theme}
       backHref={capabilityMapHref(basePath, { domain: node.domainId })}
       allDomainsHref={capabilityMapHref(basePath)}
+      domainHref={orgSlug && workspaceSlug && node.domainId ? domainDetailPath(orgSlug, workspaceSlug, node.domainId) : null}
       activityPage={Boolean(activityNode)}
       parentHref={activityNode ? capabilityDetailPath(basePath, node.id) : undefined}
       parentName={activityNode ? node.name : undefined}

@@ -169,7 +169,8 @@ test("capability detail view and app form picker stay in source", () => {
   assert.match(view, /event.key === "Enter" \|\| event.key === " "/);
   assert.match(view, /data-no-card-nav/);
   assert.match(view, /borderLeftColor/);
-  assert.match(view, /domain-theme-icon/);
+  assert.match(view, /ArchitectureBreadcrumb/);
+  assert.match(view, /capability-detail-breadcrumb/);
   assert.match(view, /themeForDomain/);
   assert.match(view, /data-testid="capability-assessment"/);
   assert.match(view, /fitness-setter/);
