@@ -16,11 +16,15 @@ export function CapabilityRelationshipsSection({
   onAdd,
   showAdd = true,
   heading = "Relationships",
+  addStyle = "link",
+  addTestId,
 }: {
   groups: { key: string; label: string; items: MappedLink[] }[];
   onAdd?: () => void;
   showAdd?: boolean;
   heading?: string;
+  addStyle?: "link" | "button";
+  addTestId?: string;
 }) {
   const { canEdit } = usePermissions();
   const { getToken } = useAuth();
@@ -81,7 +85,16 @@ export function CapabilityRelationshipsSection({
           <span className="ml-2 text-[12.5px] font-medium text-[#8b90a0]">{count}</span>
         </h2>
         {showAdd && canEdit && onAdd ? (
-          <button type="button" data-testid="add-relationship-inline" onClick={onAdd} className="text-[12.5px] font-semibold text-[#5b4ce6]">
+          <button
+            type="button"
+            data-testid={addTestId ?? (addStyle === "button" ? "add-relationship" : "add-relationship-inline")}
+            onClick={onAdd}
+            className={
+              addStyle === "button"
+                ? "inline-flex h-8 items-center rounded-lg border border-[#5b4ce6] bg-[#5b4ce6] px-3 text-[13px] font-semibold text-white"
+                : "text-[12.5px] font-semibold text-[#5b4ce6]"
+            }
+          >
             Add relationship
           </button>
         ) : null}

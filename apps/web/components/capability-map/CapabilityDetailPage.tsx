@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { useTenancy } from "@/lib/tenancy";
 import { usePermissions } from "@/lib/use-permissions";
@@ -36,11 +36,18 @@ import type { MinEAObject } from "@minea/types";
 import { useStructureActions, type StructureTarget } from "@/components/capability-map/StructureActions";
 import { useCapabilityMappedLinks } from "@/lib/use-capability-mapped-links";
 import type { MappedScope } from "@/lib/capability-mapping";
+import { recordPageTabFromSearch, recordPageTabQuery, type RecordPageTab } from "@/lib/record-tabs";
+import { EntityOwnerLine } from "@/components/people/EntityOwnerLine";
+import { ObjectTechDebtTab } from "@/components/risk/ObjectTechDebtTab";
+import { useObjectTechDebtSummary } from "@/lib/use-object-tech-debt";
+import { EntityHistoryPanel } from "@/components/shared/EntityHistory";
 
 export function CapabilityDetailPage({ capabilityId }: { capabilityId: string }) {
   const router = useRouter();
   const params = useSearchParams();
   const highlightId = params.get("activity");
+  const tab = recordPageTabFromSearch(params.get("tab"), params.get("focus"));
+  const focusOwner = params.get("focus") === "owner";
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
   const { canEdit, canCreate } = usePermissions();
@@ -50,11 +57,16 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
   const [leaving, setLeaving] = useState(false);
   const onDeleted = useCallback(
     (target: StructureTarget) => {
-      if (target.id !== capabilityId) return;
-      setLeaving(true);
-      router.replace(capabilityMapHref(basePath, { workspace: "architect", domain: target.domainId }));
+      if (target.id === capabilityId) {
+        setLeaving(true);
+        router.replace(capabilityMapHref(basePath, { workspace: "architect", domain: target.domainId }));
+        return;
+      }
+      if (target.id === highlightId) {
+        router.replace(capabilityDetailPath(basePath, capabilityId));
+      }
     },
-    [basePath, capabilityId, router],
+    [basePath, capabilityId, highlightId, router],
   );
   const structure = useStructureActions(objects, { onDeleted });
   const edges = (catalog.data?.relationships ?? []) as RelLike[];
@@ -86,18 +98,45 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
     return map;
   }, [targetIds, edges, appMap]);
 
+  const activityNode = useMemo(() => {
+    if (!node || !highlightId) return null;
+    return node.children.find((child) => child.id === highlightId) ?? null;
+  }, [node, highlightId]);
+  const pageNode = activityNode ?? node;
   const scopes = useMemo<MappedScope[]>(() => {
     if (!node) return [];
+    if (activityNode) return [{ id: activityNode.id, name: activityNode.name, level: "activity" as const }];
     return [
       { id: node.id, name: node.name, level: "capability" as const },
       ...node.children.map((child) => ({ id: child.id, name: child.name, level: "activity" as const })),
     ];
-  }, [node]);
+  }, [node, activityNode]);
   const mapped = useCapabilityMappedLinks(scopes, node?.id);
 
   const [addFor, setAddFor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const recordId = activityNode?.id ?? capabilityId;
+  const recordObject = objects.find((item) => item.id === recordId);
+  const debt = useObjectTechDebtSummary(recordId, Boolean(recordId));
+  const history = useQuery({
+    queryKey: ["object-history", orgSlug, workspaceSlug, recordId],
+    enabled: Boolean(orgSlug && workspaceSlug && recordId),
+    queryFn: async () => {
+      const token = await getToken();
+      if (!token) return { entries: [] };
+      return objectsApi.history(orgSlug, workspaceSlug, recordId, token);
+    },
+  });
+  const setTab = (next: RecordPageTab) => {
+    const query: { activity?: string | null; tab?: string; focus?: string | null } = {
+      activity: highlightId,
+      tab: recordPageTabQuery(next),
+    };
+    if (next !== "overview") query.focus = null;
+    else if (focusOwner) query.focus = "owner";
+    router.replace(capabilityDetailPath(basePath, capabilityId, query), { scroll: false });
+  };
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: catalogQueryKey(orgSlug, workspaceSlug) });
@@ -155,6 +194,12 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
   const onRename = (id: string, name: string) =>
     run(async (token) => {
       const updated = await objectsApi.update(orgSlug, workspaceSlug, id, { name }, token);
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: updated });
+    });
+
+  const onSetDescription = (value: string) =>
+    run(async (token) => {
+      const updated = await objectsApi.update(orgSlug, workspaceSlug, recordId, { description: value }, token);
       applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: updated });
     });
 
@@ -237,7 +282,9 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
     );
   }
 
-  const fromRecords = [node.id, ...node.children.map((child) => child.id)]
+  const viewNode = activityNode ?? node;
+  const fromIds = activityNode ? [activityNode.id] : [node.id, ...node.children.map((child) => child.id)];
+  const fromRecords = fromIds
     .map((id) => objects.find((item) => item.id === id))
     .filter((item): item is MinEAObject => Boolean(item));
   const fromObject = fromRecords.find((item) => item.id === addFor) ?? fromRecords[0];
@@ -249,21 +296,58 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
     .map((link) => parseDisposition(link.attributes?.disposition))
     .filter((item): item is Disposition => Boolean(item));
   const suggestedPosture = suggestInvestmentPosture(assessment, node, dispositions);
+  const relationshipCount = mapped.groups.reduce((sum, group) => sum + group.items.length, 0);
+  const historyEntries = history.data?.entries ?? [];
 
   return (
     <>
       {structure.dialogs}
       <CapabilityDetailView
-      node={node}
+      node={viewNode}
       domainName={domainName}
       theme={theme}
       backHref={capabilityMapHref(basePath, { domain: node.domainId })}
       allDomainsHref={capabilityMapHref(basePath)}
-      detailsHref={capabilityDetailPath(basePath, node.id, { activity: highlightId, tab: "details" })}
-      activityDetailsHref={(activityId) =>
-        capabilityDetailPath(basePath, node.id, { activity: activityId, tab: "details", details: activityId })
+      activityPage={Boolean(activityNode)}
+      parentHref={activityNode ? capabilityDetailPath(basePath, node.id) : undefined}
+      parentName={activityNode ? node.name : undefined}
+      moveRoot={node}
+      tab={tab}
+      onTab={setTab}
+      relationshipCount={relationshipCount}
+      openDebtCount={debt.data?.open_count ?? 0}
+      historyCount={historyEntries.length}
+      description={recordObject?.description ?? ""}
+      onSetDescription={onSetDescription}
+      ownerLine={
+        <EntityOwnerLine
+          objectId={viewNode.id}
+          objectType="capability"
+          object={recordObject}
+          canEdit={canEdit}
+          openEditor={focusOwner}
+        />
       }
-      onOpenDetails={(href) => router.push(href)}
+      techDebtPanel={
+        <ObjectTechDebtTab
+          objectId={viewNode.id}
+          objectName={viewNode.name}
+          objectKind="capability"
+          summary={debt.data}
+          isLoading={debt.isLoading}
+          onRefresh={() => void debt.refetch()}
+        />
+      }
+      historyPanel={
+        <EntityHistoryPanel
+          entries={historyEntries}
+          isLoading={history.isLoading}
+          emptyMessage="No history yet. Changes to this record will appear here."
+        />
+      }
+      onOpenActivity={(activityId) =>
+        router.push(capabilityDetailPath(basePath, node.id, { activity: activityId }))
+      }
       highlightId={highlightId}
       linksByTarget={linksByTarget}
       canEdit={canEdit}

@@ -157,11 +157,13 @@ test("capability detail view and app form picker stay in source", () => {
   const picker = readFileSync(new URL("../components/objects/MapTargetPicker.tsx", import.meta.url), "utf8");
   const form = readFileSync(new URL("../components/objects/ObjectForm.tsx", import.meta.url), "utf8");
   const screen = readFileSync(new URL("../components/mvp/ModelScreen.tsx", import.meta.url), "utf8");
+  const relSection = readFileSync(new URL("../components/capability-map/CapabilityRelationshipsSection.tsx", import.meta.url), "utf8");
   assert.match(view, /data-testid="capability-detail"/);
   assert.match(view, /Back to map/);
-  assert.match(view, /Add relationship/);
+  assert.match(relSection, /Add relationship/);
+  assert.match(view, /addStyle="button"/);
   assert.doesNotMatch(view, /\+ Link app/);
-  assert.match(view, /role="button"/);
+  assert.match(view, /role=\{navigable \? "button"/);
   assert.match(view, /cursor-pointer/);
   assert.match(view, /isCardChromeTarget/);
   assert.match(view, /event.key === "Enter" \|\| event.key === " "/);
@@ -186,7 +188,24 @@ test("capability detail view and app form picker stay in source", () => {
   assert.match(form, /MapTargetPicker/);
   assert.doesNotMatch(form, /Pick L2 capabilities from your capability map/);
   assert.match(screen, /CapabilityDetailPage/);
-  assert.match(page, /tab=details|tab: "details"/);
+  assert.match(screen, /detailsOpen = false/);
+  assert.match(page, /recordPageTabFromSearch/);
+  assert.match(page, /EntityOwnerLine/);
+  assert.match(page, /ObjectTechDebtTab/);
+  assert.match(page, /EntityHistoryPanel/);
+  assert.match(view, /ObjectDrawerTabs/);
+  assert.match(view, /id: "overview"/);
+  assert.match(view, /data-testid="record-description"/);
+  assert.doesNotMatch(view, />Details</);
+  assert.doesNotMatch(page, /tab: "details"/);
+  const domainPage = readFileSync(new URL("../components/capability-map/DomainDetailPage.tsx", import.meta.url), "utf8");
+  assert.match(domainPage, /ObjectDrawerTabs/);
+  assert.match(domainPage, /EntityOwnerLine/);
+  assert.match(domainPage, /objectKind="business_domain"/);
+  assert.match(domainPage, /DomainHistoryTab/);
+  assert.match(domainPage, /domain-section-mapping/);
+  assert.doesNotMatch(domainPage, />Details</);
+  assert.doesNotMatch(domainPage, /domain-add-relationship/);
 });
 
 test("assessment summaries follow weakest-link fitness and inherited redundancy", () => {

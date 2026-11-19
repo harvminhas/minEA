@@ -66,6 +66,8 @@ export function DomainRelationshipsTab({
         groups={mapped.groups}
         showAdd={canEdit && records.length > 0}
         onAdd={() => setOpen(true)}
+        addStyle="button"
+        addTestId="domain-add-relationship"
       />
       {open && records.length > 0 ? (
         <RelationshipForm

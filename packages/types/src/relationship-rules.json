@@ -1068,5 +1068,15 @@
     "writes",
     "technical_capability",
     "data_store"
+  ],
+  [
+    "affects",
+    "tech_debt",
+    "capability"
+  ],
+  [
+    "affects",
+    "tech_debt",
+    "business_domain"
   ]
 ]

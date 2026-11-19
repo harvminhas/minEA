@@ -59,8 +59,13 @@ export function useCapabilityMappedLinks(scopes: MappedScope[], currentCapabilit
     const processes = mappedLinksFromProcesses(lists.data?.processes ?? [], scopes, currentCapabilityId);
     const products = mappedLinksFromProducts(lists.data?.products ?? [], scopes, currentCapabilityId);
     const people = mappedLinksFromPeople(
-      peopleQueries.flatMap((query) =>
-        (query.data?.items ?? []).map((item) => ({ ...item, entity_id: query.data?.entityId }))
+      peopleQueries.flatMap((query, index) =>
+        (query.data?.items ?? []).map((item) => ({
+          ...item,
+          // Use the scope id, not a field on the cached payload — EntityOwnerLine shares this
+          // query key and stores the raw { items } API response.
+          entity_id: scopes[index]?.id,
+        }))
       ),
       scopes,
       currentCapabilityId

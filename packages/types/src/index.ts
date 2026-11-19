@@ -733,7 +733,9 @@ export type TechDebtHostKind =
   | "data_store"
   | "data_domain"
   | "cloud_service"
-  | "model";
+  | "model"
+  | "capability"
+  | "business_domain";
 
 export interface TechDebtAffectsRef {
   object_id: string;

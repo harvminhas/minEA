@@ -15,6 +15,7 @@ from app.models.relationships import Relationship
 from app.models.views_graph import Process, Product, ProductCapability, Stage, StageCapability
 from app.ai.ask.capability_tree import is_activity
 from app.services.cost_lines import object_annual_dollars
+from app.services.owner_side_links import extra_owner_side_links
 
 APP_TYPES = {"application", "solution", "technical_capability"}
 HOSTING_NOT_VENDOR = {
@@ -335,7 +336,7 @@ async def load_graph(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUI
 
 
 async def _load_side_links(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUID) -> list[dict]:
-    """Process, product, and people (owner/informed) links on capabilities. Not added to edges."""
+    """Process, product, and people (owner/informed) links on capabilities and domains. Not added to edges."""
     items: list[dict] = []
     try:
         async with db.begin_nested():
@@ -380,16 +381,18 @@ async def _load_side_links(db: AsyncSession, workspace_id: uuid.UUID, org_id: uu
                     await db.execute(select(Team).where(Team.workspace_id == workspace_id, Team.org_id == org_id))
                 ).scalars()
             }
-            rows = (
-                await db.execute(
-                    select(PeopleAccountability).where(
-                        PeopleAccountability.workspace_id == workspace_id,
-                        PeopleAccountability.org_id == org_id,
-                        PeopleAccountability.entity_kind == "capability",
+            acc_rows = list(
+                (
+                    await db.execute(
+                        select(PeopleAccountability).where(
+                            PeopleAccountability.workspace_id == workspace_id,
+                            PeopleAccountability.org_id == org_id,
+                            PeopleAccountability.entity_kind.in_(("capability", "business_domain")),
+                        )
                     )
-                )
-            ).scalars()
-            for row in rows:
+                ).scalars()
+            )
+            for row in acc_rows:
                 subject_type = "contact" if row.subject_type == "contact" else "team" if row.subject_type == "team" else row.subject_type
                 name = contacts.get(str(row.subject_id)) if subject_type == "contact" else teams.get(str(row.subject_id))
                 items.append({
@@ -399,6 +402,38 @@ async def _load_side_links(db: AsyncSession, workspace_id: uuid.UUID, org_id: uu
                     "relationship": row.link_kind,
                     "on": str(row.entity_id),
                 })
+            role_rows = list(
+                (
+                    await db.execute(
+                        select(PeopleAccountability).where(
+                            PeopleAccountability.workspace_id == workspace_id,
+                            PeopleAccountability.org_id == org_id,
+                            PeopleAccountability.entity_kind == "object",
+                            PeopleAccountability.link_kind == "business_owner",
+                        )
+                    )
+                ).scalars()
+            )
+            host_objects = list(
+                (
+                    await db.execute(
+                        select(MinEAObject).where(
+                            MinEAObject.workspace_id == workspace_id,
+                            MinEAObject.org_id == org_id,
+                            MinEAObject.type.in_(("capability", "business_domain")),
+                        )
+                    )
+                ).scalars()
+            )
+            items.extend(
+                extra_owner_side_links(
+                    objects=host_objects,
+                    accountabilities=acc_rows,
+                    role_rows=role_rows,
+                    contact_names=contacts,
+                    team_names=teams,
+                )
+            )
     except Exception:
         pass
     return items

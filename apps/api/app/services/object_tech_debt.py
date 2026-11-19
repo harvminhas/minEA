@@ -32,6 +32,8 @@ TECH_DEBT_HOST_TYPES = (
     "data_domain",
     "cloud_service",
     "model",
+    "capability",
+    "business_domain",
 )
 
 ROLLUP_HOST_TYPES = ("application", "solution", "technical_capability", "component")

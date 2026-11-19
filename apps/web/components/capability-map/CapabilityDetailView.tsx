@@ -20,6 +20,9 @@ import { InlineCreate, StructureKebab, type StructureActions } from "@/component
 import { domainIcon } from "@/lib/capability-map-icons";
 import { CapabilityAssessmentFields, type AssessmentPatch } from "@/components/capability-map/CapabilityAssessmentFields";
 import { CapabilityRelationshipsSection } from "@/components/capability-map/CapabilityRelationshipsSection";
+import { ObjectDrawerTabs } from "@/components/risk/ObjectDrawerTabs";
+import { InlineText } from "@/components/people/InlineText";
+import type { RecordPageTab } from "@/lib/record-tabs";
 import type { MappedLink } from "@/lib/capability-mapping";
 import {
   DISPOSITIONS,
@@ -44,9 +47,22 @@ export type CapabilityDetailViewProps = {
   theme?: { accent: string; tint: string; ink: string; icon: string };
   backHref: string;
   allDomainsHref?: string;
-  detailsHref: string;
-  activityDetailsHref: (activityId: string) => string;
-  onOpenDetails: (href: string) => void;
+  parentHref?: string;
+  parentName?: string;
+  activityPage?: boolean;
+  tab: RecordPageTab;
+  onTab: (tab: RecordPageTab) => void;
+  relationshipCount?: number;
+  openDebtCount?: number;
+  historyCount?: number;
+  description?: string;
+  onSetDescription?: (value: string) => void;
+  ownerLine?: ReactNode;
+  techDebtPanel?: ReactNode;
+  historyPanel?: ReactNode;
+  onOpenActivity?: (activityId: string) => void;
+  /** Capability node used for Move targets (the parent when this page is an activity). */
+  moveRoot?: TreeNode;
   highlightId?: string | null;
   linksByTarget: Map<string, AppLink[]>;
   canEdit?: boolean;
@@ -74,9 +90,21 @@ export function CapabilityDetailView({
   theme = themeForDomain({ name: domainName }),
   backHref,
   allDomainsHref,
-  detailsHref,
-  activityDetailsHref,
-  onOpenDetails,
+  parentHref,
+  parentName,
+  activityPage = false,
+  tab,
+  onTab,
+  relationshipCount = 0,
+  openDebtCount = 0,
+  historyCount = 0,
+  description = "",
+  onSetDescription,
+  ownerLine,
+  techDebtPanel,
+  historyPanel,
+  onOpenActivity,
+  moveRoot,
   highlightId,
   linksByTarget,
   canEdit = false,
@@ -156,7 +184,17 @@ export function CapabilityDetailView({
             <span>No domain</span>
           )}
           <span className="text-[#c0c3cc]">/</span>
-          <strong className="font-semibold text-[#1c2230]">{node.name}</strong>
+          {activityPage && parentHref ? (
+            <>
+              <Link href={parentHref} className="font-medium text-[#4a43c9]">
+                {parentName || "Capability"}
+              </Link>
+              <span className="text-[#c0c3cc]">/</span>
+              <strong className="font-semibold text-[#1c2230]">{node.name}</strong>
+            </>
+          ) : (
+            <strong className="font-semibold text-[#1c2230]">{node.name}</strong>
+          )}
         </div>
 
         <div className="mb-1 flex items-start justify-between gap-3">
@@ -169,42 +207,73 @@ export function CapabilityDetailView({
               editing={structure?.renamingId === node.id}
               onEditingChange={(editing) => structure?.setRenamingId(editing ? node.id : null)}
             />
-            <p className="mt-0.5 text-[13px] text-[#6b7289]">Capability in {domainName || "this map"}</p>
+            <p className="mt-0.5 text-[13px] text-[#6b7289]">
+              {activityPage
+                ? `Activity in ${parentName || "this capability"}`
+                : `Capability in ${domainName || "this map"}`}
+            </p>
+            {ownerLine}
           </div>
           <div className="flex items-center gap-2">
-            <Link
-              href={detailsHref}
-              className="inline-flex h-8 items-center rounded-md border border-[#e6e8ee] bg-white px-3 text-[12.5px] font-medium text-[#4b5163]"
-            >
-              Details
-            </Link>
-            {canEdit && (
-              <button
-                type="button"
-                data-testid="add-relationship"
-                onClick={() => onAdd(node.id)}
-                className="inline-flex h-8 items-center rounded-lg border border-[#5b4ce6] bg-[#5b4ce6] px-3 text-[13px] font-semibold text-white"
-              >
-                Add relationship
-              </button>
-            )}
             {structure ? (
               <StructureKebab
                 testId={`structure-menu-capability-${node.id}`}
                 ariaLabel={`Actions for ${node.name}`}
                 buttonClassName="opacity-100"
-                items={[
-                  { label: "Rename", icon: <Pencil size={14} />, hidden: !structure.canEdit, onClick: () => structure.setRenamingId(node.id) },
-                  { label: "Move to another domain…", icon: <ArrowRight size={14} />, hidden: !structure.canEdit, onClick: () => structure.openMove({ id: node.id, kind: "capability", name: node.name, domainId: node.domainId }) },
-                  { label: "Add activity", icon: <Plus size={14} />, hidden: !structure.canCreate, onClick: () => structure.addActivity(node.id, node.domainId) },
-                  { label: "Delete capability…", icon: <Trash2 size={14} />, variant: "danger", hidden: !structure.canDelete, onClick: () => structure.openDelete({ id: node.id, kind: "capability", name: node.name, domainId: node.domainId }) },
-                ]}
+                items={
+                  activityPage
+                    ? [
+                        { label: "Rename", icon: <Pencil size={14} />, hidden: !structure.canEdit, onClick: () => structure.setRenamingId(node.id) },
+                        { label: "Move to another capability…", icon: <ArrowRight size={14} />, hidden: !structure.canEdit, onClick: () => structure.openMove({ id: node.id, kind: "activity", name: node.name, domainId: node.domainId, parentId: node.parentId }) },
+                        { label: "Delete activity…", icon: <Trash2 size={14} />, variant: "danger", hidden: !structure.canDelete, onClick: () => structure.openDelete({ id: node.id, kind: "activity", name: node.name, domainId: node.domainId, parentId: node.parentId }) },
+                      ]
+                    : [
+                        { label: "Rename", icon: <Pencil size={14} />, hidden: !structure.canEdit, onClick: () => structure.setRenamingId(node.id) },
+                        { label: "Move to another domain…", icon: <ArrowRight size={14} />, hidden: !structure.canEdit, onClick: () => structure.openMove({ id: node.id, kind: "capability", name: node.name, domainId: node.domainId }) },
+                        { label: "Add activity", icon: <Plus size={14} />, hidden: !structure.canCreate, onClick: () => structure.addActivity(node.id, node.domainId) },
+                        { label: "Delete capability…", icon: <Trash2 size={14} />, variant: "danger", hidden: !structure.canDelete, onClick: () => structure.openDelete({ id: node.id, kind: "capability", name: node.name, domainId: node.domainId }) },
+                      ]
+                }
               />
             ) : null}
           </div>
         </div>
 
-        <div className="my-5 grid grid-cols-3 gap-2.5">
+        <div className="mt-4 border-b border-[#eef0f4]">
+          <ObjectDrawerTabs
+            activeTab={tab}
+            onTabChange={(next) => onTab(next as RecordPageTab)}
+            firstTab={{ id: "overview", label: "Overview" }}
+            showRelationships
+            showTechDebt
+            showHistory
+            relationshipCount={relationshipCount}
+            openDebtCount={openDebtCount}
+            historyCount={historyCount}
+            className="px-0"
+          />
+        </div>
+
+        {error ? <p className="mt-4 mb-3 text-[13px] text-red-600">{error}</p> : null}
+
+        {tab === "overview" ? (
+          <div className="pt-5" data-testid="record-overview">
+            <div className="mb-5 text-[13px] text-[#4b5163]" data-testid="record-description">
+              {canEdit && onSetDescription ? (
+                <InlineText
+                  label="Description"
+                  value={description}
+                  placeholder="Add a description"
+                  multiline
+                  onSave={onSetDescription}
+                  className="w-full text-[13px] text-[#4b5163]"
+                />
+              ) : (
+                <p className={description ? "" : "text-[#8b90a0]"}>{description || "No description yet."}</p>
+              )}
+            </div>
+
+            <div className="mb-5 grid grid-cols-3 gap-2.5">
           <Kpi value={String(node.uniqueAppIds.length)} label="Apps, rolled up once" />
           <Kpi value={moneyLabel(node.cost)} label="Annual spend" />
           <Kpi
@@ -214,6 +283,7 @@ export function CapabilityDetailView({
           />
         </div>
 
+        {!activityPage ? (
         <div
           className="mb-5 grid grid-cols-3 gap-2.5 rounded-xl border border-[#eef0f4] px-3 py-2.5"
           data-testid="capability-assessment"
@@ -222,8 +292,9 @@ export function CapabilityDetailView({
           <AssessItem label="Fitness" item={fitness} />
           <AssessItem label="Redundancy" item={redundancy} />
         </div>
+        ) : null}
 
-        {assessment && onSetAssessment ? (
+        {!activityPage && assessment && onSetAssessment ? (
           <CapabilityAssessmentFields
             assessment={assessment}
             suggested={suggestedPosture}
@@ -232,22 +303,16 @@ export function CapabilityDetailView({
           />
         ) : null}
 
-        {error ? <p className="mb-3 text-[13px] text-red-600">{error}</p> : null}
-
-        <CapabilityRelationshipsSection
-          groups={relationshipGroups}
-          onAdd={canEdit ? () => onAdd(node.id) : undefined}
-        />
-
+        {!activityPage ? (
         <TargetBlock
           node={node}
           kind="capability"
           highlight={false}
+          navigable={false}
           links={linksByTarget.get(node.id) ?? []}
-          moveTargets={moveTargetsFor(node, node.id)}
+          moveTargets={moveTargetsFor(moveRoot ?? node, node.id)}
           canEdit={canEdit}
-          detailsHref={detailsHref}
-          onOpenDetails={onOpenDetails}
+          onOpen={() => undefined}
           onRemove={onRemove}
           onMove={onMove}
           onRename={onRename}
@@ -257,18 +322,19 @@ export function CapabilityDetailView({
           theme={theme}
           structure={structure}
         />
+        ) : null}
 
-        {node.children.map((activity) => (
+        {(activityPage ? [node] : node.children).map((activity) => (
           <TargetBlock
             key={activity.id}
             node={activity}
             kind="activity"
-            highlight={highlightId === activity.id}
+            highlight={!activityPage && highlightId === activity.id}
+            navigable={!activityPage && Boolean(onOpenActivity)}
             links={linksByTarget.get(activity.id) ?? []}
-            moveTargets={moveTargetsFor(node, activity.id)}
+            moveTargets={moveTargetsFor(moveRoot ?? node, activity.id)}
             canEdit={canEdit}
-            detailsHref={activityDetailsHref(activity.id)}
-            onOpenDetails={onOpenDetails}
+            onOpen={() => onOpenActivity?.(activity.id)}
             onRemove={onRemove}
             onMove={onMove}
             onRename={onRename}
@@ -280,7 +346,7 @@ export function CapabilityDetailView({
           />
         ))}
 
-        {structure?.draft?.kind === "activity" && structure.draft.parentId === node.id ? (
+        {!activityPage && (structure?.draft?.kind === "activity" && structure.draft.parentId === node.id) ? (
           <div className="mt-1" data-testid="structure-create-activity-slot">
             <InlineCreate
               ariaLabel="New activity name"
@@ -293,7 +359,7 @@ export function CapabilityDetailView({
               onSave={(name) => structure.commitDraft(name)}
             />
           </div>
-        ) : canCreate && (structure?.canCreate || onAddActivity) ? (
+        ) : !activityPage && canCreate && (structure?.canCreate || onAddActivity) ? (
           <div className="mt-1">
             {addingActivity && onAddActivity ? (
               <AddActivityForm
@@ -317,6 +383,31 @@ export function CapabilityDetailView({
             )}
           </div>
         ) : null}
+          </div>
+        ) : null}
+
+        {tab === "relationships" ? (
+          <div className="pt-5" data-testid="record-relationships">
+            <CapabilityRelationshipsSection
+              groups={relationshipGroups}
+              onAdd={canEdit ? () => onAdd(node.id) : undefined}
+              addStyle="button"
+            />
+          </div>
+        ) : null}
+
+        {tab === "tech_debt" ? (
+          <div className="pt-5" data-testid="record-tech-debt">
+            {techDebtPanel}
+          </div>
+        ) : null}
+
+        {tab === "history" ? (
+          <div className="pt-5" data-testid="record-history">
+            {historyPanel}
+          </div>
+        ) : null}
+
       </div>
       {addDialog}
     </div>
@@ -356,11 +447,11 @@ function TargetBlock({
   node,
   kind,
   highlight,
+  navigable = false,
   links,
   moveTargets,
   canEdit,
-  detailsHref,
-  onOpenDetails,
+  onOpen,
   onRemove,
   onMove,
   onRename,
@@ -373,11 +464,11 @@ function TargetBlock({
   node: TreeNode;
   kind: "capability" | "activity";
   highlight: boolean;
+  navigable?: boolean;
   links: AppLink[];
   moveTargets: MoveTarget[];
   canEdit: boolean;
-  detailsHref: string;
-  onOpenDetails: (href: string) => void;
+  onOpen: () => void;
   onRemove: (link: AppLink) => void;
   onMove: (link: AppLink, targetId: string) => void;
   onRename?: (id: string, name: string) => void | Promise<void>;
@@ -387,9 +478,8 @@ function TargetBlock({
   theme: { accent: string; tint: string; ink: string; icon: string };
   structure?: StructureActions;
 }) {
-  const openDetails = () => onOpenDetails(detailsHref);
   const uniqueApps = [...new Set(links.map((link) => link.appId))];
-  const label = kind === "capability" ? `${node.name} details` : `${node.name} activity details`;
+  const label = kind === "capability" ? `${node.name}` : `${node.name} activity`;
   const leftBorder = kind === "capability" ? theme.accent : `color-mix(in srgb, ${theme.accent} 58%, white)`;
   const fill = highlight
     ? undefined
@@ -400,23 +490,32 @@ function TargetBlock({
     <section
       id={kind === "activity" ? `activity-${node.id}` : `capability-${node.id}`}
       data-testid={kind === "activity" ? `activity-block-${node.id}` : "capability-block"}
-      role="button"
-      tabIndex={0}
-      aria-label={label}
-      onClick={(event) => {
-        if (isCardChromeTarget(event.target, event.currentTarget)) return;
-        openDetails();
-      }}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          openDetails();
-        }
-      }}
+      role={navigable ? "button" : undefined}
+      tabIndex={navigable ? 0 : undefined}
+      aria-label={navigable ? label : undefined}
+      onClick={
+        navigable
+          ? (event) => {
+              if (isCardChromeTarget(event.target, event.currentTarget)) return;
+              onOpen();
+            }
+          : undefined
+      }
+      onKeyDown={
+        navigable
+          ? (event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpen();
+              }
+            }
+          : undefined
+      }
       style={{ borderLeftWidth: kind === "capability" ? 4 : 3, borderLeftColor: leftBorder, background: fill }}
       className={cn(
-        "group relative mb-2.5 rounded-xl border p-3.5 px-4 cursor-pointer",
+        "group relative mb-2.5 rounded-xl border p-3.5 px-4",
+        navigable && "cursor-pointer",
         "focus-visible:outline-none focus-visible:border-[#c4b5fd] focus-visible:shadow-[0_0_0_3px_rgba(91,76,230,0.14)]",
         kind === "capability" && !highlight && "border-[#e6e8ee] hover:border-[#c4b5fd]",
         kind === "activity" && !highlight && "border-[#e6e8ee] hover:border-[#c4b5fd]",

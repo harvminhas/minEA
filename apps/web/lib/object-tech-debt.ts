@@ -15,6 +15,8 @@ export const TECH_DEBT_HOST_TYPES: ReadonlySet<ObjectType> = new Set([
   "data_domain",
   "cloud_service",
   "model",
+  "capability",
+  "business_domain",
 ]);
 
 /** Kinds persisted via affects relationships (not product-only properties). */
@@ -32,6 +34,8 @@ export const TECH_DEBT_RELATIONSHIP_TARGETS: ReadonlySet<TechDebtHostKind> = new
   "data_domain",
   "cloud_service",
   "model",
+  "capability",
+  "business_domain",
 ]);
 
 export function supportsTechDebtTab(type: string): boolean {
@@ -66,6 +70,10 @@ export function techDebtHostKindLabel(kind: TechDebtHostKind): string {
       return "Platform";
     case "model":
       return "Runtime";
+    case "capability":
+      return "Capability";
+    case "business_domain":
+      return "Domain";
     default:
       return kind;
   }

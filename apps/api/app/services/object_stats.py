@@ -32,6 +32,7 @@ TECH_DEBT_HOST_TYPES = (
     + FLOW_TYPES
     + TECHNOLOGY_TYPES
     + DATA_TYPES
+    + ("capability", "business_domain")
 )
 
 

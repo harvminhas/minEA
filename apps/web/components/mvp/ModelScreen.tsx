@@ -138,9 +138,8 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
     : undefined;
   const isCapabilityRecord = capObject?.type === "capability";
   const isActivityRecord = Boolean(isCapabilityRecord && isActivity(capObject?.properties));
-  const detailsOpen =
-    isCapabilityRecord &&
-    (searchParams.get("tab") === "details" || Boolean(searchParams.get("focus")) || Boolean(searchParams.get("details")));
+  // Capability and activity records use the on-page tabs, not the repository drawer.
+  const detailsOpen = false;
   const waitingForCap = section === "capabilities" && Boolean(selectedKey) && catalog.isLoading && !capObject;
   const close = () => {
     if (isCapabilityRecord && capObject && !isActivityRecord) {
@@ -158,7 +157,6 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
       capabilityDetailPath(basePath, parentId, {
         activity: capObject.id,
         tab: searchParams.get("tab"),
-        details: searchParams.get("details"),
         focus: searchParams.get("focus"),
       })
     );

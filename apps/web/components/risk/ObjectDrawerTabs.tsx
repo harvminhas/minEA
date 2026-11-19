@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-export type ObjectDrawerTabId = "details" | "relationships" | "tech_debt" | "history";
+export type ObjectDrawerTabId = "details" | "overview" | "relationships" | "tech_debt" | "history";
 
 interface Props {
   activeTab: ObjectDrawerTabId;
@@ -14,6 +14,9 @@ interface Props {
   showHistory?: boolean;
   /** Defaults to "Relationships". Data entities use "Links". */
   relationshipsTabLabel?: string;
+  /** Defaults to the Details tab used by the repository drawer. Record pages pass Overview. */
+  firstTab?: { id: "details" | "overview"; label: string };
+  historyCount?: number;
   className?: string;
 }
 
@@ -26,6 +29,8 @@ export function ObjectDrawerTabs({
   showTechDebt = true,
   showHistory = true,
   relationshipsTabLabel = "Relationships",
+  firstTab = { id: "details", label: "Details" },
+  historyCount = 0,
   className,
 }: Props) {
   const tabs: {
@@ -33,7 +38,7 @@ export function ObjectDrawerTabs({
     label: string;
     badge?: number;
     badgeTone?: "alert" | "neutral";
-  }[] = [{ id: "details", label: "Details" }];
+  }[] = [{ id: firstTab.id, label: firstTab.label }];
   if (showRelationships) {
     tabs.push({
       id: "relationships",
@@ -51,7 +56,12 @@ export function ObjectDrawerTabs({
     });
   }
   if (showHistory) {
-    tabs.push({ id: "history", label: "History" });
+    tabs.push({
+      id: "history",
+      label: "History",
+      badge: historyCount > 0 ? historyCount : undefined,
+      badgeTone: "neutral",
+    });
   }
 
   return (
