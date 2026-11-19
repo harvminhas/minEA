@@ -17,6 +17,7 @@
 import type { CapEdge, CapObj, FitnessKind, TreeNode } from "@/lib/capability-tree";
 import { isActivity, moneyLabel } from "@/lib/capability-tree";
 import type { CatalogRow } from "@/lib/model-catalog";
+import { NF_APP_TYPES, parseNonfunctionalAssessment, weakestScore } from "@minea/types";
 
 export const POSTURES = ["invest", "tolerate", "migrate", "eliminate"] as const;
 export type InvestmentPosture = (typeof POSTURES)[number];
@@ -100,13 +101,44 @@ export type CapabilityAssessment = {
   /** Stored 1–5, or the default from the weakest scored link. */
   technologyFit: number | null;
   technologyFitSource: "stored" | "default" | null;
+  technologyFitDefaultFrom: "nf" | "fitness" | null;
   weakestScoredFitness: Exclude<FitnessKind, "none"> | null;
+  weakestNfScore: number | null;
   assessed: boolean;
   exposed: boolean;
 };
 
 function propsOf(object: CapObj | undefined): Record<string, unknown> {
   return (object?.properties ?? {}) as Record<string, unknown>;
+}
+
+export function weakestNfScoreUnder(
+  capabilityId: string,
+  objects: readonly CapObj[],
+  edges: readonly CapEdge[],
+): number | null {
+  const childIds = new Set<string>([capabilityId]);
+  for (const object of objects) {
+    if (object.type === "capability" && isActivity(object.properties) && String(object.properties?.parent_id ?? "") === capabilityId) {
+      childIds.add(object.id);
+    }
+  }
+  const byId = new Map(objects.map((object) => [object.id, object]));
+  const values: number[] = [];
+  const seen = new Set<string>();
+  for (const edge of edges) {
+    if (edge.type !== "supported_by" || !childIds.has(edge.from_object_id)) continue;
+    if (seen.has(edge.to_object_id)) continue;
+    seen.add(edge.to_object_id);
+    const app = byId.get(edge.to_object_id);
+    if (!app || !NF_APP_TYPES.has(app.type)) continue;
+    const assessment = parseNonfunctionalAssessment((app.properties as Record<string, unknown> | undefined)?.nonfunctional_assessment);
+    if (!assessment) continue;
+    for (const item of Object.values(assessment.scores)) {
+      if (item?.score) values.push(item.score);
+    }
+  }
+  return weakestScore(values);
 }
 
 export function weakestScoredFitnessUnder(
@@ -138,9 +170,11 @@ export function assessCapability(
   const businessCriticality = parseBusinessCriticality(props.business_criticality);
   const storedFit = parseTechnologyFit(props.technology_fit);
   const weakestScoredFitness = object ? weakestScoredFitnessUnder(object.id, objects, edges) : null;
-  const derivedFit = defaultTechnologyFitFromWeakest(weakestScoredFitness);
+  const weakestNfScore = object ? weakestNfScoreUnder(object.id, objects, edges) : null;
+  const derivedFit = weakestNfScore ?? defaultTechnologyFitFromWeakest(weakestScoredFitness);
   const technologyFit = storedFit ?? derivedFit;
   const technologyFitSource = storedFit ? "stored" : derivedFit ? "default" : null;
+  const technologyFitDefaultFrom = storedFit ? null : weakestNfScore != null ? "nf" : derivedFit ? "fitness" : null;
   const assessed = Boolean(object && ownerIsSet(object) && businessCriticality && technologyFit && posture);
   const exposed = Boolean(
     assessed &&
@@ -153,7 +187,9 @@ export function assessCapability(
     businessCriticality,
     technologyFit,
     technologyFitSource,
+    technologyFitDefaultFrom,
     weakestScoredFitness,
+    weakestNfScore,
     assessed,
     exposed,
   };

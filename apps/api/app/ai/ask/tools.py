@@ -14,7 +14,8 @@ from typing import Callable
 
 from app.ai.ask.ai_landscape import JOB_LABELS, ai_landscape as build_landscape, data_access
 from app.ai.ask.capability_tree import build_capability_tree, walk
-from app.ai.ask.capability_assessment import assess_object, dispositions_for, retire_savings
+from app.ai.ask.capability_assessment import assess_object, attach_assessment_scores, dispositions_for, retire_savings
+from app.schemas.assessment import FUNCTIONAL_DIMENSIONS, display_fitness, parse_functional_assessment, parse_nonfunctional_assessment, score_map, weakest_score
 from app.ai.ask.cio_views import idle_licences as build_idle, overlaps as build_overlaps
 from app.ai.ask.graph import Rec, WorkspaceGraph, fold
 from app.ai.ask.impact import ImpactEdge, impact_of as traverse_impact
@@ -521,7 +522,8 @@ QUALITATIVE_CRITERIA = (
     "Words like core, critical, strategic, most important, or weakest are not a stored field and not a name. "
     "Judge from these signals: highest criticality of the supporting apps, unique app count, annual cost, "
     "how many other items depend on those apps (supporting_app_dependents), coverage and fitness, "
-    "plus investment_posture, business_criticality, technology_fit and dispositions when they are set. "
+    "plus investment_posture, business_criticality, technology_fit, functional dimension scores "
+    "(coverage, effectiveness, user_sentiment, automation, data_reporting, regional_fit) and dispositions when they are set. "
     "Say which criteria you used, e.g. 'Core here means capabilities backed by Critical or High apps or carrying the most spend.' "
     "Do not name-search the adjective unless the user clearly means a name (for example a capability called Core Banking)."
 )
@@ -626,9 +628,17 @@ def _linked_records(bag: ToolBag, node: dict, edges: list[dict]) -> list[dict]:
             "relationship": rel,
             "on": on_id,
         }
-        fitness = (edge.get("attributes") or {}).get("fitness")
+        attrs = edge.get("attributes") or {}
+        fitness = display_fitness(attrs) or attrs.get("fitness")
         if fitness:
             item["fitness"] = fitness
+        functional = score_map(parse_functional_assessment(attrs.get("functional_assessment")))
+        if functional:
+            item["functional"] = functional
+        if parse_functional_assessment(attrs.get("functional_assessment")):
+            gaps = parse_functional_assessment(attrs.get("functional_assessment")).get("gaps") or []
+            if gaps:
+                item["gaps"] = gaps
         items.append(item)
     for row in getattr(bag.graph, "side_links", None) or []:
         on_id = str(row.get("on") or "")
@@ -647,8 +657,39 @@ def _linked_records(bag: ToolBag, node: dict, edges: list[dict]) -> list[dict]:
             "relationship": rel,
             "on": on_id,
         })
+    for item in items:
+        if item.get("type") in {"application", "cloud_service"}:
+            nf = score_map(parse_nonfunctional_assessment((by_id.get(item["id"]) or {}).get("properties", {}).get("nonfunctional_assessment")))
+            if nf:
+                item["nonfunctional"] = nf
     items.sort(key=lambda row: (str(row["type"]), str(row["name"])))
     return items
+
+
+
+def _functional_rollup(ids: set[str], edges: list[dict]) -> dict[str, int]:
+    by_dim: dict[str, list[int]] = {}
+    for edge in edges:
+        if edge.get("type") != "supported_by" or edge.get("from_object_id") not in ids:
+            continue
+        scores = score_map(parse_functional_assessment((edge.get("attributes") or {}).get("functional_assessment")))
+        for key, value in scores.items():
+            by_dim.setdefault(key, []).append(value)
+    return {key: value for key, value in ((dim, weakest_score(vals)) for dim, vals in by_dim.items()) if value is not None}
+
+
+def _functional_gaps(ids: set[str], edges: list[dict]) -> list[str]:
+    gaps: list[str] = []
+    seen: set[str] = set()
+    for edge in edges:
+        if edge.get("type") != "supported_by" or edge.get("from_object_id") not in ids:
+            continue
+        assessment = parse_functional_assessment((edge.get("attributes") or {}).get("functional_assessment"))
+        for gap in (assessment or {}).get("gaps") or []:
+            if gap not in seen:
+                seen.add(gap)
+                gaps.append(gap)
+    return gaps
 
 
 def _health_row(bag: ToolBag, node: dict, edges: list[dict], costs: dict[str, float]) -> dict:
@@ -688,6 +729,8 @@ def _health_row(bag: ToolBag, node: dict, edges: list[dict], costs: dict[str, fl
         "business_criticality": assessment["business_criticality"],
         "technology_fit": assessment["technology_fit"],
         "technology_fit_source": assessment["technology_fit_source"],
+        "functional": _functional_rollup(ids, edges),
+        "gaps": _functional_gaps(ids, edges),
         "assessed": assessment["assessed"],
         "exposed": assessment["exposed"],
         "dispositions": dispositions,
@@ -769,6 +812,7 @@ def _supporting_dependents(bag: ToolBag, app_ids: list[str]) -> int:
 
 def capability_health(bag: ToolBag, args: dict) -> dict:
     """The heat-map roll-up for every domain, capability and activity: coverage, fitness, redundancy, unique apps, cost."""
+    attach_assessment_scores(bag.graph)
     costs = _tree_costs(bag)
     edges = _tree_edges(bag)
     tree = build_capability_tree(bag.graph.objects, edges, costs)
@@ -870,6 +914,8 @@ def capability_health(bag: ToolBag, args: dict) -> dict:
             "business_criticality": row["business_criticality"],
             "technology_fit": row["technology_fit"],
             "technology_fit_source": row["technology_fit_source"],
+            "functional": row.get("functional") or {},
+            "gaps": row.get("gaps") or [],
             "assessed": row["assessed"],
             "exposed": row["exposed"],
             "dispositions": row["dispositions"],
@@ -878,8 +924,20 @@ def capability_health(bag: ToolBag, args: dict) -> dict:
             "linked_count": row.get("linked_count") or 0,
         }
 
+    weak_by_dimension = {}
+    for dim in FUNCTIONAL_DIMENSIONS:
+        weak = [
+            {"id": row["id"], "name": row["name"], "level": row["level"], "score": row["functional"][dim], "path_label": row["path_label"]}
+            for row in rows
+            if (row.get("functional") or {}).get(dim) is not None and row["functional"][dim] <= 2
+        ]
+        weak.sort(key=lambda item: (item["score"], item["name"]))
+        if weak:
+            weak_by_dimension[dim] = weak
+
     return {
         "criteria": {"best_shape": BEST_SHAPE_CRITERIA, "weakest": WEAKEST_CRITERIA, "qualitative": QUALITATIVE_CRITERIA},
+        "weak_by_dimension": weak_by_dimension,
         "totals": {
             "domains": len(domains),
             "capabilities": len(capabilities),
@@ -1295,7 +1353,13 @@ TOOLS: list[AskTool] = [
             "supporting_app_dependents (how many other items depend on those apps), "
             "investment_posture (invest, tolerate, migrate, eliminate, or unset), "
             "business_criticality on the capability (low, medium, high, critical, or unset), "
-            "technology_fit (1-5; if unset, defaulted from the weakest explicitly scored link: strong 4, adequate 3, weak 2), "
+            "technology_fit (1-5; if unset, defaulted from the weakest non-functional score of the apps used, else from the weakest explicitly scored link: strong 4, adequate 3, weak 2), "
+            "functional scores (1-5, rolled up as the weakest app-on-activity score) for coverage, effectiveness, "
+            "user_sentiment, automation, data_reporting and regional_fit, plus gaps (requested changes, not a score). "
+            "weak_by_dimension lists activities, capabilities and domains with a score of 1 or 2 on that dimension "
+            "(use this for questions like 'which activities have weak automation' — read the scores, do not phrase-match names). "
+            "Supporting app links include their own functional scores and the app's nonfunctional scores "
+            "(resilience, performance_usability, security, integration, maintainability, vendor_lifecycle, cost, strategic_fit). "
             "dispositions on each supporting app (keep, consolidate, retire, replace), and retire_savings "
             "(annual cost of apps marked Retire, each app counted once). "
             "A capability is assessed when owner, business_criticality, technology_fit and investment_posture are set. "

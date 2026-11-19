@@ -12,6 +12,15 @@ treats missing fitness as adequate.
 from __future__ import annotations
 
 from app.ai.ask.capability_tree import is_activity
+from app.schemas.assessment import (
+    display_fitness,
+    parse_functional_assessment,
+    parse_nonfunctional_assessment,
+    score_map,
+    weakest_nf_under,
+    weakest_score,
+    dimension_scores_of,
+)
 
 POSTURES = ("invest", "tolerate", "migrate", "eliminate")
 CRITICALITIES = ("low", "medium", "high", "critical")
@@ -95,9 +104,13 @@ def assess_object(obj: dict | None, objects: list[dict], edges: list[dict], desc
     criticality = parse_business_criticality(props.get("business_criticality"))
     stored = parse_technology_fit(props.get("technology_fit"))
     weakest = weakest_scored_fitness(obj["id"], objects, edges, descendant_ids) if obj else None
-    derived = TECH_FIT_FROM_WEAKEST.get(weakest or "")
+    nf = weakest_nf_under(obj["id"], objects, edges, descendant_ids) if obj else None
+    derived = nf if nf is not None else TECH_FIT_FROM_WEAKEST.get(weakest or "")
     technology_fit = stored if stored is not None else derived
     source = "stored" if stored is not None else ("default" if derived is not None else None)
+    default_from = None
+    if stored is None and derived is not None:
+        default_from = "nf" if nf is not None else "fitness"
     assessed = bool(obj and owner_is_set(obj) and criticality and technology_fit and posture)
     exposed = bool(assessed and criticality in {"high", "critical"} and (technology_fit or 5) <= 2)
     return {
@@ -105,7 +118,9 @@ def assess_object(obj: dict | None, objects: list[dict], edges: list[dict], desc
         "business_criticality": criticality,
         "technology_fit": technology_fit,
         "technology_fit_source": source,
+        "technology_fit_default_from": default_from,
         "weakest_scored_fitness": weakest,
+        "weakest_nf_score": nf,
         "assessed": assessed,
         "exposed": exposed,
     }
@@ -169,3 +184,71 @@ def dispositions_for(ids: set[str], objects: list[dict], edges: list[dict]) -> l
     rows = [{"app_id": app_id, "app_name": names[app_id], "disposition": found[app_id]} for app_id in found]
     rows.sort(key=lambda row: row["app_name"])
     return rows
+
+
+def attach_assessment_scores(graph) -> None:
+    """Stamp functional roll-ups and NF scores onto graph records so Ask tools can filter by data."""
+    from app.schemas.assessment import (
+        parse_functional_assessment,
+        parse_nonfunctional_assessment,
+        score_map,
+        weakest_score,
+        NF_APP_TYPES,
+    )
+
+    objects = {obj["id"]: obj for obj in getattr(graph, "objects", []) or []}
+    children: dict[str, list[str]] = {}
+    domain_members: dict[str, list[str]] = {}
+    for rec in graph.records.values():
+        if rec.parent_id:
+            children.setdefault(rec.parent_id, []).append(rec.id)
+        if rec.domain_id:
+            domain_members.setdefault(rec.domain_id, []).append(rec.id)
+        obj = objects.get(rec.id) or {}
+        if obj.get("type") in NF_APP_TYPES or rec.raw_type in NF_APP_TYPES or rec.type == "application":
+            nf = parse_nonfunctional_assessment((obj.get("properties") or {}).get("nonfunctional_assessment"))
+            scores = score_map(nf)
+            rec.nonfunctional = scores or None
+
+    # Per-link functional scores, keyed by from_object_id
+    link_scores: dict[str, list[dict[str, int]]] = {}
+    link_gaps: dict[str, list[str]] = {}
+    for edge in graph.edges:
+        if edge.relation != "supported_by":
+            continue
+        assessment = parse_functional_assessment((edge.attributes or {}).get("functional_assessment"))
+        scores = score_map(assessment)
+        if scores:
+            link_scores.setdefault(edge.from_id, []).append(scores)
+        if assessment and assessment.get("gaps"):
+            link_gaps.setdefault(edge.from_id, []).extend(assessment["gaps"])
+
+    def roll_ids(root_id: str, rec) -> list[str]:
+        if rec.raw_type == "business_domain":
+            return [root_id, *domain_members.get(root_id, [])]
+        found = [root_id]
+        for child in children.get(root_id, []):
+            found.append(child)
+            found.extend(children.get(child, []))
+        return found
+
+    def merge(ids: list[str]) -> tuple[dict[str, int] | None, list[str] | None]:
+        by_dim: dict[str, list[int]] = {}
+        gaps: list[str] = []
+        seen_gap: set[str] = set()
+        for node_id in ids:
+            for scores in link_scores.get(node_id, []):
+                for key, value in scores.items():
+                    by_dim.setdefault(key, []).append(value)
+            for gap in link_gaps.get(node_id, []):
+                if gap not in seen_gap:
+                    seen_gap.add(gap)
+                    gaps.append(gap)
+        rolled = {key: weakest_score(values) for key, values in by_dim.items()}
+        rolled = {key: value for key, value in rolled.items() if value is not None}
+        return (rolled or None, gaps or None)
+
+    for rec in graph.records.values():
+        if rec.raw_type not in {"capability", "business_domain"}:
+            continue
+        rec.functional, rec.assessment_gaps = merge(roll_ids(rec.id, rec))

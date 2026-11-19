@@ -567,3 +567,41 @@ def test_capability_health_includes_process_product_and_people_links():
     inv_types = {(item["type"], item["name"], item["relationship"]) for item in rows["inv"]["linked"]}
     assert ("contact", "Alex Chen", "owns") in inv_types
     assert ("process", "Close the books", "uses") not in inv_types
+
+
+def test_capability_health_exposes_functional_scores_and_weak_automation():
+    objects = [
+        {"id": "fin", "type": "business_domain", "name": "Finance", "properties": {}},
+        {"id": "ap", "type": "capability", "name": "Accounting", "properties": {"domain_id": "fin"}},
+        {"id": "inv", "type": "capability", "name": "Invoice", "properties": {"domain_id": "fin", "parent_id": "ap"}},
+        {"id": "erp", "type": "application", "name": "ERP", "properties": {
+            "nonfunctional_assessment": {"scores": {"integration": {"score": 2, "confidence": "H"}}}
+        }},
+    ]
+    edges = [{
+        "type": "supported_by",
+        "from_object_id": "inv",
+        "to_object_id": "erp",
+        "attributes": {
+            "fitness": "strong",
+            "functional_assessment": {
+                "scores": {"automation": {"score": 2, "confidence": "H", "evidence": [{"kind": "note", "text": "Manual"}]}},
+                "gaps": ["Re-key source"],
+            },
+        },
+    }]
+    from app.ai.ask.tools import ToolBag, run_tool
+
+    bag = ToolBag(graph=_graph(objects, edges), seen_ids=set(), numbers=set())
+    result = run_tool(bag, "capability_health", {})
+    rows = _by_id(result["records"])
+    assert rows["inv"]["functional"]["automation"] == 2
+    assert rows["ap"]["functional"]["automation"] == 2
+    assert "Re-key source" in rows["inv"]["gaps"]
+    weak = result["weak_by_dimension"]["automation"]
+    assert any(item["id"] == "inv" and item["score"] == 2 for item in weak)
+    erp = next(item for item in rows["inv"]["linked"] if item["id"] == "erp")
+    assert erp["functional"]["automation"] == 2
+    assert erp["nonfunctional"]["integration"] == 2
+    rec = bag.graph.records["inv"]
+    assert rec.functional["automation"] == 2

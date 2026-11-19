@@ -106,8 +106,10 @@ export function CapabilityAssessmentFields({
               </button>
             ))}
           </div>
-          {assessment.technologyFitSource === "default" ? (
-            <p className="mt-1.5 text-[11.5px] text-[#6b7289]">Defaulted from the weakest scored app link (strong 4, adequate 3, weak 2).</p>
+          {assessment.technologyFitSource === "default" && assessment.technologyFitDefaultFrom === "nf" ? (
+            <p className="mt-1.5 text-[11.5px] text-[#6b7289]">Based on the lowest application scores of the apps used. Click a value to override.</p>
+          ) : assessment.technologyFitSource === "default" ? (
+            <p className="mt-1.5 text-[11.5px] text-[#6b7289]">Based on the lowest Strong / Adequate / Weak rating of the apps used (Strong 4, Adequate 3, Weak 2).</p>
           ) : null}
         </Field>
       </div>

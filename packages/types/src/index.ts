@@ -138,6 +138,8 @@ export {
   type RelationshipLabel,
 } from "./relationship-labels";
 
+export * from "./assessment";
+
 export type ImpactSeverityName = "direct" | "loses_sign_in" | "degraded" | "loses_support";
 export type ImpactLane = { whenTargetFails?: ImpactSeverityName; whenSourceFails?: ImpactSeverityName };
 

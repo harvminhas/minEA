@@ -195,6 +195,9 @@ test("capability detail view and app form picker stay in source", () => {
   assert.match(page, /EntityHistoryPanel/);
   assert.match(view, /ObjectDrawerTabs/);
   assert.match(view, /id: "overview"/);
+  assert.match(view, /showAssessment/);
+  assert.match(view, /ActivityAssessmentTab/);
+  assert.match(view, /CapabilityAssessmentTab/);
   assert.match(view, /data-testid="record-description"/);
   assert.doesNotMatch(view, />Details</);
   assert.doesNotMatch(page, /tab: "details"/);

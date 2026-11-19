@@ -41,7 +41,8 @@ import { systemDataEntityLinks } from "@/lib/system-drawer-utils";
 import { useSystemLinkedNames } from "@/lib/use-system-linked-names";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
 import { usePermissions } from "@/lib/use-permissions";
-import { type ApplicationProperties, type FlowEndpointRef, type MinEAObject, OBJECT_TYPE_LABELS } from "@minea/types";
+import { serializeNonfunctionalAssessment, type ApplicationProperties, type FlowEndpointRef, type MinEAObject, OBJECT_TYPE_LABELS, type NonfunctionalAssessment } from "@minea/types";
+import { ApplicationAssessmentTab } from "@/components/assessment/ApplicationAssessmentTab";
 
 interface Props {
   objectId: string;
@@ -224,6 +225,26 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
   const handleResetLayout = useCallback(() => {
     handleLayoutSave({});
   }, [handleLayoutSave]);
+
+  const assessmentMutation = useMutation({
+    mutationFn: async (next: NonfunctionalAssessment) => {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      return objectsApi.update(
+        orgSlug,
+        workspaceSlug,
+        objectId,
+        { properties: { nonfunctional_assessment: serializeNonfunctionalAssessment(next) } },
+        token,
+      );
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData<MinEAObject>(["object", orgSlug, workspaceSlug, objectId], updated);
+      setLiveSystem(updated);
+      liveSystemRef.current = updated;
+      onUpdate();
+    },
+  });
 
   const supportedCapabilityIds = (inRels ?? [])
     .filter(
@@ -427,11 +448,23 @@ export function SystemObjectDetail({ objectId, accentColor, onClose, onUpdate }:
               activeTab={activeTab}
               onTabChange={setActiveTab}
               openDebtCount={techDebtSummary?.open_count ?? 0}
+              showAssessment={displaySystem?.type === "application" || displaySystem?.type === "cloud_service"}
               className="mt-4"
             />
           </div>
         }
       >
+        {activeTab === "assessment" && displaySystem && (
+          <ApplicationAssessmentTab
+            appName={displaySystem.name}
+            properties={(displaySystem.properties ?? {}) as Record<string, unknown>}
+            canEdit={canEdit}
+            pending={assessmentMutation.isPending}
+            error={assessmentMutation.error ? (assessmentMutation.error instanceof Error ? assessmentMutation.error.message : "Could not save assessment") : null}
+            onChange={(next) => assessmentMutation.mutate(next)}
+          />
+        )}
+
         {activeTab === "details" && displaySystem && (
           <SystemDetailsTab
             object={displaySystem}

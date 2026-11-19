@@ -1,5 +1,7 @@
 from datetime import datetime
 from typing import Any
+
+from app.schemas.assessment import apply_functional_assessment
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -253,6 +255,10 @@ class RelationshipCreate(BaseModel):
             raise ValueError(SIGN_IN_WITH_ITSELF)
         validate_flow_attributes(self.type, self.attributes)
         validate_hosting_attributes(self.type, self.attributes)
+        if self.type == "supported_by":
+            apply_functional_assessment(self.attributes)
+        elif "functional_assessment" in (self.attributes or {}):
+            raise ValueError("functional_assessment is only valid on supported_by links.")
         return self
 
 
@@ -291,4 +297,8 @@ def merge_attributes(rel_type: str, current: dict[str, Any] | None, patch: dict[
             merged[key] = value.strip() if key == "region" and isinstance(value, str) else value
     validate_flow_attributes(rel_type, merged)
     validate_hosting_attributes(rel_type, merged)
+    if rel_type == "supported_by":
+        apply_functional_assessment(merged)
+    elif "functional_assessment" in merged:
+        raise ValueError("functional_assessment is only valid on supported_by links.")
     return merged

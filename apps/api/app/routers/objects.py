@@ -6,6 +6,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.schemas.assessment import NF_APP_TYPES, apply_nonfunctional_assessment
 from app.models.objects import ChangeLog, MinEAObject
 from app.models.relationships import Relationship
 from app.models.tenancy import User
@@ -61,6 +62,21 @@ router = APIRouter(
     prefix="/orgs/{org_slug}/workspaces/{workspace_slug}/objects",
     tags=["objects"],
 )
+
+
+
+
+def _create_properties(object_type: str, properties: dict) -> dict:
+    merged = apply_ai_features(object_type, apply_cost_lines(object_type, properties))
+    return _apply_assessment_properties(object_type, merged)
+
+
+def _apply_assessment_properties(object_type: str, properties: dict) -> dict:
+    if "nonfunctional_assessment" not in properties:
+        return properties
+    if object_type not in NF_APP_TYPES:
+        raise ValueError("nonfunctional_assessment is only valid on applications.")
+    return apply_nonfunctional_assessment(properties)
 
 
 def _first_name(user: User | None) -> str | None:
@@ -214,6 +230,7 @@ async def create_object(
     await validate_object_write(db, ctx.workspace.id, ctx.org_id, body, object_type=body.type)
     try:
         validate_infra_patch(body.type, body.properties or {})
+        properties = _create_properties(body.type, dict(body.properties or {}))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -228,7 +245,7 @@ async def create_object(
         tags=body.tags,
         external_id=body.external_id,
         source=body.source,
-        properties=apply_ai_features(body.type, apply_cost_lines(body.type, dict(body.properties or {}))),
+        properties=properties,
         created_by=ctx.user_id,
         updated_by=ctx.user_id,
     )
@@ -429,6 +446,10 @@ async def update_object(
                     merged.pop(key, None)
             merged = apply_cost_lines(obj.type, merged)
             merged = apply_ai_features(obj.type, merged, strict="ai_features" in value)
+            try:
+                _apply_assessment_properties(obj.type, merged)
+            except ValueError as exc:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
             if merged != (obj.properties or {}):
                 field_changes["properties"] = {"old": obj.properties, "new": merged}
             obj.properties = merged

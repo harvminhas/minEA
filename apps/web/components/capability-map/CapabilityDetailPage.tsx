@@ -29,6 +29,7 @@ import {
   type Disposition,
 } from "@/lib/capability-assessment";
 import type { AssessmentPatch } from "@/components/capability-map/CapabilityAssessmentFields";
+import { displayFitness, serializeFunctionalAssessment, type FunctionalAssessment } from "@minea/types";
 import { CapabilityDetailView } from "@/components/capability-map/CapabilityDetailView";
 import { themeForDomain } from "@/lib/domain-theme";
 import { RelationshipForm } from "@/components/objects/RelationshipForm";
@@ -239,6 +240,23 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
       applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: updated });
     });
 
+  const onSetFunctionalAssessment = (link: AppLink, next: FunctionalAssessment) =>
+    run(async (token) => {
+      const fitness = displayFitness({ ...link.attributes, functional_assessment: serializeFunctionalAssessment(next) });
+      const updated = await relationshipsApi.updateAttributes(
+        orgSlug,
+        workspaceSlug,
+        link.relId,
+        {
+          ...link.attributes,
+          functional_assessment: serializeFunctionalAssessment(next),
+          ...(fitness ? { fitness } : {}),
+        },
+        token
+      );
+      applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { relationship: updated });
+    });
+
   const onAddActivity = (name: string) =>
     run(async (token) => {
       const created = await objectsApi.create(
@@ -362,6 +380,11 @@ export function CapabilityDetailPage({ capabilityId }: { capabilityId: string })
       assessment={assessment}
       suggestedPosture={suggestedPosture}
       onSetAssessment={(patch) => void onSetAssessment(patch)}
+      catalogObjects={objects as CapabilityRecord[]}
+      catalogEdges={edges}
+      processes={mapped.processes}
+      onSetFunctionalAssessment={(link, next) => void onSetFunctionalAssessment(link, next)}
+      assessmentError={error}
       onAddActivity={(name) => onAddActivity(name)}
       structure={structure}
       relationshipGroups={mapped.groups}

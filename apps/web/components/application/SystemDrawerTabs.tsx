@@ -2,12 +2,13 @@
 
 import { cn } from "@/lib/utils";
 
-export type SystemDrawerTabId = "details" | "data" | "object_links" | "tech_debt" | "history";
+export type SystemDrawerTabId = "details" | "assessment" | "data" | "object_links" | "tech_debt" | "history";
 
 interface Props {
   activeTab: SystemDrawerTabId;
   onTabChange: (tab: SystemDrawerTabId) => void;
   openDebtCount?: number;
+  showAssessment?: boolean;
   className?: string;
 }
 
@@ -15,6 +16,7 @@ export function SystemDrawerTabs({
   activeTab,
   onTabChange,
   openDebtCount = 0,
+  showAssessment = false,
   className,
 }: Props) {
   const tabs: {
@@ -24,6 +26,7 @@ export function SystemDrawerTabs({
     badgeTone?: "alert" | "neutral";
   }[] = [
     { id: "details", label: "Details" },
+    ...(showAssessment ? [{ id: "assessment" as const, label: "Assessment" }] : []),
     { id: "data", label: "Data" },
     { id: "object_links", label: "Object links" },
     {
@@ -36,7 +39,7 @@ export function SystemDrawerTabs({
   ];
 
   return (
-    <div className={cn("flex gap-6 px-6 overflow-x-auto", className)}>
+    <div className={cn("flex gap-4 px-6 overflow-x-auto", className)}>
       {tabs.map((tab) => (
         <button
           key={tab.id}

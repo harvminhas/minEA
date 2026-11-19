@@ -93,6 +93,10 @@ class Rec:
     is_activity: bool = False
     domain_id: str | None = None
     parent_id: str | None = None
+    # Assessment scores exposed to Ask: NF on apps, functional roll-up on activities/capabilities/domains.
+    functional: dict[str, int] | None = None
+    nonfunctional: dict[str, int] | None = None
+    assessment_gaps: list[str] | None = None
 
     def type_label(self) -> str:
         if self.raw_type == "capability" and self.is_activity:
@@ -126,6 +130,9 @@ class Rec:
             "lifecycle": self.lifecycle,
             "criticality": self.criticality,
             "blank_fields": self.blank,
+            **({"functional": self.functional} if self.functional else {}),
+            **({"nonfunctional": self.nonfunctional} if self.nonfunctional else {}),
+            **({"assessment_gaps": self.assessment_gaps} if self.assessment_gaps else {}),
         }
 
 
@@ -331,7 +338,11 @@ async def load_graph(db: AsyncSession, workspace_id: uuid.UUID, org_id: uuid.UUI
     for rel in relationships:
         edges.append(Edge(str(rel.from_object_id), str(rel.to_object_id), rel.type, "", dict(getattr(rel, "attributes", None) or {})))
     side_links = await _load_side_links(db, workspace_id, org_id)
-    return WorkspaceGraph(records=records, edges=edges, objects=raw, side_links=side_links)
+    graph = WorkspaceGraph(records=records, edges=edges, objects=raw, side_links=side_links)
+    from app.ai.ask.capability_assessment import attach_assessment_scores
+
+    attach_assessment_scores(graph)
+    return graph
 
 
 

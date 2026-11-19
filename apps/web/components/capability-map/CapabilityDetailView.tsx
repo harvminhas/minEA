@@ -18,7 +18,11 @@ import { themeForDomain } from "@/lib/domain-theme";
 import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { InlineCreate, StructureKebab, type StructureActions } from "@/components/capability-map/StructureActions";
 import { domainIcon } from "@/lib/capability-map-icons";
-import { CapabilityAssessmentFields, type AssessmentPatch } from "@/components/capability-map/CapabilityAssessmentFields";
+import type { AssessmentPatch } from "@/components/capability-map/CapabilityAssessmentFields";
+import { ActivityAssessmentTab, type ProcessLike } from "@/components/assessment/ActivityAssessmentTab";
+import { CapabilityAssessmentTab } from "@/components/assessment/CapabilityAssessmentTab";
+import type { FunctionalAssessment } from "@minea/types";
+import type { CapEdge, CapObj } from "@/lib/capability-tree";
 import { CapabilityRelationshipsSection } from "@/components/capability-map/CapabilityRelationshipsSection";
 import { ObjectDrawerTabs } from "@/components/risk/ObjectDrawerTabs";
 import { InlineText } from "@/components/people/InlineText";
@@ -79,6 +83,12 @@ export type CapabilityDetailViewProps = {
   assessment?: CapabilityAssessment;
   suggestedPosture?: SuggestedPosture | null;
   onSetAssessment?: (patch: AssessmentPatch) => void;
+  catalogObjects?: readonly CapObj[];
+  catalogEdges?: readonly CapEdge[];
+  processes?: ProcessLike[];
+  onSetFunctionalAssessment?: (link: AppLink, next: FunctionalAssessment) => void;
+  assessmentError?: string | null;
+  assessmentPending?: boolean;
   addDialog?: ReactNode;
   structure?: StructureActions;
   relationshipGroups?: { key: string; label: string; items: MappedLink[] }[];
@@ -121,6 +131,12 @@ export function CapabilityDetailView({
   assessment,
   suggestedPosture = null,
   onSetAssessment,
+  catalogObjects = [],
+  catalogEdges = [],
+  processes = [],
+  onSetFunctionalAssessment,
+  assessmentError,
+  assessmentPending,
   addDialog,
   structure,
   relationshipGroups = [],
@@ -244,6 +260,7 @@ export function CapabilityDetailView({
             activeTab={tab}
             onTabChange={(next) => onTab(next as RecordPageTab)}
             firstTab={{ id: "overview", label: "Overview" }}
+            showAssessment
             showRelationships
             showTechDebt
             showHistory
@@ -292,15 +309,6 @@ export function CapabilityDetailView({
           <AssessItem label="Fitness" item={fitness} />
           <AssessItem label="Redundancy" item={redundancy} />
         </div>
-        ) : null}
-
-        {!activityPage && assessment && onSetAssessment ? (
-          <CapabilityAssessmentFields
-            assessment={assessment}
-            suggested={suggestedPosture}
-            canEdit={canEdit}
-            onChange={onSetAssessment}
-          />
         ) : null}
 
         {!activityPage ? (
@@ -384,6 +392,34 @@ export function CapabilityDetailView({
           </div>
         ) : null}
           </div>
+        ) : null}
+
+        {tab === "assessment" ? (
+          activityPage && onSetFunctionalAssessment ? (
+            <ActivityAssessmentTab
+              activityId={node.id}
+              activityName={node.name}
+              links={linksByTarget.get(node.id) ?? []}
+              processes={processes}
+              edges={catalogEdges}
+              canEdit={Boolean(canEdit)}
+              pending={assessmentPending}
+              error={assessmentError}
+              onChange={onSetFunctionalAssessment}
+            />
+          ) : (
+            <CapabilityAssessmentTab
+              node={node}
+              linksByTarget={linksByTarget}
+              objects={catalogObjects}
+              edges={catalogEdges}
+              processes={processes}
+              assessment={assessment}
+              suggestedPosture={suggestedPosture}
+              canEdit={Boolean(canEdit)}
+              onSetAssessment={onSetAssessment}
+            />
+          )
         ) : null}
 
         {tab === "relationships" ? (

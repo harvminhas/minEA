@@ -10,7 +10,9 @@ test("legacy panel tab=details and bare URLs open Overview", () => {
 });
 
 test("relationships, tech debt, and history query values are kept", () => {
+  assert.equal(recordPageTabFromSearch("assessment"), "assessment");
   assert.equal(recordPageTabFromSearch("relationships"), "relationships");
+  assert.equal(recordPageTabQuery("assessment"), "assessment");
   assert.equal(recordPageTabFromSearch("tech_debt"), "tech_debt");
   assert.equal(recordPageTabFromSearch("tech-debt"), "tech_debt");
   assert.equal(recordPageTabFromSearch("history"), "history");

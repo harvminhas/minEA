@@ -323,3 +323,25 @@ test("unassessed tiles are muted for posture, spend, and risk lenses, not covera
   assert.equal(isExecutiveTileMuted("coverage", 0, null, null), false);
 });
 
+
+test("technology_fit defaults from the weakest NF score of linked apps, then from fitness", () => {
+  const finance = obj("fin", "business_domain", "Finance");
+  const cap = obj("ap", "capability", "Accounting", {
+    owner: "CFO",
+    properties: { domain_id: "fin", business_criticality: "high", investment_posture: "migrate" },
+  });
+  const act = obj("gl", "capability", "Manage general ledger", { properties: { domain_id: "fin", parent_id: "ap" } });
+  const app = obj("erp", "application", "ERP", {
+    properties: {
+      annual_cost: 1000,
+      nonfunctional_assessment: { scores: { integration: { score: 2, confidence: "H" }, security: { score: 5, confidence: "H" } } },
+    },
+  });
+  const objects = [finance, cap, act, app];
+  const edges = [edge("gl", "erp", { fitness: "strong" })];
+  const assessed = assessCapability(cap, objects, edges);
+  assert.equal(assessed.technologyFit, 2);
+  assert.equal(assessed.technologyFitSource, "default");
+  assert.equal(assessed.technologyFitDefaultFrom, "nf");
+  assert.equal(assessed.weakestNfScore, 2);
+});

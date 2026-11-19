@@ -1,0 +1,167 @@
+{
+  "functional": {
+    "coverage": {
+      "label": "Coverage",
+      "short": "Coverage",
+      "anchors": {
+        "1": "Few or no linked process steps are supported (under 25%).",
+        "2": "Some linked process steps are supported (25–49%).",
+        "3": "About half of the linked process steps are supported (50–69%).",
+        "4": "Most linked process steps are supported (70–89%).",
+        "5": "All or nearly all linked process steps are supported (90–100%)."
+      },
+      "coverage_bands": [
+        { "min": 0, "max": 24, "score": 1 },
+        { "min": 25, "max": 49, "score": 2 },
+        { "min": 50, "max": 69, "score": 3 },
+        { "min": 70, "max": 89, "score": 4 },
+        { "min": 90, "max": 100, "score": 5 }
+      ]
+    },
+    "effectiveness": {
+      "label": "Effectiveness",
+      "short": "Effectiveness",
+      "anchors": {
+        "1": "Rarely achieves the intended outcome. Frequent workarounds or rework.",
+        "2": "Inconsistent. The outcome is reached only with significant effort.",
+        "3": "Adequate. The outcome is usually reached, with some friction or exceptions.",
+        "4": "Reliable. The outcome is consistently reached for standard cases.",
+        "5": "Exemplary. The outcome is consistently reached, including exceptions."
+      }
+    },
+    "user_sentiment": {
+      "label": "User sentiment",
+      "short": "User sentiment",
+      "anchors": {
+        "1": "Users strongly dislike the experience and avoid the app where they can.",
+        "2": "Users are dissatisfied; complaints are common.",
+        "3": "Users find it acceptable, with noticeable frustrations.",
+        "4": "Users are generally satisfied and would recommend it with minor caveats.",
+        "5": "Users are highly satisfied and prefer this app for the work."
+      }
+    },
+    "automation": {
+      "label": "Automation",
+      "short": "Automation",
+      "anchors": {
+        "1": "Almost entirely manual. Little or no automation of the work.",
+        "2": "Only isolated steps are automated; most work is still manual.",
+        "3": "Core steps are automated, with regular manual intervention.",
+        "4": "Most of the work is automated; exceptions are handled by hand.",
+        "5": "The work is automated end to end, including routine exceptions."
+      }
+    },
+    "data_reporting": {
+      "label": "Data & reporting",
+      "short": "Data & reporting",
+      "anchors": {
+        "1": "Data is missing, unreliable, or cannot be reported.",
+        "2": "Data is incomplete or hard to trust; reporting needs heavy rework.",
+        "3": "Data and reporting are adequate, with gaps or delays.",
+        "4": "Data is complete and timely for standard needs; reports are trusted.",
+        "5": "Data and reporting are complete, timely, and trusted for decisions."
+      }
+    },
+    "regional_fit": {
+      "label": "Regional fit",
+      "short": "Regional fit",
+      "anchors": {
+        "1": "Does not support the required region or regions. Major legal or operational gaps.",
+        "2": "Significant gaps in a required region, or only one of the needed regions works.",
+        "3": "Works in the required regions (US, Canada, or both) with some exceptions.",
+        "4": "Fits the required regional scope, with only minor gaps.",
+        "5": "Fully fits the required regional scope (US, Canada, or both)."
+      }
+    }
+  },
+  "nonfunctional": {
+    "resilience": {
+      "label": "Resilience",
+      "short": "Resil.",
+      "anchors": {
+        "1": "Frequent outages or data-loss risk. Recovery is slow or unproven.",
+        "2": "Recovers poorly from incidents; downtime is a regular problem.",
+        "3": "Usually stable, with occasional incidents and acceptable recovery.",
+        "4": "Reliable, with proven recovery and rare, short incidents.",
+        "5": "Highly resilient. Incidents are rare and recovery is fast and practiced."
+      }
+    },
+    "performance_usability": {
+      "label": "Performance & usability",
+      "short": "Perf.",
+      "anchors": {
+        "1": "Slow or hard to use. Users regularly abandon tasks.",
+        "2": "Noticeable lag or awkward flows that slow people down.",
+        "3": "Performance and usability are acceptable, with some friction.",
+        "4": "Responsive and straightforward for everyday work.",
+        "5": "Fast and easy to use, including for less frequent tasks."
+      }
+    },
+    "security": {
+      "label": "Security",
+      "short": "Sec.",
+      "anchors": {
+        "1": "Serious control gaps. Known issues are unaddressed.",
+        "2": "Controls are incomplete or inconsistently applied.",
+        "3": "Baseline controls are in place, with some gaps.",
+        "4": "Controls are solid and reviewed; residual risk is accepted and tracked.",
+        "5": "Controls are strong, current, and independently assured."
+      }
+    },
+    "integration": {
+      "label": "Integration",
+      "short": "Integ.",
+      "anchors": {
+        "1": "Integrates poorly or not at all. Heavy manual re-keying.",
+        "2": "Fragile or limited integrations; frequent breaks or workarounds.",
+        "3": "Integrates adequately for core flows, with some manual steps.",
+        "4": "Integrates reliably with the systems that matter.",
+        "5": "Integrates cleanly and reliably, including edge cases."
+      }
+    },
+    "maintainability": {
+      "label": "Maintainability",
+      "short": "Maint.",
+      "anchors": {
+        "1": "Hard to change or support. Knowledge is scarce; changes are risky.",
+        "2": "Changes are slow and error-prone; documentation is weak.",
+        "3": "Can be maintained with effort; some complexity or knowledge risk.",
+        "4": "Straightforward to maintain, with clear ownership and docs.",
+        "5": "Easy to change and support, with strong documentation and skills."
+      }
+    },
+    "vendor_lifecycle": {
+      "label": "Vendor & lifecycle",
+      "short": "Vendor",
+      "anchors": {
+        "1": "Vendor or product is exiting, unresponsive, or past end of support.",
+        "2": "Lifecycle risk is high: uncertain roadmap, weak support, or ageing release.",
+        "3": "Vendor and lifecycle are acceptable, with some watch-outs.",
+        "4": "Vendor is stable and the product is current, with a clear roadmap.",
+        "5": "Strong vendor relationship and a healthy, well-supported lifecycle."
+      }
+    },
+    "cost": {
+      "label": "Cost",
+      "short": "Cost",
+      "anchors": {
+        "1": "Cost is unjustified or unsustainable for the value received.",
+        "2": "Cost is high relative to value, or poorly understood and controlled.",
+        "3": "Cost is acceptable, with some inefficiency or limited visibility.",
+        "4": "Cost is proportionate to value and is actively managed.",
+        "5": "Cost is efficient, transparent, and good value for money."
+      }
+    },
+    "strategic_fit": {
+      "label": "Strategic fit",
+      "short": "Strat.",
+      "anchors": {
+        "1": "Conflicts with the intended architecture or direction.",
+        "2": "Poor fit; kept mainly for historical reasons.",
+        "3": "Adequate fit, with some tension against the target state.",
+        "4": "Aligns well with the intended architecture and direction.",
+        "5": "A clear strategic choice and a good long-term fit."
+      }
+    }
+  }
+}

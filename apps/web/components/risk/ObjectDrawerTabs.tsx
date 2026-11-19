@@ -2,13 +2,14 @@
 
 import { cn } from "@/lib/utils";
 
-export type ObjectDrawerTabId = "details" | "overview" | "relationships" | "tech_debt" | "history";
+export type ObjectDrawerTabId = "details" | "overview" | "assessment" | "relationships" | "tech_debt" | "history";
 
 interface Props {
   activeTab: ObjectDrawerTabId;
   onTabChange: (tab: ObjectDrawerTabId) => void;
   openDebtCount?: number;
   relationshipCount?: number;
+  showAssessment?: boolean;
   showRelationships?: boolean;
   showTechDebt?: boolean;
   showHistory?: boolean;
@@ -25,6 +26,7 @@ export function ObjectDrawerTabs({
   onTabChange,
   openDebtCount = 0,
   relationshipCount = 0,
+  showAssessment = false,
   showRelationships = false,
   showTechDebt = true,
   showHistory = true,
@@ -39,6 +41,9 @@ export function ObjectDrawerTabs({
     badge?: number;
     badgeTone?: "alert" | "neutral";
   }[] = [{ id: firstTab.id, label: firstTab.label }];
+  if (showAssessment) {
+    tabs.push({ id: "assessment", label: "Assessment" });
+  }
   if (showRelationships) {
     tabs.push({
       id: "relationships",

@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Trash2, X } from "lucide-react";
-import type { MinEAObject, Relationship, TechDebtHostKind } from "@minea/types";
+import { serializeNonfunctionalAssessment, type MinEAObject, type NonfunctionalAssessment, type Relationship, type TechDebtHostKind } from "@minea/types";
 import { objectsApi, relationshipsApi } from "@/lib/api-client";
 import { connectionPhrase, groupImpactHits, impactOf } from "@/lib/impact/relationship-impact";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
@@ -38,6 +38,7 @@ import { askPath } from "@/lib/mvp-paths";
 import { Pill } from "@/components/mvp/pills";
 import { VendorSupplies } from "@/components/mvp/VendorSupplies";
 import { EntityAccountabilities } from "@/components/people/EntityAccountabilities";
+import { ApplicationAssessmentTab } from "@/components/assessment/ApplicationAssessmentTab";
 import { OwnershipCard } from "@/components/mvp/OwnershipCard";
 
 export function ModelDetailPanel({
@@ -56,7 +57,8 @@ export function ModelDetailPanel({
   const params = useSearchParams();
   const focusParam = params?.get("focus") ?? null;
   const highlightParam = params?.get("highlight") ?? null;
-  const tabParam = params?.get("tab") === "relationships" ? "relationships" : null;
+  const rawTab = params?.get("tab");
+  const tabParam = rawTab === "relationships" || rawTab === "assessment" ? rawTab : null;
   const [tab, setTab] = useState<ObjectDrawerTabId>(tabParam ?? "details");
   const [openField, setOpenField] = useState<string | null>(focusParam);
   useEffect(() => {
@@ -106,9 +108,11 @@ export function ModelDetailPanel({
   const partyIds = sameNamePartyIds(catalog.data?.objects ?? [], row.id, row.object.type, row.name);
   const relationshipCount = relationshipsForIds(catalog.data?.relationships ?? [], partyIds).length;
   const storedObject = isCatalogObjectId(row.id);
+  const showAssessment = storedObject && (row.object.type === "application" || row.object.type === "cloud_service");
   useEffect(() => {
-    if (!storedObject && (tab === "history" || tab === "tech_debt")) setTab("details");
-  }, [storedObject, tab]);
+    if (!storedObject && (tab === "history" || tab === "tech_debt" || tab === "assessment")) setTab("details");
+    if (!showAssessment && tab === "assessment") setTab("details");
+  }, [storedObject, showAssessment, tab]);
 
   const history = useQuery({
     queryKey: ["object-history", row.id],
@@ -117,6 +121,23 @@ export function ModelDetailPanel({
       const token = await getToken();
       if (!token || !orgSlug || !workspaceSlug) return { entries: [] };
       return objectsApi.history(orgSlug, workspaceSlug, row.id, token);
+    },
+  });
+
+  const assessmentMutation = useMutation({
+    mutationFn: async (next: NonfunctionalAssessment) => {
+      const token = await getToken();
+      if (!token || !orgSlug || !workspaceSlug) throw new Error("Not signed in");
+      return objectsApi.update(
+        orgSlug,
+        workspaceSlug,
+        row.id,
+        { properties: { nonfunctional_assessment: serializeNonfunctionalAssessment(next) } },
+        token,
+      );
+    },
+    onSuccess: (updated) => {
+      if (orgSlug && workspaceSlug) applyCatalogWrite(queryClient, orgSlug, workspaceSlug, { object: updated });
     },
   });
 
@@ -173,12 +194,13 @@ export function ModelDetailPanel({
         <ObjectDrawerTabs
           activeTab={tab}
           onTabChange={setTab}
+          showAssessment={showAssessment}
           showRelationships
           showHistory={storedObject}
           showTechDebt={storedObject}
           openDebtCount={debt.data?.open_count ?? 0}
           relationshipCount={relationshipCount}
-          className="px-5"
+          className="px-4 gap-2"
         />
       </div>
 
@@ -241,6 +263,17 @@ export function ModelDetailPanel({
               ))}
             </section>
           </div>
+        )}
+        {tab === "assessment" && showAssessment && (
+          <ApplicationAssessmentTab
+            appName={row.name}
+            properties={(row.object.properties ?? {}) as Record<string, unknown>}
+            canEdit={canEdit}
+            pending={assessmentMutation.isPending}
+            error={assessmentMutation.error ? (assessmentMutation.error instanceof Error ? assessmentMutation.error.message : "Could not save assessment") : null}
+            onChange={(next) => assessmentMutation.mutate(next)}
+            className="px-0 py-0"
+          />
         )}
         {tab === "relationships" && <Relationships row={row} canEdit={canEdit} highlight={highlightParam} />}
         {tab === "tech_debt" && (

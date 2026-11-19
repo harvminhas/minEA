@@ -1,5 +1,5 @@
 /** Tabs on capability, activity, and domain record pages. */
-export type RecordPageTab = "overview" | "relationships" | "tech_debt" | "history";
+export type RecordPageTab = "overview" | "assessment" | "relationships" | "tech_debt" | "history";
 
 const TECH_DEBT = new Set(["tech_debt", "tech-debt", "techdebt"]);
 
@@ -12,6 +12,7 @@ export function recordPageTabFromSearch(
   _focus?: string | null
 ): RecordPageTab {
   const value = (tab ?? "").trim().toLowerCase();
+  if (value === "assessment") return "assessment";
   if (value === "relationships") return "relationships";
   if (TECH_DEBT.has(value)) return "tech_debt";
   if (value === "history") return "history";

@@ -78,6 +78,7 @@ export function useCapabilityMappedLinks(scopes: MappedScope[], currentCapabilit
   return {
     links,
     groups,
+    processes: lists.data?.processes ?? [],
     pending: lists.isPending || peopleQueries.some((query) => query.isPending),
   };
 }
