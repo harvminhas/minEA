@@ -229,6 +229,8 @@ export function DomainOverviewTab({ domain, onSwitchTab, onEditCapability, onRef
     },
   });
 
+  const [gapsExpanded, setGapsExpanded] = useState(false);
+
   const gaps: DomainGapItem[] = useMemo(() => {
     const items: DomainGapItem[] = [];
     for (const cap of domain.capabilities) {
@@ -415,7 +417,7 @@ export function DomainOverviewTab({ domain, onSwitchTab, onEditCapability, onRef
             action={<TabLinkButton label="View all" onClick={() => onSwitchTab("mapping")} />}
           >
             <ul className="space-y-3">
-              {gaps.map((gap) => (
+              {(gapsExpanded ? gaps : gaps.slice(0, 3)).map((gap) => (
                 <li key={gap.id} className="flex items-center justify-between gap-4">
                   <div className="flex items-start gap-2.5 min-w-0">
                     <span
@@ -438,6 +440,17 @@ export function DomainOverviewTab({ domain, onSwitchTab, onEditCapability, onRef
                 </li>
               ))}
             </ul>
+            {gaps.length > 3 && (
+              <button
+                type="button"
+                aria-expanded={gapsExpanded}
+                data-testid="gaps-show-more"
+                onClick={() => setGapsExpanded((open) => !open)}
+                className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+              >
+                {gapsExpanded ? "Show less" : `Show ${gaps.length - 3} more`}
+              </button>
+            )}
           </SectionCard>
         )}
       </div>

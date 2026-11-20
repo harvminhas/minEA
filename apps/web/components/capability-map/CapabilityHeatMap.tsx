@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { MinEAObject, Relationship } from "@minea/types";
 import type { CatalogRow } from "@/lib/model-catalog";
 import {
@@ -149,13 +149,6 @@ export function CapabilityHeatMap({
   const leaves = flatten(tree, "l3");
   const gaps = leaves.filter((n) => n.uniqueAppIds.length === 0).length;
   const spend = rows.filter((row) => linked.has(row.id)).reduce((sum, row) => sum + (row.annualCostNumber ?? 0), 0);
-
-  const tileKey = tiles.map((node) => node.id).join("|");
-  useEffect(() => {
-    if (!focusDomainId || tiles.length === 0) return;
-    const targetId = tiles.some((node) => node.id === focusDomainId) ? focusDomainId : tiles[0]!.id;
-    document.getElementById(`heat-node-${targetId}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [focusDomainId, tileKey, tiles]);
 
   return (
     <div data-testid="capability-heat-map">

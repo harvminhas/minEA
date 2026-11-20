@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import type { SuggestedDomain } from "@minea/types";
@@ -35,11 +35,13 @@ import { CapabilityHeatMap } from "@/components/capability-map/CapabilityHeatMap
 import { CapabilityAppMapping } from "@/components/capability-map/CapabilityAppMapping";
 import { CapabilityStructureEditor } from "@/components/capability-map/CapabilityStructureEditor";
 import { InlineCreate, InlineRename, StructureKebab, useStructureActions } from "@/components/capability-map/StructureActions";
+import { scrollAncestorToTop } from "@/lib/scroll-ancestor";
 import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 
 type Mode = "none" | "add" | "interview" | "review" | "mapping" | "edit";
 
 export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
@@ -162,17 +164,18 @@ export function CapabilitiesSection({ selectedId }: { selectedId?: string }) {
   const empty = !catalog.isLoading && rows.length === 0;
   const domainGroups = focusDomainName ? groups.filter((group) => group.domain === focusDomainName) : groups;
   const shownGroups = gapsOnly ? domainGroups.map((group) => ({ ...group, rows: group.rows.filter((row) => row.gap) })).filter((group) => group.rows.length) : domainGroups;
+  // The model shell's <main> keeps its scroll across map ↔ record navigation, and
+  // scrolling a domain tile into view tucked the page title under the top nav.
   useEffect(() => {
-    if (!focusDomainName || view !== "list") return;
-    document.getElementById("capability-domain-focus-group")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [focusDomainName, view]);
+    scrollAncestorToTop(rootRef.current);
+  }, [focusDomainId]);
   const flat = groups.length === 1 && groups[0]!.domain === NO_DOMAIN;
   const focused = mode === "review" || mode === "mapping" || mode === "edit" || mode === "interview";
   // Empty-map interview lives in mode "none"; hide the page-top error so it only appears under the form.
   const interviewVisible = mode === "interview" || (empty && mode === "none" && canCreate);
 
   return (
-    <div className="px-6 py-5" data-testid="capabilities-section">
+    <div ref={rootRef} className="px-6 py-5" data-testid="capabilities-section">
       {structure.dialogs}
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
