@@ -9,7 +9,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = (rel: string) => readFileSync(join(root, rel), "utf8");
 
 describe("architecture record breadcrumbs", () => {
-  it("builds Architecture › Capabilities › Domain › Capability › Activity with links on ancestors", () => {
+  it("builds Business › Capabilities › Domain › Capability › Activity with links on ancestors", () => {
     const items = architectureRecordCrumbs({
       capabilitiesHref: "/orgs/acme/workspaces/main/model/capabilities",
       domain: { name: "Customer & After-Sales", href: "/orgs/acme/workspaces/main/business/capabilities/domains/d1" },
@@ -17,7 +17,7 @@ describe("architecture record breadcrumbs", () => {
       activity: { name: "Capture enquiries" },
     });
     assert.deepEqual(items.map((item) => item.label), [
-      "Architecture",
+      "Business",
       "Capabilities",
       "Customer & After-Sales",
       "Lead capture",

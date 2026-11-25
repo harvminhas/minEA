@@ -11,7 +11,7 @@ const src = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url
 test("one 'Capability map' item, default, highlighted on domain pages; no classic item under Advanced", () => {
   const items = architectureItems(B);
   const maps = items.filter((item) => /capabilit/i.test(item.label) && !/heatmap/i.test(item.label));
-  assert.deepEqual(maps.map((item) => [item.label, item.href, item.advanced]), [["Capability map", `${B}/model/capabilities`, false]]);
+  assert.deepEqual(maps.map((item) => [item.label, item.href, Boolean(item.advanced)]), [["Capability map", `${B}/model/capabilities`, false]]);
   assert.ok(maps[0]!.match.includes("/business/capabilities"));
   assert.ok(!visibleArchitectureItems(items, true).some((item) => /classic/i.test(item.label)));
 });

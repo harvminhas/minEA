@@ -73,10 +73,12 @@ test("every person picker can add a new person (member, lead, owner fields)", ()
 });
 
 test("Roles are retired from the UI: nav, pages and the role forms are gone", () => {
+  const navGroups = src("../../lib/architecture-nav.ts");
+  assert.match(navGroups, /label: "People & teams"/);
+  assert.doesNotMatch(navGroups, /label: "Roles"|label: "Contacts"/);
   const sidebar = src("../mvp/ModelSidebar.tsx");
-  assert.match(sidebar, /label: "People & teams"/);
-  assert.ok(sidebar.indexOf('label: "People",') < sidebar.indexOf('label: "Teams",'));
   assert.doesNotMatch(sidebar, /label: "Roles"|label: "Contacts"/);
+  // People, Teams and Ownership roles live as tabs on the hub, not as sidebar children.
   const nav = src("../../lib/repository-nav.ts");
   assert.doesNotMatch(nav, /label: "Roles"|label: "Contacts"/);
   const rolesPage = src("../../app/orgs/[orgSlug]/workspaces/[workspaceSlug]/people/roles/page.tsx");

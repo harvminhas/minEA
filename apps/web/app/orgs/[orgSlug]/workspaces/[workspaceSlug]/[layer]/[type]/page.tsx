@@ -11,16 +11,13 @@ import { ObjectCard } from "@/components/objects/ObjectCard";
 import { ObjectDetail } from "@/components/objects/ObjectDetail";
 import { ObjectForm } from "@/components/objects/ObjectForm";
 import { CapabilityMapRedirect } from "@/components/capability-map/CapabilityMapRedirect";
+import { LegacyListRedirect } from "@/components/mvp/LegacyListRedirect";
 import { DataLayerList } from "@/components/data/DataLayerList";
 import { SensitiveDataRoute } from "@/components/data/SensitiveDataPage";
-import { FlowList } from "@/components/integration/FlowList";
-import { ApiList } from "@/components/integration/ApiList";
-import { EventList } from "@/components/integration/EventList";
 import { ComponentList } from "@/components/application/ComponentList";
 import { SystemList } from "@/components/application/SystemList";
 import { PlatformList } from "@/components/infrastructure/PlatformList";
 import { RuntimeList } from "@/components/infrastructure/RuntimeList";
-import { IntegrationInfraList } from "@/components/integration/IntegrationInfraList";
 import { OBJECT_TYPE_LABELS, type ObjectType, type MinEAObject } from "@minea/types";
 import { getLayerColor } from "@/lib/utils";
 import { invalidateWorkspaceSummary } from "@/lib/workspace-summary-cache";
@@ -72,20 +69,8 @@ export default function ObjectListPage({ params }: { params: Promise<{ layer: st
     return <DataLayerList typePath={typePath} />;
   }
 
-  if (layer === "integration" && typePath === "flows") {
-    return <FlowList />;
-  }
-
-  if (layer === "integration" && typePath === "apis") {
-    return <ApiList />;
-  }
-
-  if (layer === "integration" && typePath === "events") {
-    return <EventList />;
-  }
-
-  if (layer === "integration" && typePath === "tools") {
-    return <IntegrationInfraList />;
+  if (layer === "integration" && (typePath === "flows" || typePath === "apis" || typePath === "events" || typePath === "tools")) {
+    return <LegacyListRedirect />;
   }
 
   if (layer === "application" && typePath === "applications") {

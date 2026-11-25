@@ -3,7 +3,7 @@ export type ArchitectureBreadcrumbItem = {
   href?: string;
 };
 
-/** Shared Architecture record trail: Architecture › Capabilities › Domain › Capability › Activity. */
+/** Shared Business record trail: Business › Capabilities › Domain › Capability › Activity. */
 export function architectureRecordCrumbs(opts: {
   capabilitiesHref: string;
   domain?: { name: string; href?: string } | null;
@@ -11,7 +11,7 @@ export function architectureRecordCrumbs(opts: {
   activity?: { name: string } | null;
 }): ArchitectureBreadcrumbItem[] {
   const items: ArchitectureBreadcrumbItem[] = [
-    { label: "Architecture" },
+    { label: "Business" },
     { label: "Capabilities", href: opts.capabilitiesHref },
   ];
   if (opts.domain?.name) {

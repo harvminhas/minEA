@@ -6,7 +6,7 @@ import { ChevronRight, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from "
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { modelPath, type ModelSection } from "@/lib/mvp-paths";
-import { UI_TYPE_LABEL } from "@/lib/relationship-targets";
+import { ADVANCED_TOOLTIP } from "@/lib/architecture-nav";
 
 export type SidebarIcon = LucideIcon;
 
@@ -14,10 +14,15 @@ export type SidebarNavItem = {
   label: string;
   href: string;
   icon?: SidebarIcon;
-  railIconOnly?: boolean;
   count?: number;
   match: string[];
   children?: SidebarNavItem[];
+};
+
+export type SidebarSection = {
+  id: string;
+  label: string | null;
+  items: SidebarNavItem[];
 };
 
 function isActive(pathname: string, match: string[]): boolean {
@@ -30,8 +35,7 @@ export function ModelSidebarView({
   basePath,
   collapsed,
   onToggle,
-  estate,
-  architecture,
+  sections,
   advanced,
   onAdvanced,
   advancedError,
@@ -46,8 +50,7 @@ export function ModelSidebarView({
   basePath: string;
   collapsed: boolean;
   onToggle: () => void;
-  estate: SidebarNavItem[];
-  architecture: SidebarNavItem[];
+  sections: SidebarSection[];
   advanced: boolean;
   onAdvanced: (next: boolean) => void;
   advancedError?: string | null;
@@ -62,7 +65,7 @@ export function ModelSidebarView({
       data-testid="model-sidebar"
       data-collapsed={collapsed ? "true" : "false"}
       className={cn(
-        "relative z-10 flex h-full flex-shrink-0 flex-col overflow-visible border-r border-[#e7e8ee] bg-[#f6f7f9]",
+        "relative z-10 flex h-full flex-shrink-0 flex-col overflow-hidden border-r border-[#e7e8ee] bg-[#f6f7f9]",
         collapsed ? "w-[60px]" : "w-[232px]"
       )}
     >
@@ -79,62 +82,56 @@ export function ModelSidebarView({
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
       </div>
-      <nav className={cn("flex-1", collapsed ? "overflow-visible px-0 py-2" : "space-y-4 overflow-y-auto px-2 pb-4 pt-2")}>
-        <Section
-          label="Your estate"
-          items={estate}
-          pathname={pathname}
-          active={active}
-          subnav={subnav}
-          collapsed={collapsed}
-          showcaseTooltip={showcaseTooltip}
-        />
-        <Section
-          label="Architecture"
-          items={architecture}
-          pathname={pathname}
-          active={active}
-          subnav={subnav}
-          collapsed={collapsed}
-          hairline={collapsed}
-          showcaseTooltip={showcaseTooltip}
-        />
-        {collapsed ? (
-          <div className="mt-1 flex justify-center">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={advanced}
-              data-testid="arch-advanced-toggle"
-              aria-label="Show advanced architecture"
-              title="Processes, Products, Journeys, Investments, Data stores and Data domains"
-              onClick={() => onAdvanced(!advanced)}
-              className={cn(
-                "group relative inline-flex h-9 w-9 items-center justify-center rounded-lg",
-                advanced ? "bg-[#ece9ff] text-[#5b4ce6]" : "text-[#8b90a0] hover:bg-[#eceef3] hover:text-[#3c4254]"
-              )}
-            >
-              <SlidersHorizontal size={16} />
-              <RailTip label="Show advanced" show={showcaseTooltip === "Show advanced"} />
-            </button>
-          </div>
-        ) : (
-          <label className="mt-1 flex cursor-pointer items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-[12px] text-[#6b7289] hover:bg-[#eceef3]">
-            <span title="Processes, Products, Journeys, Investments, Data stores and Data domains">Show advanced</span>
-            <input
-              type="checkbox"
-              role="switch"
-              data-testid="arch-advanced-toggle"
-              aria-label="Show advanced architecture"
-              checked={advanced}
-              onChange={(event) => onAdvanced(event.target.checked)}
-              className="h-3.5 w-3.5 accent-[#5b4ce6]"
-            />
-          </label>
-        )}
-        {advancedError && !collapsed ? <p className="px-2.5 text-[11px] text-[#b42318]">{advancedError}</p> : null}
+      <nav className={cn("min-h-0 flex-1", collapsed ? "overflow-visible px-0 py-2" : "space-y-4 overflow-y-auto px-2 pb-2 pt-2")}>
+        {sections.map((section) => (
+          <Section
+            key={section.id}
+            label={section.label}
+            items={section.items}
+            pathname={pathname}
+            active={active}
+            subnav={subnav}
+            collapsed={collapsed}
+            hairline={collapsed && section.id !== "overview"}
+            showcaseTooltip={showcaseTooltip}
+          />
+        ))}
       </nav>
-      <div className={cn("border-t border-[#e7e8ee]", collapsed ? "flex justify-center px-0 py-3" : "px-4 py-3")}>
+      {collapsed ? (
+        <div className="mt-1 flex shrink-0 justify-center pb-1">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={advanced}
+            data-testid="arch-advanced-toggle"
+            aria-label="Show advanced"
+            title={ADVANCED_TOOLTIP}
+            onClick={() => onAdvanced(!advanced)}
+            className={cn(
+              "group relative inline-flex h-9 w-9 items-center justify-center rounded-lg",
+              advanced ? "bg-[#ece9ff] text-[#5b4ce6]" : "text-[#8b90a0] hover:bg-[#eceef3] hover:text-[#3c4254]"
+            )}
+          >
+            <SlidersHorizontal size={16} />
+            <RailTip label="Show advanced" show={showcaseTooltip === "Show advanced"} />
+          </button>
+        </div>
+      ) : (
+        <label className="mx-2 mb-1 flex shrink-0 cursor-pointer items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-[12px] text-[#6b7289] hover:bg-[#eceef3]">
+          <span title={ADVANCED_TOOLTIP}>Show advanced</span>
+          <input
+            type="checkbox"
+            role="switch"
+            data-testid="arch-advanced-toggle"
+            aria-label="Show advanced"
+            checked={advanced}
+            onChange={(event) => onAdvanced(event.target.checked)}
+            className="h-3.5 w-3.5 accent-[#5b4ce6]"
+          />
+        </label>
+      )}
+      {advancedError && !collapsed ? <p className="shrink-0 px-4 pb-1 text-[11px] text-[#b42318]">{advancedError}</p> : null}
+      <div className={cn("shrink-0 border-t border-[#e7e8ee]", collapsed ? "flex justify-center px-0 py-3" : "px-4 py-3")}>
         {collapsed ? (
           <div className="group relative">
             <span
@@ -193,7 +190,7 @@ function Section({
   hairline,
   showcaseTooltip,
 }: {
-  label: string;
+  label: string | null;
   items: SidebarNavItem[];
   pathname: string;
   active?: ModelSection;
@@ -209,7 +206,7 @@ function Section({
         collapsed && hairline && "mt-2.5 w-9 border-t border-[#e7e8ee] pt-2.5"
       )}
     >
-      {!collapsed && (
+      {!collapsed && label && (
         <p className="px-2.5 pb-1.5 text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">
           {label.toUpperCase()}
         </p>
@@ -261,11 +258,8 @@ function NavRows({
   }, [pathname]);
   const selected =
     !childActive &&
-    (isActive(pathname, item.match) ||
-      (active === "overview" && item.label === "Overview") ||
-      (active === "vendors" && item.label === UI_TYPE_LABEL.external_party));
+    (isActive(pathname, item.match) || (active === "overview" && item.label === "Overview") || (active === "vendors" && item.label === "Vendors & contracts"));
   const Icon = item.icon;
-  const showIcon = Boolean(Icon) && (collapsed || !item.railIconOnly);
   const tip = showcaseTooltip === item.label;
 
   if (collapsed) {
@@ -294,7 +288,7 @@ function NavRows({
   );
   const body = (
     <>
-      {showIcon && Icon && <Icon size={16} className={cn("shrink-0", selected || childActive ? "text-[#5b4ce6]" : "text-[#8b90a0]")} />}
+      {Icon && <Icon size={16} className={cn("shrink-0", selected || childActive ? "text-[#5b4ce6]" : "text-[#8b90a0]")} />}
       {item.children && (
         <ChevronRight
           size={14}

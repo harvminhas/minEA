@@ -123,6 +123,29 @@ export function setupCardHeader(state: Pick<SetupState, "apps" | "located">, wiz
   };
 }
 
+export type OverviewSetupNoticeCopy = {
+  line: string;
+  cta: string;
+  onlyLink: boolean;
+};
+
+/** One-line Overview notice under the subtitle. The full setup card stays on Reports and Views. */
+export function setupOverviewNotice(state: Pick<SetupState, "apps" | "located">): OverviewSetupNoticeCopy {
+  const onlyLink = state.apps >= SETUP_MIN.apps && state.located < SETUP_MIN.located;
+  if (onlyLink) {
+    return {
+      line: "Last step: say where one app runs to unlock reports.",
+      cta: "Say where an app runs",
+      onlyLink: true,
+    };
+  }
+  return {
+    line: `Add at least ${SETUP_MIN.apps} apps to unlock reports · ${state.apps} so far.`,
+    cta: "Add apps",
+    onlyLink: false,
+  };
+}
+
 function appsLabel(n: number): string {
   return n === 1 ? "1 app" : `${n} apps`;
 }

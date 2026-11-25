@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { setupCardHeader } from "./setupMin.ts";
+import { setupCardHeader, setupOverviewNotice } from "./setupMin.ts";
 
 test("Example data only while the wizard is closed and there are 0 real apps", () => {
   assert.deepEqual(setupCardHeader({ apps: 0, located: 0 }, false), { mode: "example" });
@@ -24,15 +24,20 @@ test("progress header: counts, bar percent and the 'saved' line", () => {
   assert.equal(full.mode === "progress" && full.percent, 100);
 });
 
-test("Model, Reports and Views all use the shared card (no copies of the old sample-only header)", () => {
-  for (const file of ["ModelScreen", "ReportsScreen", "EstateViews"]) {
+test("Reports and Views use the shared card; Overview uses the slim notice (same wizard)", () => {
+  for (const file of ["ReportsScreen", "EstateViews"]) {
     const src = readFileSync(new URL(`../../components/mvp/${file}.tsx`, import.meta.url), "utf8");
     assert.match(src, /<SetupProgressCard/, file);
     assert.doesNotMatch(src, /> Example data<|>Example data</, file);
   }
+  const overview = readFileSync(new URL("../../components/mvp/ModelOverview.tsx", import.meta.url), "utf8");
+  assert.match(overview, /<OverviewSetupNotice/);
+  assert.doesNotMatch(overview, /<SetupProgressCard/);
+  assert.doesNotMatch(overview, /> Example data<|>Example data</);
   const card = readFileSync(new URL("../../components/mvp/SetupProgressCard.tsx", import.meta.url), "utf8");
   assert.match(card, /setupCardHeader\(state, open\)/);
   assert.match(card, /role="progressbar"/);
+  assert.match(card, /onlyLink \? <SetupFlow inline startAt="where" \/> : <FirstRunAsk inline \/>/);
 });
 
 test("apps met, link missing: clamped count, 'Last step' copy, bar at 50% (never past 100)", () => {
@@ -80,4 +85,18 @@ test("progress line wording: no 'N of 1', a ✓ only for what is done", () => {
   assert.equal(line(5, 0), "5 apps ✓ · Say where one app runs");
   assert.equal(line(7, 2), "7 apps ✓ · Location known ✓");
   for (const [apps, located] of [[0, 0], [1, 0], [4, 1], [5, 0], [9, 3]]) assert.doesNotMatch(line(apps, located), /\d+ of \d+/);
+});
+
+test("Overview slim notice: last-step vs add-apps wording", () => {
+  assert.deepEqual(setupOverviewNotice({ apps: 20, located: 0 }), {
+    line: "Last step: say where one app runs to unlock reports.",
+    cta: "Say where an app runs",
+    onlyLink: true,
+  });
+  assert.deepEqual(setupOverviewNotice({ apps: 2, located: 0 }), {
+    line: "Add at least 5 apps to unlock reports · 2 so far.",
+    cta: "Add apps",
+    onlyLink: false,
+  });
+  assert.equal(setupOverviewNotice({ apps: 0, located: 0 }).line, "Add at least 5 apps to unlock reports · 0 so far.");
 });

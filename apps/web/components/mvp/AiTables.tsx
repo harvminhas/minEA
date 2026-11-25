@@ -19,7 +19,7 @@ const EMPTY_COPY: Record<AiTableType, string> = {
     "No AI models yet. Add the models your agents use (GPT-4o, Claude, Llama…) so a model or vendor outage shows up in impact.",
 };
 
-export function AiTable({ type, selectedId }: { type: AiTableType; selectedId?: string }) {
+export function AiTable({ type, selectedId, hideHeader = false }: { type: AiTableType; selectedId?: string; hideHeader?: boolean }) {
   const router = useRouter();
   const { basePath, orgSlug, workspaceSlug } = useTenancy();
   const { getToken } = useAuth();
@@ -47,7 +47,8 @@ export function AiTable({ type, selectedId }: { type: AiTableType; selectedId?: 
     onError: (err: Error) => setError(err.message),
   });
   return (
-    <div className="px-6 py-5">
+    <div className={hideHeader ? "py-2" : "px-6 py-5"}>
+      {!hideHeader && (
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">AI</p>
@@ -63,6 +64,18 @@ export function AiTable({ type, selectedId }: { type: AiTableType; selectedId?: 
           + Add
         </button>
       </div>
+      )}
+      {hideHeader && (
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setAdding((value) => !value)}
+            className="rounded-lg bg-[#5b4ce6] px-3 py-1.5 text-[13px] font-semibold text-white"
+          >
+            + Add
+          </button>
+        </div>
+      )}
       {adding && (
         <form
           className="mb-4 flex flex-wrap items-center gap-2"

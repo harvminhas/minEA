@@ -9,12 +9,15 @@ import { useTenancy } from "@/lib/tenancy";
 import { modelItemId, modelItemPath, modelPath, type ModelSection } from "@/lib/mvp-paths";
 import { capabilityDetailPath } from "@/lib/capability-detail";
 import { isActivity } from "@/lib/capability-tree";
-import { AgingTile, PlatformsTable, ServersTable } from "@/components/mvp/InfraTables";
-import { LocationsTable } from "@/components/mvp/LocationsTable";
-import { AiTable } from "@/components/mvp/AiTables";
+import { ServersTable } from "@/components/mvp/InfraTables";
+import { PlatformsCloudPage } from "@/components/mvp/PlatformsCloudPage";
+import { ConnectionsHub } from "@/components/mvp/ConnectionsHub";
+import { ApplicationsTabs, ApplicationsAiPanel } from "@/components/mvp/ApplicationsHubChrome";
+import { ModelOverview } from "@/components/mvp/ModelOverview";
+import { applicationsPath, platformsPath } from "@/lib/model-legacy-paths";
 import { describeTypes } from "@/lib/ask/deterministic";
 import { VendorsHub } from "@/components/vendors/VendorsHub";
-import { catalogStats, moneyLabel, rowForPanel, vendorPanelRow, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
+import { moneyLabel, rowForPanel, vendorPanelRow, vendorRollup, type CatalogRow } from "@/lib/model-catalog";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { objectsApi } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -32,10 +35,8 @@ import { ObjectForm } from "@/components/objects/ObjectForm";
 import { RESTORE_PARAM, RESTORE_VALUE } from "@/lib/add-draft";
 import { AppAddPanel } from "@/components/add/AppAddPanel";
 import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
-import { SampleCompanyBadge, SetupProgressCard } from "@/components/mvp/SetupProgressCard";
 import { addAnywhereEnabled } from "@/lib/flags";
 import { useWorkspaceSetup } from "@/lib/setup/use-setup";
-import Link from "next/link";
 import { aiColumnLabel } from "@/lib/ai/features";
 import { ANY_CAPABILITY, appCapabilityIndex, capabilityFilterOptions, matchesCapabilityFilter } from "@/lib/capabilities";
 
@@ -66,8 +67,6 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
     if (showPaste) setSetupLatched(true);
   }, [showPaste]);
   const rows = catalog.data?.rows ?? [];
-  const connections = catalog.data?.connections ?? [];
-  const stats = catalogStats(rows);
   const vendors = useMemo(() => vendorRollup(rows), [rows]);
   const selectedKey = selectedId ? modelItemId(selectedId) : "";
   const selected = useMemo(() => {
@@ -98,6 +97,15 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
   }, [section]);
   const [addPulse, setAddPulse] = useState(0);
   const anywhere = addAnywhereEnabled();
+  const applicationsTab = section === "agents" || section === "ai-models" || searchParams.get("tab") === "ai" ? "ai" : "applications";
+  const isApplicationsHub = section === "applications" || ((section === "agents" || section === "ai-models") && Boolean(selectedId));
+
+  useEffect(() => {
+    if (selectedId) return;
+    if (section === "agents") router.replace(applicationsPath(basePath, { tab: "ai", aiType: "agents" }));
+    if (section === "ai-models") router.replace(applicationsPath(basePath, { tab: "ai", aiType: "models" }));
+    if (section === "locations") router.replace(platformsPath(basePath, "locations"));
+  }, [section, selectedId, basePath, router]);
 
   const source = rows.filter((row) => {
     if (section === "applications") return row.kind === "application";
@@ -182,32 +190,41 @@ export function ModelScreen({ section, selectedId }: { section: ModelSection; se
           </div>
         )}
         {section === "overview" && (
-          <Overview
-            example={setup.enabled && !setup.state.met}
-            gap={setup.gap}
-            appsSoFar={setup.state.apps}
-            setupProgress={setup.state}
-            stats={stats}
-            rows={rows}
-            basePath={basePath}
+          <ModelOverview
             pending={catalog.isPending}
             failed={catalog.isError && !catalog.data}
+            basePath={basePath}
           />
         )}
-        {section === "platforms" && <PlatformsTable rows={rows} selectedId={selectedId} anywhere={anywhere} />}
+        {(section === "platforms" || (section === "locations" && Boolean(selectedId))) && (
+          <PlatformsCloudPage
+            rows={rows}
+            selectedId={selectedId}
+            anywhere={anywhere}
+            initialTab={section === "locations" ? "locations" : undefined}
+          />
+        )}
         {section === "servers" && <ServersTable rows={rows} selectedId={selectedId} anywhere={anywhere} />}
-        {section === "locations" && <LocationsTable anywhere={anywhere} selectedId={selectedId} />}
-        {section === "agents" && <AiTable type="agent" selectedId={selectedId} />}
-        {section === "ai-models" && <AiTable type="ai_model" selectedId={selectedId} />}
         {section === "capabilities" && !isCapabilityRecord && !waitingForCap && <CapabilitiesSection selectedId={selectedId} />}
         {section === "capabilities" && isCapabilityRecord && !isActivityRecord && (
           <CapabilityDetailPage capabilityId={capObject.id} />
         )}
-        {section === "connections" && <ConnectionsList items={connections} basePath={basePath} />}
+        {section === "connections" && <ConnectionsHub />}
         {section === "vendors" && <VendorsHub selectedId={selectedId} />}
         {section === "owners" && <OwnersPage />}
-        {(section === "applications" || section === "infrastructure") && (
+        {isApplicationsHub && applicationsTab === "ai" && (
           <div className="px-6 py-5">
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">WHAT THE BUSINESS RUNS</p>
+            <h1 className="mb-4 text-[22px] font-semibold text-[#1c2230]">Applications</h1>
+            <ApplicationsTabs applicationsCount={rows.filter((row) => row.kind === "application").length} active="ai" />
+            <ApplicationsAiPanel selectedId={selectedId} />
+          </div>
+        )}
+        {((section === "applications" && applicationsTab === "applications") || section === "infrastructure") && (
+          <div className="px-6 py-5">
+            {section === "applications" && (
+              <ApplicationsTabs applicationsCount={source.length} active="applications" />
+            )}
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold tracking-[0.14em] text-[#8b90a0]">
@@ -487,117 +504,3 @@ function AddMenu({ onPick }: { onPick: (kind: "runtime" | "platform") => void })
     </div>
   );
 }
-
-function Overview({
-  example,
-  gap,
-  appsSoFar,
-  setupProgress,
-  stats,
-  rows,
-  basePath,
-  pending,
-  failed,
-}: {
-  example: boolean;
-  gap: string;
-  appsSoFar: number;
-  setupProgress: { apps: number; located: number };
-  stats: ReturnType<typeof catalogStats>;
-  rows: CatalogRow[];
-  basePath: string;
-  pending: boolean;
-  failed: boolean;
-}) {
-  const platforms = rows.filter((row) => row.kind === "platform").length;
-  const servers = rows.filter((row) => row.kind === "runtime").length;
-  const show = !pending && !failed && !example;
-  const cards = example
-    ? [
-        { href: modelPath(basePath, "applications"), label: "Applications", value: "13" },
-        { href: modelPath(basePath, "platforms"), label: "Platforms & cloud", value: "6" },
-        { href: modelPath(basePath, "servers"), label: "Servers & devices", value: "11" },
-        { href: `${basePath}/reports/spend`, label: "Annual spend tracked", value: "$140,270" },
-        { href: modelPath(basePath, "applications"), label: "Missing fields", value: "7" },
-      ]
-    : [
-        { href: modelPath(basePath, "applications"), label: "Applications", value: show ? String(stats.systems) : "—" },
-        { href: modelPath(basePath, "platforms"), label: "Platforms & cloud", value: show ? String(platforms) : "—" },
-        { href: modelPath(basePath, "servers"), label: "Servers & devices", value: show ? String(servers) : "—" },
-        { href: `${basePath}/reports/spend`, label: "Annual spend tracked", value: show && stats.spend ? moneyLabel(stats.spend) : "—" },
-        { href: modelPath(basePath, "applications"), label: "Missing fields", value: show ? String(stats.missing) : "—" },
-      ];
-  return (
-    <div className="relative px-8 py-8">
-      {example && (
-        <SampleCompanyBadge className="mb-4" />
-      )}
-      <div className={example ? "pointer-events-none select-none opacity-40" : ""} aria-hidden={example || undefined}>
-        <h1 className="text-[28px] font-semibold text-[#1c2230]">Model overview</h1>
-        <p className="mt-1 text-[14px] text-[#6b7289]">
-          {example
-            ? "Sample company: 13 applications, 6 platforms, 11 servers."
-            : failed
-              ? "The model didn't load. Refresh the page to try again."
-              : pending
-                ? "Loading the model…"
-                : `${stats.systems} applications, ${stats.infrastructure} infrastructure${stats.vendorCount ? `, ${stats.vendorCount} vendors` : ""}.`}
-        </p>
-        <div className="mt-6 grid grid-cols-2 gap-3 xl:grid-cols-5">
-          {cards.map((card) => (
-            <Link key={card.label} href={card.href} className="rounded-xl border border-[#e6e8ee] p-4 hover:border-[#c9c6f5]">
-              <div className="text-[12px] text-[#8b90a0]">{card.label}</div>
-              <div className="mt-1 text-[22px] font-semibold text-[#1c2230]">{card.value}</div>
-            </Link>
-          ))}
-        </div>
-        {show && <AgingTile rows={rows} basePath={basePath} />}
-        {show && (
-          <div className="mt-4 rounded-xl border border-[#e6e8ee] p-4">
-            <div className="text-[14px] font-medium text-[#1c2230]">Model health: {stats.completeness}% complete, {stats.missing} fields missing</div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#eef0f4]">
-              <div className="h-full rounded-full bg-[#5b4ce6]" style={{ width: `${stats.completeness}%` }} />
-            </div>
-          </div>
-        )}
-      </div>
-      {example && (
-        // In normal flow (pulled up over the dimmed sample tiles), not an absolute full-size
-        // overlay: that box was only as tall as the tiles and clipped the opened wizard.
-        <div className="relative z-10 -mt-24 flex justify-center px-3 pb-6">
-          <SetupProgressCard
-            state={setupProgress}
-            gap={gap}
-            sampleText={`You have ${appsSoFar} app${appsSoFar === 1 ? "" : "s"} so far. Until then this is a sample company; nothing here is saved to your workspace.`}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ConnectionsList({ items, basePath }: { items: { id: string; name: string; type: string }[]; basePath: string }) {
-  const hrefFor = (type: string) => {
-    if (type === "api") return `${basePath}/integration/apis`;
-    if (type === "event") return `${basePath}/integration/events`;
-    if (type === "tool") return `${basePath}/integration/tools`;
-    return `${basePath}/integration/flows`;
-  };
-  return (
-    <div className="px-6 py-5">
-      <h1 className="text-[22px] font-semibold text-[#1c2230]">Connections <span className="text-[14px] font-normal text-[#8b90a0]">{items.length}</span></h1>
-      <p className="mb-4 mt-1 text-[13px] text-[#6b7289]">Flows, APIs, events, and integration infrastructure. Open a list to edit diagrams and links.</p>
-      <div className="divide-y divide-[#f0f1f5] rounded-xl border border-[#e6e8ee]">
-        {items.length === 0 && <p className="px-4 py-8 text-[13px] text-[#8b90a0]">No connections yet.</p>}
-        {items.map((item) => (
-          <Link key={item.id} href={hrefFor(item.type)} className="flex items-center justify-between px-4 py-3 text-[13px] hover:bg-[#fafafb]">
-            <span className="font-medium text-[#1c2230]">{item.name}</span>
-            <span className="text-[#8b90a0]">{item.type.replace(/_/g, " ")}</span>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-

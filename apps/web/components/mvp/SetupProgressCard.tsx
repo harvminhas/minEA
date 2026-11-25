@@ -4,13 +4,27 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Info } from "lucide-react";
 import { FirstRunAsk } from "@/components/mvp/FirstRunAsk";
 import { SetupFlow } from "@/components/mvp/setup-flow";
-import { setupCardHeader, type SetupState } from "@/lib/setup/setupMin";
+import { setupCardHeader, setupOverviewNotice, type SetupState } from "@/lib/setup/setupMin";
 
 /**
  * The card over sample screens (Model, Reports, Views). Closed with 0 real apps it says
  * "Example data"; once the wizard is open or any real app exists it shows the person's own
  * saved progress. "Add apps here" toggles to "Close" and focuses the paste box.
  */
+function useSetupWizard() {
+  const [open, setOpen] = useState(false);
+  const card = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const frame = window.requestAnimationFrame(() => {
+      (card.current?.querySelector("textarea") ?? card.current?.querySelector<HTMLElement>("[data-where-own]"))?.focus({ preventScroll: true });
+      card.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open]);
+  return { open, setOpen, card };
+}
+
 export function SetupProgressCard({
   state,
   gap,
@@ -26,16 +40,7 @@ export function SetupProgressCard({
   /** Replaces the Add apps button + wizard (e.g. a link to Hosting). */
   action?: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const card = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const frame = window.requestAnimationFrame(() => {
-      (card.current?.querySelector("textarea") ?? card.current?.querySelector<HTMLElement>("[data-where-own]"))?.focus({ preventScroll: true });
-      card.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [open]);
+  const { open, setOpen, card } = useSetupWizard();
   const header = setupCardHeader(state, open);
   const onlyLink = header.mode === "progress" && header.onlyLink;
   return (
@@ -73,6 +78,42 @@ export function SetupProgressCard({
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Slim first-run notice under the Overview subtitle. Opens the same inline wizard as SetupProgressCard.
+ */
+export function OverviewSetupNotice({
+  state,
+}: {
+  state: Pick<SetupState, "apps" | "located">;
+}) {
+  const { open, setOpen, card } = useSetupWizard();
+  const notice = setupOverviewNotice(state);
+  return (
+    <div ref={card} className={open ? "max-w-3xl" : undefined}>
+      <div
+        data-testid="overview-setup-notice"
+        role="status"
+        className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-[#fde68a] bg-[#fffbeb] px-3 py-2 text-[13px] text-[#92400e]"
+      >
+        <p className="min-w-0 flex-1">{notice.line}</p>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className="shrink-0 text-[13px] font-medium text-[#5b4ce6] hover:underline"
+        >
+          {open ? "Close" : notice.cta}
+        </button>
+      </div>
+      {open && (
+        <div data-testid="example-wizard" className="mt-3 text-left">
+          {notice.onlyLink ? <SetupFlow inline startAt="where" /> : <FirstRunAsk inline />}
+        </div>
       )}
     </div>
   );

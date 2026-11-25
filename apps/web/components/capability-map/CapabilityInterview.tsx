@@ -13,12 +13,14 @@ export function CapabilityInterview({
   error,
   onSuggest,
   onAddYourself,
+  addYourselfLabel = "Or add one capability yourself",
 }: {
   existing?: boolean;
   busy?: boolean;
   error?: string;
   onSuggest: (values: InterviewValues) => void;
   onAddYourself?: () => void;
+  addYourselfLabel?: string;
 }) {
   const [about, setAbout] = useState("");
   const [website, setWebsite] = useState("");
@@ -78,7 +80,7 @@ export function CapabilityInterview({
           </button>
           {onAddYourself && (
             <button type="button" onClick={onAddYourself} className="text-[12.5px] font-medium text-[#5b4ce6]">
-              Or add one capability yourself
+              {addYourselfLabel}
             </button>
           )}
         </div>
