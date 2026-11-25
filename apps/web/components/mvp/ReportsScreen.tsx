@@ -12,6 +12,7 @@ import { useModelCatalog } from "@/lib/use-model-catalog";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { aiLandscape } from "@/lib/ai/landscape";
 import { EXAMPLE_REPORT_STATS, hostingMap, infraCost, popularCards, REPORT_REGISTRY, singlePoints, topHostLine } from "@/lib/reports/home";
+import { coverageCardCopy } from "@/lib/reports/capability-coverage";
 import { countLabel } from "@/lib/labels";
 
 export function ReportsScreen() {
@@ -48,6 +49,7 @@ export function ReportsScreen() {
     if (id === "spend") return { value: cards.spend.value, detail: cards.spend.detail.replace("/ yr · ", "/ yr · ") };
     if (id === "infrastructure-cost") return { value: moneyLabel(cost.total), detail: `/ yr · platforms ${moneyLabel(cost.platforms)} · servers ${moneyLabel(cost.servers)}` };
     if (id === "impact") return { value: topHostLine(rows, impact.edges), detail: "" };
+    if (id === "capability-coverage") return coverageCardCopy(objects ?? [], relationships ?? [], rows);
     if (id === "aging") return cards.aging;
     if (id === "hosting") return { value: countLabel(hosts.hosts, "host", "hosts"), detail: `${hosts.unlinked} app${hosts.unlinked === 1 ? "" : "s"} with no host linked` };
     if (id === "end-of-life") {

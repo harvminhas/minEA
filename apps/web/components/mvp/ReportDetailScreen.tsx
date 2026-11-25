@@ -19,6 +19,7 @@ import { Pill } from "@/components/mvp/pills";
 import { connectionPhrase, groupImpactHits, impactOf } from "@/lib/impact/relationship-impact";
 import { useImpactGraph } from "@/lib/impact/use-impact-graph";
 import { AiLandscapeReport } from "@/components/mvp/AiLandscapeReport";
+import { CapabilityCoverageReport } from "@/components/mvp/CapabilityCoverageReport";
 import { IdleLicencesReport, OverlapsReport } from "@/components/views/CioViews";
 
 export function ReportDetailScreen({ reportId }: { reportId: string }) {
@@ -29,6 +30,7 @@ export function ReportDetailScreen({ reportId }: { reportId: string }) {
   const stats = catalogStats(rows);
 
   if (reportId === "ai-landscape") return <AiLandscapeReport />;
+  if (reportId === "capability-coverage") return <CapabilityCoverageReport />;
   if (reportId === "idle-licences") return <IdleLicencesReport />;
   if (reportId === "overlaps") return <OverlapsReport />;
   if (reportId === "spend") return <SpendReport rows={rows} />;

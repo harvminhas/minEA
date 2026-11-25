@@ -59,6 +59,6 @@ test("home: the working state shows the moment Ask is pressed; report cards show
   assert.match(src, /mode === "home" && pendingQuestion/);
   assert.match(src, /router\.prefetch\(askPath\(basePath/);
   assert.match(src, /const estateLoading = !catalog\.data;/);
-  assert.equal((src.match(/estateLoading \? "…" : cards\./g) ?? []).length, 4);
+  assert.equal((src.match(/estateLoading \? "…" : (?:cards|coverageCard)\./g) ?? []).length, 4);
   assert.match(src, /Model health: loading…/);
 });

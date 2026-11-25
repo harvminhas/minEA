@@ -13,6 +13,7 @@ import { recordOpenPath } from "@/lib/record-href";
 import { ASK_BAR_ID } from "@/components/nav/ask-shortcut";
 import { catalogStats, moneyLabel, type CatalogRow } from "@/lib/model-catalog";
 import { askChips, popularCards, supportCounts } from "@/lib/reports/home";
+import { coverageCardCopy } from "@/lib/reports/capability-coverage";
 import { useAppStore } from "@/lib/store";
 import { applyCatalogWrite, useModelCatalog } from "@/lib/use-model-catalog";
 import { answerFromModel, nameMatchAnswer, recordsAnswer, type AskAnswer, type AskCitation, type AskFixAction } from "@/lib/ask/deterministic";
@@ -287,6 +288,9 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
   const estateLoading = !catalog.data;
   const chips = askChips(rows, impact.edges, new Date(), catalog.data?.objects ?? []);
   const cards = popularCards(rows, impact.edges, new Date(), emptyPreview);
+  const coverageCard = emptyPreview
+    ? { value: "No capability map yet", detail: "Add", alert: false }
+    : coverageCardCopy(catalog.data?.objects ?? [], catalog.data?.relationships ?? [], rows);
   const support = supportCounts(rows);
   const platformCount = rows.filter((row) => row.kind === "platform").length;
   const serverCount = rows.filter((row) => row.kind === "runtime").length;
@@ -432,7 +436,7 @@ export function AskScreen({ mode }: { mode: "home" | "answer" }) {
             <ReportTile href={cards.renewals.detail === "Add" ? modelPath(basePath, "applications") : reportPath(basePath, "renewals")} title="Renewals next 90 days" value={estateLoading ? "…" : cards.renewals.value} detail={estateLoading ? "Loading…" : cards.renewals.detail} />
             <ReportTile href={cards.spend.detail === "Add" ? modelPath(basePath, "applications") : reportPath(basePath, "spend")} title="Spend by vendor & category" value={estateLoading ? "…" : cards.spend.value} detail={estateLoading ? "Loading…" : cards.spend.detail} />
             <ReportTile href={reportPath(basePath, "ownership-gaps")} title="Ownership gaps" value={estateLoading ? "…" : cards.ownership.value} detail={estateLoading ? "Loading…" : cards.ownership.detail} />
-            <ReportTile href={`${modelPath(basePath, "servers")}?status=attention`} title="Aging infrastructure" value={estateLoading ? "…" : cards.aging.value} detail={estateLoading ? "Loading…" : cards.aging.detail} alert={!estateLoading && cards.aging.alert} />
+            <ReportTile href={reportPath(basePath, "capability-coverage")} title="Capability coverage" value={estateLoading ? "…" : coverageCard.value} detail={estateLoading ? "Loading…" : coverageCard.detail} />
           </div>
           {aiCard && <AiCard card={aiCard} href={reportPath(basePath, "ai-landscape")} />}
           <div className="mt-4 flex items-center justify-between rounded-2xl border border-[#e6e8ee] bg-[#fafafb] px-4 py-3">
