@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchWorkspaceDashboardState } from "@/lib/use-workspace-dashboard";
 import { workspaceDashboardQueryKey } from "@/lib/workspace-summary-cache";
-import { ChatPanel } from "@/components/ai/ChatPanel";
+import { ChatPanel, SHOW_FLOATING_AI_BUTTON } from "@/components/ai/ChatPanel";
 import { useTenancy } from "@/lib/tenancy";
 import { useAppStore } from "@/lib/store";
 import { workspacesApi } from "@/lib/api-client";
@@ -67,7 +67,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     <AccessProvider mode={accessMode}>
       {!isEmbed && viewerByRole && <ReadOnlyBanner />}
       {leavingGoneWorkspace ? null : children}
-      {!isEmbed && !leavingGoneWorkspace && <ChatPanel />}
+      {SHOW_FLOATING_AI_BUTTON && !isEmbed && !leavingGoneWorkspace && <ChatPanel />}
     </AccessProvider>
   );
 }

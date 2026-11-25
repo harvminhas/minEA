@@ -16,6 +16,9 @@ interface Message {
   content: string;
 }
 
+/** Set to true to show the floating bottom-right AI chat button again. */
+export const SHOW_FLOATING_AI_BUTTON = false;
+
 export function ChatPanel() {
   const { getToken } = useAuth();
   const { isReadOnly } = usePermissions();
